@@ -6,6 +6,16 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
+# Sub-project build outputs
+admin-panel/dist/
+igreja-paraiso/.next/
+igreja-paraiso/out/
+
+# Sub-project node_modules
+admin-panel/node_modules/
+igreja-paraiso/node_modules/
+
+
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
