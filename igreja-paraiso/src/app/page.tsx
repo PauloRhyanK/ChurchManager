@@ -3,7 +3,15 @@ import { getTenantBySlug, getUpcomingEvents, getSiteSection } from "@/lib/data";
 // ISR: revalidate the page every 60 seconds
 export const revalidate = 60;
 
-const TENANT_SLUG = process.env.NEXT_PUBLIC_TENANT_SLUG ?? "igreja-paraiso";
+const TENANT_SLUG = process.env.NEXT_PUBLIC_TENANT_SLUG ?? (() => {
+  if (process.env.NODE_ENV !== "test") {
+    console.warn(
+      "NEXT_PUBLIC_TENANT_SLUG is not set. Falling back to 'igreja-paraiso'. " +
+        "Copy .env.example to .env.local and set NEXT_PUBLIC_TENANT_SLUG.",
+    );
+  }
+  return "igreja-paraiso";
+})();
 
 export default async function Home() {
   const tenant = await getTenantBySlug(TENANT_SLUG);

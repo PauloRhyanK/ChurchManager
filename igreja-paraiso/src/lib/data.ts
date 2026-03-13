@@ -30,6 +30,10 @@ export const getTenantBySlug = cache(async (slug: string): Promise<Tenant | null
 export const getUpcomingEvents = cache(async (tenantId: string): Promise<Event[]> => {
   const client = getSupabaseClient();
   if (!client) return [];
+  // NOTE: The date filter uses the query execution time (i.e., when the ISR
+  // page was last generated), not the visitor's request time. Events that start
+  // within the revalidation window (60 s) may still appear briefly after they
+  // have passed. This is an acceptable trade-off for the ISR caching strategy.
   const { data, error } = await client
     .from('events')
     .select('id, tenant_id, title, date, description, banner_url, is_active')
