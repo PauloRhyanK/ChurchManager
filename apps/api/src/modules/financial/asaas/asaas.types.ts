@@ -1,0 +1,30 @@
+/** Resposta parcial da API Asaas v3 — cliente criado */
+export interface AsaasCustomerResponse {
+  id: string;
+  name?: string;
+  email?: string;
+  cpfCnpj?: string;
+}
+
+/** Resposta parcial — cobrança criada */
+export interface AsaasPaymentResponse {
+  id: string;
+  customer: string;
+  value: number;
+  netValue?: number;
+  billingType: string;
+  status: string;
+  dueDate: string;
+  invoiceUrl?: string;
+  bankSlipUrl?: string;
+  invoiceNumber?: string;
+  externalReference?: string;
+  /** PIX */
+  pixTransaction?: {
+    encodedImage?: string;
+    payload?: string;
+    expirationDate?: string;
+  };
+}
+
+export type AsaasBillingType = 'BOLETO' | 'CREDIT_CARD' | 'PIX' | 'UNDEFINED';

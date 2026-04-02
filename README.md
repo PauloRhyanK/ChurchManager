@@ -12,6 +12,8 @@ SaaS multitenant para gestão de igrejas: **API Nest.js** (PostgreSQL) e **paine
 
 Estrutura típica: `apps/api`, `apps/admin`. Uma pasta `apps/site-public` é **opcional** (starter interno). Os sites das igrejas em produção podem estar noutros clones, alinhados ao contrato da API documentado em Swagger/OpenAPI.
 
+- **[apps/api](apps/api/README.md)** — API Nest.js (Asaas, pré-cadastro por CPF, webhooks).
+
 ## Licença
 
 Ver [LICENSE](LICENSE).
