@@ -8,17 +8,19 @@ Este documento especifica o modelo de dados financeiro e o fluxo de integração
 
 Planos de assinatura oferecidos ao tenant (ou globais, conforme regra de negócio acordada).
 
-| Coluna | Tipo | Notas |
-|--------|------|--------|
-| `id` | UUID | PK |
-| `tenant_id` | UUID | FK para `tenants.id` — se os planos forem por igreja; se forem globais, avaliar `tenant_id` NULL ou tabela de associação num ADR futuro |
-| `name` | VARCHAR | Nome exibível |
-| `description` | TEXT | Opcional |
-| `asaas_plan_id` ou referência externa | VARCHAR | ID ou chave do plano no Asaas, se aplicável |
-| `amount_cents` ou decimal | INTEGER / NUMERIC | Valor e moeda conforme produto |
-| `interval` | VARCHAR | Ex.: `MONTHLY`, `YEARLY` |
-| `is_active` | BOOLEAN | DEFAULT true |
-| `created_at` / `updated_at` | TIMESTAMPTZ | Auditoria |
+
+| Coluna                                | Tipo              | Notas                                                                                                                                   |
+| ------------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                                  | UUID              | PK                                                                                                                                      |
+| `tenant_id`                           | UUID              | FK para `tenants.id` — se os planos forem por igreja; se forem globais, avaliar `tenant_id` NULL ou tabela de associação num ADR futuro |
+| `name`                                | VARCHAR           | Nome exibível                                                                                                                           |
+| `description`                         | TEXT              | Opcional                                                                                                                                |
+| `asaas_plan_id` ou referência externa | VARCHAR           | ID ou chave do plano no Asaas, se aplicável                                                                                             |
+| `amount_cents` ou decimal             | INTEGER / NUMERIC | Valor e moeda conforme produto                                                                                                          |
+| `interval`                            | VARCHAR           | Ex.: `MONTHLY`, `YEARLY`                                                                                                                |
+| `is_active`                           | BOOLEAN           | DEFAULT true                                                                                                                            |
+| `created_at` / `updated_at`           | TIMESTAMPTZ       | Auditoria                                                                                                                               |
+
 
 Índices: pelo menos `(tenant_id)` ou critério de listagem principal.
 
@@ -26,17 +28,19 @@ Planos de assinatura oferecidos ao tenant (ou globais, conforme regra de negóci
 
 Assinaturas ligadas a um tenant e a um utilizador ou entidade de cobrança.
 
-| Coluna | Tipo | Notas |
-|--------|------|--------|
-| `id` | UUID | PK |
-| `tenant_id` | UUID | FK NOT NULL — isolamento multitenant |
-| `plan_id` | UUID | FK para `financial_plans.id` |
-| `user_id` | UUID | FK opcional para `users.id` (quem subscreveu) |
-| `asaas_customer_id` | VARCHAR | ID do cliente no Asaas |
-| `asaas_subscription_id` | VARCHAR | ID da subscrição no Asaas (único por integração) |
-| `status` | VARCHAR | Ex.: `PENDING`, `ACTIVE`, `PAST_DUE`, `CANCELLED` |
-| `current_period_end` | TIMESTAMPTZ | Opcional, para UI |
-| `created_at` / `updated_at` | TIMESTAMPTZ | |
+
+| Coluna                      | Tipo        | Notas                                             |
+| --------------------------- | ----------- | ------------------------------------------------- |
+| `id`                        | UUID        | PK                                                |
+| `tenant_id`                 | UUID        | FK NOT NULL — isolamento multitenant              |
+| `plan_id`                   | UUID        | FK para `financial_plans.id`                      |
+| `user_id`                   | UUID        | FK opcional para `users.id` (quem subscreveu)     |
+| `asaas_customer_id`         | VARCHAR     | ID do cliente no Asaas                            |
+| `asaas_subscription_id`     | VARCHAR     | ID da subscrição no Asaas (único por integração)  |
+| `status`                    | VARCHAR     | Ex.: `PENDING`, `ACTIVE`, `PAST_DUE`, `CANCELLED` |
+| `current_period_end`        | TIMESTAMPTZ | Opcional, para UI                                 |
+| `created_at` / `updated_at` | TIMESTAMPTZ |                                                   |
+
 
 Índices únicos recomendados: `asaas_subscription_id` (onde NOT NULL); `(tenant_id, id)` para lookups seguros.
 
@@ -44,18 +48,20 @@ Assinaturas ligadas a um tenant e a um utilizador ou entidade de cobrança.
 
 Movimentos financeiros e correlação com eventos Asaas (pagamentos, estornos, etc.).
 
-| Coluna | Tipo | Notas |
-|--------|------|--------|
-| `id` | UUID | PK |
-| `tenant_id` | UUID | FK NOT NULL |
-| `subscription_id` | UUID | FK para `financial_subscriptions.id`, opcional se houver pagamentos avulsos |
-| `asaas_payment_id` | VARCHAR | ID do pagamento no Asaas |
-| `asaas_event_id` ou `external_event_key` | VARCHAR | Identificador **estável** do evento de webhook para idempotência (ver secção 3) |
-| `type` | VARCHAR | Ex.: `PAYMENT_CONFIRMED`, `PAYMENT_REFUNDED` |
-| `amount_cents` | INTEGER | Ou NUMERIC + moeda |
-| `status` | VARCHAR | Ex.: `PENDING`, `CONFIRMED`, `FAILED` |
-| `raw_payload_ref` | TEXT ou JSONB | Opcional: referência ou payload resumido para auditoria (evitar dados sensíveis desnecessários) |
-| `created_at` | TIMESTAMPTZ | |
+
+| Coluna                                   | Tipo          | Notas                                                                                           |
+| ---------------------------------------- | ------------- | ----------------------------------------------------------------------------------------------- |
+| `id`                                     | UUID          | PK                                                                                              |
+| `tenant_id`                              | UUID          | FK NOT NULL                                                                                     |
+| `subscription_id`                        | UUID          | FK para `financial_subscriptions.id`, opcional se houver pagamentos avulsos                     |
+| `asaas_payment_id`                       | VARCHAR       | ID do pagamento no Asaas                                                                        |
+| `asaas_event_id` ou `external_event_key` | VARCHAR       | Identificador **estável** do evento de webhook para idempotência (ver secção 3)                 |
+| `type`                                   | VARCHAR       | Ex.: `PAYMENT_CONFIRMED`, `PAYMENT_REFUNDED`                                                    |
+| `amount_cents`                           | INTEGER       | Ou NUMERIC + moeda                                                                              |
+| `status`                                 | VARCHAR       | Ex.: `PENDING`, `CONFIRMED`, `FAILED`                                                           |
+| `raw_payload_ref`                        | TEXT ou JSONB | Opcional: referência ou payload resumido para auditoria (evitar dados sensíveis desnecessários) |
+| `created_at`                             | TIMESTAMPTZ   |                                                                                                 |
+
 
 Índices: **único** em `asaas_event_id` (ou combinação acordada com a documentação Asaas) para deduplicação; `asaas_payment_id`; `(tenant_id, created_at)`.
 
@@ -81,8 +87,8 @@ Nenhum frontend importa SDK ou variáveis Asaas.
 1. **Validação de entrada:** verificar assinatura/token do webhook **antes** de alterar dados.
 2. **Chave idempotente:** extrair da payload um identificador estável — por exemplo `id` do evento Asaas ou combinação documentada `(event_type + payment_id)` — e gravá-lo em `financial_transactions.asaas_event_id` (ou tabela dedicada `webhook_events_processed`).
 3. **Transação de base de dados:** envolver o processamento em **uma transação** (`BEGIN … COMMIT`):
-   - Inserir ou actualizar registo de deduplicação com **constraint UNIQUE** na chave idempotente; se violação de unicidade, **commit** vazio e responder `200` (evento já processado).
-   - Alternativa: `INSERT … ON CONFLICT DO NOTHING` e, se zero linhas afectadas, sair cedo.
+  - Inserir ou actualizar registo de deduplicação com **constraint UNIQUE** na chave idempotente; se violação de unicidade, **commit** vazio e responder `200` (evento já processado).
+  - Alternativa: `INSERT … ON CONFLICT DO NOTHING` e, se zero linhas afectadas, sair cedo.
 4. **Locks:** em PostgreSQL, para o mesmo `payment_id`, pode usar `SELECT … FOR UPDATE` sobre a linha de `financial_transactions` ou subscrição **dentro** da mesma transacção, para serializar actualizações concorrentes.
 5. **Resposta HTTP:** devolver sucesso quando o evento foi aceite ou já tinha sido processado (idempotência), para a Asaas não reencaminhar indefinidamente; códigos de erro apenas para falhas recuperáveis conforme política Asaas.
 
@@ -96,3 +102,4 @@ Nenhum frontend importa SDK ou variáveis Asaas.
 
 - [architecture.md](./architecture.md)
 - [ADR 0001](./adr/0001-from-supabase-to-nest-api.md)
+

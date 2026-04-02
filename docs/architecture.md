@@ -2,6 +2,10 @@
 
 Documento canónico da visão técnica alvo. O monorepo existe por **co-localização** e conveniência de desenvolvimento; cada aplicação mantém **o seu próprio** `package.json` e pipeline de build, **sem** pacotes partilhados (ex.: sem `@shared/types`).
 
+### Site público e repositórios
+
+O **painel admin** e a **API** são o núcleo versionado neste monorepo. O **site público Next.js** de cada igreja é, em geral, um **projecto à parte** (repositório separado), porque ao comercializar o CMS cada cliente pode ter tema, deploy e alterações próprias sem estar acoplado ao histórico do produto. O vínculo é sempre **REST + OpenAPI** (URL da API configurável por ambiente). Uma pasta opcional `apps/site-public` pode existir só como **starter** ou referência interna — ver [ADR 0002](./adr/0002-site-public-repository-strategy.md).
+
 ## 1. Visão geral
 
 | Camada | Tecnologia | Responsabilidade |
@@ -89,12 +93,12 @@ Armazenamento de ficheiros (banners): URL externa ou serviço de object storage 
 ## 7. Decisões arquitectónicas (ADRs)
 
 - [ADR 0001: De Supabase/PostgREST para API Nest.js](./adr/0001-from-supabase-to-nest-api.md)
-- [ADR 0002: Site público em `apps/site-public` no monorepo](./adr/0002-site-public-in-monorepo.md)
+- [ADR 0002: Estratégia do repositório do site público](./adr/0002-site-public-repository-strategy.md)
 
 ## 8. Roadmap por fases
 
-1. **Fundação** — Estrutura de monorepo (pastas por app); Nest.js + PostgreSQL; migrações base (`tenants`, `users`); módulo Core; JWT/guards e `tenant_id` no contexto; Swagger ativo.
-2. **Domínio editorial** — Módulos Eventos e CMS; painel admin mínimo; endpoints públicos **read-only** para o Next.js (por `slug` / tenant explícito).
+1. **Fundação** — Estrutura de monorepo (API + admin; site opcional); Nest.js + PostgreSQL; migrações base (`tenants`, `users`); módulo Core; JWT/guards e `tenant_id` no contexto; Swagger ativo.
+2. **Domínio editorial** — Módulos Eventos e CMS; painel admin mínimo; endpoints públicos **read-only** para consumidores Next.js (por `slug` / tenant explícito), em repos separados ou starter interno.
 3. **Financeiro** — Adapter Asaas; tabelas `financial_*`; `POST` de subscrição/intenção de pagamento; `POST` webhook com idempotência e testes de concorrência.
 4. **Endurecimento** — Rate limiting no webhook; observabilidade (logs/métricas); auditoria de segurança multitenant.
 
