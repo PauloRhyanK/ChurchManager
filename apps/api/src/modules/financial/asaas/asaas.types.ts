@@ -1,9 +1,11 @@
-/** Resposta parcial da API Asaas v3 — cliente criado */
+/** Resposta parcial da API Asaas v3 — cliente (POST/GET customers) */
 export interface AsaasCustomerResponse {
   id: string;
   name?: string;
   email?: string;
   cpfCnpj?: string;
+  phone?: string;
+  mobilePhone?: string;
 }
 
 /** Resposta parcial — validação de credencial */

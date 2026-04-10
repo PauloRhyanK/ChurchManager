@@ -22,7 +22,7 @@ Rotas públicas (sem JWT): o tenant é resolvido por **`slug`** na URL — ver s
 
 ### 1.2 `financial_webhook_events` (idempotência)
 
-Tabela de deduplicação de webhooks: `idempotency_key` **UNIQUE** (ex.: `evento:paymentId` ou header `idempotency-key`). Evita processar duas vezes o mesmo evento da Asaas.
+Tabela de deduplicação de webhooks: `idempotency_key` **UNIQUE** global. A chave é derivada com **prefixo do `tenant_id`** para evitar colisão entre igrejas: prioridade **header `idempotency-key`** > **`id` do evento na raiz do JSON Asaas** (recomendado na [documentação Asaas](https://docs.asaas.com/docs/how-to-implement-idempotence-in-webhooks)) > fallback `${tenantId}:${eventType}:${paymentId|subscriptionId}`. Chaves com mais de 256 caracteres são substituídas pelo digest **SHA-256** (hex 64). Evita processar duas vezes o mesmo evento.
 
 ### 1.3 `financial_plans`
 
@@ -106,6 +106,20 @@ Nenhum frontend importa SDK ou variáveis Asaas.
 Implementação de referência: [apps/api](../apps/api) (Prisma + Nest.js).
 
 ## 3. Webhook Asaas — idempotência e transacções
+
+### 3.0 Comportamento implementado (`AsaasWebhookService`)
+
+1. **Autenticação:** `asaas-access-token` comparado ao token de webhook do tenant (cifrado em repouso), antes de qualquer processamento.
+2. **Idempotência em duas camadas:** (a) `findUnique` por `idempotency_key` — se existir, responde **200** sem chamar a API Asaas; (b) dentro da transacção Prisma, `create` em `financial_webhook_events` com tratamento de violação **única (P2002)** para corridas entre pedidos concorrentes.
+3. **Enriquecimento:** para eventos que exigem dados do pagador, **depois** do passo 2a e **antes** da transacção, `GET /v3/customers/{id}` com a `asaas_api_key` do tenant. Se esta chamada falhar (**5xx, rede, etc.**), o handler propaga erro (**500**), para a Asaas voltar a tentar o webhook.
+4. **Transacção única:** inserção do registo de webhook (quando aplicável), **upsert lógico** de `financial_payer_profiles` (CPF com 11 dígitos válidos; match preferencial por `asaas_customer_id`, depois por `cpf`; actualiza nome, email, telefone) e actualização/criação de `financial_transactions` na **mesma** `$transaction`.
+5. **Eventos (`switch`):**
+   - **`PAYMENT_RECEIVED` / `PAYMENT_CONFIRMED`:** confirma transacções existentes (`status` → `CONFIRMED`), preenche `payer_profile_id`, mescla `raw_payload_ref` com `linkTracking` se `payment.externalReference` for do formato `cm|v1|…` (links de pagamento).
+   - **`PAYMENT_CREATED`:** enriquece pagador; actualiza transacção existente ou cria linha **PENDING** com `amount_cents` a partir de `payment.value`.
+   - **`SUBSCRIPTION_CREATED`:** enriquece pagador apenas (sem linha de pagamento); registo do webhook para dedup.
+   - **Outros tipos:** apenas grava `financial_webhook_events` (dedup), sem `GET` customer.
+
+**CNPJ (14 dígitos):** o modelo actual só persiste **CPF** em `financial_payer_profiles`; clientes só com CNPJ não geram perfil local (com log).
 
 ### 3.1 Ameaças
 

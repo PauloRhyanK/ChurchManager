@@ -24,7 +24,7 @@ export class AsaasWebhookController {
   ) {
     const tenant = await this.tenants.findBySlugOrThrow(slug);
     this.webhook.verifyToken(asaasAccessToken, tenant.asaasWebhookToken);
-    await this.webhook.processRawBody(body, idempotencyKey, tenant.id);
+    await this.webhook.processRawBody(body, idempotencyKey, tenant);
     return { received: true };
   }
 }

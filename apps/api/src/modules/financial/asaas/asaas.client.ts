@@ -73,6 +73,29 @@ export class AsaasClient {
     return data;
   }
 
+  /** Usado pelo webhook para enriquecer pagador; falhas propagam 500 para retry Asaas. */
+  async getCustomer(input: {
+    apiKey: string;
+    customerId: string;
+  }): Promise<AsaasCustomerResponse> {
+    const res = await fetch(
+      `${this.baseUrl}/customers/${encodeURIComponent(input.customerId)}`,
+      {
+        method: 'GET',
+        headers: this.headers(input.apiKey),
+      },
+    );
+    const data = (await res.json()) as AsaasCustomerResponse & {
+      errors?: Array<{ description?: string }>;
+    };
+    if (!res.ok) {
+      const msg =
+        data.errors?.[0]?.description ?? `Asaas customers GET ${res.status}`;
+      throw new InternalServerErrorException(msg);
+    }
+    return data;
+  }
+
   async createPayment(input: {
     apiKey: string;
     customerId: string;
