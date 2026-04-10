@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { FinancialModule } from './modules/financial/financial.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { HealthModule } from './health/health.module';
 import { RequestLoggingInterceptor } from './common/request-logging.interceptor';
 
 @Module({
@@ -42,6 +43,7 @@ import { RequestLoggingInterceptor } from './common/request-logging.interceptor'
       },
     ]),
     PrismaModule,
+    HealthModule,
     AuthModule,
     TenantsModule,
     FinancialModule,

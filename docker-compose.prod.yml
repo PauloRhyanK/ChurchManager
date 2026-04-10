@@ -1,0 +1,26 @@
+# Exemplo: API apenas (Postgres gerido ou externo). Não inclui o serviço db.
+# Uso: docker compose -f docker-compose.prod.yml up -d
+# Defina API_IMAGE e ficheiro de ambiente com segredos (não commitado).
+
+services:
+  api:
+    image: ${API_IMAGE:-church-manager-api:latest}
+    ports:
+      - "${API_PORT:-3000}:3000"
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 60s

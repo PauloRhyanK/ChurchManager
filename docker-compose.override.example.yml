@@ -1,0 +1,9 @@
+# Copie para docker-compose.override.yml (ficheiro ignorado pelo Git) para ajustes locais.
+# O Docker Compose carrega automaticamente docker-compose.override.yml se existir.
+#
+# Exemplo: activar seed na primeira subida (apenas desenvolvimento)
+#
+# services:
+#   api:
+#     environment:
+#       RUN_SEED: "true"

@@ -8,10 +8,15 @@
 4. `npx prisma db seed` — cria tenant `slug=demo`, plano de exemplo e utilizador admin (email/senha configuráveis com `ADMIN_SEED_EMAIL` / `ADMIN_SEED_PASSWORD`; padrão `admin@demo.local` / `demo123456`).
 5. `npm run start:dev`
 
+## Docker
+
+Imagem multi-stage e Postgres via Compose na **raiz do monorepo**: ver [docker/README.md](../../docker/README.md). Na raiz, copiar [`.env.docker.example`](../../.env.docker.example) para `.env.docker` e preencher segredos antes de `docker compose up`.
+
 ## Endpoints relevantes
 
 | Método | Caminho | Descrição |
 |--------|---------|-----------|
+| GET | `/api/health` | Liveness (sem auth; healthcheck Docker) |
 | POST | `/api/auth/login` | Login admin (`email`, `password`) → JWT |
 | GET | `/api/admin/tenants/me/financial-setup` | Estado Asaas configurado? (Bearer JWT) |
 | PUT | `/api/admin/tenants/me/asaas-credentials` | Atualiza credenciais Asaas (valida no Asaas; Bearer JWT) |

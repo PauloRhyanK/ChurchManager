@@ -14,6 +14,7 @@ Estrutura típica: `apps/api`, `apps/admin`. Uma pasta `apps/site-public` é **o
 
 - **[apps/api](apps/api/README.md)** — API Nest.js (Asaas, pré-cadastro por CPF, webhooks, auth JWT para o painel).
 - **[apps/admin](apps/admin/README.md)** — Painel React (Vite, Tailwind, login, financeiro, cotas).
+- **[docker](docker/README.md)** — Postgres + API em contentores (Compose), variáveis `.env.docker`.
 
 ## Licença
 

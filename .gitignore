@@ -69,6 +69,13 @@ web_modules/
 .env
 .env.*
 !.env.example
+!.env.docker.example
+
+# Docker Compose local overrides
+docker-compose.override.yml
+
+# Docker env local (raiz)
+.env.docker
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
