@@ -4,6 +4,7 @@ const SENSITIVE_KEYS = new Set([
   'apiKey',
   'webhookToken',
   'access_token',
+  'password',
 ]);
 
 export function redactSecrets<T>(value: T): T {

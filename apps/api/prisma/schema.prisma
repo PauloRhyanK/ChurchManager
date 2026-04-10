@@ -23,8 +23,23 @@ model Tenant {
   subscriptions      FinancialSubscription[]
   transactions       FinancialTransaction[]
   webhookEvents      FinancialWebhookEvent[]
+  adminUsers         AdminUser[]
 
   @@map("tenants")
+}
+
+model AdminUser {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  email        String   @unique @db.VarChar(255)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("admin_users")
 }
 
 model FinancialPayerProfile {

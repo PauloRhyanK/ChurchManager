@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { FinancialModule } from './modules/financial/financial.module';
+import { AuthModule } from './modules/auth/auth.module';
 import { RequestLoggingInterceptor } from './common/request-logging.interceptor';
 
 @Module({
@@ -17,6 +18,12 @@ import { RequestLoggingInterceptor } from './common/request-logging.interceptor'
           // Falha no arranque (equivalente a process.exit): o processo Nest não sobe.
           throw new Error(
             'ENCRYPTION_KEY inválida ou ausente (esperado hex com 64 caracteres)',
+          );
+        }
+        const jwt = env.JWT_SECRET as string | undefined;
+        if (!jwt || jwt.length < 32) {
+          throw new Error(
+            'JWT_SECRET ausente ou fraca (mínimo 32 caracteres recomendado)',
           );
         }
         return env;
@@ -35,6 +42,7 @@ import { RequestLoggingInterceptor } from './common/request-logging.interceptor'
       },
     ]),
     PrismaModule,
+    AuthModule,
     TenantsModule,
     FinancialModule,
   ],
