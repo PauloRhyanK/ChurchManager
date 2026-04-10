@@ -32,6 +32,6 @@ export class PublicFinancialController {
     @Body() dto: CreatePaymentIntentDto,
   ) {
     const tenant = await this.tenants.findBySlugOrThrow(slug);
-    return this.paymentIntents.createIntent(tenant.id, dto);
+    return this.paymentIntents.createIntent(tenant, dto);
   }
 }

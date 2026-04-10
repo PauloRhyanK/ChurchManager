@@ -99,7 +99,7 @@ Identificação da igreja pelo **`slug`** do tenant na URL; **sem** JWT. Rate li
 
 1. **Nest.js:** cria ou reutiliza cliente no Asaas (adapter HTTP); cria pagamento; persiste transacção **PENDING**.
 2. **Asaas** notifica o estado final via **webhook**.
-3. **Nest.js — webhook:** `POST /api/webhooks/asaas`; header `asaas-access-token` igual a `ASAAS_WEBHOOK_TOKEN`; processamento **idempotente** (secção 3) via tabela `financial_webhook_events`.
+3. **Nest.js — webhook:** `POST /api/webhooks/asaas/:slug`; header `asaas-access-token` igual ao token de webhook cifrado do tenant (decriptado em memória); processamento **idempotente** (secção 3) via tabela `financial_webhook_events`.
 
 Nenhum frontend importa SDK ou variáveis Asaas.
 

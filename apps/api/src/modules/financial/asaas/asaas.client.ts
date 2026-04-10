@@ -2,6 +2,7 @@ import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   AsaasBillingType,
+  AsaasAccountResponse,
   AsaasCustomerResponse,
   AsaasPaymentResponse,
 } from './asaas.types';
@@ -16,24 +17,31 @@ export class AsaasClient {
       'https://sandbox.asaas.com/api/v3';
   }
 
-  private apiKey(): string {
-    const key = this.config.get<string>('ASAAS_API_KEY');
-    if (!key) {
-      throw new InternalServerErrorException(
-        'ASAAS_API_KEY não configurada no servidor',
-      );
-    }
-    return key;
-  }
-
-  private headers(): Record<string, string> {
+  private headers(apiKey: string): Record<string, string> {
     return {
       'Content-Type': 'application/json',
-      access_token: this.apiKey(),
+      access_token: apiKey,
     };
   }
 
+  async validateApiKey(apiKey: string): Promise<AsaasAccountResponse> {
+    const res = await fetch(`${this.baseUrl}/myAccount`, {
+      method: 'GET',
+      headers: this.headers(apiKey),
+    });
+    const data = (await res.json()) as AsaasAccountResponse & {
+      errors?: Array<{ description?: string }>;
+    };
+    if (!res.ok) {
+      const msg =
+        data.errors?.[0]?.description ?? `Asaas myAccount ${res.status}`;
+      throw new InternalServerErrorException(msg);
+    }
+    return data;
+  }
+
   async createCustomer(input: {
+    apiKey: string;
     name: string;
     email: string;
     phone?: string;
@@ -42,7 +50,7 @@ export class AsaasClient {
   }): Promise<AsaasCustomerResponse> {
     const res = await fetch(`${this.baseUrl}/customers`, {
       method: 'POST',
-      headers: this.headers(),
+      headers: this.headers(input.apiKey),
       body: JSON.stringify({
         name: input.name,
         email: input.email,
@@ -64,6 +72,7 @@ export class AsaasClient {
   }
 
   async createPayment(input: {
+    apiKey: string;
     customerId: string;
     billingType: AsaasBillingType;
     value: number;
@@ -73,7 +82,7 @@ export class AsaasClient {
   }): Promise<AsaasPaymentResponse> {
     const res = await fetch(`${this.baseUrl}/payments`, {
       method: 'POST',
-      headers: this.headers(),
+      headers: this.headers(input.apiKey),
       body: JSON.stringify({
         customer: input.customerId,
         billingType: input.billingType,

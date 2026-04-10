@@ -3,11 +3,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Tenant } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AsaasClient } from './asaas/asaas.client';
 import { CreatePaymentIntentDto } from './dto/create-payment-intent.dto';
 import { normalizeCpf, isValidCpfDigits } from '../../common/cpf';
 import { AsaasBillingType } from './asaas/asaas.types';
+import { TenantCredentialsService } from '../tenants/tenant-credentials.service';
 
 function formatDueDate(daysFromNow = 0): string {
   const d = new Date();
@@ -20,9 +22,11 @@ export class PaymentIntentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly asaas: AsaasClient,
+    private readonly tenantCredentials: TenantCredentialsService,
   ) {}
 
-  async createIntent(tenantId: string, dto: CreatePaymentIntentDto) {
+  async createIntent(tenant: Tenant, dto: CreatePaymentIntentDto) {
+    const tenantId = tenant.id;
     const cpf = normalizeCpf(dto.cpf);
     if (!isValidCpfDigits(cpf)) {
       throw new BadRequestException('CPF inválido');
@@ -64,6 +68,7 @@ export class PaymentIntentsService {
     let asaasCustomerId = profile.asaasCustomerId;
     if (!asaasCustomerId) {
       const customer = await this.asaas.createCustomer({
+        apiKey: this.tenantCredentials.getDecryptedApiKey(tenant.asaasApiKey),
         name: profile.name,
         email: profile.email,
         phone: profile.phone ?? undefined,
@@ -81,6 +86,7 @@ export class PaymentIntentsService {
       billingType === 'BOLETO' ? formatDueDate(3) : formatDueDate(0);
 
     const payment = await this.asaas.createPayment({
+      apiKey: this.tenantCredentials.getDecryptedApiKey(tenant.asaasApiKey),
       customerId: asaasCustomerId,
       billingType,
       value: amountReais,

@@ -6,6 +6,13 @@ export interface AsaasCustomerResponse {
   cpfCnpj?: string;
 }
 
+/** Resposta parcial — validação de credencial */
+export interface AsaasAccountResponse {
+  id?: string;
+  name?: string;
+  email?: string;
+}
+
 /** Resposta parcial — cobrança criada */
 export interface AsaasPaymentResponse {
   id: string;

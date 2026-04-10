@@ -3,8 +3,8 @@ import {
   UnauthorizedException,
   BadRequestException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
+import { TenantCredentialsService } from '../tenants/tenant-credentials.service';
 
 /** Payload mínimo esperado dos webhooks Asaas v3 */
 interface AsaasWebhookBody {
@@ -21,14 +21,19 @@ interface AsaasWebhookBody {
 export class AsaasWebhookService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
+    private readonly tenantCredentials: TenantCredentialsService,
   ) {}
 
-  verifyToken(headerToken: string | undefined): void {
-    const expected = this.config.get<string>('ASAAS_WEBHOOK_TOKEN');
-    if (!expected) {
+  verifyToken(
+    headerToken: string | undefined,
+    encryptedToken: string | null,
+  ): void {
+    if (!encryptedToken) {
       throw new UnauthorizedException('Webhook não configurado');
     }
+    const expected = this.tenantCredentials.getDecryptedWebhookToken(
+      encryptedToken,
+    );
     if (headerToken !== expected) {
       throw new UnauthorizedException('Token inválido');
     }
@@ -37,6 +42,7 @@ export class AsaasWebhookService {
   async processRawBody(
     raw: unknown,
     idempotencyKeyFromHeader: string | undefined,
+    tenantId: string,
   ): Promise<{ ok: true; duplicate: boolean }> {
     const body = raw as AsaasWebhookBody;
     const paymentId = body.payment?.id;
@@ -54,6 +60,7 @@ export class AsaasWebhookService {
       const inserted = await tx.financialWebhookEvent.createMany({
         data: [
           {
+            tenantId,
             idempotencyKey,
             eventType: event,
             paymentId,
