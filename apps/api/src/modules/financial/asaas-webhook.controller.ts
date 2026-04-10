@@ -4,7 +4,7 @@ import { AsaasWebhookService } from './asaas-webhook.service';
 import { TenantsService } from '../tenants/tenants.service';
 
 @Controller('webhooks/asaas/:slug')
-@SkipThrottle()
+@SkipThrottle({ public: true, links: true })
 export class AsaasWebhookController {
   constructor(
     private readonly webhook: AsaasWebhookService,

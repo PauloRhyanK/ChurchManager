@@ -35,3 +35,46 @@ export interface AsaasPaymentResponse {
 }
 
 export type AsaasBillingType = 'BOLETO' | 'CREDIT_CARD' | 'PIX' | 'UNDEFINED';
+
+/** Pedido parcial — POST /v3/paymentLinks */
+export type AsaasPaymentLinkChargeType = 'DETACHED' | 'RECURRENT' | 'INSTALLMENT';
+
+export type AsaasPaymentLinkBillingType =
+  | 'UNDEFINED'
+  | 'BOLETO'
+  | 'CREDIT_CARD'
+  | 'PIX';
+
+export type AsaasPaymentLinkSubscriptionCycle =
+  | 'WEEKLY'
+  | 'BIWEEKLY'
+  | 'MONTHLY'
+  | 'BIMONTHLY'
+  | 'QUARTERLY'
+  | 'SEMIANNUALLY'
+  | 'YEARLY';
+
+export interface AsaasPaymentLinkCreateInput {
+  name: string;
+  description?: string;
+  billingType: AsaasPaymentLinkBillingType;
+  chargeType: AsaasPaymentLinkChargeType;
+  value?: number;
+  subscriptionCycle?: AsaasPaymentLinkSubscriptionCycle;
+  dueDateLimitDays?: number;
+  externalReference?: string;
+  notificationEnabled?: boolean;
+}
+
+/** Resposta parcial — link de pagamentos criado */
+export interface AsaasPaymentLinkResponse {
+  id: string;
+  url: string;
+  name?: string;
+  value?: number;
+  chargeType?: string;
+  billingType?: string;
+  subscriptionCycle?: string;
+  externalReference?: string;
+  active?: boolean;
+}

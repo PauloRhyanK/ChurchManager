@@ -14,6 +14,7 @@ import { RequestLoggingInterceptor } from './common/request-logging.interceptor'
       validate: (env) => {
         const key = env.ENCRYPTION_KEY as string | undefined;
         if (!key || !/^[0-9a-fA-F]{64}$/.test(key)) {
+          // Falha no arranque (equivalente a process.exit): o processo Nest não sobe.
           throw new Error(
             'ENCRYPTION_KEY inválida ou ausente (esperado hex com 64 caracteres)',
           );
@@ -26,6 +27,11 @@ import { RequestLoggingInterceptor } from './common/request-logging.interceptor'
         name: 'public',
         ttl: 60_000,
         limit: 30,
+      },
+      {
+        name: 'links',
+        ttl: 60_000,
+        limit: 5,
       },
     ]),
     PrismaModule,

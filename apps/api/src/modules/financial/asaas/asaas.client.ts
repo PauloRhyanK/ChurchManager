@@ -5,6 +5,8 @@ import {
   AsaasAccountResponse,
   AsaasCustomerResponse,
   AsaasPaymentResponse,
+  AsaasPaymentLinkCreateInput,
+  AsaasPaymentLinkResponse,
 } from './asaas.types';
 
 @Injectable()
@@ -98,6 +100,26 @@ export class AsaasClient {
     if (!res.ok) {
       const msg =
         data.errors?.[0]?.description ?? `Asaas payments ${res.status}`;
+      throw new InternalServerErrorException(msg);
+    }
+    return data;
+  }
+
+  async createPaymentLink(input: {
+    apiKey: string;
+    body: AsaasPaymentLinkCreateInput;
+  }): Promise<AsaasPaymentLinkResponse> {
+    const res = await fetch(`${this.baseUrl}/paymentLinks`, {
+      method: 'POST',
+      headers: this.headers(input.apiKey),
+      body: JSON.stringify(input.body),
+    });
+    const data = (await res.json()) as AsaasPaymentLinkResponse & {
+      errors?: Array<{ description?: string; code?: string }>;
+    };
+    if (!res.ok) {
+      const msg =
+        data.errors?.[0]?.description ?? `Asaas paymentLinks ${res.status}`;
       throw new InternalServerErrorException(msg);
     }
     return data;

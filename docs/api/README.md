@@ -21,6 +21,7 @@ Documentação orientada ao consumo pelo site/app. Os caminhos assumem o **prefi
 |-----------|----------|
 | [events-public-contract.md](./events-public-contract.md) | Eventos, detalhe, ingressos, fluxo de pagamento, conclusão e bilhete |
 | [cotas-payment-contract.md](./cotas-payment-contract.md) | Links/cobranças Asaas para **cotas** (valor fixo da cota vs valor livre) |
+| [public-payment-links.md](./public-payment-links.md) | **`POST .../links`** — link de pagamento Asaas (único vs mensal, valor opcional) |
 
 ## Implementação vs planeamento
 
