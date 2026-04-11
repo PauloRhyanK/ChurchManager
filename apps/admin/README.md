@@ -2,16 +2,18 @@
 
 Interface para gestão da igreja: autenticação JWT, configuração Asaas e visão de cotas.
 
+**Primeiro arranque:** seguir [README na raiz](../../README.md#dev-quickstart). Se pedidos à API devolverem **404**, confirma que `VITE_API_URL` termina em `/api`.
+
 ## Requisitos
 
 - Node.js 20+
-- API Nest em execução ([apps/api](../api/README.md)) com `ADMIN_CORS_ORIGIN` a incluir a origem deste app (ex.: `http://localhost:5173`)
+- API Nest em execução ([apps/api](../api/README.md)) com `ADMIN_CORS_ORIGIN` a incluir `http://localhost:5173` (origem do Vite). Origens de **sites públicos** por igreja: base de dados (Configurações financeiras → Site público (CORS)), não esta variável.
 
 ## Configuração
 
-1. Copiar `.env.example` para `.env` e ajustar `VITE_API_URL` se necessário (por defeito `http://localhost:3000/api`).
+1. Copiar `.env.example` para `.env`. Manter `VITE_API_URL=http://localhost:3000/api` salvo a API use outro host/porto.
 2. `npm install`
-3. Na API: `npx prisma migrate deploy`, `npx prisma db seed` — cria utilizador demo `admin@demo.local` / `demo123456` (ou variáveis `ADMIN_SEED_*`).
+3. Na API: migrar (e opcionalmente seed) — ver README raiz.
 
 ## Scripts
 
@@ -25,7 +27,7 @@ Interface para gestão da igreja: autenticação JWT, configuração Asaas e vis
 |---------|-----------|
 | `/login` | Início de sessão |
 | `/admin/financeiro/cotas` | Tabela de cotas (paginação e filtros na query string) |
-| `/admin/configuracoes/financeiro` | API Key e webhook token Asaas |
+| `/admin/configuracoes/financeiro` | Asaas, credenciais e **origens CORS** do site público |
 
 ## Stack
 

@@ -1,16 +1,22 @@
 # API (Nest.js)
 
+Fluxo mínimo local (ordem e variáveis): **[README na raiz do monorepo](../../README.md#dev-quickstart)**.
+
 ## Configuração
 
-1. Copiar `.env.example` para `.env` e preencher `DATABASE_URL`, `ENCRYPTION_KEY`, `JWT_SECRET` (≥32 caracteres), `ASAAS_API_URL` e, para o painel admin local, `ADMIN_CORS_ORIGIN` (ex.: `http://localhost:5173`).
+1. Copiar `.env.example` para `.env` e preencher variáveis obrigatórias (ver `.env.example`). `ADMIN_CORS_ORIGIN` = origens do **painel admin** apenas (ex. `http://localhost:5173`). Sites públicos por igreja: tabela `tenant_public_web_origins` (painel **Configurações financeiras** ou rotas `.../public-web-origins`).
 2. `npm install`
 3. `npx prisma migrate deploy` (ou `npx prisma migrate dev` em desenvolvimento)
-4. `npx prisma db seed` — cria tenant `slug=demo`, plano de exemplo e utilizador admin (email/senha configuráveis com `ADMIN_SEED_EMAIL` / `ADMIN_SEED_PASSWORD`; padrão `admin@demo.local` / `demo123456`).
+4. Opcional: `npx prisma db seed` — tenant demo, admin, origem CORS de exemplo `http://localhost:3001`
 5. `npm run start:dev`
 
 ## Docker
 
-Imagem multi-stage e Postgres via Compose na **raiz do monorepo**: ver [docker/README.md](../../docker/README.md). Na raiz, copiar [`.env.docker.example`](../../.env.docker.example) para `.env.docker` e preencher segredos antes de `docker compose up`.
+Compose na raiz: [docker/README.md](../../docker/README.md). Copiar [`.env.docker.example`](../../.env.docker.example) → `.env.docker`. O entrypoint da API aplica migrações ao arranque; seed só com `RUN_SEED=true`.
+
+## Webhooks em desenvolvimento local
+
+O Asaas precisa de um URL público (HTTPS). Ver [docs/webhooks-local-dev-ngrok.md](../../docs/webhooks-local-dev-ngrok.md) (ngrok + configuração no Asaas).
 
 ## Endpoints relevantes
 
@@ -20,9 +26,13 @@ Imagem multi-stage e Postgres via Compose na **raiz do monorepo**: ver [docker/R
 | POST | `/api/auth/login` | Login admin (`email`, `password`) → JWT |
 | GET | `/api/admin/tenants/me/financial-setup` | Estado Asaas configurado? (Bearer JWT) |
 | PUT | `/api/admin/tenants/me/asaas-credentials` | Atualiza credenciais Asaas (valida no Asaas; Bearer JWT) |
+| GET | `/api/admin/tenants/me/public-web-origins` | Lista origens de browser autorizadas para `/api/public/tenants/:slug/...` (Bearer JWT) |
+| POST | `/api/admin/tenants/me/public-web-origins` | Regista origem (`{ "origin": "https://..." }`; Bearer JWT) |
+| DELETE | `/api/admin/tenants/me/public-web-origins/:id` | Remove origem (Bearer JWT) |
 | GET | `/api/admin/tenants/me/cotas` | Lista cotas paginada (`page`, `limit`, `status`, `q`; Bearer JWT) |
 | POST | `/api/public/tenants/:slug/payer-profiles` | Pré-cadastro (CPF, nome, email, telefone) |
 | POST | `/api/public/tenants/:slug/payment-intents` | Gera cobrança Asaas (exige pré-cadastro) |
+| POST | `/api/public/tenants/:slug/links` | Gera link de pagamento Asaas (cotas; ver `docs/api/public-payment-links.md`) |
 | POST | `/api/webhooks/asaas/:slug` | Webhook por tenant (header `asaas-access-token`) |
 
 Prefixo global: `api`.

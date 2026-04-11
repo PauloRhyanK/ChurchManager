@@ -22,6 +22,34 @@ export async function updateAsaasCredentials(body: {
   return data;
 }
 
+export interface PublicWebOriginDto {
+  id: string;
+  origin: string;
+  createdAt: string;
+}
+
+export async function fetchPublicWebOrigins() {
+  const { data } = await api.get<{ items: PublicWebOriginDto[] }>(
+    '/admin/tenants/me/public-web-origins',
+  );
+  return data.items;
+}
+
+export async function createPublicWebOrigin(origin: string) {
+  const { data } = await api.post<PublicWebOriginDto>(
+    '/admin/tenants/me/public-web-origins',
+    { origin },
+  );
+  return data;
+}
+
+export async function deletePublicWebOrigin(id: string) {
+  const { data } = await api.delete<{ ok: boolean }>(
+    `/admin/tenants/me/public-web-origins/${id}`,
+  );
+  return data;
+}
+
 export type QuotaStatus = 'PAID' | 'OVERDUE' | 'PENDING';
 
 export interface CotaRowDto {

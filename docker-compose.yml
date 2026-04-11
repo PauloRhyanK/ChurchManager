@@ -43,5 +43,40 @@ services:
       retries: 5
       start_period: 90s
 
+  # Túnel HTTPS para webhooks Asaas em dev (opcional). Ver docker/README.md e docs/webhooks-local-dev-ngrok.md
+  ngrok:
+    image: ngrok/ngrok:latest
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    # Token lido de .env.docker (evita ${NGROK_AUTHTOKEN} no YAML e o aviso do compose ao correr logs sem .env)
+    env_file:
+      - .env.docker
+    command: ["http", "--log=stdout", "http://api:3000"]
+    ports:
+      - "4040:4040"
+
+  # pgAdmin 4 — só dev local. Não uses em produção exposto à internet.
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    profiles: ["pgadmin"]
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env.docker
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@church.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - church_manager_pgadmin:/var/lib/pgadmin
+
 volumes:
   church_manager_pgdata:
+  church_manager_pgadmin:

@@ -24,8 +24,23 @@ model Tenant {
   transactions       FinancialTransaction[]
   webhookEvents      FinancialWebhookEvent[]
   adminUsers         AdminUser[]
+  publicWebOrigins   TenantPublicWebOrigin[]
 
   @@map("tenants")
+}
+
+/// Origens de browser (scheme + host + port) autorizadas a chamar `/api/public/tenants/:slug/...` (CORS).
+model TenantPublicWebOrigin {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  origin    String   @db.VarChar(512)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, origin])
+  @@index([tenantId])
+  @@map("tenant_public_web_origins")
 }
 
 model AdminUser {

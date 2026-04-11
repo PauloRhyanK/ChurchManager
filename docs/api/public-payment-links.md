@@ -4,6 +4,10 @@ Gera um **link de pagamentos** na conta Asaas da igreja (credencial por `slug`).
 
 O código deve usar um serviço partilhado de geração (`PaymentLinksGenerationService`) com `sourceKey` fixo `cotas` no `externalReference` (`cm|v1|<tenantSlug>|cotas`). **Eventos** e outros módulos podem ter **outro endpoint** que chama o mesmo serviço com outro `sourceKey` (ex.: `events-<uuid>`).
 
+## CORS
+
+O browser só envia `fetch` de origens registadas para este tenant na tabela **`tenant_public_web_origins`** (gestão em **Configurações financeiras** no admin ou `GET/POST/DELETE /api/admin/tenants/me/public-web-origins`). Não uses `ADMIN_CORS_ORIGIN` para sites de clientes.
+
 ## Pedido
 
 `Content-Type: application/json`

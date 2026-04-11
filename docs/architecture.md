@@ -40,6 +40,12 @@ flowchart LR
 - **Toda** leitura/escrita em dados de negócio deve ser **filtrada** por `tenant_id` no serviço/repositório (não confiar apenas no cliente).
 - O site público obtém dados **apenas** de endpoints que fixam o tenant por **slug**, **token público limitado** ou outro mecanismo explícito documentado — nunca listar dados de todos os tenants.
 
+### 2.1 CORS (browser)
+
+- **`/api/public/tenants/:slug/...`:** o cabeçalho `Origin` só é reflectido em `Access-Control-Allow-Origin` se existir correspondência na tabela **`tenant_public_web_origins`** dessa igreja (cadastro por tenant na base de dados). Assim, cada cliente comercial pode ter um ou mais domínios do site público sem listar todos os sites do mundo no `.env`.
+- **`/api/auth`**, **`/api/admin/...`** e **`/api/health`:** continuam a usar **`ADMIN_CORS_ORIGIN`** (lista separada por vírgula), típica do deploy do painel admin (ex.: `http://localhost:5173`).
+- Implementação: `DynamicCorsMiddleware` (Nest) com cache curto por `slug`; a biblioteca `cors` estática não basta porque o `Origin` permitido depende do caminho e do tenant. No Express/Nest, o **prefixo global `api` não se aplica ao middleware** — o caminho visto é tipicamente `/public/tenants/...` e `/auth/login`, não `/api/...`; o código aceita ambas as formas.
+
 ## 3. Módulos de negócio (domínios)
 
 ### 3.1 Core — Auth e tenants

@@ -16,7 +16,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { getApiErrorMessage } from '@/lib/api';
 import {
+  createPublicWebOrigin,
+  deletePublicWebOrigin,
   fetchFinancialSetup,
+  fetchPublicWebOrigins,
   updateAsaasCredentials,
 } from '../api/tenant-financial-api';
 import {
@@ -28,10 +31,39 @@ export function FinancialSettingsPage() {
   const queryClient = useQueryClient();
   const [showApiKey, setShowApiKey] = useState(false);
   const [showWebhook, setShowWebhook] = useState(false);
+  const [newOrigin, setNewOrigin] = useState('');
 
   const setupQuery = useQuery({
     queryKey: ['financial-setup'],
     queryFn: fetchFinancialSetup,
+  });
+
+  const originsQuery = useQuery({
+    queryKey: ['public-web-origins'],
+    queryFn: fetchPublicWebOrigins,
+  });
+
+  const addOriginMutation = useMutation({
+    mutationFn: createPublicWebOrigin,
+    onSuccess: () => {
+      toast.success('Origem registada.');
+      void queryClient.invalidateQueries({ queryKey: ['public-web-origins'] });
+      setNewOrigin('');
+    },
+    onError: (err) => {
+      toast.error(getApiErrorMessage(err));
+    },
+  });
+
+  const removeOriginMutation = useMutation({
+    mutationFn: deletePublicWebOrigin,
+    onSuccess: () => {
+      toast.success('Origem removida.');
+      void queryClient.invalidateQueries({ queryKey: ['public-web-origins'] });
+    },
+    onError: (err) => {
+      toast.error(getApiErrorMessage(err));
+    },
   });
 
   const form = useForm<AsaasCredentialsFormValues>({
@@ -151,6 +183,89 @@ export function FinancialSettingsPage() {
                 </>
               ) : (
                 'Guardar configurações'
+              )}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Site público (CORS)</CardTitle>
+          <CardDescription>
+            O valor tem de coincidir com o que o browser envia em{' '}
+            <strong>Origin</strong> (barra de endereço: mesmo host, porta e{' '}
+            <code className="text-xs">http</code> vs <code className="text-xs">https</code>
+            ). Podes escrever só <code className="text-xs">localhost:3001</code> — o
+            servidor completa com <code className="text-xs">http://</code>.{' '}
+            <code className="text-xs">localhost</code> e{' '}
+            <code className="text-xs">127.0.0.1</code> são origens diferentes; regista a
+            que o site usa.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {originsQuery.isLoading && (
+            <p className="text-sm text-[var(--muted-foreground)]">A carregar…</p>
+          )}
+          {originsQuery.isError && (
+            <p className="text-sm text-red-600 dark:text-red-400">
+              {getApiErrorMessage(originsQuery.error)}
+            </p>
+          )}
+          {originsQuery.data && originsQuery.data.length === 0 && (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Nenhuma origem registada. O browser bloqueará pedidos ao domínio da
+              API a partir de sites externos.
+            </p>
+          )}
+          <ul className="space-y-2">
+            {originsQuery.data?.map((row) => (
+              <li
+                key={row.id}
+                className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 font-mono text-sm"
+              >
+                <span className="truncate">{row.origin}</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={removeOriginMutation.isPending}
+                  onClick={() => removeOriginMutation.mutate(row.id)}
+                >
+                  Remover
+                </Button>
+              </li>
+            ))}
+          </ul>
+          <form
+            className="flex flex-col gap-2 sm:flex-row sm:items-end"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const v = newOrigin.trim();
+              if (!v) return;
+              addOriginMutation.mutate(v);
+            }}
+          >
+            <div className="min-w-0 flex-1 space-y-2">
+              <Label htmlFor="publicOrigin">Nova origem</Label>
+              <Input
+                id="publicOrigin"
+                placeholder="https://www.exemplo.org ou localhost:3001"
+                className="font-mono text-sm"
+                value={newOrigin}
+                onChange={(e) => setNewOrigin(e.target.value)}
+                autoComplete="off"
+              />
+            </div>
+            <Button
+              type="submit"
+              variant="secondary"
+              disabled={addOriginMutation.isPending || !newOrigin.trim()}
+            >
+              {addOriginMutation.isPending ? (
+                <Loader2 className="animate-spin" />
+              ) : (
+                'Adicionar'
               )}
             </Button>
           </form>

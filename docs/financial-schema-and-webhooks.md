@@ -101,6 +101,8 @@ Identificação da igreja pelo **`slug`** do tenant na URL; **sem** JWT. Rate li
 2. **Asaas** notifica o estado final via **webhook**.
 3. **Nest.js — webhook:** `POST /api/webhooks/asaas/:slug`; header `asaas-access-token` igual ao token de webhook cifrado do tenant (decriptado em memória); processamento **idempotente** (secção 3) via tabela `financial_webhook_events`.
 
+**Desenvolvimento local:** o Asaas não alcança `localhost`; usar um túnel HTTPS (ex. ngrok). Ver [webhooks-local-dev-ngrok.md](./webhooks-local-dev-ngrok.md).
+
 Nenhum frontend importa SDK ou variáveis Asaas.
 
 Implementação de referência: [apps/api](../apps/api) (Prisma + Nest.js).

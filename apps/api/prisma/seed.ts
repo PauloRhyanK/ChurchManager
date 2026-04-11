@@ -46,9 +46,23 @@ async function main() {
     },
   });
 
+  await prisma.tenantPublicWebOrigin.upsert({
+    where: {
+      tenantId_origin: {
+        tenantId: tenant.id,
+        origin: 'http://localhost:3001',
+      },
+    },
+    create: {
+      tenantId: tenant.id,
+      origin: 'http://localhost:3001',
+    },
+    update: {},
+  });
+
   // eslint-disable-next-line no-console
   console.log(
-    `Seed OK — tenant slug: demo | email: ${seedEmail} | ${seedPassword === 'demo123456' ? 'senha padrão demo123456 (altere em produção)' : 'senha via ADMIN_SEED_PASSWORD'}`,
+    `Seed OK — tenant slug: demo | email: ${seedEmail} | ${seedPassword === 'demo123456' ? 'senha padrão demo123456 (altere em produção)' : 'senha via ADMIN_SEED_PASSWORD'} | CORS site público: http://localhost:3001`,
   );
 }
 
