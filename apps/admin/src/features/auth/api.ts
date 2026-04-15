@@ -1,4 +1,4 @@
-import { api } from '@/lib/api';
+import { api } from "@/lib/api";
 
 export interface LoginResponse {
   accessToken: string;
@@ -11,7 +11,7 @@ export interface LoginResponse {
 }
 
 export async function loginRequest(email: string, password: string) {
-  const { data } = await api.post<LoginResponse>('/auth/login', {
+  const { data } = await api.post<LoginResponse>("/auth/login", {
     email,
     password,
   });

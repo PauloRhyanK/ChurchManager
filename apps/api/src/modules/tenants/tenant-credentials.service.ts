@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -25,15 +26,27 @@ export class TenantCredentialsService {
       throw new NotFoundException('Igreja não encontrada');
     }
 
-    // Valida chave no Asaas antes de persistir.
-    await this.asaas.validateApiKey(dto.apiKey);
+    const data: { asaasApiKey?: string; asaasWebhookToken?: string } = {};
+
+    if (dto.apiKey) {
+      // Valida chave no Asaas antes de persistir.
+      await this.asaas.validateApiKey(dto.apiKey);
+      data.asaasApiKey = this.crypto.encrypt(dto.apiKey);
+    }
+
+    if (dto.webhookToken) {
+      data.asaasWebhookToken = this.crypto.encrypt(dto.webhookToken);
+    }
+
+    if (!Object.keys(data).length) {
+      throw new BadRequestException(
+        'Informe ao menos uma credencial (apiKey ou webhookToken)',
+      );
+    }
 
     await this.prisma.tenant.update({
       where: { id: tenantId },
-      data: {
-        asaasApiKey: this.crypto.encrypt(dto.apiKey),
-        asaasWebhookToken: this.crypto.encrypt(dto.webhookToken),
-      },
+      data,
     });
   }
 

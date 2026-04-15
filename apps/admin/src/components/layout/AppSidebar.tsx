@@ -1,0 +1,195 @@
+import {
+  LayoutDashboard,
+  DollarSign,
+  CalendarDays,
+  Globe,
+  Users,
+  Grid3X3,
+  Settings,
+  Lock,
+  Church,
+  LogOut,
+} from "lucide-react";
+import { NavLink } from "@/components/NavLink";
+import { useLocation } from "react-router-dom";
+import { clearStoredSession, getStoredSession } from "@/lib/auth-storage";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarFooter,
+  SidebarHeader,
+  useSidebar,
+} from "@/components/ui/sidebar";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
+
+const mainNav = [
+  { title: "Visão Geral", url: "/", icon: LayoutDashboard },
+  { title: "Financeiro", url: "/financeiro", icon: DollarSign },
+  { title: "Eventos", url: "/eventos", icon: CalendarDays },
+  { title: "Site", url: "/site", icon: Globe },
+];
+
+const managementNav = [
+  { title: "Escalas", url: "#", icon: Users, soon: true },
+  { title: "Células / Grupos", url: "#", icon: Grid3X3, soon: true },
+];
+
+export function AppSidebar() {
+  const { state } = useSidebar();
+  const collapsed = state === "collapsed";
+  const location = useLocation();
+  const session = getStoredSession();
+
+  const isActive = (path: string) =>
+    path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
+
+  function logout() {
+    clearStoredSession();
+    window.location.assign("/login");
+  }
+
+  return (
+    <Sidebar collapsible="icon" className="border-r border-sidebar-border">
+      <SidebarHeader className="p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+            <Church className="h-5 w-5" />
+          </div>
+          {!collapsed && (
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-sidebar-foreground">
+                Igreja Admin
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Painel de Gestão
+              </span>
+            </div>
+          )}
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent className="px-2">
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-3 mb-1">
+            Menu Principal
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {mainNav.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(item.url)}
+                    tooltip={item.title}
+                  >
+                    <NavLink
+                      to={item.url}
+                      end={item.url === "/"}
+                      className="rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                    >
+                      <item.icon className="h-4 w-4" />
+                      {!collapsed && <span>{item.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <Separator className="my-2 mx-3" />
+
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-3 mb-1">
+            Gestão
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {managementNav.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton
+                    tooltip={`${item.title} — Em breve`}
+                    className="rounded-lg px-3 py-2 text-sm text-muted-foreground/60 cursor-not-allowed"
+                    disabled
+                  >
+                    <item.icon className="h-4 w-4" />
+                    {!collapsed && (
+                      <span className="flex items-center gap-2">
+                        {item.title}
+                        {item.soon && (
+                          <Badge
+                            variant="secondary"
+                            className="text-[10px] px-1.5 py-0 font-normal"
+                          >
+                            <Lock className="h-2.5 w-2.5 mr-0.5" />
+                            Breve
+                          </Badge>
+                        )}
+                      </span>
+                    )}
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+
+      <SidebarFooter className="p-3">
+        <Separator className="mb-3" />
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={isActive("/configuracoes")}
+              tooltip="Configurações"
+            >
+              <NavLink
+                to="/configuracoes"
+                className="rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+              >
+                <Settings className="h-4 w-4" />
+                {!collapsed && <span>Configurações</span>}
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+
+        {!collapsed && (
+          <div className="mt-2 flex items-center gap-3 rounded-lg bg-secondary/50 p-3">
+            <Avatar className="h-8 w-8">
+              <AvatarImage src="" />
+              <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+                PA
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{session?.user.tenantSlug ?? "Administrador"}</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {session?.user.email ?? "admin@igreja.com"}
+              </p>
+            </div>
+            <button
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              type="button"
+              onClick={logout}
+              aria-label="Sair"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+      </SidebarFooter>
+    </Sidebar>
+  );
+}

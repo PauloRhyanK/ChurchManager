@@ -8,7 +8,7 @@ test('updateAsaasCredentials salva valores cifrados quando chave Asaas é válid
     tenant: {
       findUnique: async () => ({ id: 't1' }),
       update: async (args: {
-        data: { asaasApiKey: string; asaasWebhookToken: string };
+        data: { asaasApiKey?: string; asaasWebhookToken?: string };
       }) => {
         updated.asaasApiKey = args.data.asaasApiKey;
         updated.asaasWebhookToken = args.data.asaasWebhookToken;
@@ -35,6 +35,45 @@ test('updateAsaasCredentials salva valores cifrados quando chave Asaas é válid
 
   assert.equal(updated.asaasApiKey, 'enc:live_api');
   assert.equal(updated.asaasWebhookToken, 'enc:live_hook');
+});
+
+test('updateAsaasCredentials permite salvar apenas webhookToken', async () => {
+  const updated: { asaasApiKey?: string; asaasWebhookToken?: string } = {};
+  const prisma = {
+    tenant: {
+      findUnique: async () => ({ id: 't1' }),
+      update: async (args: {
+        data: { asaasApiKey?: string; asaasWebhookToken?: string };
+      }) => {
+        updated.asaasApiKey = args.data.asaasApiKey;
+        updated.asaasWebhookToken = args.data.asaasWebhookToken;
+      },
+    },
+  };
+  let calledValidateApiKey = false;
+  const crypto = {
+    encrypt: (v: string) => `enc:${v}`,
+    decrypt: (v: string) => v.replace('enc:', ''),
+  };
+  const asaas = {
+    validateApiKey: async () => {
+      calledValidateApiKey = true;
+      return { id: 'ok' };
+    },
+  };
+  const service = new TenantCredentialsService(
+    prisma as never,
+    crypto as never,
+    asaas as never,
+  );
+
+  await service.updateAsaasCredentials('t1', {
+    webhookToken: 'only_hook_123',
+  });
+
+  assert.equal(calledValidateApiKey, false);
+  assert.equal(updated.asaasApiKey, undefined);
+  assert.equal(updated.asaasWebhookToken, 'enc:only_hook_123');
 });
 
 test('updateAsaasCredentials não persiste quando validação Asaas falha', async () => {
