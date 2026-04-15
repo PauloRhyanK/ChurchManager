@@ -13,6 +13,12 @@ import { buildPaymentLinkExternalReference } from './payment-link-external-refer
 /** `sourceKey` para o endpoint público de cotas (webhooks / relatórios). */
 export const PAYMENT_LINK_SOURCE_COTAS = 'cotas';
 
+/**
+ * Dias úteis para vencimento quando o link permite boleto (`billingType` UNDEFINED
+ * ou BOLETO). Obrigatório na API Asaas — ver docs "Criar um link de pagamentos".
+ */
+const PAYMENT_LINK_DUE_DATE_LIMIT_BUSINESS_DAYS = 10;
+
 export interface CreatePaymentLinkOptions {
   isMonthly: boolean;
   value?: number;
@@ -59,6 +65,7 @@ export class PaymentLinksGenerationService {
           : 'Pagamento único (link público)'),
       billingType: 'UNDEFINED',
       chargeType: opts.isMonthly ? 'RECURRENT' : 'DETACHED',
+      dueDateLimitDays: PAYMENT_LINK_DUE_DATE_LIMIT_BUSINESS_DAYS,
       externalReference,
       notificationEnabled: true,
     };

@@ -29,6 +29,7 @@ test('create: isMonthly false usa DETACHED sem subscriptionCycle', async () => {
   let bodySent: {
     chargeType: string;
     subscriptionCycle?: string;
+    dueDateLimitDays?: number;
     value?: number;
     externalReference?: string;
   };
@@ -55,6 +56,7 @@ test('create: isMonthly false usa DETACHED sem subscriptionCycle', async () => {
   });
   assert.equal(bodySent!.chargeType, 'DETACHED');
   assert.equal(bodySent!.subscriptionCycle, undefined);
+  assert.equal(bodySent!.dueDateLimitDays, 10);
   assert.equal(bodySent!.externalReference, 'cm|v1|igreja-teste|cotas');
   assert.equal(out.id, 'link-1');
   assert.equal(out.metadata.source, PAYMENT_LINK_SOURCE_COTAS);
@@ -62,7 +64,11 @@ test('create: isMonthly false usa DETACHED sem subscriptionCycle', async () => {
 });
 
 test('create: isMonthly true usa RECURRENT e MONTHLY', async () => {
-  let bodySent: { chargeType: string; subscriptionCycle?: string };
+  let bodySent: {
+    chargeType: string;
+    subscriptionCycle?: string;
+    dueDateLimitDays?: number;
+  };
   const asaas = {
     createPaymentLink: async (input: { body: typeof bodySent }) => {
       bodySent = input.body;
@@ -80,6 +86,7 @@ test('create: isMonthly true usa RECURRENT e MONTHLY', async () => {
   });
   assert.equal(bodySent!.chargeType, 'RECURRENT');
   assert.equal(bodySent!.subscriptionCycle, 'MONTHLY');
+  assert.equal(bodySent!.dueDateLimitDays, 10);
 });
 
 test('create: envia value quando informado', async () => {

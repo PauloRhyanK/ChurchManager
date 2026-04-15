@@ -56,7 +56,7 @@ Serviço opcional com perfil **`pgadmin`**. UI em `http://localhost:5050` (ou o 
 docker compose --profile pgadmin up -d
 ```
 
-- **Login na UI:** email e palavra por defeito `admin@church.local` / `admin`, a menos que definas `PGADMIN_DEFAULT_EMAIL` e `PGADMIN_DEFAULT_PASSWORD` no `.env.docker`.
+- **Login na UI:** email e palavra por defeito `admin@example.com` / `admin`, a menos que definas `PGADMIN_DEFAULT_EMAIL` e `PGADMIN_DEFAULT_PASSWORD` no `.env.docker` (evita domínios `.local`, que o pgAdmin pode rejeitar).
 - **Ligar ao Postgres:** em *Register → Server*, aba *Connection*:
   - **Host:** `db` (nome do serviço no Compose; não uses `localhost` dentro do diálogo do servidor)
   - **Port:** `5432`

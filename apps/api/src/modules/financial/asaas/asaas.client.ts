@@ -132,10 +132,20 @@ export class AsaasClient {
     apiKey: string;
     body: AsaasPaymentLinkCreateInput;
   }): Promise<AsaasPaymentLinkResponse> {
+    /** Asaas exige com `UNDEFINED` (boleto entre opções) ou `BOLETO`. Alinhado a `PaymentLinksGenerationService`. */
+    const requiresDueLimit =
+      input.body.billingType === 'UNDEFINED' ||
+      input.body.billingType === 'BOLETO';
+    const body: AsaasPaymentLinkCreateInput = {
+      ...input.body,
+      dueDateLimitDays:
+        input.body.dueDateLimitDays ??
+        (requiresDueLimit ? 10 : undefined),
+    };
     const res = await fetch(`${this.baseUrl}/paymentLinks`, {
       method: 'POST',
       headers: this.headers(input.apiKey),
-      body: JSON.stringify(input.body),
+      body: JSON.stringify(body),
     });
     const data = (await res.json()) as AsaasPaymentLinkResponse & {
       errors?: Array<{ description?: string; code?: string }>;
