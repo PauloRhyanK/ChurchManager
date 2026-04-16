@@ -4,6 +4,9 @@
 
 services:
   api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
     image: ${API_IMAGE:-church-manager-api:latest}
     env_file:
       - .env.production
