@@ -82,7 +82,8 @@ const Settings = () => {
 
   const webhookUrl = useMemo(() => {
     if (!session?.user?.tenantSlug) return null;
-    const apiUrl = (import.meta.env.VITE_API_URL || "http://localhost:3000/api").replace(/\/$/, "");
+    const rawApiUrl = import.meta.env.API_URL || import.meta.env.VITE_API_URL;
+    const apiUrl = (rawApiUrl || "http://localhost:3000/api").replace(/\/$/, "");
     const base = apiUrl.endsWith("/api") ? apiUrl.slice(0, -4) : apiUrl;
     return `${base}/api/webhooks/asaas/${session.user.tenantSlug}/`;
   }, [session?.user?.tenantSlug]);

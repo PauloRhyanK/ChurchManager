@@ -1,7 +1,8 @@
 import axios from "axios";
 import { clearStoredSession, getStoredToken } from "./auth-storage";
 
-const baseURL = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://localhost:3000/api";
+const rawApiUrl = import.meta.env.API_URL || import.meta.env.VITE_API_URL;
+const baseURL = rawApiUrl?.replace(/\/$/, "") || "http://localhost:3000/api";
 
 export const api = axios.create({
   baseURL,
