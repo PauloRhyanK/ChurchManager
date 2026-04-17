@@ -4,32 +4,44 @@
 
 services:
   api:
+    image: ${API_IMAGE:-church-manager-api:latest}
     build:
       context: ./apps/api
       dockerfile: Dockerfile
-    image: ${API_IMAGE:-church-manager-api:latest}
     env_file:
       - .env.production
     environment:
       NODE_ENV: production
+    restart: unless-stopped
+    depends_on:
+      - db
     networks:
       - default
       - proxy-network
-    restart: unless-stopped
     healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
-        ]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 20s
       timeout: 5s
       retries: 5
       start_period: 60s
 
+  db:
+    image: postgres:15-alpine
+    container_name: churchmanager_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: SenhaSuperForte123
+      POSTGRES_DB: churchmanager_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - default
+
 networks:
   default:
   proxy-network:
     external: true
+
+volumes:
+  pgdata:
