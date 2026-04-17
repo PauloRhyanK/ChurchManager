@@ -98,7 +98,7 @@ Mensagens começam por `[entrypoint]`.
 | Ficheiro | Uso |
 |----------|-----|
 | [docker-compose.yml](../docker-compose.yml) | Postgres + API (dev); perfis opcionais `tunnel` (ngrok), `pgadmin` |
-| [docker-compose.prod.yml](../docker-compose.prod.yml) | Exemplo: só API (imagem pré-construída, `DATABASE_URL` externo) |
+| [docker-compose.prod.yml](../docker-compose.prod.yml) | API + Postgres + pgAdmin; `POSTGRES_*` no [`.env.production.example`](../.env.production.example); arranque com `--env-file .env.production`. Rede `proxy-network` (NPM) |
 | `docker-compose.override.yml` | Opcional, local, ignorado pelo Git |
 
 ## Produção

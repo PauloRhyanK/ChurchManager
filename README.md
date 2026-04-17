@@ -6,7 +6,7 @@ Monorepo com **API Nest.js** + **painel admin** (React/Vite) e Postgres. O site 
 
 <h2 id="dev-quickstart">Início rápido (desenvolvimento)</h2>
 
-1. **Postgres** a correr — na raiz: `docker compose up -d db` (só base) ou `docker compose up` (API também); detalhes em [docker/README.md](docker/README.md).
+1. **Postgres** a correr — na raiz: `docker compose up -d db` (só base) ou `docker compose up` (API também); detalhes em [docker/README.md](docker/README.md). Env Docker: [`.env.docker.example`](.env.docker.example) → `.env.docker`; produção: [`.env.production.example`](.env.production.example) → `.env.production`.
 2. **API** — pasta `apps/api`: copiar `.env.example` → `.env`, preencher `DATABASE_URL`, `ENCRYPTION_KEY` (64 hex), `JWT_SECRET` (≥32 caracteres), `ASAAS_API_URL`, `ADMIN_CORS_ORIGIN=http://localhost:5173`.
 3. Na pasta `apps/api`: `npm install` e `npx prisma migrate deploy`.
 4. **Opcional:** `npx prisma db seed` — utilizador demo e origem CORS de exemplo para `http://localhost:3001`. Sem seed, regista origens no admin em **Configurações financeiras → Site público (CORS)**.

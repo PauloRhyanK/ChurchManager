@@ -1,6 +1,9 @@
-# Stack de produção: API + Postgres + pgAdmin (opcional, para NPM na proxy-network).
-# Uso: docker compose -f docker-compose.prod.yml up -d
-# Defina API_IMAGE e `.env.production` com segredos (não commitado). Rede externa `proxy-network` (ex.: NPM).
+# Produção: API + Postgres + pgAdmin. Rede externa `proxy-network` (ex.: NPM).
+# 1) Copia `.env.production.example` → `.env.production` e preenche POSTGRES_*, ENCRYPTION_KEY, JWT_SECRET, etc.
+# 2) Na VPS: `docker compose --env-file .env.production -f docker-compose.prod.yml up -d`
+#    (assim POSTGRES_* e API_IMAGE são lidos na interpolação; alternativa: mesmas chaves num `.env` na raiz.)
+#
+# Login pgAdmin (UI): variáveis PGADMIN_* abaixo ou no `.env` da raiz.
 
 services:
   api:
@@ -12,6 +15,7 @@ services:
       - .env.production
     environment:
       NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-SenhaSuperForte123}@db:5432/${POSTGRES_DB:-churchmanager_db}
     restart: unless-stopped
     depends_on:
       - db
@@ -30,27 +34,25 @@ services:
     container_name: churchmanager_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: SenhaSuperForte123
-      POSTGRES_DB: churchmanager_db
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-SenhaSuperForte123}
+      POSTGRES_DB: ${POSTGRES_DB:-churchmanager_db}
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks:
       - default
 
-  # pgAdmin 4 — UI na porta 80 do contentor. No NPM: Forward Hostname = churchmanager_pgadmin, Forward Port = 80.
-  # No pgAdmin, regista o servidor Postgres com Host = db (nome do serviço na rede Docker), Port = 5432.
+  # NPM: Forward Hostname = churchmanager_pgadmin, Porta = 80
+  # No pgAdmin → Register Server: Host = db, Port = 5432, user/pass = POSTGRES_USER / POSTGRES_PASSWORD (.env.production)
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: churchmanager_pgadmin
     restart: unless-stopped
     depends_on:
       - db
-    env_file:
-      - .env.production
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-change-me-in-env}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
       PGADMIN_CONFIG_SERVER_MODE: "True"
     volumes:
       - pgadmin_data:/var/lib/pgadmin

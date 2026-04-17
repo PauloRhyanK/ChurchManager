@@ -1,9 +1,34 @@
-# Copie para docker-compose.override.yml (ficheiro ignorado pelo Git) para ajustes locais.
-# O Docker Compose carrega automaticamente docker-compose.override.yml se existir.
+# Copie para `docker-compose.override.yml` (ignorado pelo Git).
+# O Docker Compose funde automaticamente com `docker-compose.yml`.
 #
-# Exemplo: activar seed na primeira subida (apenas desenvolvimento)
+# --- Exemplo 1: seed na primeira subida (só desenvolvimento) ---
 #
 # services:
 #   api:
 #     environment:
 #       RUN_SEED: "true"
+
+# --- Exemplo 2: porto diferente da API no host ---
+#
+# services:
+#   api:
+#     ports:
+#       - "3001:3000"
+
+# --- Exemplo 3: API na mesma rede que o NPM (teste local do proxy) ---
+# Cria antes a rede: docker network create proxy-network
+#
+# services:
+#   api:
+#     networks:
+#       - default
+#       - proxy-network
+#
+# networks:
+#   proxy-network:
+#     external: true
+
+# Perfis opcionais (combináveis na CLI):
+#   docker compose --profile pgadmin up -d
+#   docker compose --profile tunnel up -d
+#   docker compose --profile pgadmin --profile tunnel up -d
