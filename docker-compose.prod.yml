@@ -1,6 +1,6 @@
-# Exemplo: API apenas (Postgres gerido ou externo). Não inclui o serviço db.
+# Stack de produção: API + Postgres + pgAdmin (opcional, para NPM na proxy-network).
 # Uso: docker compose -f docker-compose.prod.yml up -d
-# Defina API_IMAGE e ficheiro de ambiente com segredos (não commitado).
+# Defina API_IMAGE e `.env.production` com segredos (não commitado). Rede externa `proxy-network` (ex.: NPM).
 
 services:
   api:
@@ -38,6 +38,26 @@ services:
     networks:
       - default
 
+  # pgAdmin 4 — UI na porta 80 do contentor. No NPM: Forward Hostname = churchmanager_pgadmin, Forward Port = 80.
+  # No pgAdmin, regista o servidor Postgres com Host = db (nome do serviço na rede Docker), Port = 5432.
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: churchmanager_pgadmin
+    restart: unless-stopped
+    depends_on:
+      - db
+    env_file:
+      - .env.production
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-change-me-in-env}
+      PGADMIN_CONFIG_SERVER_MODE: "True"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - default
+      - proxy-network
+
 networks:
   default:
   proxy-network:
@@ -45,3 +65,4 @@ networks:
 
 volumes:
   pgdata:
+  pgadmin_data:
