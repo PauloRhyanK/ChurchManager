@@ -3,7 +3,9 @@
 # 2) Na VPS: `docker compose --env-file .env.production -f docker-compose.prod.yml up -d`
 #    (assim POSTGRES_* e API_IMAGE são lidos na interpolação; alternativa: mesmas chaves num `.env` na raiz.)
 #
-# Login pgAdmin (UI): variáveis PGADMIN_* abaixo ou no `.env` da raiz.
+# Login pgAdmin: PGADMIN_DEFAULT_EMAIL / PGADMIN_DEFAULT_PASSWORD no `.env.production`
+# (env_file no serviço pgadmin — não depende de `--env-file` no compose).
+# Se mudares email/senha e o login falhar, apaga o volume `pgadmin_data` (só apaga dados da UI pgAdmin).
 
 services:
   api:
@@ -50,9 +52,9 @@ services:
     restart: unless-stopped
     depends_on:
       - db
+    env_file:
+      - .env.production
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
       PGADMIN_CONFIG_SERVER_MODE: "True"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
