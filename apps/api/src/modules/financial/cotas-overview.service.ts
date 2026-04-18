@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { maskCpfDigits } from '../../common/mask-cpf';
+import { planLabelFromRawPayloadRef } from './asaas-payment-meta.patch';
 
 /** Janela em dias: último pagamento CONFIRMED dentro disto = em dia (MVP). */
 export const COTAS_PAID_WINDOW_DAYS = 35;
@@ -161,13 +162,50 @@ export class CotasOverviewService {
       }
     }
 
+    const lastTxRows = await this.prisma.financialTransaction.findMany({
+      where: {
+        tenantId,
+        status: 'CONFIRMED',
+        payerProfileId: { in: ids },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        payerProfileId: true,
+        rawPayloadRef: true,
+        amountCents: true,
+      },
+    });
+    const lastTxByPayer = new Map<
+      string,
+      { rawPayloadRef: unknown; amountCents: number }
+    >();
+    for (const row of lastTxRows) {
+      if (row.payerProfileId && !lastTxByPayer.has(row.payerProfileId)) {
+        lastTxByPayer.set(row.payerProfileId, {
+          rawPayloadRef: row.rawPayloadRef,
+          amountCents: row.amountCents,
+        });
+      }
+    }
+
     const items = payers.map((p) => {
       const lastAt = lastPaidMap.get(p.id) ?? null;
       const quotaStatus = this.resolveQuotaStatus(lastAt);
       const sub = subByPayer.get(p.id);
-      const planLabelStr = sub?.plan
-        ? planLabel(sub.plan.name, sub.plan.amountCents, sub.plan.currency)
-        : '—';
+      const lt = lastTxByPayer.get(p.id);
+      const fromPayload =
+        lt &&
+        planLabelFromRawPayloadRef(lt.rawPayloadRef, lt.amountCents);
+      let planLabelStr = '—';
+      if (fromPayload) {
+        planLabelStr = fromPayload;
+      } else if (sub?.plan) {
+        planLabelStr = planLabel(
+          sub.plan.name,
+          sub.plan.amountCents,
+          sub.plan.currency,
+        );
+      }
       return {
         payerProfileId: p.id,
         name: p.name,

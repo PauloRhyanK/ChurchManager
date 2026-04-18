@@ -12,6 +12,10 @@ import { AsaasClient } from './asaas/asaas.client';
 import type { AsaasCustomerResponse } from './asaas/asaas.types';
 import { buildWebhookIdempotencyKey } from './asaas-webhook-idempotency';
 import { parsePaymentLinkExternalReference } from './payment-link-external-reference';
+import {
+  paymentAsaasMetaPatch,
+  type AsaasPaymentWebhookFields,
+} from './asaas-payment-meta.patch';
 
 /** Payload webhook Asaas v3 (campos usados pelo handler). */
 export interface AsaasWebhookBody {
@@ -24,6 +28,10 @@ export interface AsaasWebhookBody {
     customer?: string;
     externalReference?: string;
     billingType?: string;
+    subscription?: string;
+    description?: string;
+    paymentLink?: string;
+    installmentNumber?: number | null;
   };
   subscription?: {
     id?: string;
@@ -67,6 +75,16 @@ function paymentSourcePatch(
     };
   }
   return { asaasPaymentExternalReference: externalReference };
+}
+
+function buildPaymentRawPayloadPatch(
+  externalReference: string | undefined,
+  payment: AsaasWebhookBody['payment'] | undefined,
+): Record<string, unknown> {
+  return {
+    ...paymentSourcePatch(externalReference),
+    ...paymentAsaasMetaPatch(payment as AsaasPaymentWebhookFields | undefined),
+  };
 }
 
 @Injectable()
@@ -155,7 +173,10 @@ export class AsaasWebhookService {
       body.payment?.status === 'RECEIVED' ||
       body.payment?.status === 'CONFIRMED';
 
-    const sourcePatch = paymentSourcePatch(body.payment?.externalReference);
+    const combinedPatch = buildPaymentRawPayloadPatch(
+      body.payment?.externalReference,
+      body.payment,
+    );
 
     const txOutcome = await this.prisma.$transaction(async (tx) => {
       try {
@@ -182,17 +203,28 @@ export class AsaasWebhookService {
         customer,
       );
 
+      const internalSubId = body.payment?.subscription?.trim()
+        ? await this.syncSubscriptionByAsaasId(
+            tx,
+            tenant.id,
+            customerId,
+            body.payment.subscription.trim(),
+            payer?.id ?? null,
+          )
+        : null;
+
       if (shouldConfirm) {
         const rows = await tx.financialTransaction.findMany({
           where: { tenantId: tenant.id, asaasPaymentId: paymentId },
         });
         for (const row of rows) {
-          const nextRef = mergeRawPayloadRef(row.rawPayloadRef, sourcePatch);
+          const nextRef = mergeRawPayloadRef(row.rawPayloadRef, combinedPatch);
           await tx.financialTransaction.update({
             where: { id: row.id },
             data: {
               status: 'CONFIRMED',
               payerProfileId: payer?.id ?? row.payerProfileId,
+              subscriptionId: internalSubId ?? row.subscriptionId,
               rawPayloadRef: nextRef,
             },
           });
@@ -239,7 +271,10 @@ export class AsaasWebhookService {
         ? Math.round(Number(value) * 100)
         : 0;
     const billingType = body.payment?.billingType ?? 'UNDEFINED';
-    const sourcePatch = paymentSourcePatch(body.payment?.externalReference);
+    const combinedPatch = buildPaymentRawPayloadPatch(
+      body.payment?.externalReference,
+      body.payment,
+    );
 
     const txOutcome = await this.prisma.$transaction(async (tx) => {
       try {
@@ -266,16 +301,27 @@ export class AsaasWebhookService {
         customer,
       );
 
+      const internalSubId = body.payment?.subscription?.trim()
+        ? await this.syncSubscriptionByAsaasId(
+            tx,
+            tenant.id,
+            customerId,
+            body.payment.subscription.trim(),
+            payer?.id ?? null,
+          )
+        : null;
+
       const existing = await tx.financialTransaction.findFirst({
         where: { tenantId: tenant.id, asaasPaymentId: paymentId },
       });
 
       if (existing) {
-        const nextRef = mergeRawPayloadRef(existing.rawPayloadRef, sourcePatch);
+        const nextRef = mergeRawPayloadRef(existing.rawPayloadRef, combinedPatch);
         await tx.financialTransaction.update({
           where: { id: existing.id },
           data: {
             payerProfileId: payer?.id ?? existing.payerProfileId,
+            subscriptionId: internalSubId ?? existing.subscriptionId,
             rawPayloadRef: nextRef,
           },
         });
@@ -287,11 +333,12 @@ export class AsaasWebhookService {
           tenantId: tenant.id,
           asaasPaymentId: paymentId,
           payerProfileId: payer?.id ?? null,
+          subscriptionId: internalSubId,
           type: 'PAYMENT_CREATED',
           amountCents,
           status: 'PENDING',
           billingType,
-          rawPayloadRef: mergeRawPayloadRef(null, sourcePatch),
+          rawPayloadRef: mergeRawPayloadRef(null, combinedPatch),
         },
       });
       return 'processed' as const;
@@ -335,12 +382,22 @@ export class AsaasWebhookService {
         throw e;
       }
 
-      await this.upsertPayerFromAsaasCustomer(
+      const payer = await this.upsertPayerFromAsaasCustomer(
         tx,
         tenant.id,
         customerId,
         customer,
       );
+      const asaasSubId = subscriptionId?.trim();
+      if (asaasSubId) {
+        await this.syncSubscriptionByAsaasId(
+          tx,
+          tenant.id,
+          customerId,
+          asaasSubId,
+          payer?.id ?? null,
+        );
+      }
       return 'processed' as const;
     });
 
@@ -381,6 +438,52 @@ export class AsaasWebhookService {
       return { ok: true, duplicate: true };
     }
     return { ok: true, duplicate: false };
+  }
+
+  /**
+   * Garante `financial_subscriptions` para um `sub_…` do Asaas, usando o primeiro
+   * `financial_plans` activo do tenant como plano de referência (MVP).
+   */
+  private async syncSubscriptionByAsaasId(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    asaasCustomerId: string,
+    asaasSubscriptionId: string,
+    payerProfileId: string | null,
+  ): Promise<string | null> {
+    const trimmed = asaasSubscriptionId.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const plan = await tx.financialPlan.findFirst({
+      where: { tenantId, isActive: true },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    if (!plan) {
+      this.logger.warn(
+        `Tenant ${tenantId}: sem financial_plans activos; não persiste assinatura Asaas ${trimmed}`,
+      );
+      return null;
+    }
+
+    const row = await tx.financialSubscription.upsert({
+      where: { asaasSubscriptionId: trimmed },
+      create: {
+        tenantId,
+        planId: plan.id,
+        payerProfileId,
+        asaasCustomerId,
+        asaasSubscriptionId: trimmed,
+        status: 'ACTIVE',
+      },
+      update: {
+        ...(payerProfileId ? { payerProfileId } : {}),
+        status: 'ACTIVE',
+      },
+    });
+    return row.id;
   }
 
   private async fetchAsaasCustomer(

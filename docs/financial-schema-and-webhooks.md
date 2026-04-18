@@ -86,6 +86,18 @@ Movimentos financeiros e correlação com eventos Asaas (pagamentos, estornos, e
 
 Índices: **único** em `asaas_event_id` (ou combinação acordada com a documentação Asaas) para deduplicação; `asaas_payment_id`; `(tenant_id, created_at)`.
 
+**`raw_payload_ref` (JSON) — chaves usadas pelo webhook de pagamentos**
+
+| Chave | Origem | Notas |
+|-------|--------|--------|
+| `linkTracking.tenantSlug`, `linkTracking.sourceKey` | `payment.externalReference` no formato `cm\|v1\|…` | Correlaciona com link público de cotas. |
+| `asaasSubscriptionId` | `payment.subscription` (Asaas, ex. `sub_…`) | ID da subscrição no Asaas (não confundir com `subscription_id` UUID interno). |
+| `asaasPaymentLinkId` | `payment.paymentLink` | Identificador do payment link no Asaas. |
+| `paymentDescription` | `payment.description` | Texto exibido no painel de cotas quando presente (prioridade sobre o plano local). |
+| `installmentNumber` | `payment.installmentNumber` | Quando aplicável. |
+
+Quando existe `payment.subscription` no webhook, o serviço faz *upsert* em `financial_subscriptions` (ligando ao primeiro `financial_plans` activo do tenant) e preenche `financial_transactions.subscription_id` com o UUID interno.
+
 ## 2. Fluxo REST (síntese)
 
 ### 2.1 Rotas públicas por `slug` (site / formulário)
