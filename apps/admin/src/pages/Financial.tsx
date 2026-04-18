@@ -113,6 +113,10 @@ const Financial = () => {
             <p className="text-muted-foreground text-sm mt-1">
               Visão geral dos pagadores e estado das cotas.
             </p>
+            <p className="text-muted-foreground text-xs mt-2 max-w-3xl">
+              «Plano / valor» mostra primeiro a descrição e metadados enviados pelo Asaas (após
+              webhooks); se não houver, usa o plano da assinatura registada na base.
+            </p>
           </div>
         </div>
 

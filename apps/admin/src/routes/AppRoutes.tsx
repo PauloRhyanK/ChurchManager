@@ -1,11 +1,10 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { LoginPage } from "@/features/auth/pages/LoginPage";
-import Events from "@/pages/Events";
 import Financial from "@/pages/Financial";
 import Index from "@/pages/Index";
+import { ModuleComingSoon } from "@/pages/ModuleComingSoon";
 import NotFound from "@/pages/NotFound";
 import Settings from "@/pages/Settings";
-import SiteManagement from "@/pages/SiteManagement";
 import PlatformChurches from "@/pages/PlatformChurches";
 import { PlatformAdminRoute } from "./PlatformAdminRoute";
 import { ProtectedRoute } from "./ProtectedRoute";
@@ -18,8 +17,24 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<Index />} />
         <Route path="/financeiro" element={<Financial />} />
-        <Route path="/eventos" element={<Events />} />
-        <Route path="/site" element={<SiteManagement />} />
+        <Route
+          path="/eventos"
+          element={
+            <ModuleComingSoon
+              title="Eventos"
+              description="Agenda, inscrições e bilhetes integrados ao painel ainda estão em desenvolvimento. Por agora use o Financeiro para cotas e pagamentos."
+            />
+          }
+        />
+        <Route
+          path="/site"
+          element={
+            <ModuleComingSoon
+              title="Gestão do site"
+              description="Conteúdo público, banners e CMS por igreja serão adicionados aqui numa próxima versão."
+            />
+          }
+        />
         <Route path="/configuracoes" element={<Settings />} />
 
         <Route element={<PlatformAdminRoute />}>
