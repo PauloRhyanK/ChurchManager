@@ -63,6 +63,8 @@ export interface AsaasPaymentLinkCreateInput {
   chargeType: AsaasPaymentLinkChargeType;
   value?: number;
   subscriptionCycle?: AsaasPaymentLinkSubscriptionCycle;
+  /** Limite de vigência da assinatura no link (YYYY-MM-DD). Ver API Asaas `paymentLinks`. */
+  endDate?: string;
   dueDateLimitDays?: number;
   externalReference?: string;
   notificationEnabled?: boolean;

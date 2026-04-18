@@ -56,6 +56,7 @@ export class PublicFinancialController {
     return this.paymentLinksGeneration.create(tenant, {
       isMonthly: dto.isMonthly,
       value: dto.value,
+      subscriptionDurationMonths: dto.subscriptionDurationMonths,
       sourceKey: PAYMENT_LINK_SOURCE_COTAS,
       asaasLinkName: `Cotas — ${tenant.name}`,
     });

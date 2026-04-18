@@ -9,6 +9,7 @@ import { TenantCredentialsService } from '../tenants/tenant-credentials.service'
 import { AsaasClient } from './asaas/asaas.client';
 import type { AsaasPaymentLinkCreateInput } from './asaas/asaas.types';
 import { buildPaymentLinkExternalReference } from './payment-link-external-reference';
+import { computeSubscriptionEndDateYmd } from './payment-link-subscription-end';
 
 /** `sourceKey` para o endpoint público de cotas (webhooks / relatórios). */
 export const PAYMENT_LINK_SOURCE_COTAS = 'cotas';
@@ -22,6 +23,11 @@ const PAYMENT_LINK_DUE_DATE_LIMIT_BUSINESS_DAYS = 10;
 export interface CreatePaymentLinkOptions {
   isMonthly: boolean;
   value?: number;
+  /**
+   * Com `isMonthly`, número de meses da assinatura (obrigatório no endpoint público).
+   * Envia `endDate` à Asaas para encerrar a recorrência nessa data.
+   */
+  subscriptionDurationMonths?: number;
   /** Identificador estável do módulo (ex.: `cotas`, `events-<uuid>`). Não use `|`. */
   sourceKey: string;
   /** Nome exibido no painel Asaas */
@@ -61,7 +67,9 @@ export class PaymentLinksGenerationService {
       description:
         opts.asaasDescription ??
         (opts.isMonthly
-          ? 'Assinatura mensal (link público)'
+          ? opts.subscriptionDurationMonths != null
+            ? `Assinatura mensal — ${opts.subscriptionDurationMonths} meses (link público)`
+            : 'Assinatura mensal (link público)'
           : 'Pagamento único (link público)'),
       billingType: 'UNDEFINED',
       chargeType: opts.isMonthly ? 'RECURRENT' : 'DETACHED',
@@ -72,6 +80,11 @@ export class PaymentLinksGenerationService {
 
     if (opts.isMonthly) {
       body.subscriptionCycle = 'MONTHLY';
+      if (opts.subscriptionDurationMonths != null) {
+        body.endDate = computeSubscriptionEndDateYmd(
+          opts.subscriptionDurationMonths,
+        );
+      }
     }
 
     if (opts.value !== undefined && opts.value !== null) {

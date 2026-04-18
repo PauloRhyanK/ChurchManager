@@ -63,11 +63,13 @@ test('create: isMonthly false usa DETACHED sem subscriptionCycle', async () => {
   assert.equal(out.metadata.tenant, 'igreja-teste');
 });
 
-test('create: isMonthly true usa RECURRENT e MONTHLY', async () => {
+test('create: isMonthly true usa RECURRENT, MONTHLY e endDate', async () => {
   let bodySent: {
     chargeType: string;
     subscriptionCycle?: string;
     dueDateLimitDays?: number;
+    endDate?: string;
+    description?: string;
   };
   const asaas = {
     createPaymentLink: async (input: { body: typeof bodySent }) => {
@@ -82,11 +84,17 @@ test('create: isMonthly true usa RECURRENT e MONTHLY', async () => {
   );
   await service.create(tenant(), {
     isMonthly: true,
+    subscriptionDurationMonths: 6,
     ...cotasOpts,
   });
   assert.equal(bodySent!.chargeType, 'RECURRENT');
   assert.equal(bodySent!.subscriptionCycle, 'MONTHLY');
   assert.equal(bodySent!.dueDateLimitDays, 10);
+  assert.match(bodySent!.endDate ?? '', /^\d{4}-\d{2}-\d{2}$/);
+  assert.match(
+    bodySent!.description ?? '',
+    /Assinatura mensal — 6 meses/,
+  );
 });
 
 test('create: envia value quando informado', async () => {
