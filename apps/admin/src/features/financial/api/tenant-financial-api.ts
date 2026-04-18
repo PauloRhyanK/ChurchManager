@@ -60,3 +60,34 @@ export async function fetchCotas(params: { page: number; limit: number; status?:
   const { data } = await api.get<CotasListResponse>("/admin/tenants/me/cotas", { params });
   return data;
 }
+
+export interface PayerPaymentHistoryItemDto {
+  id: string;
+  createdAt: string;
+  amountCents: number;
+  status: string;
+  billingType: string | null;
+  asaasPaymentId: string | null;
+  paymentDescription: string | null;
+  installmentNumber: number | null;
+}
+
+export interface PayerPaymentHistoryResponse {
+  payerProfileId: string;
+  name: string;
+  cpfMasked: string;
+  summary: {
+    confirmedPaymentCount: number;
+    totalRecords: number;
+    inferredRecurringTotalMonths: number | null;
+    maxInstallmentNumberFromWebhooks: number | null;
+  };
+  items: PayerPaymentHistoryItemDto[];
+}
+
+export async function fetchPayerPaymentHistory(payerProfileId: string) {
+  const { data } = await api.get<PayerPaymentHistoryResponse>(
+    `/admin/tenants/me/cotas/${payerProfileId}/payment-history`,
+  );
+  return data;
+}

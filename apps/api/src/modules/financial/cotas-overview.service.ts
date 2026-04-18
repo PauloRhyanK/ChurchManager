@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { maskCpfDigits } from '../../common/mask-cpf';
 import { planLabelFromRawPayloadRef } from './asaas-payment-meta.patch';
+import { inferSubscriptionMonthsFromDescription } from './infer-subscription-months-from-description';
 
 /** Janela em dias: último pagamento CONFIRMED dentro disto = em dia (MVP). */
 export const COTAS_PAID_WINDOW_DAYS = 35;
@@ -217,5 +218,102 @@ export class CotasOverviewService {
     });
 
     return { items, page, limit, total };
+  }
+
+  /**
+   * Histórico de `financial_transactions` do pagador (webhooks Asaas),
+   * com resumo para acompanhamento de mensalidades / parcelas conhecidas.
+   */
+  async getPayerPaymentHistory(tenantId: string, payerProfileId: string) {
+    const payer = await this.prisma.financialPayerProfile.findFirst({
+      where: { id: payerProfileId, tenantId },
+      select: { id: true, name: true, cpf: true },
+    });
+    if (!payer) {
+      throw new NotFoundException('Pagador não encontrado');
+    }
+
+    const txs = await this.prisma.financialTransaction.findMany({
+      where: { tenantId, payerProfileId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        createdAt: true,
+        amountCents: true,
+        status: true,
+        billingType: true,
+        asaasPaymentId: true,
+        rawPayloadRef: true,
+      },
+    });
+
+    let inferredRecurringTotalMonths: number | null = null;
+    let maxInstallmentNumberFromWebhooks: number | null = null;
+
+    for (const t of txs) {
+      const raw = t.rawPayloadRef;
+      if (!raw || typeof raw !== 'object') {
+        continue;
+      }
+      const o = raw as Record<string, unknown>;
+      const desc = o.paymentDescription;
+      if (typeof desc === 'string') {
+        const inf = inferSubscriptionMonthsFromDescription(desc);
+        if (inf != null) {
+          inferredRecurringTotalMonths =
+            inferredRecurringTotalMonths == null
+              ? inf
+              : Math.max(inferredRecurringTotalMonths, inf);
+        }
+      }
+      const inst = o.installmentNumber;
+      if (typeof inst === 'number' && Number.isFinite(inst)) {
+        maxInstallmentNumberFromWebhooks =
+          maxInstallmentNumberFromWebhooks == null
+            ? inst
+            : Math.max(maxInstallmentNumberFromWebhooks, inst);
+      }
+    }
+
+    const items = txs.map((t) => {
+      let paymentDescription: string | null = null;
+      let installmentNumber: number | null = null;
+      const raw = t.rawPayloadRef;
+      if (raw && typeof raw === 'object') {
+        const o = raw as Record<string, unknown>;
+        if (typeof o.paymentDescription === 'string') {
+          paymentDescription = o.paymentDescription.trim().slice(0, 500);
+        }
+        if (typeof o.installmentNumber === 'number') {
+          installmentNumber = o.installmentNumber;
+        }
+      }
+      return {
+        id: t.id,
+        createdAt: t.createdAt.toISOString(),
+        amountCents: t.amountCents,
+        status: t.status,
+        billingType: t.billingType,
+        asaasPaymentId: t.asaasPaymentId,
+        paymentDescription,
+        installmentNumber,
+      };
+    });
+
+    const confirmedPaymentCount = txs.filter((t) => t.status === 'CONFIRMED')
+      .length;
+
+    return {
+      payerProfileId: payer.id,
+      name: payer.name,
+      cpfMasked: maskCpfDigits(payer.cpf),
+      summary: {
+        confirmedPaymentCount,
+        totalRecords: txs.length,
+        inferredRecurringTotalMonths,
+        maxInstallmentNumberFromWebhooks,
+      },
+      items,
+    };
   }
 }

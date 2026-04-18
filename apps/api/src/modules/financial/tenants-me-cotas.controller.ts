@@ -1,4 +1,11 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/auth-user';
@@ -9,6 +16,14 @@ import { ListCotasQueryDto } from './dto/list-cotas-query.dto';
 @UseGuards(AuthGuard('jwt'))
 export class TenantsMeCotasController {
   constructor(private readonly cotas: CotasOverviewService) {}
+
+  @Get('cotas/:payerProfileId/payment-history')
+  async payerPaymentHistory(
+    @CurrentUser() user: AuthUser,
+    @Param('payerProfileId', ParseUUIDPipe) payerProfileId: string,
+  ) {
+    return this.cotas.getPayerPaymentHistory(user.tenantId, payerProfileId);
+  }
 
   @Get('cotas')
   async listCotas(
