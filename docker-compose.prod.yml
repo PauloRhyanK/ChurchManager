@@ -1,6 +1,6 @@
 # Produção: API + Postgres + pgAdmin. Rede externa `proxy-network` (ex.: NPM).
 # 1) Copia `.env.production.example` → `.env.production` e preenche POSTGRES_*, ENCRYPTION_KEY, JWT_SECRET, etc.
-# 2) Na VPS: `docker compose --env-file .env.production -f docker-compose.prod.yml up -d`
+# 2) Na VPS (obrigatório --env-file para API_IMAGE): `docker compose --env-file .env.production -f docker-compose.prod.yml up -d`
 #    (assim POSTGRES_* e API_IMAGE são lidos na interpolação; alternativa: mesmas chaves num `.env` na raiz.)
 #
 # pgAdmin — leitura OBRIGATÓria (imagem oficial dpage/pgadmin4):
@@ -18,7 +18,10 @@
 
 services:
   api:
-    image: ${API_IMAGE:-church-manager-api:latest}
+    # Interpolação: lê API_IMAGE do ambiente do processo `docker compose` ou de `--env-file`.
+    # NÃO vem de `env_file:` abaixo (isso só entra no contentor). Sem API_IMAGE definida aqui,
+    # o Compose falha com mensagem clara — evita pull de `church-manager-api:latest` por engano.
+    image: "${API_IMAGE:?Defina API_IMAGE e passe --env-file .env.production ao docker compose. Ver .env.production.example e docker/README.md}"
     build:
       context: ./apps/api
       dockerfile: Dockerfile

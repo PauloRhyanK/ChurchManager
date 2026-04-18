@@ -115,6 +115,30 @@ Mensagens começam por `[entrypoint]`.
 - **Migrações:** `migrate deploy` corre no entrypoint; com várias réplicas, considera um job de deploy dedicado para evitar corridas.
 - **Imagem:** tag semântica (`registry/.../api:1.2.3`), não só `latest`.
 
+### VPS: imagem do GHCR e erro `pull access denied for church-manager-api`
+
+O `docker-compose.prod.yml` usa `API_IMAGE` na linha `image:` do serviço `api`. O Compose **só** substitui essa variável a partir de:
+
+1. Variáveis exportadas no shell antes do comando, ou  
+2. Ficheiro passado com **`--env-file .env.production`**, ou  
+3. Ficheiro **`.env`** na mesma pasta (nome fixo; **não** é o `.env.production`).
+
+O bloco `env_file: .env.production` **não** alimenta a interpolação do `image:` — só injeta variáveis **dentro** do contentor.
+
+Por isso, na Locaweb, usa sempre:
+
+```bash
+cd ~/projetos/churchmanager
+sudo docker login ghcr.io -u SEU_USUARIO --password-stdin   # token com read:packages
+
+sudo docker compose --env-file .env.production -f docker-compose.prod.yml pull api
+sudo docker compose --env-file .env.production -f docker-compose.prod.yml up -d api
+```
+
+Confirma que `.env.production` contém `API_IMAGE=ghcr.io/<user>/churchmanager/api:latest` (caminho exacto na aba **Packages** do GitHub). Sem `--env-file`, o Compose antigo caía no nome local `church-manager-api:latest` e o `pull` falhava.
+
+**`sudo`:** se definires `API_IMAGE` só no utilizador normal, `sudo` não a herda; `--env-file` resolve porque lê o ficheiro como root.
+
 ## Build manual da imagem da API
 
 ```bash
