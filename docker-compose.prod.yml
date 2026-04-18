@@ -3,9 +3,18 @@
 # 2) Na VPS: `docker compose --env-file .env.production -f docker-compose.prod.yml up -d`
 #    (assim POSTGRES_* e API_IMAGE são lidos na interpolação; alternativa: mesmas chaves num `.env` na raiz.)
 #
-# Login pgAdmin: PGADMIN_DEFAULT_EMAIL / PGADMIN_DEFAULT_PASSWORD no `.env.production`
-# (env_file no serviço pgadmin — não depende de `--env-file` no compose).
-# Se mudares email/senha e o login falhar, apaga o volume `pgadmin_data` (só apaga dados da UI pgAdmin).
+# pgAdmin — leitura OBRIGATÓria (imagem oficial dpage/pgadmin4):
+# PGADMIN_DEFAULT_EMAIL / PGADMIN_DEFAULT_PASSWORD só definem o login na PRIMEIRA vez que o
+# contentor cria a base em /var/lib/pgadmin. Depois disso ficam guardados no VOLUME Docker
+# `pgadmin_data`. Mudar o `.env.production` NÃO altera email/senha já criados.
+#
+# Se o login falhar com credenciais “certas” no .env:
+#   1) Tenta primeiro o login que foi usado na primeira subida (ex.: admin@example.com / admin).
+#   2) Para forçar o .env atual: para o pgadmin, apaga o volume, sobe de novo.
+#      Nome real do volume: `docker volume ls` → procura `pgadmin_data` (ex.: churchmanager_pgadmin_data).
+#      docker compose -f docker-compose.prod.yml stop pgadmin
+#      docker volume rm <nome_completo_do_volume>
+#      docker compose --env-file .env.production -f docker-compose.prod.yml up -d
 
 services:
   api:
@@ -56,6 +65,8 @@ services:
       - .env.production
     environment:
       PGADMIN_CONFIG_SERVER_MODE: "True"
+      # Atrás do NPM/proxy; senão cookies podem falhar no login (documentação pgAdmin / reverse proxy).
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "False"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     networks:

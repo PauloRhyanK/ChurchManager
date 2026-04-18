@@ -4,7 +4,7 @@ Gera um **link de pagamentos** na conta Asaas da igreja (credencial por `slug`).
 
 O código deve usar um serviço partilhado de geração (`PaymentLinksGenerationService`) com `sourceKey` fixo `cotas` no `externalReference` (`cm|v1|<tenantSlug>|cotas`). **Eventos** e outros módulos podem ter **outro endpoint** que chama o mesmo serviço com outro `sourceKey` (ex.: `events-<uuid>`).
 
-O pedido ao Asaas inclui `dueDateLimitDays` (dias úteis para vencimento quando há opção de boleto); com `billingType` `UNDEFINED` a API Asaas exige este campo.
+O pedido ao Asaas inclui `dueDateLimitDays` (dias úteis para vencimento quando há opção de boleto); com `billingType` `UNDEFINED` a API Asaas exige este campo. Em assinaturas (`isMonthly: true`), envia-se também `endDate` (YYYY-MM-DD) derivado de `subscriptionDurationMonths` para limitar a vigência da recorrência no link — validar o comportamento exacto na [sandbox Asaas](https://docs.asaas.com/docs/welcome-to-asaas). O cálculo usa o calendário local do servidor Node (recomenda-se `TZ=America/Sao_Paulo` em produção).
 
 ## CORS
 
@@ -17,13 +17,15 @@ O browser só envia `fetch` de origens registadas para este tenant na tabela **`
 | Campo | Tipo | Obrigatório | Notas |
 |-------|------|-------------|--------|
 | `isMonthly` | boolean | sim | `true` → assinatura mensal (`RECURRENT` + `MONTHLY` no Asaas); `false` → cobrança única (`DETACHED`) |
+| `subscriptionDurationMonths` | integer | sim se `isMonthly` | Entre **1** e **120**. Duração da assinatura em meses; a API calcula `endDate` para o link Asaas |
 | `value` | number | não | Reais, ≥ `0.01`, 2 decimais. Se omitido ou `null`, o pagador define o valor na página Asaas |
 
-### Exemplo — valor livre, mensal
+### Exemplo — valor livre, mensal (12 meses)
 
 ```json
 {
-  "isMonthly": true
+  "isMonthly": true,
+  "subscriptionDurationMonths": 12
 }
 ```
 

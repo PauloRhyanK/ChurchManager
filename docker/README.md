@@ -68,6 +68,12 @@ Podes combinar perfis, por exemplo: `docker compose --profile pgadmin --profile 
 
 **Aviso:** credenciais fracas por defeito; muda-as no `.env.docker` e não expões o porto `5050` em redes não confiáveis.
 
+### pgAdmin em produção (`docker-compose.prod.yml`)
+
+A imagem oficial **só usa** `PGADMIN_DEFAULT_EMAIL` e `PGADMIN_DEFAULT_PASSWORD` quando cria a base interna pela **primeira vez**. Se o volume `pgadmin_data` já existir (primeira subida com outro `.env` ou defaults do compose), o login **não muda** quando editas o `.env.production` — continuam válidas as credenciais da primeira instalação (por exemplo `admin@example.com` / `admin` se foi isso que correu na altura).
+
+Para aplicar o email/senha novos do `.env.production`: `docker compose -f docker-compose.prod.yml stop pgadmin`, apaga o volume que contém `pgadmin_data` (`docker volume ls` para ver o nome completo, ex. `pastadoprojeto_pgadmin_data`), depois `docker compose --env-file .env.production -f docker-compose.prod.yml up -d`. Isto **apaga só** dados da UI do pgAdmin (servidores guardados no pgAdmin, etc.), não apaga a base Postgres (`pgdata`).
+
 ## O que ver nos logs (`docker compose logs -f api`)
 
 O script [`apps/api/docker-entrypoint.sh`](../apps/api/docker-entrypoint.sh) imprime, em ordem:
