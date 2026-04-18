@@ -23,7 +23,9 @@ api.interceptors.response.use(
     if (err.response?.status === 401) {
       clearStoredSession();
       if (!window.location.pathname.startsWith("/login")) {
-        window.location.assign("/login");
+        const next = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        const qs = next && next !== "/" ? `?next=${encodeURIComponent(next)}` : "";
+        window.location.assign(`/login${qs}`);
       }
     }
     return Promise.reject(err);
