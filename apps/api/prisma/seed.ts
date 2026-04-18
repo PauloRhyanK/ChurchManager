@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { AdminUserRole, PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -39,10 +39,12 @@ async function main() {
       tenantId: tenant.id,
       email: seedEmail,
       passwordHash,
+      role: AdminUserRole.PLATFORM_ADMIN,
     },
     update: {
       passwordHash,
       tenantId: tenant.id,
+      role: AdminUserRole.PLATFORM_ADMIN,
     },
   });
 

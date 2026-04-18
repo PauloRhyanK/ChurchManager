@@ -28,7 +28,10 @@ export function LoginPage() {
     onSuccess: (data) => {
       setStoredSession({
         accessToken: data.accessToken,
-        user: data.user,
+        user: {
+          ...data.user,
+          role: data.user.role ?? "TENANT_ADMIN",
+        },
       });
       toast.success("Sessão iniciada");
       navigate(next, { replace: true });

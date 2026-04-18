@@ -1,11 +1,15 @@
 const TOKEN_KEY = "cm_admin_token";
 const SESSION_KEY = "cm_admin_session";
 
+export type AdminUserRole = "TENANT_ADMIN" | "PLATFORM_ADMIN";
+
 export interface AuthUser {
   id: string;
   email: string;
   tenantId: string;
   tenantSlug: string;
+  /** Ausente em sessões antigas; tratado como `TENANT_ADMIN` ao ler. */
+  role?: AdminUserRole;
 }
 
 export interface AuthSession {
@@ -25,7 +29,11 @@ export function getStoredSession(): AuthSession | null {
   const raw = sessionStorage.getItem(SESSION_KEY);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as AuthSession;
+    const parsed = JSON.parse(raw) as AuthSession;
+    if (parsed.user && parsed.user.role == null) {
+      parsed.user = { ...parsed.user, role: "TENANT_ADMIN" };
+    }
+    return parsed;
   } catch {
     return null;
   }

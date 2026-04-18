@@ -6,6 +6,8 @@ import Index from "@/pages/Index";
 import NotFound from "@/pages/NotFound";
 import Settings from "@/pages/Settings";
 import SiteManagement from "@/pages/SiteManagement";
+import PlatformChurches from "@/pages/PlatformChurches";
+import { PlatformAdminRoute } from "./PlatformAdminRoute";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 export function AppRoutes() {
@@ -19,6 +21,10 @@ export function AppRoutes() {
         <Route path="/eventos" element={<Events />} />
         <Route path="/site" element={<SiteManagement />} />
         <Route path="/configuracoes" element={<Settings />} />
+
+        <Route element={<PlatformAdminRoute />}>
+          <Route path="/plataforma/igrejas" element={<PlatformChurches />} />
+        </Route>
 
         <Route path="/admin" element={<Navigate to="/financeiro" replace />} />
         <Route path="/admin/financeiro/cotas" element={<Navigate to="/financeiro" replace />} />

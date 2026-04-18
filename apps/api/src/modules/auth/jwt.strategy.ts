@@ -8,6 +8,7 @@ import type { AuthUser } from './auth-user';
 interface JwtPayload {
   sub: string;
   tenantId: string;
+  role?: string;
 }
 
 @Injectable()
@@ -40,6 +41,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       tenantId: user.tenantId,
       tenantSlug: user.tenant.slug,
       email: user.email,
+      role: user.role,
     };
   }
 }

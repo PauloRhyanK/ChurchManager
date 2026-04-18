@@ -9,6 +9,7 @@ import {
   Lock,
   Church,
   LogOut,
+  Building2,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -41,6 +42,12 @@ const managementNav = [
   { title: "Escalas", url: "#", icon: Users, soon: true },
   { title: "Células / Grupos", url: "#", icon: Grid3X3, soon: true },
 ];
+
+const platformNavItem = {
+  title: "Igrejas (plataforma)",
+  url: "/plataforma/igrejas",
+  icon: Building2,
+} as const;
 
 export function AppSidebar() {
   const { state } = useSidebar();
@@ -107,6 +114,34 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <Separator className="my-2 mx-3" />
+
+        {session?.user?.role === "PLATFORM_ADMIN" && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-3 mb-1">
+              Plataforma
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(platformNavItem.url)}
+                    tooltip={platformNavItem.title}
+                  >
+                    <NavLink
+                      to={platformNavItem.url}
+                      className="rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                    >
+                      <platformNavItem.icon className="h-4 w-4" />
+                      {!collapsed && <span>{platformNavItem.title}</span>}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         <SidebarGroup>
           <SidebarGroupLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-3 mb-1">

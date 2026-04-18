@@ -1,5 +1,7 @@
 import { api } from "@/lib/api";
 
+import type { AdminUserRole } from "@/lib/auth-storage";
+
 export interface LoginResponse {
   accessToken: string;
   user: {
@@ -7,6 +9,8 @@ export interface LoginResponse {
     email: string;
     tenantId: string;
     tenantSlug: string;
+    /** Presente a partir da API com multitenancy por papéis. */
+    role?: AdminUserRole;
   };
 }
 

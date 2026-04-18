@@ -51,6 +51,7 @@ flowchart LR
 ### 3.1 Core — Auth e tenants
 
 - CRUD de tenants (igrejas) e gestão de utilizadores administrativos **ligados** a um `tenant_id`.
+- Utilizadores com papel **`PLATFORM_ADMIN`** podem criar novos tenants e o primeiro administrador por `POST /api/admin/platform/tenants` (ver README da API); os restantes admins são `TENANT_ADMIN` no respectivo tenant.
 - Guards/middlewares Nest.js: extrair `tenant_id` do contexto autenticado e disponibilizá-lo à camada de aplicação.
 
 ### 3.2 Eventos

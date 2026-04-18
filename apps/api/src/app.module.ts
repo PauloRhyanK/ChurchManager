@@ -42,6 +42,11 @@ import { RequestLoggingInterceptor } from './common/request-logging.interceptor'
         ttl: 60_000,
         limit: 5,
       },
+      {
+        name: 'platform',
+        ttl: 60_000,
+        limit: 10,
+      },
     ]),
     PrismaModule,
     HealthModule,

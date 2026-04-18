@@ -7,8 +7,17 @@ Fluxo mínimo local (ordem e variáveis): **[README na raiz do monorepo](../../R
 1. Copiar `.env.example` para `.env` e preencher variáveis obrigatórias (ver `.env.example`). `ADMIN_CORS_ORIGIN` = origens do **painel admin** apenas (ex. `http://localhost:5173`). Sites públicos por igreja: tabela `tenant_public_web_origins` (painel **Configurações financeiras** ou rotas `.../public-web-origins`).
 2. `npm install`
 3. `npx prisma migrate deploy` (ou `npx prisma migrate dev` em desenvolvimento)
-4. Opcional: `npx prisma db seed` — tenant demo, admin, origem CORS de exemplo `http://localhost:3001`
+4. Opcional: `npx prisma db seed` — tenant demo, admin com papel **`PLATFORM_ADMIN`**, origem CORS de exemplo `http://localhost:3001`
 5. `npm run start:dev`
+
+### Plataforma (criar igrejas)
+
+Utilizadores com `role = PLATFORM_ADMIN` na tabela `admin_users` podem chamar:
+
+- `GET /api/admin/platform/tenants` — lista tenants (id, nome, slug, data de criação).
+- `POST /api/admin/platform/tenants` — cria tenant + primeiro `TENANT_ADMIN` (corpo: `name`, `slug`, `adminEmail`, `adminPassword`). Limite de pedidos: throttler `platform` (10/min por IP).
+
+O painel admin mostra **Plataforma → Igrejas** só para esse papel. Em **produção**, altere a palavra-passe do seed e promova outros operadores via SQL (`UPDATE admin_users SET role = 'PLATFORM_ADMIN' WHERE …`) se necessário; não deixe credenciais de demonstração activas.
 
 ## Docker
 
@@ -23,7 +32,9 @@ O Asaas precisa de um URL público (HTTPS). Ver [docs/webhooks-local-dev-ngrok.m
 | Método | Caminho | Descrição |
 |--------|---------|-----------|
 | GET | `/api/health` | Liveness (sem auth; healthcheck Docker) |
-| POST | `/api/auth/login` | Login admin (`email`, `password`) → JWT |
+| POST | `/api/auth/login` | Login admin (`email`, `password`) → JWT (resposta inclui `user.role`) |
+| GET | `/api/admin/platform/tenants` | Lista igrejas — só `PLATFORM_ADMIN` (Bearer JWT) |
+| POST | `/api/admin/platform/tenants` | Cria igreja + admin inicial — só `PLATFORM_ADMIN` (Bearer JWT) |
 | GET | `/api/admin/tenants/me/financial-setup` | Estado Asaas configurado? (Bearer JWT) |
 | PUT | `/api/admin/tenants/me/asaas-credentials` | Atualiza credenciais Asaas (valida no Asaas; Bearer JWT) |
 | GET | `/api/admin/tenants/me/public-web-origins` | Lista origens de browser autorizadas para `/api/public/tenants/:slug/...` (Bearer JWT) |
