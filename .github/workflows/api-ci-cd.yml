@@ -102,3 +102,24 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+  # Secrets: SSH_HOST, SSH_USER, SSH_PRIVATE_KEY (chave privada PEM com acesso SSH à VPS).
+  # Na VPS: git pull precisa de acesso ao repo; docker pull do GHCR precisa de login ghcr.io (read:packages).
+  deploy:
+    name: Deploy na VPS
+    runs-on: ubuntu-latest
+    needs: docker
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd ~/projetos/churchmanager
+            git pull origin main
+            sudo docker compose --env-file .env.production -f docker-compose.prod.yml pull api
+            sudo docker compose --env-file .env.production -f docker-compose.prod.yml up -d api
+            sudo docker image prune -f
