@@ -4,6 +4,8 @@ export interface FinancialSetupResponse {
   isAsaasConfigured: boolean;
   /** URL completo de retorno pós-pagamento (opcional); pode incluir query `?`. */
   paymentSuccessRedirectUrl: string | null;
+  /** Se false, a predefinição do painel não é enviada ao Asaas (o URL mantém-se guardado). */
+  paymentSuccessRedirectEnabled: boolean;
 }
 
 export async function fetchFinancialSetup() {
@@ -20,12 +22,14 @@ export async function updateAsaasCredentials(body: {
 }
 
 export async function updatePaymentSuccessRedirect(body: {
-  paymentSuccessRedirectUrl: string | null;
+  paymentSuccessRedirectUrl?: string | null;
+  paymentSuccessRedirectEnabled?: boolean;
 }) {
-  const { data } = await api.put<{ ok: boolean; paymentSuccessRedirectUrl: string | null }>(
-    "/admin/tenants/me/payment-success-redirect",
-    body,
-  );
+  const { data } = await api.put<{
+    ok: boolean;
+    paymentSuccessRedirectUrl: string | null;
+    paymentSuccessRedirectEnabled: boolean;
+  }>("/admin/tenants/me/payment-success-redirect", body);
   return data;
 }
 

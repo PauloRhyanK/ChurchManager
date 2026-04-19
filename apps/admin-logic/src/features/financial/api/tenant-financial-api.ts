@@ -3,6 +3,7 @@ import { api } from '@/lib/api';
 export interface FinancialSetupResponse {
   isAsaasConfigured: boolean;
   paymentSuccessRedirectUrl: string | null;
+  paymentSuccessRedirectEnabled: boolean;
 }
 
 export async function fetchFinancialSetup() {
@@ -24,11 +25,13 @@ export async function updateAsaasCredentials(body: {
 }
 
 export async function updatePaymentSuccessRedirect(body: {
-  paymentSuccessRedirectUrl: string | null;
+  paymentSuccessRedirectUrl?: string | null;
+  paymentSuccessRedirectEnabled?: boolean;
 }) {
   const { data } = await api.put<{
     ok: boolean;
     paymentSuccessRedirectUrl: string | null;
+    paymentSuccessRedirectEnabled: boolean;
   }>('/admin/tenants/me/payment-success-redirect', body);
   return data;
 }

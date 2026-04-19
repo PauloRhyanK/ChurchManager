@@ -49,7 +49,9 @@ export class PublicFinancialController {
     const allowed = await this.publicWebOrigins.getAllowedOriginsForSlug(slug);
     const effectiveSuccessUrl = resolveEffectivePaymentSuccessUrl(
       dto.successUrl,
-      tenant.paymentSuccessRedirectUrl,
+      tenant.paymentSuccessRedirectEnabled !== false
+        ? tenant.paymentSuccessRedirectUrl
+        : null,
     );
     assertPublicPaymentSuccessUrlAllowed(
       effectiveSuccessUrl,
@@ -75,7 +77,9 @@ export class PublicFinancialController {
     const allowed = await this.publicWebOrigins.getAllowedOriginsForSlug(slug);
     const effectiveSuccessUrl = resolveEffectivePaymentSuccessUrl(
       dto.successUrl,
-      tenant.paymentSuccessRedirectUrl,
+      tenant.paymentSuccessRedirectEnabled !== false
+        ? tenant.paymentSuccessRedirectUrl
+        : null,
     );
     assertPublicPaymentSuccessUrlAllowed(
       effectiveSuccessUrl,

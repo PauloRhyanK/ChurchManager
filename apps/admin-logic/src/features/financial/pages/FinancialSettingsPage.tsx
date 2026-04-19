@@ -94,7 +94,7 @@ export function FinancialSettingsPage() {
   const paymentRedirectMutation = useMutation({
     mutationFn: updatePaymentSuccessRedirect,
     onSuccess: () => {
-      toast.success('URL de retorno guardado.');
+      toast.success('Redirecionamento atualizado.');
       void queryClient.invalidateQueries({ queryKey: ['financial-setup'] });
     },
     onError: (err) => {
@@ -301,6 +301,44 @@ export function FinancialSettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/30 p-4">
+            <p className="text-sm font-medium">Redirecionamento como predefinição</p>
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              Desligue temporariamente se o Asaas ainda não tiver o domínio cadastrado. O URL guardado não é apagado.
+            </p>
+            <Button
+              type="button"
+              className="mt-3"
+              variant={
+                setupQuery.data?.paymentSuccessRedirectEnabled ?? true
+                  ? 'outline'
+                  : 'secondary'
+              }
+              disabled={
+                setupQuery.isLoading ||
+                setupQuery.isError ||
+                paymentRedirectMutation.isPending
+              }
+              onClick={() =>
+                paymentRedirectMutation.mutate({
+                  paymentSuccessRedirectEnabled: !(
+                    setupQuery.data?.paymentSuccessRedirectEnabled ?? true
+                  ),
+                })
+              }
+            >
+              {paymentRedirectMutation.isPending ? (
+                <>
+                  <Loader2 className="animate-spin" />
+                  A atualizar…
+                </>
+              ) : (setupQuery.data?.paymentSuccessRedirectEnabled ?? true) ? (
+                'Desativar redirecionamento'
+              ) : (
+                'Ativar redirecionamento'
+              )}
+            </Button>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="paymentSuccessUrl">URL de sucesso</Label>
             <Input

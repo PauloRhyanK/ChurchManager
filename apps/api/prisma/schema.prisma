@@ -22,6 +22,8 @@ model Tenant {
   asaasWebhookToken String? @map("asaas_webhook_token") @db.Text
   /// URL completo de retorno pós-pagamento Asaas (opcional; pode incluir `?query`). Validado contra origens públicas.
   paymentSuccessRedirectUrl String? @map("payment_success_redirect_url") @db.VarChar(2048)
+  /// Se false, o URL acima não é usado como predefinição (o valor mantém-se para reativar depois).
+  paymentSuccessRedirectEnabled Boolean @default(true) @map("payment_success_redirect_enabled")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { getApiErrorMessage } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth-storage";
 import {
@@ -91,7 +92,7 @@ const Settings = () => {
   const paymentRedirectMutation = useMutation({
     mutationFn: updatePaymentSuccessRedirect,
     onSuccess: () => {
-      toast.success("URL de retorno guardado.");
+      toast.success("Redirecionamento atualizado.");
       void queryClient.invalidateQueries({ queryKey: ["financial-setup"] });
     },
     onError: (error) => {
@@ -297,6 +298,26 @@ const Settings = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex flex-col gap-3 rounded-md border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <Label htmlFor="paymentRedirectEnabled" className="text-base">
+                  Usar redirecionamento (predefinição)
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Quando desligado, o URL abaixo não é enviado ao Asaas nos links/cobranças sem{" "}
+                  <code className="text-xs">successUrl</code> no pedido — útil enquanto o domínio não está
+                  cadastrado no Asaas. O URL permanece guardado para reativar depois.
+                </p>
+              </div>
+              <Switch
+                id="paymentRedirectEnabled"
+                checked={setupQuery.data?.paymentSuccessRedirectEnabled ?? true}
+                disabled={setupQuery.isLoading || setupQuery.isError || paymentRedirectMutation.isPending}
+                onCheckedChange={(checked) => {
+                  paymentRedirectMutation.mutate({ paymentSuccessRedirectEnabled: checked });
+                }}
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="paymentSuccessUrl">URL de sucesso</Label>
               <Input

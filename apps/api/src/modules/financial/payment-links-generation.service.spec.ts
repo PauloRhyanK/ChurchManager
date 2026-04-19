@@ -15,6 +15,7 @@ function tenant(over: Partial<Tenant> = {}): Tenant {
     asaasApiKey: 'cifrado',
     asaasWebhookToken: null,
     paymentSuccessRedirectUrl: null,
+    paymentSuccessRedirectEnabled: true,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...over,

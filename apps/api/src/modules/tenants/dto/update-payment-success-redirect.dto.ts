@@ -1,7 +1,18 @@
 import { Transform } from 'class-transformer';
-import { IsOptional, IsUrl, MaxLength, ValidateIf } from 'class-validator';
+import {
+  IsBoolean,
+  IsOptional,
+  IsUrl,
+  MaxLength,
+  ValidateIf,
+} from 'class-validator';
 
 export class UpdatePaymentSuccessRedirectDto {
+  /** Se false, não se usa `paymentSuccessRedirectUrl` como predefinição nos endpoints públicos. */
+  @IsOptional()
+  @IsBoolean()
+  paymentSuccessRedirectEnabled?: boolean;
+
   @IsOptional()
   @Transform(({ value }) =>
     value === '' || value === null ? null : value,
