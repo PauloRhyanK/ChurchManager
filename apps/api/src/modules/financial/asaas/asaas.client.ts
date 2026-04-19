@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import {
   AsaasBillingType,
   AsaasAccountResponse,
+  AsaasCallbackInput,
   AsaasCustomerResponse,
   AsaasPaymentResponse,
   AsaasPaymentLinkCreateInput,
@@ -132,6 +133,7 @@ export class AsaasClient {
     dueDate: string;
     description?: string;
     externalReference?: string;
+    callback?: AsaasCallbackInput;
   }): Promise<AsaasPaymentResponse> {
     const res = await fetch(`${this.baseUrl}/payments`, {
       method: 'POST',
@@ -143,6 +145,7 @@ export class AsaasClient {
         dueDate: input.dueDate,
         description: input.description,
         externalReference: input.externalReference,
+        ...(input.callback ? { callback: input.callback } : {}),
       }),
     });
     const data = (await res.json()) as AsaasPaymentResponse & {

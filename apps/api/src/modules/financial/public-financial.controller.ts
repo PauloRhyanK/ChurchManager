@@ -1,5 +1,7 @@
 import { Body, Controller, HttpCode, Param, Post } from '@nestjs/common';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
+import { assertPublicPaymentSuccessUrlAllowed } from '../tenants/public-web-origin.util';
+import { TenantPublicWebOriginService } from '../tenants/tenant-public-web-origin.service';
 import { TenantsService } from '../tenants/tenants.service';
 import { PayerProfilesService } from './payer-profiles.service';
 import { PaymentIntentsService } from './payment-intents.service';
@@ -19,6 +21,7 @@ export class PublicFinancialController {
     private readonly payerProfiles: PayerProfilesService,
     private readonly paymentIntents: PaymentIntentsService,
     private readonly paymentLinksGeneration: PaymentLinksGenerationService,
+    private readonly publicWebOrigins: TenantPublicWebOriginService,
   ) {}
 
   @Post(':slug/payer-profiles')
@@ -40,6 +43,12 @@ export class PublicFinancialController {
     @Body() dto: CreatePaymentIntentDto,
   ) {
     const tenant = await this.tenants.findBySlugOrThrow(slug);
+    const allowed = await this.publicWebOrigins.getAllowedOriginsForSlug(slug);
+    assertPublicPaymentSuccessUrlAllowed(
+      dto.successUrl,
+      dto.autoRedirect,
+      allowed,
+    );
     return this.paymentIntents.createIntent(tenant, dto);
   }
 
@@ -53,12 +62,20 @@ export class PublicFinancialController {
     @Body() dto: CreatePublicPaymentLinkDto,
   ) {
     const tenant = await this.tenants.findBySlugOrThrow(slug);
+    const allowed = await this.publicWebOrigins.getAllowedOriginsForSlug(slug);
+    assertPublicPaymentSuccessUrlAllowed(
+      dto.successUrl,
+      dto.autoRedirect,
+      allowed,
+    );
     return this.paymentLinksGeneration.create(tenant, {
       isMonthly: dto.isMonthly,
       value: dto.value,
       subscriptionDurationMonths: dto.subscriptionDurationMonths,
       sourceKey: PAYMENT_LINK_SOURCE_COTAS,
       asaasLinkName: `Cotas — ${tenant.name}`,
+      successUrl: dto.successUrl,
+      autoRedirect: dto.autoRedirect,
     });
   }
 }

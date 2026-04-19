@@ -33,6 +33,10 @@ export interface CreatePaymentLinkOptions {
   /** Nome exibido no painel Asaas */
   asaasLinkName: string;
   asaasDescription?: string;
+  /** URL de retorno após pagamento (validado contra origens públicas do tenant antes de chamar). */
+  successUrl?: string;
+  /** Só com `successUrl`. Repassado ao Asaas em `callback.autoRedirect`. */
+  autoRedirect?: boolean;
 }
 
 /**
@@ -89,6 +93,16 @@ export class PaymentLinksGenerationService {
 
     if (opts.value !== undefined && opts.value !== null) {
       body.value = opts.value;
+    }
+
+    const successTrimmed = opts.successUrl?.trim();
+    if (successTrimmed) {
+      body.callback = {
+        successUrl: successTrimmed,
+        ...(opts.autoRedirect !== undefined
+          ? { autoRedirect: opts.autoRedirect }
+          : {}),
+      };
     }
 
     try {

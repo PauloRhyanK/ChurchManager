@@ -129,3 +129,26 @@ test('create: 503 sem asaasApiKey', async () => {
     ServiceUnavailableException,
   );
 });
+
+test('create: envia callback quando successUrl', async () => {
+  let bodySent: { callback?: { successUrl: string; autoRedirect?: boolean } };
+  const asaas = {
+    createPaymentLink: async (input: { body: typeof bodySent }) => {
+      bodySent = input.body;
+      return { id: 'x', url: 'https://www.asaas.com/c/x' };
+    },
+  };
+  const credentials = { getDecryptedApiKey: () => 'k' };
+  const service = new PaymentLinksGenerationService(
+    asaas as never,
+    credentials as never,
+  );
+  await service.create(tenant(), {
+    isMonthly: false,
+    successUrl: 'https://cotas.test/obrigado',
+    autoRedirect: true,
+    ...cotasOpts,
+  });
+  assert.equal(bodySent!.callback?.successUrl, 'https://cotas.test/obrigado');
+  assert.equal(bodySent!.callback?.autoRedirect, true);
+});

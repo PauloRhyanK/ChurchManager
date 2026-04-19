@@ -56,6 +56,13 @@ export type AsaasPaymentLinkSubscriptionCycle =
   | 'SEMIANNUALLY'
   | 'YEARLY';
 
+/** Redirecionamento após pagamento — ver docs Asaas `callback` em cobranças e paymentLinks. */
+export interface AsaasCallbackInput {
+  successUrl: string;
+  /** Se `false`, o Asaas mostra o botão “Ir para o site” em vez de redireccionar de imediato. */
+  autoRedirect?: boolean;
+}
+
 export interface AsaasPaymentLinkCreateInput {
   name: string;
   description?: string;
@@ -68,6 +75,7 @@ export interface AsaasPaymentLinkCreateInput {
   dueDateLimitDays?: number;
   externalReference?: string;
   notificationEnabled?: boolean;
+  callback?: AsaasCallbackInput;
 }
 
 /** Resposta parcial — link de pagamentos criado */

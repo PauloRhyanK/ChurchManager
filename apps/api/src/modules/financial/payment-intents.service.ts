@@ -85,6 +85,7 @@ export class PaymentIntentsService {
     const dueDate =
       billingType === 'BOLETO' ? formatDueDate(3) : formatDueDate(0);
 
+    const successTrimmed = dto.successUrl?.trim();
     const payment = await this.asaas.createPayment({
       apiKey: this.tenantCredentials.getDecryptedApiKey(tenant.asaasApiKey),
       customerId: asaasCustomerId,
@@ -93,6 +94,16 @@ export class PaymentIntentsService {
       dueDate,
       description,
       externalReference: profile.id,
+      ...(successTrimmed
+        ? {
+            callback: {
+              successUrl: successTrimmed,
+              ...(dto.autoRedirect !== undefined
+                ? { autoRedirect: dto.autoRedirect }
+                : {}),
+            },
+          }
+        : {}),
     });
 
     const amountCents = Math.round(amountReais * 100);

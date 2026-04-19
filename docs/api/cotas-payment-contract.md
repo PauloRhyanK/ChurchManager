@@ -42,8 +42,10 @@ Corpo (semântica actual em [create-payment-intent.dto.ts](../../apps/api/src/mo
 | `planId` | uuid | não | Se presente, valor vem do plano (**cota com valor fixo**) |
 | `value` | number | condicional | Obrigatório se **não** houver `planId`; reais, ≥ `0.01`, 2 decimais (**cota com valor livre**) |
 | `billingType` | string | sim | `PIX` \| `BOLETO` \| `UNDEFINED` |
+| `successUrl` | string (URL) | não | Redirecionamento após pagamento na fatura Asaas (`callback.successUrl` na cobrança). O **origin** tem de estar em **`tenant_public_web_origins`**; o domínio também nos dados comerciais Asaas. Ver [public-payment-links.md](./public-payment-links.md) (mesma regra). |
+| `autoRedirect` | boolean | não | Só com `successUrl`; repassado ao Asaas em `callback.autoRedirect`. |
 
-Resposta: objecto com `transactionId`, `asaasPaymentId`, `status`, `billingType`, `value`, `dueDate`, `invoiceUrl`, `bankSlipUrl`, `pix?` — espelhar a implementação actual de [payment-intents.service.ts](../../apps/api/src/modules/financial/payment-intents.service.ts).
+Resposta: objecto com `transactionId`, `asaasPaymentId`, `status`, `billingType`, `value`, `dueDate`, `invoiceUrl`, `bankSlipUrl`, `pix?` — espelhar a implementação actual de [payment-intents.service.ts](../../apps/api/src/modules/financial/payment-intents.service.ts). Com `successUrl`, o utilizador que abre `invoiceUrl` pode ser redireccionado de volta ao site após pagamento conforme [Asaas — redirecionamento](https://docs.asaas.com/docs/redirecionamento-apos-o-pagamento).
 
 ---
 

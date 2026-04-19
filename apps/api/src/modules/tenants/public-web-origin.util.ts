@@ -60,3 +60,56 @@ export function originMatchesAllowlist(
   }
   return false;
 }
+
+const LOCAL_HTTP_ORIGIN_RE =
+  /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+
+/**
+ * Indica se `successUrl` é permitido como retorno pós-pagamento: HTTPS (ou HTTP só em
+ * localhost / 127.0.0.1 / ::1) e o `origin` coincide com uma origem pública do tenant.
+ */
+export function successUrlAllowedByPublicOrigins(
+  successUrl: string,
+  allowedOrigins: readonly string[],
+): boolean {
+  let url: URL;
+  try {
+    url = new URL(successUrl);
+  } catch {
+    return false;
+  }
+  if (url.username || url.password) {
+    return false;
+  }
+  const origin = url.origin;
+  if (url.protocol === 'http:') {
+    if (!LOCAL_HTTP_ORIGIN_RE.test(origin)) {
+      return false;
+    }
+  } else if (url.protocol !== 'https:') {
+    return false;
+  }
+  return originMatchesAllowlist(origin, allowedOrigins);
+}
+
+/** Valida `successUrl` / `autoRedirect` antes de enviar `callback` ao Asaas. */
+export function assertPublicPaymentSuccessUrlAllowed(
+  successUrl: string | undefined,
+  autoRedirect: boolean | undefined,
+  allowedOrigins: readonly string[],
+): void {
+  const trimmed = successUrl?.trim();
+  if (!trimmed) {
+    if (autoRedirect !== undefined && autoRedirect !== null) {
+      throw new BadRequestException(
+        'autoRedirect só pode ser usado juntamente com successUrl.',
+      );
+    }
+    return;
+  }
+  if (!successUrlAllowedByPublicOrigins(trimmed, allowedOrigins)) {
+    throw new BadRequestException(
+      'successUrl deve usar HTTPS (ou http em localhost) e o domínio deve estar nas origens públicas registadas para esta igreja.',
+    );
+  }
+}
