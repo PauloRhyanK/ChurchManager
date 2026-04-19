@@ -1,4 +1,10 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  Injectable,
+  InternalServerErrorException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   AsaasBillingType,
@@ -16,7 +22,7 @@ export class AsaasClient {
   constructor(private readonly config: ConfigService) {
     this.baseUrl =
       this.config.get<string>('ASAAS_API_URL') ??
-      'https://sandbox.asaas.com/api/v3';
+      'https://api-sandbox.asaas.com/v3';
   }
 
   private headers(apiKey: string): Record<string, string> {
@@ -27,19 +33,41 @@ export class AsaasClient {
   }
 
   async validateApiKey(apiKey: string): Promise<AsaasAccountResponse> {
-    const res = await fetch(`${this.baseUrl}/myAccount`, {
-      method: 'GET',
-      headers: this.headers(apiKey),
-    });
-    const data = (await res.json()) as AsaasAccountResponse & {
-      errors?: Array<{ description?: string }>;
-    };
-    if (!res.ok) {
-      const msg =
-        data.errors?.[0]?.description ?? `Asaas myAccount ${res.status}`;
-      throw new InternalServerErrorException(msg);
+    try {
+      const res = await fetch(`${this.baseUrl}/myAccount`, {
+        method: 'GET',
+        headers: this.headers(apiKey),
+      });
+      let data: AsaasAccountResponse & {
+        errors?: Array<{ description?: string }>;
+      };
+      try {
+        data = (await res.json()) as typeof data;
+      } catch {
+        throw new ServiceUnavailableException(
+          'Resposta inválida do Asaas ao validar a chave. Confirme ASAAS_API_URL (sandbox: https://api-sandbox.asaas.com/v3 , produção: https://api.asaas.com/v3 ).',
+        );
+      }
+      if (!res.ok) {
+        const msg =
+          data.errors?.[0]?.description ?? `Asaas myAccount HTTP ${res.status}`;
+        if (res.status >= 400 && res.status < 500) {
+          throw new BadRequestException(
+            `${msg} Se a chave estiver correta, use URL de Sandbox com chave de testes e URL de produção com chave de produção.`,
+          );
+        }
+        throw new ServiceUnavailableException(msg);
+      }
+      return data;
+    } catch (e) {
+      if (e instanceof HttpException) {
+        throw e;
+      }
+      const cause = e instanceof Error ? e.message : String(e);
+      throw new ServiceUnavailableException(
+        `Não foi possível contactar o Asaas: ${cause}`,
+      );
     }
-    return data;
   }
 
   async createCustomer(input: {
