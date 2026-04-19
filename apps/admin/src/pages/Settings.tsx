@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -17,6 +17,7 @@ import {
   fetchFinancialSetup,
   fetchPublicWebOrigins,
   updateAsaasCredentials,
+  updatePaymentSuccessRedirect,
 } from "@/features/financial/api/tenant-financial-api";
 import {
   asaasCredentialsSchema,
@@ -28,6 +29,7 @@ const Settings = () => {
   const [showApiKey, setShowApiKey] = useState(false);
   const [showWebhookToken, setShowWebhookToken] = useState(false);
   const [newOrigin, setNewOrigin] = useState("");
+  const [paymentSuccessUrlDraft, setPaymentSuccessUrlDraft] = useState("");
   const session = getStoredSession();
 
   const setupQuery = useQuery({
@@ -74,6 +76,23 @@ const Settings = () => {
     onSuccess: () => {
       toast.success("Origem CORS removida.");
       void queryClient.invalidateQueries({ queryKey: ["public-web-origins"] });
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error));
+    },
+  });
+
+  useEffect(() => {
+    if (setupQuery.data) {
+      setPaymentSuccessUrlDraft(setupQuery.data.paymentSuccessRedirectUrl ?? "");
+    }
+  }, [setupQuery.data]);
+
+  const paymentRedirectMutation = useMutation({
+    mutationFn: updatePaymentSuccessRedirect,
+    onSuccess: () => {
+      toast.success("URL de retorno guardado.");
+      void queryClient.invalidateQueries({ queryKey: ["financial-setup"] });
     },
     onError: (error) => {
       toast.error(getApiErrorMessage(error));
@@ -265,6 +284,54 @@ const Settings = () => {
                 {addOriginMutation.isPending ? "A adicionar..." : "Adicionar"}
               </Button>
             </form>
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base">Redirecionamento após pagamento (Asaas)</CardTitle>
+            <CardDescription>
+              URL completa para onde o pagador volta depois do pagamento na página Asaas (pode incluir parâmetros após{" "}
+              <code className="text-xs">?</code>). O <strong>origin</strong> deste URL deve estar listado em &quot;Site
+              público (CORS)&quot; acima; o domínio também deve constar nos dados comerciais da conta Asaas.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="paymentSuccessUrl">URL de sucesso</Label>
+              <Input
+                id="paymentSuccessUrl"
+                className="font-mono text-sm"
+                placeholder="https://cotas.exemplo.org/obrigado?origem=asaas"
+                value={paymentSuccessUrlDraft}
+                onChange={(e) => setPaymentSuccessUrlDraft(e.target.value)}
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                Deixe vazio e guarde para remover a predefinição. O site público pode ainda enviar{" "}
+                <code className="text-xs">successUrl</code> no pedido e substituir este valor.
+              </p>
+            </div>
+            <Button
+              type="button"
+              disabled={paymentRedirectMutation.isPending}
+              onClick={() =>
+                paymentRedirectMutation.mutate({
+                  paymentSuccessRedirectUrl:
+                    paymentSuccessUrlDraft.trim() === "" ? null : paymentSuccessUrlDraft.trim(),
+                })
+              }
+              className="gap-2"
+            >
+              {paymentRedirectMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  A guardar...
+                </>
+              ) : (
+                "Guardar URL de retorno"
+              )}
+            </Button>
           </CardContent>
         </Card>
       </div>

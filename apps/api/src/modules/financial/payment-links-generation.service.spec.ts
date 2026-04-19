@@ -14,6 +14,7 @@ function tenant(over: Partial<Tenant> = {}): Tenant {
     slug: 'igreja-teste',
     asaasApiKey: 'cifrado',
     asaasWebhookToken: null,
+    paymentSuccessRedirectUrl: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...over,

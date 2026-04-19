@@ -2,6 +2,8 @@ import { api } from "@/lib/api";
 
 export interface FinancialSetupResponse {
   isAsaasConfigured: boolean;
+  /** URL completo de retorno pós-pagamento (opcional); pode incluir query `?`. */
+  paymentSuccessRedirectUrl: string | null;
 }
 
 export async function fetchFinancialSetup() {
@@ -14,6 +16,16 @@ export async function updateAsaasCredentials(body: {
   webhookToken?: string;
 }) {
   const { data } = await api.put<{ ok: boolean }>("/admin/tenants/me/asaas-credentials", body);
+  return data;
+}
+
+export async function updatePaymentSuccessRedirect(body: {
+  paymentSuccessRedirectUrl: string | null;
+}) {
+  const { data } = await api.put<{ ok: boolean; paymentSuccessRedirectUrl: string | null }>(
+    "/admin/tenants/me/payment-success-redirect",
+    body,
+  );
   return data;
 }
 

@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,7 @@ import {
   fetchFinancialSetup,
   fetchPublicWebOrigins,
   updateAsaasCredentials,
+  updatePaymentSuccessRedirect,
 } from '../api/tenant-financial-api';
 import {
   asaasCredentialsSchema,
@@ -32,6 +33,7 @@ export function FinancialSettingsPage() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [showWebhook, setShowWebhook] = useState(false);
   const [newOrigin, setNewOrigin] = useState('');
+  const [paymentSuccessUrlDraft, setPaymentSuccessUrlDraft] = useState('');
 
   const setupQuery = useQuery({
     queryKey: ['financial-setup'],
@@ -77,6 +79,23 @@ export function FinancialSettingsPage() {
       toast.success('Configurações salvas com sucesso!');
       void queryClient.invalidateQueries({ queryKey: ['financial-setup'] });
       form.reset({ apiKey: '', webhookToken: '' });
+    },
+    onError: (err) => {
+      toast.error(getApiErrorMessage(err));
+    },
+  });
+
+  useEffect(() => {
+    if (setupQuery.data) {
+      setPaymentSuccessUrlDraft(setupQuery.data.paymentSuccessRedirectUrl ?? '');
+    }
+  }, [setupQuery.data]);
+
+  const paymentRedirectMutation = useMutation({
+    mutationFn: updatePaymentSuccessRedirect,
+    onSuccess: () => {
+      toast.success('URL de retorno guardado.');
+      void queryClient.invalidateQueries({ queryKey: ['financial-setup'] });
     },
     onError: (err) => {
       toast.error(getApiErrorMessage(err));
@@ -269,6 +288,53 @@ export function FinancialSettingsPage() {
               )}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Redirecionamento após pagamento (Asaas)</CardTitle>
+          <CardDescription>
+            URL completa para onde o pagador volta depois do pagamento na página Asaas (pode incluir parâmetros após{' '}
+            <code className="text-xs">?</code>). O <strong>origin</strong> deste URL deve estar nas origens públicas
+            (cartão acima); o domínio também deve constar nos dados comerciais da conta Asaas.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="paymentSuccessUrl">URL de sucesso</Label>
+            <Input
+              id="paymentSuccessUrl"
+              className="font-mono text-sm"
+              placeholder="https://cotas.exemplo.org/obrigado?origem=asaas"
+              value={paymentSuccessUrlDraft}
+              onChange={(e) => setPaymentSuccessUrlDraft(e.target.value)}
+              autoComplete="off"
+            />
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Deixe vazio e guarde para remover. O site público pode enviar <code className="text-xs">successUrl</code> no
+              pedido e substituir esta predefinição.
+            </p>
+          </div>
+          <Button
+            type="button"
+            disabled={paymentRedirectMutation.isPending}
+            onClick={() =>
+              paymentRedirectMutation.mutate({
+                paymentSuccessRedirectUrl:
+                  paymentSuccessUrlDraft.trim() === '' ? null : paymentSuccessUrlDraft.trim(),
+              })
+            }
+          >
+            {paymentRedirectMutation.isPending ? (
+              <>
+                <Loader2 className="animate-spin" />
+                A guardar…
+              </>
+            ) : (
+              'Guardar URL de retorno'
+            )}
+          </Button>
         </CardContent>
       </Card>
     </div>

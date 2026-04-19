@@ -2,6 +2,7 @@ import { api } from '@/lib/api';
 
 export interface FinancialSetupResponse {
   isAsaasConfigured: boolean;
+  paymentSuccessRedirectUrl: string | null;
 }
 
 export async function fetchFinancialSetup() {
@@ -19,6 +20,16 @@ export async function updateAsaasCredentials(body: {
     '/admin/tenants/me/asaas-credentials',
     body,
   );
+  return data;
+}
+
+export async function updatePaymentSuccessRedirect(body: {
+  paymentSuccessRedirectUrl: string | null;
+}) {
+  const { data } = await api.put<{
+    ok: boolean;
+    paymentSuccessRedirectUrl: string | null;
+  }>('/admin/tenants/me/payment-success-redirect', body);
   return data;
 }
 

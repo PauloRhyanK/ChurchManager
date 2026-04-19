@@ -1,6 +1,9 @@
 import { Body, Controller, HttpCode, Param, Post } from '@nestjs/common';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
-import { assertPublicPaymentSuccessUrlAllowed } from '../tenants/public-web-origin.util';
+import {
+  assertPublicPaymentSuccessUrlAllowed,
+  resolveEffectivePaymentSuccessUrl,
+} from '../tenants/public-web-origin.util';
 import { TenantPublicWebOriginService } from '../tenants/tenant-public-web-origin.service';
 import { TenantsService } from '../tenants/tenants.service';
 import { PayerProfilesService } from './payer-profiles.service';
@@ -44,12 +47,19 @@ export class PublicFinancialController {
   ) {
     const tenant = await this.tenants.findBySlugOrThrow(slug);
     const allowed = await this.publicWebOrigins.getAllowedOriginsForSlug(slug);
-    assertPublicPaymentSuccessUrlAllowed(
+    const effectiveSuccessUrl = resolveEffectivePaymentSuccessUrl(
       dto.successUrl,
+      tenant.paymentSuccessRedirectUrl,
+    );
+    assertPublicPaymentSuccessUrlAllowed(
+      effectiveSuccessUrl,
       dto.autoRedirect,
       allowed,
     );
-    return this.paymentIntents.createIntent(tenant, dto);
+    return this.paymentIntents.createIntent(tenant, {
+      ...dto,
+      successUrl: effectiveSuccessUrl,
+    });
   }
 
   /** Gera link de pagamento Asaas (cota única ou mensal). Rate limit: throttler `links` (5/min/IP). */
@@ -63,8 +73,12 @@ export class PublicFinancialController {
   ) {
     const tenant = await this.tenants.findBySlugOrThrow(slug);
     const allowed = await this.publicWebOrigins.getAllowedOriginsForSlug(slug);
-    assertPublicPaymentSuccessUrlAllowed(
+    const effectiveSuccessUrl = resolveEffectivePaymentSuccessUrl(
       dto.successUrl,
+      tenant.paymentSuccessRedirectUrl,
+    );
+    assertPublicPaymentSuccessUrlAllowed(
+      effectiveSuccessUrl,
       dto.autoRedirect,
       allowed,
     );
@@ -74,7 +88,7 @@ export class PublicFinancialController {
       subscriptionDurationMonths: dto.subscriptionDurationMonths,
       sourceKey: PAYMENT_LINK_SOURCE_COTAS,
       asaasLinkName: `Cotas — ${tenant.name}`,
-      successUrl: dto.successUrl,
+      successUrl: effectiveSuccessUrl,
       autoRedirect: dto.autoRedirect,
     });
   }

@@ -5,6 +5,7 @@ import {
   assertPublicPaymentSuccessUrlAllowed,
   originMatchesAllowlist,
   parsePublicWebOrigin,
+  resolveEffectivePaymentSuccessUrl,
   successUrlAllowedByPublicOrigins,
 } from './public-web-origin.util';
 
@@ -83,4 +84,16 @@ test('assertPublicPaymentSuccessUrlAllowed: sem successUrl e sem autoRedirect', 
   assert.doesNotThrow(() =>
     assertPublicPaymentSuccessUrlAllowed(undefined, undefined, []),
   );
+});
+
+test('resolveEffectivePaymentSuccessUrl: prioriza body sobre tenant', () => {
+  assert.equal(
+    resolveEffectivePaymentSuccessUrl('https://a.com/x', 'https://b.com/y'),
+    'https://a.com/x',
+  );
+  assert.equal(
+    resolveEffectivePaymentSuccessUrl(undefined, 'https://b.com/y?z=1'),
+    'https://b.com/y?z=1',
+  );
+  assert.equal(resolveEffectivePaymentSuccessUrl(undefined, null), undefined);
 });

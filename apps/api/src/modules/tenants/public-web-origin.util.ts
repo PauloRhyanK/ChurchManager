@@ -92,6 +92,21 @@ export function successUrlAllowedByPublicOrigins(
   return originMatchesAllowlist(origin, allowedOrigins);
 }
 
+/**
+ * Prioridade: URL enviada no pedido público; senão URL por defeito do tenant (painel).
+ */
+export function resolveEffectivePaymentSuccessUrl(
+  requestSuccessUrl: string | undefined,
+  tenantDefault: string | null | undefined,
+): string | undefined {
+  const fromBody = requestSuccessUrl?.trim();
+  if (fromBody) {
+    return fromBody;
+  }
+  const fromTenant = tenantDefault?.trim();
+  return fromTenant || undefined;
+}
+
 /** Valida `successUrl` / `autoRedirect` antes de enviar `callback` ao Asaas. */
 export function assertPublicPaymentSuccessUrlAllowed(
   successUrl: string | undefined,

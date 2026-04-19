@@ -20,6 +20,8 @@ model Tenant {
   asaasApiKey String? @map("asaas_api_key") @db.Text
   /// Token de webhook Asaas cifrado (mesmo formato).
   asaasWebhookToken String? @map("asaas_webhook_token") @db.Text
+  /// URL completo de retorno pós-pagamento Asaas (opcional; pode incluir `?query`). Validado contra origens públicas.
+  paymentSuccessRedirectUrl String? @map("payment_success_redirect_url") @db.VarChar(2048)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

@@ -26,6 +26,8 @@ O browser só envia `fetch` de origens registadas para este tenant na tabela **`
 
 Com `successUrl`, o body enviado ao Asaas inclui `callback` no link de pagamentos. Detalhes de comportamento: [documentação Asaas](https://docs.asaas.com/docs/redirecionamento-apos-o-pagamento). **Boleto** pode ter fluxo diferente (pagamento fora de linha).
 
+**Predefinição no painel:** o tenant pode guardar um URL em `PUT /api/admin/tenants/me/payment-success-redirect` (ou no formulário **Configurações** do admin). Se o pedido público **omitir** `successUrl`, usa-se esse valor da base (`tenants.payment_success_redirect_url`). Se o pedido **enviar** `successUrl`, este prevalece sobre a predefinição.
+
 ### Exemplo — valor livre, mensal (12 meses)
 
 ```json

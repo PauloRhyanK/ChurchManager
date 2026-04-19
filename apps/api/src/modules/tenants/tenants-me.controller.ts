@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -16,8 +17,10 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/auth-user';
 import { CreatePublicWebOriginDto } from './dto/create-public-web-origin.dto';
 import { UpdateAsaasCredentialsDto } from './dto/update-asaas-credentials.dto';
+import { UpdatePaymentSuccessRedirectDto } from './dto/update-payment-success-redirect.dto';
 import { TenantCredentialsService } from './tenant-credentials.service';
 import { TenantPublicWebOriginService } from './tenant-public-web-origin.service';
+import { successUrlAllowedByPublicOrigins } from './public-web-origin.util';
 
 @Controller('admin/tenants/me')
 @SkipThrottle({ links: true })
@@ -33,12 +36,56 @@ export class TenantsMeController {
   async getFinancialSetup(@CurrentUser() user: AuthUser) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: user.tenantId },
-      select: { asaasApiKey: true, asaasWebhookToken: true },
+      select: {
+        asaasApiKey: true,
+        asaasWebhookToken: true,
+        paymentSuccessRedirectUrl: true,
+      },
     });
     const isAsaasConfigured = Boolean(
       tenant?.asaasApiKey && tenant?.asaasWebhookToken,
     );
-    return { isAsaasConfigured };
+    return {
+      isAsaasConfigured,
+      paymentSuccessRedirectUrl: tenant?.paymentSuccessRedirectUrl ?? null,
+    };
+  }
+
+  @Put('payment-success-redirect')
+  async updatePaymentSuccessRedirect(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UpdatePaymentSuccessRedirectDto,
+  ) {
+    if (dto.paymentSuccessRedirectUrl === undefined) {
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { id: user.tenantId },
+        select: { paymentSuccessRedirectUrl: true },
+      });
+      return {
+        ok: true,
+        paymentSuccessRedirectUrl: tenant?.paymentSuccessRedirectUrl ?? null,
+      };
+    }
+    const next =
+      dto.paymentSuccessRedirectUrl === null
+        ? null
+        : dto.paymentSuccessRedirectUrl.trim() === ''
+          ? null
+          : dto.paymentSuccessRedirectUrl.trim();
+    if (next !== null) {
+      const origins = await this.publicWebOrigins.listForTenant(user.tenantId);
+      const allowed = origins.map((o) => o.origin);
+      if (!successUrlAllowedByPublicOrigins(next, allowed)) {
+        throw new BadRequestException(
+          'O URL de retorno deve usar HTTPS (ou http em localhost) e o origin deve estar nas origens públicas registadas.',
+        );
+      }
+    }
+    await this.prisma.tenant.update({
+      where: { id: user.tenantId },
+      data: { paymentSuccessRedirectUrl: next },
+    });
+    return { ok: true, paymentSuccessRedirectUrl: next };
   }
 
   @Put('asaas-credentials')

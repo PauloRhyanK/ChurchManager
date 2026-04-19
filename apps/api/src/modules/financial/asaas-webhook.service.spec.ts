@@ -11,6 +11,7 @@ function minimalTenant(over: Partial<Tenant> = {}): Tenant {
     slug: 't',
     asaasApiKey: 'enc',
     asaasWebhookToken: 'encw',
+    paymentSuccessRedirectUrl: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...over,
