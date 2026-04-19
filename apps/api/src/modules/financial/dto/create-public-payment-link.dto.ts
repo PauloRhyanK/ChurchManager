@@ -17,7 +17,11 @@ export class CreatePublicPaymentLinkDto {
   @IsOptional()
   @Transform(({ value }) => (value === null ? undefined : value))
   @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0.01)
+  /** Asaas exige mínimo R$ 5,00 em links/cobranças (erro típico: "O valor mínimo para cobranças é R$ 5,00"). */
+  @Min(5, {
+    message:
+      'value deve ser no mínimo R$ 5,00 quando informado (regra Asaas). Omita value para o pagador definir o valor no link.',
+  })
   value?: number;
 
   @IsBoolean()

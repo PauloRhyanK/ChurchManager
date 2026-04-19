@@ -18,7 +18,7 @@ O browser só envia `fetch` de origens registadas para este tenant na tabela **`
 |-------|------|-------------|--------|
 | `isMonthly` | boolean | sim | `true` → assinatura mensal (`RECURRENT` + `MONTHLY` no Asaas); `false` → cobrança única (`DETACHED`) |
 | `subscriptionDurationMonths` | integer | sim se `isMonthly` | Entre **1** e **120**. Duração da assinatura em meses; a API calcula `endDate` para o link Asaas |
-| `value` | number | não | Reais, ≥ `0.01`, 2 decimais. Se omitido ou `null`, o pagador define o valor na página Asaas |
+| `value` | number | não | Reais, **≥ `5,00`** quando informado (mínimo Asaas). 2 decimais. Se omitido ou `null`, o pagador define o valor na página Asaas |
 | `successUrl` | string (URL) | não | Redirecionamento após pagamento na interface Asaas (`callback.successUrl`). O **origin** tem de coincidir com uma entrada em **`tenant_public_web_origins`**. O domínio também tem de constar nos dados comerciais da conta Asaas (requisito da plataforma). |
 | `autoRedirect` | boolean | não | Só com `successUrl`. Se `false`, o Asaas mostra “Ir para o site” em vez de redireccionar de imediato. Não enviar sem `successUrl`. |
 
