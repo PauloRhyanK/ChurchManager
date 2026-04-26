@@ -25,11 +25,10 @@ export class CreatePublicPaymentLinkDto {
 
   @ValidateIf(
     (o: CreatePublicPaymentLinkDto) =>
-      (o.reuseMode ?? 'preset_global') === 'preset_global',
+      (o.reuseMode ?? 'preset_global') === 'preset_global' &&
+      o.presetKey != null &&
+      String(o.presetKey).trim() !== '',
   )
-  @IsDefined({
-    message: 'presetKey é obrigatório quando reuseMode é preset_global',
-  })
   @IsString()
   @MaxLength(80)
   @Transform(({ value }) => String(value ?? '').trim().toLowerCase())
@@ -65,9 +64,14 @@ export class CreatePublicPaymentLinkDto {
 
   @ValidateIf(
     (o: CreatePublicPaymentLinkDto) =>
-      (o.reuseMode ?? 'preset_global') === 'cpf_custom',
+      (o.reuseMode ?? 'preset_global') === 'cpf_custom' ||
+      ((o.reuseMode ?? 'preset_global') === 'preset_global' &&
+        (!o.presetKey || String(o.presetKey).trim() === '')),
   )
-  @IsDefined({ message: 'isMonthly é obrigatório quando reuseMode é cpf_custom' })
+  @IsDefined({
+    message:
+      'isMonthly é obrigatório quando reuseMode é cpf_custom ou quando presetKey não é enviado',
+  })
   @IsBoolean()
   isMonthly?: boolean;
 
@@ -99,7 +103,10 @@ export class CreatePublicPaymentLinkDto {
   /** Obrigatório com `isMonthly: true` — duração da assinatura em meses (enviado à Asaas como `endDate`). */
   @ValidateIf(
     (o: CreatePublicPaymentLinkDto) =>
-      (o.reuseMode ?? 'preset_global') === 'cpf_custom' && o.isMonthly === true,
+      (((o.reuseMode ?? 'preset_global') === 'cpf_custom' ||
+        ((o.reuseMode ?? 'preset_global') === 'preset_global' &&
+          (!o.presetKey || String(o.presetKey).trim() === ''))) &&
+        o.isMonthly === true),
   )
   @IsDefined({
     message:

@@ -3,6 +3,7 @@
 Gera (ou reutiliza) um **link de pagamentos** na conta Asaas da igreja (credencial por `slug`). Uso actual: **cotas**. O endpoint suporta dois modos:
 
 - `preset_global` (default): usa presets cadastrados no admin e reusa link por `presetKey`.
+- `preset_global` (default): usa presets cadastrados no admin **quando `presetKey` é enviado**; sem `presetKey`, reutiliza por configuração do payload (`isMonthly`, `subscriptionDurationMonths`, `value`, `successUrl`, `autoRedirect`), mantendo compatibilidade com o fluxo antigo.
 - `cpf_custom`: cria/reusa link customizado por CPF + parâmetros.
 
 O código deve usar um serviço partilhado de geração (`PaymentLinksGenerationService`) com `sourceKey` fixo `cotas` no `externalReference` (`cm|v1|<tenantSlug>|cotas`). **Eventos** e outros módulos podem ter **outro endpoint** que chama o mesmo serviço com outro `sourceKey` (ex.: `events-<uuid>`).
@@ -20,7 +21,7 @@ O browser só envia `fetch` de origens registadas para este tenant na tabela **`
 | Campo | Tipo | Obrigatório | Notas |
 |-------|------|-------------|--------|
 | `reuseMode` | string | não | `preset_global` (default) \| `cpf_custom` |
-| `presetKey` | string | sim em `preset_global` | Chave do preset global cadastrado em `admin/tenants/me/link-presets` |
+| `presetKey` | string | não | Chave do preset global cadastrado em `admin/tenants/me/link-presets`; se omitido, o reuso global usa a própria configuração enviada no body |
 | `cpf` | string | sim em `cpf_custom` | CPF válido (11 dígitos) |
 | `name` | string | sim em `cpf_custom` | Nome do pagador para busca/auditoria |
 | `isMonthly` | boolean | sim em `cpf_custom` | `true` → assinatura mensal (`RECURRENT` + `MONTHLY` no Asaas); `false` → cobrança única (`DETACHED`) |
@@ -41,6 +42,15 @@ Com `successUrl`, o body enviado ao Asaas inclui `callback` no link de pagamento
 {
   "reuseMode": "preset_global",
   "presetKey": "cotas_12x_site"
+}
+```
+
+### Exemplo — reuso global por configuração (sem presetKey)
+
+```json
+{
+  "isMonthly": true,
+  "subscriptionDurationMonths": 12
 }
 ```
 

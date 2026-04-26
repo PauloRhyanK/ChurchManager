@@ -62,16 +62,27 @@ export class PaymentLinksOrchestratorService {
 
   async createOrReusePublicCotasLink(tenant: Tenant, input: PublicCotasInput) {
     const mode = input.reuseMode ?? 'preset_global';
-    const resolved =
-      mode === 'cpf_custom'
-        ? this.resolveCpfCustomData(tenant, input)
-        : await this.resolvePresetData(tenant, 'cotas', input.presetKey);
+    const resolved = await this.resolvePublicCotasData(tenant, input, mode);
 
     const reuseKey = this.buildReuseKey(tenant.id, resolved, {
       mode: resolved.reuseMode,
       presetKey: input.presetKey ?? null,
     });
     return this.createOrReuse(tenant, resolved, reuseKey);
+  }
+
+  private async resolvePublicCotasData(
+    tenant: Tenant,
+    input: PublicCotasInput,
+    mode: 'preset_global' | 'cpf_custom',
+  ): Promise<BaseResolvedLinkData> {
+    if (mode === 'cpf_custom') {
+      return this.resolveCpfCustomData(tenant, input);
+    }
+    if (input.presetKey?.trim()) {
+      return this.resolvePresetData(tenant, 'cotas', input.presetKey);
+    }
+    return this.resolveGlobalConfigData(tenant, input);
   }
 
   async createOrReuseEventAutoLink(tenant: Tenant, input: EventAutoInput) {
@@ -244,6 +255,23 @@ export class PaymentLinksOrchestratorService {
       cpf,
       payerName: payerName ?? undefined,
       asaasLinkName: `Cotas - ${tenant.name} - ${payerName ?? cpf}`,
+    };
+  }
+
+  private resolveGlobalConfigData(
+    tenant: Tenant,
+    input: PublicCotasInput,
+  ): BaseResolvedLinkData {
+    return {
+      module: 'cotas',
+      sourceKey: PAYMENT_LINK_SOURCE_COTAS,
+      isMonthly: input.isMonthly ?? false,
+      subscriptionDurationMonths: input.subscriptionDurationMonths,
+      value: input.value,
+      successUrl: normalizeMaybe(input.successUrl) ?? undefined,
+      autoRedirect: input.autoRedirect,
+      reuseMode: 'preset_global',
+      asaasLinkName: `Cotas - ${tenant.name}`,
     };
   }
 
