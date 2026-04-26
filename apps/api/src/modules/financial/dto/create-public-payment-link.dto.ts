@@ -2,18 +2,57 @@ import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsDefined,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
+  IsString,
   IsUrl,
   Max,
   MaxLength,
   Min,
   ValidateIf,
 } from 'class-validator';
+import { IsCpf } from '../../../common/is-cpf.validator';
+const PUBLIC_LINK_REUSE_MODES = ['preset_global', 'cpf_custom'] as const;
+type PublicLinkReuseMode = (typeof PUBLIC_LINK_REUSE_MODES)[number];
 
 /** Body do endpoint público de links para **cotas**. */
 export class CreatePublicPaymentLinkDto {
+  @IsOptional()
+  @IsIn(PUBLIC_LINK_REUSE_MODES)
+  reuseMode?: PublicLinkReuseMode;
+
+  @ValidateIf(
+    (o: CreatePublicPaymentLinkDto) =>
+      (o.reuseMode ?? 'preset_global') === 'preset_global',
+  )
+  @IsDefined({
+    message: 'presetKey é obrigatório quando reuseMode é preset_global',
+  })
+  @IsString()
+  @MaxLength(80)
+  @Transform(({ value }) => String(value ?? '').trim().toLowerCase())
+  presetKey?: string;
+
+  @ValidateIf(
+    (o: CreatePublicPaymentLinkDto) =>
+      (o.reuseMode ?? 'preset_global') === 'cpf_custom',
+  )
+  @IsDefined({ message: 'cpf é obrigatório quando reuseMode é cpf_custom' })
+  @IsCpf()
+  cpf?: string;
+
+  @ValidateIf(
+    (o: CreatePublicPaymentLinkDto) =>
+      (o.reuseMode ?? 'preset_global') === 'cpf_custom',
+  )
+  @IsDefined({ message: 'name é obrigatório quando reuseMode é cpf_custom' })
+  @IsString()
+  @MaxLength(255)
+  @Transform(({ value }) => String(value ?? '').trim())
+  name?: string;
+
   @IsOptional()
   @Transform(({ value }) => (value === null ? undefined : value))
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -24,8 +63,13 @@ export class CreatePublicPaymentLinkDto {
   })
   value?: number;
 
+  @ValidateIf(
+    (o: CreatePublicPaymentLinkDto) =>
+      (o.reuseMode ?? 'preset_global') === 'cpf_custom',
+  )
+  @IsDefined({ message: 'isMonthly é obrigatório quando reuseMode é cpf_custom' })
   @IsBoolean()
-  isMonthly!: boolean;
+  isMonthly?: boolean;
 
   /**
    * URL após pagamento concluído (Asaas `callback.successUrl`). O origin deve estar
@@ -53,7 +97,10 @@ export class CreatePublicPaymentLinkDto {
   autoRedirect?: boolean;
 
   /** Obrigatório com `isMonthly: true` — duração da assinatura em meses (enviado à Asaas como `endDate`). */
-  @ValidateIf((o: CreatePublicPaymentLinkDto) => o.isMonthly === true)
+  @ValidateIf(
+    (o: CreatePublicPaymentLinkDto) =>
+      (o.reuseMode ?? 'preset_global') === 'cpf_custom' && o.isMonthly === true,
+  )
   @IsDefined({
     message:
       'subscriptionDurationMonths é obrigatório quando isMonthly é true',

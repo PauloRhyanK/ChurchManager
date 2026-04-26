@@ -32,10 +32,23 @@ model Tenant {
   subscriptions      FinancialSubscription[]
   transactions       FinancialTransaction[]
   webhookEvents      FinancialWebhookEvent[]
+  paymentLinks       FinancialPaymentLink[]
+  linkPresets        FinancialLinkPreset[]
   adminUsers         AdminUser[]
   publicWebOrigins   TenantPublicWebOrigin[]
 
   @@map("tenants")
+}
+
+enum FinancialLinkModule {
+  COTAS
+  EVENTS
+}
+
+enum FinancialPaymentLinkMode {
+  PRESET_GLOBAL
+  CPF_CUSTOM
+  EVENT_AUTO
 }
 
 /// Origens de browser (scheme + host + port) autorizadas a chamar `/api/public/tenants/:slug/...` (CORS).
@@ -166,4 +179,60 @@ model FinancialWebhookEvent {
 
   @@index([paymentId])
   @@map("financial_webhook_events")
+}
+
+model FinancialLinkPreset {
+  id                         String              @id @default(uuid()) @db.Uuid
+  tenantId                   String              @map("tenant_id") @db.Uuid
+  module                     FinancialLinkModule
+  presetKey                  String              @map("preset_key") @db.VarChar(80)
+  name                       String              @db.VarChar(255)
+  sourceKey                  String              @map("source_key") @db.VarChar(120)
+  isMonthly                  Boolean             @map("is_monthly")
+  subscriptionDurationMonths Int?                @map("subscription_duration_months")
+  valueCents                 Int?                @map("value_cents")
+  successUrl                 String?             @map("success_url") @db.VarChar(2048)
+  autoRedirect               Boolean?            @map("auto_redirect")
+  active                     Boolean             @default(true)
+  createdAt                  DateTime            @default(now()) @map("created_at")
+  updatedAt                  DateTime            @updatedAt @map("updated_at")
+
+  tenant       Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  paymentLinks FinancialPaymentLink[]
+
+  @@unique([tenantId, module, presetKey])
+  @@index([tenantId, module, active])
+  @@map("financial_link_presets")
+}
+
+model FinancialPaymentLink {
+  id                         String                   @id @default(uuid()) @db.Uuid
+  tenantId                   String                   @map("tenant_id") @db.Uuid
+  presetId                   String?                  @map("preset_id") @db.Uuid
+  provider                   String                   @default("asaas") @db.VarChar(32)
+  providerLinkId             String                   @map("provider_link_id") @db.VarChar(80)
+  url                        String                   @db.VarChar(2048)
+  module                     FinancialLinkModule
+  sourceKey                  String                   @map("source_key") @db.VarChar(120)
+  mode                       FinancialPaymentLinkMode
+  reuseKey                   String                   @map("reuse_key") @db.VarChar(255)
+  cpf                        String?                  @db.Char(11)
+  payerName                  String?                  @map("payer_name") @db.VarChar(255)
+  isMonthly                  Boolean                  @map("is_monthly")
+  subscriptionDurationMonths Int?                     @map("subscription_duration_months")
+  valueCents                 Int?                     @map("value_cents")
+  successUrl                 String?                  @map("success_url") @db.VarChar(2048)
+  autoRedirect               Boolean?                 @map("auto_redirect")
+  active                     Boolean                  @default(true)
+  createdAt                  DateTime                 @default(now()) @map("created_at")
+  updatedAt                  DateTime                 @updatedAt @map("updated_at")
+
+  tenant  Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  preset  FinancialLinkPreset? @relation(fields: [presetId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, reuseKey])
+  @@unique([tenantId, providerLinkId])
+  @@index([tenantId, module, mode, active])
+  @@index([tenantId, cpf])
+  @@map("financial_payment_links")
 }

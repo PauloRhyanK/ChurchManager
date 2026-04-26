@@ -64,6 +64,79 @@ export async function deletePublicWebOrigin(id: string) {
   return data;
 }
 
+export type LinkPresetModule = 'cotas' | 'events';
+
+export interface LinkPresetDto {
+  id: string;
+  module: LinkPresetModule;
+  presetKey: string;
+  name: string;
+  sourceKey: string;
+  isMonthly: boolean;
+  subscriptionDurationMonths: number | null;
+  value: number | null;
+  successUrl: string | null;
+  autoRedirect: boolean | null;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function fetchLinkPresets() {
+  const { data } = await api.get<{ items: LinkPresetDto[] }>(
+    '/admin/tenants/me/link-presets',
+  );
+  return data.items;
+}
+
+export async function createLinkPreset(body: {
+  module: LinkPresetModule;
+  presetKey: string;
+  name: string;
+  sourceKey: string;
+  isMonthly: boolean;
+  subscriptionDurationMonths?: number;
+  value?: number;
+  successUrl?: string;
+  autoRedirect?: boolean;
+  active?: boolean;
+}) {
+  const { data } = await api.post<LinkPresetDto>(
+    '/admin/tenants/me/link-presets',
+    body,
+  );
+  return data;
+}
+
+export async function updateLinkPreset(
+  id: string,
+  body: Partial<{
+    module: LinkPresetModule;
+    presetKey: string;
+    name: string;
+    sourceKey: string;
+    isMonthly: boolean;
+    subscriptionDurationMonths: number;
+    value: number;
+    successUrl: string;
+    autoRedirect: boolean;
+    active: boolean;
+  }>,
+) {
+  const { data } = await api.put<LinkPresetDto>(
+    `/admin/tenants/me/link-presets/${id}`,
+    body,
+  );
+  return data;
+}
+
+export async function deleteLinkPreset(id: string) {
+  const { data } = await api.delete<{ ok: boolean }>(
+    `/admin/tenants/me/link-presets/${id}`,
+  );
+  return data;
+}
+
 export type QuotaStatus = 'PAID' | 'OVERDUE' | 'PENDING';
 
 export interface CotaRowDto {

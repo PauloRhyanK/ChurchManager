@@ -280,5 +280,7 @@ Pode ser outro endpoint administrativo ou com token de equipa; fora do escopo de
 |------------------|--------|
 | `POST /api/public/tenants/:slug/payer-profiles` | **Implementado** — pré-registo pagador |
 | `POST /api/public/tenants/:slug/payment-intents` | **Implementado** — cobrança com `planId` ou `value` |
+| `POST /api/admin/tenants/me/events/:eventId/ticket-types/:ticketTypeId/payment-link` | **Implementado (admin)** — cria/reusa link Asaas automático para tipo de ingresso |
+| `GET/POST/PUT/DELETE /api/admin/tenants/me/link-presets` | **Implementado (admin)** — gestão de presets globais de links (`cotas` e `events`) |
 
 O checkout de eventos (secção 4) pode internamente reutilizar a mesma camada Asaas/transacções, desde que `externalReference` ou metadados liguem a transacção ao `orderId` / evento.

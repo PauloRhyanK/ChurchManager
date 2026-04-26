@@ -13,10 +13,14 @@ import { Switch } from "@/components/ui/switch";
 import { getApiErrorMessage } from "@/lib/api";
 import { getStoredSession } from "@/lib/auth-storage";
 import {
+  createLinkPreset,
   createPublicWebOrigin,
+  deleteLinkPreset,
   deletePublicWebOrigin,
   fetchFinancialSetup,
+  fetchLinkPresets,
   fetchPublicWebOrigins,
+  updateLinkPreset,
   updateAsaasCredentials,
   updatePaymentSuccessRedirect,
 } from "@/features/financial/api/tenant-financial-api";
@@ -31,6 +35,15 @@ const Settings = () => {
   const [showWebhookToken, setShowWebhookToken] = useState(false);
   const [newOrigin, setNewOrigin] = useState("");
   const [paymentSuccessUrlDraft, setPaymentSuccessUrlDraft] = useState("");
+  const [presetForm, setPresetForm] = useState({
+    module: "cotas" as "cotas" | "events",
+    presetKey: "",
+    name: "",
+    sourceKey: "",
+    isMonthly: true,
+    subscriptionDurationMonths: 12,
+    value: "",
+  });
   const session = getStoredSession();
 
   const setupQuery = useQuery({
@@ -41,6 +54,11 @@ const Settings = () => {
   const originsQuery = useQuery({
     queryKey: ["public-web-origins"],
     queryFn: fetchPublicWebOrigins,
+  });
+
+  const linkPresetsQuery = useQuery({
+    queryKey: ["link-presets"],
+    queryFn: fetchLinkPresets,
   });
 
   const form = useForm<AsaasCredentialsFormValues>({
@@ -77,6 +95,49 @@ const Settings = () => {
     onSuccess: () => {
       toast.success("Origem CORS removida.");
       void queryClient.invalidateQueries({ queryKey: ["public-web-origins"] });
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error));
+    },
+  });
+
+  const createPresetMutation = useMutation({
+    mutationFn: createLinkPreset,
+    onSuccess: () => {
+      toast.success("Preset de link criado.");
+      setPresetForm({
+        module: "cotas",
+        presetKey: "",
+        name: "",
+        sourceKey: "",
+        isMonthly: true,
+        subscriptionDurationMonths: 12,
+        value: "",
+      });
+      void queryClient.invalidateQueries({ queryKey: ["link-presets"] });
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error));
+    },
+  });
+
+  const togglePresetMutation = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      updateLinkPreset(id, { active }),
+    onSuccess: () => {
+      toast.success("Preset atualizado.");
+      void queryClient.invalidateQueries({ queryKey: ["link-presets"] });
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error));
+    },
+  });
+
+  const removePresetMutation = useMutation({
+    mutationFn: deleteLinkPreset,
+    onSuccess: () => {
+      toast.success("Preset removido.");
+      void queryClient.invalidateQueries({ queryKey: ["link-presets"] });
     },
     onError: (error) => {
       toast.error(getApiErrorMessage(error));
@@ -148,6 +209,194 @@ const Settings = () => {
                 </div>
               </>
             )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-0 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-base">Links default (presets)</CardTitle>
+            <CardDescription>
+              Presets globais reutilizáveis por módulo. Cotas usa estes presets no fluxo público; eventos podem reutilizar na geração automática por tipo de ingresso.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {linkPresetsQuery.isLoading ? (
+              <p className="text-sm text-muted-foreground">A carregar presets...</p>
+            ) : linkPresetsQuery.isError ? (
+              <p className="text-sm text-red-600">{getApiErrorMessage(linkPresetsQuery.error)}</p>
+            ) : (
+              <div className="space-y-2">
+                {linkPresetsQuery.data?.length ? (
+                  linkPresetsQuery.data.map((preset) => (
+                    <div key={preset.id} className="rounded-md border p-3">
+                      <p className="text-sm font-medium">{preset.name}</p>
+                      <p className="font-mono text-xs text-muted-foreground">
+                        {preset.module}:{preset.presetKey} · {preset.sourceKey}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {preset.isMonthly
+                          ? `${preset.subscriptionDurationMonths ?? 0}x mensal`
+                          : "Pagamento único"}{" "}
+                        · {preset.value != null ? `R$ ${preset.value.toFixed(2)}` : "valor livre"}
+                      </p>
+                      <div className="mt-2 flex gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={togglePresetMutation.isPending}
+                          onClick={() =>
+                            togglePresetMutation.mutate({
+                              id: preset.id,
+                              active: !preset.active,
+                            })
+                          }
+                        >
+                          {preset.active ? "Desativar" : "Ativar"}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={removePresetMutation.isPending}
+                          onClick={() => removePresetMutation.mutate(preset.id)}
+                        >
+                          Remover
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">Nenhum preset cadastrado.</p>
+                )}
+              </div>
+            )}
+
+            <form
+              className="grid gap-3 rounded-md border p-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const valueNumber =
+                  presetForm.value.trim() === "" ? undefined : Number(presetForm.value);
+                createPresetMutation.mutate({
+                  module: presetForm.module,
+                  presetKey: presetForm.presetKey.trim().toLowerCase(),
+                  name: presetForm.name.trim(),
+                  sourceKey: presetForm.sourceKey.trim(),
+                  isMonthly: presetForm.isMonthly,
+                  subscriptionDurationMonths: presetForm.isMonthly
+                    ? presetForm.subscriptionDurationMonths
+                    : undefined,
+                  value: Number.isFinite(valueNumber) ? valueNumber : undefined,
+                });
+              }}
+            >
+              <p className="text-sm font-medium">Novo preset</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="preset-module">Módulo</Label>
+                  <select
+                    id="preset-module"
+                    className="flex h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
+                    value={presetForm.module}
+                    onChange={(e) =>
+                      setPresetForm((prev) => ({
+                        ...prev,
+                        module: e.target.value as "cotas" | "events",
+                      }))
+                    }
+                  >
+                    <option value="cotas">Cotas</option>
+                    <option value="events">Eventos</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="preset-key">Preset key</Label>
+                  <Input
+                    id="preset-key"
+                    value={presetForm.presetKey}
+                    onChange={(e) =>
+                      setPresetForm((prev) => ({ ...prev, presetKey: e.target.value }))
+                    }
+                    placeholder="cotas_12x_site"
+                  />
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="preset-name">Nome</Label>
+                  <Input
+                    id="preset-name"
+                    value={presetForm.name}
+                    onChange={(e) =>
+                      setPresetForm((prev) => ({ ...prev, name: e.target.value }))
+                    }
+                    placeholder="Cotas 12x - Site"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="preset-source">Source key</Label>
+                  <Input
+                    id="preset-source"
+                    value={presetForm.sourceKey}
+                    onChange={(e) =>
+                      setPresetForm((prev) => ({ ...prev, sourceKey: e.target.value }))
+                    }
+                    placeholder="cotas"
+                  />
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="space-y-1">
+                  <Label htmlFor="preset-monthly">Frequência</Label>
+                  <select
+                    id="preset-monthly"
+                    className="flex h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
+                    value={presetForm.isMonthly ? "monthly" : "single"}
+                    onChange={(e) =>
+                      setPresetForm((prev) => ({
+                        ...prev,
+                        isMonthly: e.target.value === "monthly",
+                      }))
+                    }
+                  >
+                    <option value="monthly">Mensal</option>
+                    <option value="single">Único</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="preset-duration">Meses</Label>
+                  <Input
+                    id="preset-duration"
+                    type="number"
+                    min={1}
+                    max={120}
+                    value={presetForm.subscriptionDurationMonths}
+                    disabled={!presetForm.isMonthly}
+                    onChange={(e) =>
+                      setPresetForm((prev) => ({
+                        ...prev,
+                        subscriptionDurationMonths: Number(e.target.value || 12),
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="preset-value">Valor (opcional)</Label>
+                  <Input
+                    id="preset-value"
+                    value={presetForm.value}
+                    onChange={(e) =>
+                      setPresetForm((prev) => ({ ...prev, value: e.target.value }))
+                    }
+                    placeholder="50.00"
+                  />
+                </div>
+              </div>
+              <Button type="submit" disabled={createPresetMutation.isPending}>
+                {createPresetMutation.isPending ? "A criar..." : "Criar preset"}
+              </Button>
+            </form>
           </CardContent>
         </Card>
 

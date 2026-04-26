@@ -8,10 +8,7 @@ import { TenantPublicWebOriginService } from '../tenants/tenant-public-web-origi
 import { TenantsService } from '../tenants/tenants.service';
 import { PayerProfilesService } from './payer-profiles.service';
 import { PaymentIntentsService } from './payment-intents.service';
-import {
-  PAYMENT_LINK_SOURCE_COTAS,
-  PaymentLinksGenerationService,
-} from './payment-links-generation.service';
+import { PaymentLinksOrchestratorService } from './payment-links-orchestrator.service';
 import { CreatePayerProfileDto } from './dto/create-payer-profile.dto';
 import { CreatePaymentIntentDto } from './dto/create-payment-intent.dto';
 import { CreatePublicPaymentLinkDto } from './dto/create-public-payment-link.dto';
@@ -23,7 +20,7 @@ export class PublicFinancialController {
     private readonly tenants: TenantsService,
     private readonly payerProfiles: PayerProfilesService,
     private readonly paymentIntents: PaymentIntentsService,
-    private readonly paymentLinksGeneration: PaymentLinksGenerationService,
+    private readonly paymentLinksOrchestrator: PaymentLinksOrchestratorService,
     private readonly publicWebOrigins: TenantPublicWebOriginService,
   ) {}
 
@@ -86,12 +83,14 @@ export class PublicFinancialController {
       dto.autoRedirect,
       allowed,
     );
-    return this.paymentLinksGeneration.create(tenant, {
+    return this.paymentLinksOrchestrator.createOrReusePublicCotasLink(tenant, {
+      reuseMode: dto.reuseMode,
+      presetKey: dto.presetKey,
+      cpf: dto.cpf,
+      name: dto.name,
       isMonthly: dto.isMonthly,
       value: dto.value,
       subscriptionDurationMonths: dto.subscriptionDurationMonths,
-      sourceKey: PAYMENT_LINK_SOURCE_COTAS,
-      asaasLinkName: `Cotas — ${tenant.name}`,
       successUrl: effectiveSuccessUrl,
       autoRedirect: dto.autoRedirect,
     });

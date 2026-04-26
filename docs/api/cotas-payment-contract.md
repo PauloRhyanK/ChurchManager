@@ -47,6 +47,15 @@ Corpo (semântica actual em [create-payment-intent.dto.ts](../../apps/api/src/mo
 
 Resposta: objecto com `transactionId`, `asaasPaymentId`, `status`, `billingType`, `value`, `dueDate`, `invoiceUrl`, `bankSlipUrl`, `pix?` — espelhar a implementação actual de [payment-intents.service.ts](../../apps/api/src/modules/financial/payment-intents.service.ts). Com `successUrl`, o utilizador que abre `invoiceUrl` pode ser redireccionado de volta ao site após pagamento conforme [Asaas — redirecionamento](https://docs.asaas.com/docs/redirecionamento-apos-o-pagamento).
 
+### 1.3 Criar/reusar links por preset ou CPF
+
+**Implementado:** `POST /api/public/tenants/:slug/links`
+
+- `reuseMode: "preset_global"` (default): usa `presetKey` e reaproveita link global.
+- `reuseMode: "cpf_custom"`: valida `cpf` + `name` e reaproveita link por combinação de parâmetros.
+
+Gestão dos presets: `GET/POST/PUT/DELETE /api/admin/tenants/me/link-presets`.
+
 ---
 
 ## 2. Mapeamento de negócio — “Cotas”

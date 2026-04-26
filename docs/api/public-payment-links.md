@@ -1,6 +1,9 @@
 # Contrato público — `POST /api/public/tenants/:slug/links`
 
-Gera um **link de pagamentos** na conta Asaas da igreja (credencial por `slug`). Uso actual: **cotas** (a igreja não expõe campus no produto — um único contexto). O valor pode ser fixo no link ou livre (omitir `value`).
+Gera (ou reutiliza) um **link de pagamentos** na conta Asaas da igreja (credencial por `slug`). Uso actual: **cotas**. O endpoint suporta dois modos:
+
+- `preset_global` (default): usa presets cadastrados no admin e reusa link por `presetKey`.
+- `cpf_custom`: cria/reusa link customizado por CPF + parâmetros.
 
 O código deve usar um serviço partilhado de geração (`PaymentLinksGenerationService`) com `sourceKey` fixo `cotas` no `externalReference` (`cm|v1|<tenantSlug>|cotas`). **Eventos** e outros módulos podem ter **outro endpoint** que chama o mesmo serviço com outro `sourceKey` (ex.: `events-<uuid>`).
 
@@ -16,9 +19,13 @@ O browser só envia `fetch` de origens registadas para este tenant na tabela **`
 
 | Campo | Tipo | Obrigatório | Notas |
 |-------|------|-------------|--------|
-| `isMonthly` | boolean | sim | `true` → assinatura mensal (`RECURRENT` + `MONTHLY` no Asaas); `false` → cobrança única (`DETACHED`) |
-| `subscriptionDurationMonths` | integer | sim se `isMonthly` | Entre **1** e **120**. Duração da assinatura em meses; a API calcula `endDate` para o link Asaas |
-| `value` | number | não | Reais, **≥ `5,00`** quando informado (mínimo Asaas). 2 decimais. Se omitido ou `null`, o pagador define o valor na página Asaas |
+| `reuseMode` | string | não | `preset_global` (default) \| `cpf_custom` |
+| `presetKey` | string | sim em `preset_global` | Chave do preset global cadastrado em `admin/tenants/me/link-presets` |
+| `cpf` | string | sim em `cpf_custom` | CPF válido (11 dígitos) |
+| `name` | string | sim em `cpf_custom` | Nome do pagador para busca/auditoria |
+| `isMonthly` | boolean | sim em `cpf_custom` | `true` → assinatura mensal (`RECURRENT` + `MONTHLY` no Asaas); `false` → cobrança única (`DETACHED`) |
+| `subscriptionDurationMonths` | integer | sim se `isMonthly` e `cpf_custom` | Entre **1** e **120** |
+| `value` | number | não | Reais, **≥ `5,00`** quando informado; se omitido, valor livre |
 | `successUrl` | string (URL) | não | Redirecionamento após pagamento na interface Asaas (`callback.successUrl`). O **origin** tem de coincidir com uma entrada em **`tenant_public_web_origins`**. O domínio também tem de constar nos dados comerciais da conta Asaas (requisito da plataforma). |
 | `autoRedirect` | boolean | não | Só com `successUrl`. Se `false`, o Asaas mostra “Ir para o site” em vez de redireccionar de imediato. Não enviar sem `successUrl`. |
 
@@ -28,28 +35,22 @@ Com `successUrl`, o body enviado ao Asaas inclui `callback` no link de pagamento
 
 **Predefinição no painel:** o tenant pode guardar um URL em `PUT /api/admin/tenants/me/payment-success-redirect` (ou no formulário **Configurações** do admin). Se o pedido público **omitir** `successUrl`, usa-se esse valor da base (`tenants.payment_success_redirect_url`). Se o pedido **enviar** `successUrl`, este prevalece sobre a predefinição.
 
-### Exemplo — valor livre, mensal (12 meses)
+### Exemplo — preset global (12x do site)
 
 ```json
 {
-  "isMonthly": true,
-  "subscriptionDurationMonths": 12
+  "reuseMode": "preset_global",
+  "presetKey": "cotas_12x_site"
 }
 ```
 
-### Exemplo — valor fixo, pagamento único
+### Exemplo — custom por CPF (reuso por usuário)
 
 ```json
 {
-  "isMonthly": false,
-  "value": 50
-}
-```
-
-### Exemplo — com retorno ao site de cotas após pagar
-
-```json
-{
+  "reuseMode": "cpf_custom",
+  "cpf": "39053344705",
+  "name": "Maria Silva",
   "isMonthly": false,
   "value": 50,
   "successUrl": "https://cotas.suaigreja.org/obrigado",
@@ -65,7 +66,8 @@ Com `successUrl`, o body enviado ao Asaas inclui `callback` no link de pagamento
   "url": "https://www.asaas.com/c/...",
   "metadata": {
     "source": "cotas",
-    "tenant": "slug-da-igreja"
+    "tenant": "slug-da-igreja",
+    "reused": true
   }
 }
 ```
