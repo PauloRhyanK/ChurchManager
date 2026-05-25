@@ -2,7 +2,7 @@
  * Limpa legado "mensal + 1 mês" que gerou RECURRENT no Asaas:
  * - DELETE do payment link no Asaas (se ainda existir)
  * - active = false na BD (a migration também desactiva links activos no deploy)
- * - PUT endDate na assinatura Asaas (1 período) para parar cobranças futuras
+ * - PUT endDate na assinatura (1 período); se o Asaas recusar, DELETE da assinatura
  *
  * Host (DATABASE_URL com 127.0.0.1:5438 no dev, se Postgres exposto):
  *   DATABASE_URL="postgresql://..." npm run script:cleanup-1month-recurrent-links -- --dry-run
@@ -109,6 +109,7 @@ async function main() {
     let removedAsaas = 0;
     let markedInactive = 0;
     let subscriptionsUpdated = 0;
+    let subscriptionsRemoved = 0;
     let failures = 0;
     const details: Array<Record<string, unknown>> = [];
 
@@ -179,14 +180,31 @@ async function main() {
           endDate: entry.endDate,
           status: 'subscription_end_date_set',
         });
-      } catch (e) {
-        failures++;
-        details.push({
-          subscription: entry.subscriptionId,
-          paymentLink: entry.paymentLink,
-          status: 'subscription_failed',
-          error: e instanceof Error ? e.message : String(e),
-        });
+      } catch (updateErr) {
+        const updateMsg =
+          updateErr instanceof Error ? updateErr.message : String(updateErr);
+        try {
+          await asaas.deleteSubscription({
+            apiKey: entry.apiKey,
+            subscriptionId: entry.subscriptionId,
+          });
+          subscriptionsRemoved++;
+          details.push({
+            subscription: entry.subscriptionId,
+            paymentLink: entry.paymentLink,
+            status: 'subscription_removed',
+            previousError: updateMsg,
+          });
+        } catch (deleteErr) {
+          failures++;
+          details.push({
+            subscription: entry.subscriptionId,
+            paymentLink: entry.paymentLink,
+            status: 'subscription_failed',
+            error: deleteErr instanceof Error ? deleteErr.message : String(deleteErr),
+            updateError: updateMsg,
+          });
+        }
       }
     }
 
@@ -199,6 +217,7 @@ async function main() {
           removedAsaasOk: removedAsaas,
           markedInactive,
           subscriptionsUpdated,
+          subscriptionsRemoved,
           failures,
           details,
         },

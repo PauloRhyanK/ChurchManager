@@ -35,7 +35,7 @@ Compose na raiz: [docker/README.md](../../docker/README.md). Copiar [`.env.examp
 cd apps/api
 DATABASE_URL="postgresql://postgres:SENHA@127.0.0.1:5438/churchmanager_db" \
   npm run script:cleanup-1month-recurrent-links -- --dry-run
-# sem --dry-run para aplicar: DELETE link + endDate na assinatura (1 período)
+# sem --dry-run: DELETE link + endDate na assinatura; se o Asaas recusar PUT, DELETE da assinatura
 ```
 
 Novos pedidos de 1 mês passam a gerar cobrança única (`DETACHED`).

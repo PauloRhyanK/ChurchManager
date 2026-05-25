@@ -221,6 +221,33 @@ export class AsaasClient {
     return data;
   }
 
+  /**
+   * Remove assinatura no Asaas (soft delete; remove parcelas pendentes/vencidas).
+   * @see https://docs.asaas.com/reference/remove-subscription
+   */
+  async deleteSubscription(input: {
+    apiKey: string;
+    subscriptionId: string;
+  }): Promise<void> {
+    const res = await fetch(
+      `${this.baseUrl}/subscriptions/${encodeURIComponent(input.subscriptionId)}`,
+      {
+        method: 'DELETE',
+        headers: this.headers(input.apiKey),
+      },
+    );
+    if (res.ok || res.status === 404) {
+      return;
+    }
+    const data = (await res.json().catch(() => ({}))) as {
+      errors?: Array<{ description?: string }>;
+    };
+    const msg =
+      data.errors?.[0]?.description ??
+      `Asaas subscriptions DELETE ${res.status}`;
+    throw new InternalServerErrorException(msg);
+  }
+
   /** Remove o link no Asaas ([Remove a payments link](https://docs.asaas.com/reference/remove-a-payments-link)). */
   async deletePaymentLink(input: {
     apiKey: string;
