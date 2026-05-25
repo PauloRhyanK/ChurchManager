@@ -188,4 +188,28 @@ export class AsaasClient {
     }
     return data;
   }
+
+  /** Remove o link no Asaas ([Remove a payments link](https://docs.asaas.com/reference/remove-a-payments-link)). */
+  async deletePaymentLink(input: {
+    apiKey: string;
+    linkId: string;
+  }): Promise<void> {
+    const res = await fetch(
+      `${this.baseUrl}/paymentLinks/${encodeURIComponent(input.linkId)}`,
+      {
+        method: 'DELETE',
+        headers: this.headers(input.apiKey),
+      },
+    );
+    if (res.ok || res.status === 404) {
+      return;
+    }
+    const data = (await res.json().catch(() => ({}))) as {
+      errors?: Array<{ description?: string }>;
+    };
+    const msg =
+      data.errors?.[0]?.description ??
+      `Asaas paymentLinks DELETE ${res.status}`;
+    throw new InternalServerErrorException(msg);
+  }
 }

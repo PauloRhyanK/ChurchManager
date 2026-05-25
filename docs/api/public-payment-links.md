@@ -8,7 +8,14 @@ Gera (ou reutiliza) um **link de pagamentos** na conta Asaas da igreja (credenci
 
 O código deve usar um serviço partilhado de geração (`PaymentLinksGenerationService`) com `sourceKey` fixo `cotas` no `externalReference` (`cm|v1|<tenantSlug>|cotas`). **Eventos** e outros módulos podem ter **outro endpoint** que chama o mesmo serviço com outro `sourceKey` (ex.: `events-<uuid>`).
 
-O pedido ao Asaas inclui `dueDateLimitDays` (dias úteis para vencimento quando há opção de boleto); com `billingType` `UNDEFINED` a API Asaas exige este campo. Em assinaturas (`isMonthly: true`), envia-se também `endDate` (YYYY-MM-DD) derivado de `subscriptionDurationMonths` para limitar a vigência da recorrência no link — validar o comportamento exacto na [sandbox Asaas](https://docs.asaas.com/docs/welcome-to-asaas). O cálculo usa o calendário local do servidor Node (recomenda-se `TZ=America/Sao_Paulo` em produção).
+O pedido ao Asaas inclui `dueDateLimitDays` (dias úteis para vencimento quando há opção de boleto); com `billingType` `UNDEFINED` a API Asaas exige este campo.
+
+**Comportamento `subscriptionDurationMonths` (backend):**
+
+- **`1`**: o link é criado como **`chargeType: DETACHED`** (cobrança única). Não há recorrência — evita o caso em que assinatura mensal com `endDate` mal dimensionado gerava uma segunda cobrança no mês seguinte.
+- **`>= 2`** com `isMonthly: true`: **`chargeType: RECURRENT`**, `subscriptionCycle: MONTHLY`, e `endDate` (YYYY-MM-DD) = **`addMonths(hoje, N) − 1 dia`** (`date-fns`, calendário local do servidor Node). Isto limita a recorrência para gerar **N** cobranças mensais em vez de `N+1`. Recomenda-se `TZ=America/Sao_Paulo` em produção.
+
+Validar o comportamento exacto na [sandbox Asaas](https://docs.asaas.com/docs/welcome-to-asaas).
 
 ## CORS
 
@@ -24,8 +31,8 @@ O browser só envia `fetch` de origens registadas para este tenant na tabela **`
 | `presetKey` | string | não | Chave do preset global cadastrado em `admin/tenants/me/link-presets`; se omitido, o reuso global usa a própria configuração enviada no body |
 | `cpf` | string | sim em `cpf_custom` | CPF válido (11 dígitos) |
 | `name` | string | sim em `cpf_custom` | Nome do pagador para busca/auditoria |
-| `isMonthly` | boolean | sim em `cpf_custom` | `true` → assinatura mensal (`RECURRENT` + `MONTHLY` no Asaas); `false` → cobrança única (`DETACHED`) |
-| `subscriptionDurationMonths` | integer | sim se `isMonthly` e `cpf_custom` | Entre **1** e **120** |
+| `isMonthly` | boolean | sim em `cpf_custom` | `true` → assinatura mensal (`RECURRENT` + `MONTHLY`) **exceto** quando `subscriptionDurationMonths === 1` (tratado como cobrança única `DETACHED`); `false` → cobrança única (`DETACHED`) |
+| `subscriptionDurationMonths` | integer | sim se `isMonthly` e `cpf_custom` | Entre **1** e **120**. Com **`1`**, o backend envia link de cobrança única; com **`>= 2`**, envia `endDate` conforme regra acima. |
 | `value` | number | não | Reais, **≥ `5,00`** quando informado; se omitido, valor livre |
 | `successUrl` | string (URL) | não | Redirecionamento após pagamento na interface Asaas (`callback.successUrl`). O **origin** tem de coincidir com uma entrada em **`tenant_public_web_origins`**. O domínio também tem de constar nos dados comerciais da conta Asaas (requisito da plataforma). |
 | `autoRedirect` | boolean | não | Só com `successUrl`. Se `false`, o Asaas mostra “Ir para o site” em vez de redireccionar de imediato. Não enviar sem `successUrl`. |

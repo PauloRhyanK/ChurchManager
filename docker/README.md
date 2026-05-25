@@ -103,7 +103,7 @@ Mensagens começam por `[entrypoint]`.
 | Ficheiro | Uso |
 |----------|-----|
 | [docker-compose.yml](../docker-compose.yml) | Postgres + API (dev); perfis opcionais `tunnel` (ngrok), `pgadmin` |
-| [docker-compose.dev.yml](../docker-compose.dev.yml) | Stack completa no servidor Debian (API + admin + Postgres + pgAdmin); rede externa `web_gateway` + [nginx-gateway](nginx-gateway/nginx.conf) |
+| [docker-compose.dev.yml](../docker-compose.dev.yml) | Stack completa no servidor Debian (API + admin + Postgres + pgAdmin); perfil opcional `tunnel` (ngrok); rede `web_gateway` |
 | [docker-compose.prod.yml](../docker-compose.prod.yml) | API + Postgres + pgAdmin; variáveis no `.env`. Rede `proxy-network` (NPM) |
 | `docker-compose.override.yml` | Opcional, local, ignorado pelo Git |
 
@@ -117,7 +117,16 @@ Para expor `api.churchmanager.local`, `admin.churchmanager.local` e `db.churchma
 4. DNS ou `/etc/hosts`: os três hostnames apontam para o IP do nginx-gateway
 5. Na pasta do projeto: `docker compose -f docker-compose.dev.yml up -d --build`
 
-Portos só em `127.0.0.1` no host (acesso directo opcional): Postgres `5438`, API `4060`, admin `4061`, pgAdmin `5052`.
+Portos só em `127.0.0.1` no host (acesso directo opcional): Postgres `5438`, API `4060`, admin `4061`, pgAdmin `5052`, ngrok inspector `4040` (perfil `tunnel`).
+
+**Webhooks Asaas no servidor dev:** define `NGROK_AUTHTOKEN` no `.env` e sobe o túnel:
+
+```bash
+docker compose -f docker-compose.dev.yml --profile tunnel up -d
+docker compose -f docker-compose.dev.yml logs -f churchmanager-ngrok
+```
+
+URL público: `https://<subdomínio-ngrok>/api/webhooks/asaas/<slug>` — ver [webhooks-local-dev-ngrok.md](../docs/webhooks-local-dev-ngrok.md).
 
 No pgAdmin → *Register Server*: Host `churchmanager-postgres`, Port `5432`, credenciais = `POSTGRES_USER` / `POSTGRES_PASSWORD` do `.env`.
 

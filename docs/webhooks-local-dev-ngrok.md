@@ -21,7 +21,7 @@ ngrok config add-authtoken <TEU_AUTHTOKEN>
 Não precisas de instalar o CLI do ngrok no Windows.
 
 1. Authtoken: [dashboard ngrok](https://dashboard.ngrok.com/get-started/your-authtoken).
-2. No `.env.docker` na raiz do repo, adiciona:
+2. No `.env` na raiz do repo, adiciona:
 
    ```env
    NGROK_AUTHTOKEN=cola_o_token_aqui
@@ -30,13 +30,17 @@ Não precisas de instalar o CLI do ngrok no Windows.
 3. Na raiz do monorepo:
 
    ```bash
+   # Dev local
    docker compose --profile tunnel up -d
+
+   # Servidor dev (docker-compose.dev.yml)
+   docker compose -f docker-compose.dev.yml --profile tunnel up -d
    ```
 
-   O serviço `ngrok` usa `env_file: .env.docker` e lê `NGROK_AUTHTOKEN` de lá (sem variável `${…}` no `docker-compose.yml`, para não aparecer o aviso do Compose quando corres `docker compose logs`, etc.). O tráfego público vai para `http://api:3000` na rede interna.
+   O serviço `ngrok` / `churchmanager-ngrok` usa `env_file: .env` e lê `NGROK_AUTHTOKEN` de lá. O tráfego público vai para a API na rede interna (`http://api:3000` ou `http://churchmanager-backend-api:3000`).
 
 4. Descobre o URL HTTPS público:
-   - `docker compose logs ngrok` (procura `url=https://…`), ou
+   - `docker compose logs ngrok` ou `docker compose -f docker-compose.dev.yml logs churchmanager-ngrok` (procura `url=https://…`), ou
    - abre `http://localhost:4040` no browser (inspector do ngrok).
 
 5. Webhook no Asaas: `https://<subdomínio>/api/webhooks/asaas/<slug>` + header `asaas-access-token`.

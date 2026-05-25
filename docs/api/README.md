@@ -31,3 +31,7 @@ Documentação orientada ao consumo pelo site/app. Os caminhos assumem o **prefi
 ## Relação com o domínio financeiro
 
 Modelo de dados, webhooks Asaas e rotas financeiras já descritas no código: [financial-schema-and-webhooks.md](../financial-schema-and-webhooks.md).
+
+## Coleção Insomnia (site público)
+
+Ficheiro [insomnia-site-public.json](./insomnia-site-public.json) — importar no Insomnia (*Application → Import → From File*). Inclui todas as rotas **implementadas** do site (`/api/public/tenants/...`, webhook Asaas e health), **sem** rotas do painel admin. Ambientes *Local* e *Dev nginx-gateway* pré-configurados; ajusta `tenant_slug`, `public_origin` e credenciais Asaas antes de testar.

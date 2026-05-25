@@ -21,7 +21,7 @@ O painel admin mostra **Plataforma → Igrejas** só para esse papel. Em **produ
 
 ## Docker
 
-Compose na raiz: [docker/README.md](../../docker/README.md). Copiar [`.env.docker.example`](../../.env.docker.example) → `.env.docker`. O entrypoint da API aplica migrações ao arranque; seed só com `RUN_SEED=true`.
+Compose na raiz: [docker/README.md](../../docker/README.md). Copiar [`.env.example`](../../.env.example) → `.env` na raiz. O entrypoint da API aplica migrações ao arranque; seed só com `RUN_SEED=true`. Prisma CLI: `npm run prisma:migrate` (lê `../../.env` via dotenv-cli).
 
 ## Webhooks em desenvolvimento local
 
@@ -52,3 +52,7 @@ Prefixo global: `api`.
 
 Ver [docs/financial-schema-and-webhooks.md](../../docs/financial-schema-and-webhooks.md) na raiz do monorepo.
 Ver [docs/security-secrets.md](../../docs/security-secrets.md) para operação de segredo em produção.
+
+### Scripts operacionais
+
+- **Limpar links antigos “1 mês recorrente”** (remove no Asaas e marca `active=false` na BD): `npx tsx scripts/cleanup-1month-recurrent-links.ts` — executar com `.env` válido a partir desta pasta (`apps/api`). Ver comentário no topo do ficheiro.

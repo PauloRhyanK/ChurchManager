@@ -1,0 +1,533 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-05-25T18:00:00.000Z",
+  "__export_source": "church-manager-api",
+  "resources": [
+    {
+      "_id": "wrk_site_public",
+      "_type": "workspace",
+      "parentId": null,
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "Church Manager — Site público",
+      "description": "Rotas HTTP do **site da igreja** (cotas + webhook Asaas). **Exclui** `/api/admin/*` e `/api/auth/*`.\n\n**CORS:** nas rotas `public/tenants` envia o header `Origin` igual a uma origem em `tenant_public_web_origins` do tenant (configurado no painel admin).\n\n**Variáveis:** edita o ambiente *Local* ou *Dev nginx-gateway* antes de testar.",
+      "scope": "collection"
+    },
+    {
+      "_id": "env_local",
+      "_type": "environment",
+      "parentId": "wrk_site_public",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "Local",
+      "data": {
+        "base_url": "http://localhost:3000",
+        "tenant_slug": "demo",
+        "public_origin": "http://localhost:3001",
+        "asaas_webhook_token": "cole-o-token-webhook-do-tenant",
+        "plan_id": "00000000-0000-4000-8000-000000000001",
+        "preset_key": "cotas_12x_site",
+        "success_url": "http://localhost:3001/obrigado"
+      },
+      "dataPropertyOrder": {
+        "&": [
+          "base_url",
+          "tenant_slug",
+          "public_origin",
+          "asaas_webhook_token",
+          "plan_id",
+          "preset_key",
+          "success_url"
+        ]
+      },
+      "color": "#3d9970",
+      "isPrivate": false,
+      "metaSortKey": 1748196000000
+    },
+    {
+      "_id": "env_gateway",
+      "_type": "environment",
+      "parentId": "wrk_site_public",
+      "modified": 1748196000001,
+      "created": 1748196000001,
+      "name": "Dev nginx-gateway",
+      "data": {
+        "base_url": "http://api.churchmanager.local",
+        "tenant_slug": "demo",
+        "public_origin": "http://cotas.churchmanager.local",
+        "asaas_webhook_token": "cole-o-token-webhook-do-tenant",
+        "plan_id": "00000000-0000-4000-8000-000000000001",
+        "preset_key": "cotas_12x_site",
+        "success_url": "http://cotas.churchmanager.local/obrigado"
+      },
+      "dataPropertyOrder": {
+        "&": [
+          "base_url",
+          "tenant_slug",
+          "public_origin",
+          "asaas_webhook_token",
+          "plan_id",
+          "preset_key",
+          "success_url"
+        ]
+      },
+      "color": "#0074d9",
+      "isPrivate": false,
+      "metaSortKey": 1748196000001
+    },
+    {
+      "_id": "jar_default",
+      "_type": "cookie_jar",
+      "parentId": "wrk_site_public",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "Default Jar",
+      "cookies": []
+    },
+    {
+      "_id": "fld_health",
+      "_type": "request_group",
+      "parentId": "wrk_site_public",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "Infra",
+      "description": "Health check (não é UI do site; útil para validar que a API está no ar).",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -1000
+    },
+    {
+      "_id": "fld_cotas",
+      "_type": "request_group",
+      "parentId": "wrk_site_public",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "Site — Cotas",
+      "description": "Fluxo público de cotas em `/api/public/tenants/:slug/...`. Requer `Origin` permitido para o tenant.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -900
+    },
+    {
+      "_id": "fld_payer",
+      "_type": "request_group",
+      "parentId": "fld_cotas",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "Perfil pagador",
+      "description": "Pré-cadastro antes de `payment-intents`.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -890
+    },
+    {
+      "_id": "fld_intents",
+      "_type": "request_group",
+      "parentId": "fld_cotas",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "Payment intents",
+      "description": "Cobrança direta Asaas (PIX / boleto / indefinido). Ver cotas-payment-contract.md.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -880
+    },
+    {
+      "_id": "fld_links",
+      "_type": "request_group",
+      "parentId": "fld_cotas",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "Payment links",
+      "description": "Link de pagamento Asaas (preset ou CPF). Ver public-payment-links.md.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -870
+    },
+    {
+      "_id": "fld_webhooks",
+      "_type": "request_group",
+      "parentId": "wrk_site_public",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "Webhooks Asaas",
+      "description": "Simulação server-to-server (sem CORS de site). Token = `asaas-access-token`.",
+      "environment": {},
+      "environmentPropertyOrder": null,
+      "metaSortKey": -800
+    },
+    {
+      "_id": "req_health",
+      "_type": "request",
+      "parentId": "fld_health",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "GET Health",
+      "description": "Liveness da API. Não exige JWT nem slug.",
+      "url": "{{ _.base_url }}/api/health",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": -1000,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_payer_upsert",
+      "_type": "request",
+      "parentId": "fld_payer",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "POST Payer profile (upsert)",
+      "description": "Cria ou atualiza perfil pagador (CPF + contacto). Resposta 200: `{ id, updatedAt }`.",
+      "url": "{{ _.base_url }}/api/public/tenants/{{ _.tenant_slug }}/payer-profiles",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"cpf\": \"39053344705\",\n  \"name\": \"Maria Silva\",\n  \"email\": \"maria@example.com\",\n  \"phone\": \"11999999999\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        { "name": "Content-Type", "value": "application/json", "id": "pair_ct_payer" },
+        { "name": "Origin", "value": "{{ _.public_origin }}", "id": "pair_origin_payer" }
+      ],
+      "authentication": {},
+      "metaSortKey": -1000,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_intent_pix_value",
+      "_type": "request",
+      "parentId": "fld_intents",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "POST Intent — PIX valor livre",
+      "description": "Cota com valor livre (`value`, sem `planId`). Perfil deve existir (rodar payer-profiles antes).",
+      "url": "{{ _.base_url }}/api/public/tenants/{{ _.tenant_slug }}/payment-intents",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"cpf\": \"39053344705\",\n  \"billingType\": \"PIX\",\n  \"value\": 50\n}"
+      },
+      "parameters": [],
+      "headers": [
+        { "name": "Content-Type", "value": "application/json", "id": "pair_ct_int_pix" },
+        { "name": "Origin", "value": "{{ _.public_origin }}", "id": "pair_origin_int_pix" }
+      ],
+      "authentication": {},
+      "metaSortKey": -1000,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_intent_plan",
+      "_type": "request",
+      "parentId": "fld_intents",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "POST Intent — PIX com planId",
+      "description": "Cota com valor do plano na base. Ajusta `plan_id` no ambiente.",
+      "url": "{{ _.base_url }}/api/public/tenants/{{ _.tenant_slug }}/payment-intents",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"cpf\": \"39053344705\",\n  \"billingType\": \"PIX\",\n  \"planId\": \"{{ _.plan_id }}\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        { "name": "Content-Type", "value": "application/json", "id": "pair_ct_int_plan" },
+        { "name": "Origin", "value": "{{ _.public_origin }}", "id": "pair_origin_int_plan" }
+      ],
+      "authentication": {},
+      "metaSortKey": -990,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_intent_boleto",
+      "_type": "request",
+      "parentId": "fld_intents",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "POST Intent — BOLETO",
+      "description": "Cobrança boleto com valor livre.",
+      "url": "{{ _.base_url }}/api/public/tenants/{{ _.tenant_slug }}/payment-intents",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"cpf\": \"39053344705\",\n  \"billingType\": \"BOLETO\",\n  \"value\": 100\n}"
+      },
+      "parameters": [],
+      "headers": [
+        { "name": "Content-Type", "value": "application/json", "id": "pair_ct_int_bol" },
+        { "name": "Origin", "value": "{{ _.public_origin }}", "id": "pair_origin_int_bol" }
+      ],
+      "authentication": {},
+      "metaSortKey": -980,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_intent_undefined",
+      "_type": "request",
+      "parentId": "fld_intents",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "POST Intent — UNDEFINED (pagador escolhe)",
+      "description": "Asaas permite PIX ou boleto no checkout.",
+      "url": "{{ _.base_url }}/api/public/tenants/{{ _.tenant_slug }}/payment-intents",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"cpf\": \"39053344705\",\n  \"billingType\": \"UNDEFINED\",\n  \"value\": 25.5\n}"
+      },
+      "parameters": [],
+      "headers": [
+        { "name": "Content-Type", "value": "application/json", "id": "pair_ct_int_und" },
+        { "name": "Origin", "value": "{{ _.public_origin }}", "id": "pair_origin_int_und" }
+      ],
+      "authentication": {},
+      "metaSortKey": -970,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_intent_success",
+      "_type": "request",
+      "parentId": "fld_intents",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "POST Intent — com successUrl",
+      "description": "Origin de `success_url` deve estar em `tenant_public_web_origins`.",
+      "url": "{{ _.base_url }}/api/public/tenants/{{ _.tenant_slug }}/payment-intents",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"cpf\": \"39053344705\",\n  \"billingType\": \"PIX\",\n  \"value\": 50,\n  \"successUrl\": \"{{ _.success_url }}\",\n  \"autoRedirect\": true\n}"
+      },
+      "parameters": [],
+      "headers": [
+        { "name": "Content-Type", "value": "application/json", "id": "pair_ct_int_suc" },
+        { "name": "Origin", "value": "{{ _.public_origin }}", "id": "pair_origin_int_suc" }
+      ],
+      "authentication": {},
+      "metaSortKey": -960,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_link_preset",
+      "_type": "request",
+      "parentId": "fld_links",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "POST Link — preset global (presetKey)",
+      "description": "Reutiliza link por preset cadastrado no admin. Resposta 201. Rate limit: 5/min/IP.",
+      "url": "{{ _.base_url }}/api/public/tenants/{{ _.tenant_slug }}/links",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"reuseMode\": \"preset_global\",\n  \"presetKey\": \"{{ _.preset_key }}\"\n}"
+      },
+      "parameters": [],
+      "headers": [
+        { "name": "Content-Type", "value": "application/json", "id": "pair_ct_lnk_pre" },
+        { "name": "Origin", "value": "{{ _.public_origin }}", "id": "pair_origin_lnk_pre" }
+      ],
+      "authentication": {},
+      "metaSortKey": -1000,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_link_config",
+      "_type": "request",
+      "parentId": "fld_links",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "POST Link — preset global (sem presetKey, 12x)",
+      "description": "Reuso por configuração: mensal 12 meses.",
+      "url": "{{ _.base_url }}/api/public/tenants/{{ _.tenant_slug }}/links",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"reuseMode\": \"preset_global\",\n  \"isMonthly\": true,\n  \"subscriptionDurationMonths\": 12\n}"
+      },
+      "parameters": [],
+      "headers": [
+        { "name": "Content-Type", "value": "application/json", "id": "pair_ct_lnk_cfg" },
+        { "name": "Origin", "value": "{{ _.public_origin }}", "id": "pair_origin_lnk_cfg" }
+      ],
+      "authentication": {},
+      "metaSortKey": -990,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_link_onetime",
+      "_type": "request",
+      "parentId": "fld_links",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "POST Link — cpf_custom cobrança única",
+      "description": "Link custom por CPF; `value` mínimo R$ 5 quando informado.",
+      "url": "{{ _.base_url }}/api/public/tenants/{{ _.tenant_slug }}/links",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"reuseMode\": \"cpf_custom\",\n  \"cpf\": \"39053344705\",\n  \"name\": \"Maria Silva\",\n  \"isMonthly\": false,\n  \"value\": 50\n}"
+      },
+      "parameters": [],
+      "headers": [
+        { "name": "Content-Type", "value": "application/json", "id": "pair_ct_lnk_one" },
+        { "name": "Origin", "value": "{{ _.public_origin }}", "id": "pair_origin_lnk_one" }
+      ],
+      "authentication": {},
+      "metaSortKey": -980,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_link_monthly",
+      "_type": "request",
+      "parentId": "fld_links",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "POST Link — cpf_custom mensal 12x",
+      "description": "Assinatura mensal com duração em meses.",
+      "url": "{{ _.base_url }}/api/public/tenants/{{ _.tenant_slug }}/links",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"reuseMode\": \"cpf_custom\",\n  \"cpf\": \"39053344705\",\n  \"name\": \"Maria Silva\",\n  \"isMonthly\": true,\n  \"subscriptionDurationMonths\": 12,\n  \"value\": 50\n}"
+      },
+      "parameters": [],
+      "headers": [
+        { "name": "Content-Type", "value": "application/json", "id": "pair_ct_lnk_mon" },
+        { "name": "Origin", "value": "{{ _.public_origin }}", "id": "pair_origin_lnk_mon" }
+      ],
+      "authentication": {},
+      "metaSortKey": -970,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_link_success",
+      "_type": "request",
+      "parentId": "fld_links",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "POST Link — cpf_custom + successUrl",
+      "description": "Redirecionamento após pagamento no checkout Asaas.",
+      "url": "{{ _.base_url }}/api/public/tenants/{{ _.tenant_slug }}/links",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"reuseMode\": \"cpf_custom\",\n  \"cpf\": \"39053344705\",\n  \"name\": \"Maria Silva\",\n  \"isMonthly\": false,\n  \"value\": 50,\n  \"successUrl\": \"{{ _.success_url }}\",\n  \"autoRedirect\": true\n}"
+      },
+      "parameters": [],
+      "headers": [
+        { "name": "Content-Type", "value": "application/json", "id": "pair_ct_lnk_suc" },
+        { "name": "Origin", "value": "{{ _.public_origin }}", "id": "pair_origin_lnk_suc" }
+      ],
+      "authentication": {},
+      "metaSortKey": -960,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_webhook_payment",
+      "_type": "request",
+      "parentId": "fld_webhooks",
+      "modified": 1748196000000,
+      "created": 1748196000000,
+      "name": "POST Webhook — PAYMENT_RECEIVED",
+      "description": "Simula evento Asaas v3. Header `asaas-access-token` = token webhook do tenant (painel / credenciais). Opcional: `idempotency-key`.",
+      "url": "{{ _.base_url }}/api/webhooks/asaas/{{ _.tenant_slug }}",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"id\": \"evt_simulado_insomnia_001\",\n  \"event\": \"PAYMENT_RECEIVED\",\n  \"payment\": {\n    \"id\": \"pay_simulado_001\",\n    \"customer\": \"cus_simulado_001\",\n    \"value\": 50,\n    \"status\": \"RECEIVED\"\n  }\n}"
+      },
+      "parameters": [],
+      "headers": [
+        { "name": "Content-Type", "value": "application/json", "id": "pair_ct_wh" },
+        { "name": "asaas-access-token", "value": "{{ _.asaas_webhook_token }}", "id": "pair_asaas_token" },
+        { "name": "idempotency-key", "value": "insomnia-{{ _.tenant_slug }}-payment-received-1", "id": "pair_idem" }
+      ],
+      "authentication": {},
+      "metaSortKey": -1000,
+      "isPrivate": false,
+      "settingStoreCookies": true,
+      "settingSendCookies": true,
+      "settingDisableRenderRequestBody": false,
+      "settingEncodeUrl": true,
+      "settingRebuildPath": true,
+      "settingFollowRedirects": "global"
+    }
+  ]
+}

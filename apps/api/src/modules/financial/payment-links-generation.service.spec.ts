@@ -6,6 +6,7 @@ import {
   PAYMENT_LINK_SOURCE_COTAS,
   PaymentLinksGenerationService,
 } from './payment-links-generation.service';
+import { computeSubscriptionEndDateYmd } from './payment-link-subscription-end';
 
 function tenant(over: Partial<Tenant> = {}): Tenant {
   return {
@@ -92,11 +93,40 @@ test('create: isMonthly true usa RECURRENT, MONTHLY e endDate', async () => {
   assert.equal(bodySent!.chargeType, 'RECURRENT');
   assert.equal(bodySent!.subscriptionCycle, 'MONTHLY');
   assert.equal(bodySent!.dueDateLimitDays, 10);
-  assert.match(bodySent!.endDate ?? '', /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(bodySent!.endDate, computeSubscriptionEndDateYmd(6));
   assert.match(
     bodySent!.description ?? '',
     /Assinatura mensal — 6 meses/,
   );
+});
+
+test('create: isMonthly true + subscriptionDurationMonths 1 usa DETACHED (uma cobrança)', async () => {
+  let bodySent: {
+    chargeType: string;
+    subscriptionCycle?: string;
+    endDate?: string;
+    description?: string;
+  };
+  const asaas = {
+    createPaymentLink: async (input: { body: typeof bodySent }) => {
+      bodySent = input.body;
+      return { id: 'link-3', url: 'https://www.asaas.com/c/one' };
+    },
+  };
+  const credentials = { getDecryptedApiKey: () => 'k' };
+  const service = new PaymentLinksGenerationService(
+    asaas as never,
+    credentials as never,
+  );
+  await service.create(tenant(), {
+    isMonthly: true,
+    subscriptionDurationMonths: 1,
+    ...cotasOpts,
+  });
+  assert.equal(bodySent!.chargeType, 'DETACHED');
+  assert.equal(bodySent!.subscriptionCycle, undefined);
+  assert.equal(bodySent!.endDate, undefined);
+  assert.equal(bodySent!.description, 'Pagamento único (link público)');
 });
 
 test('create: envia value quando informado', async () => {

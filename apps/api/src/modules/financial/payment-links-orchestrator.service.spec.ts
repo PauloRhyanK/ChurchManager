@@ -100,3 +100,51 @@ test('orchestrator: cria e persiste link quando não encontra', async () => {
   assert.equal(out.metadata.reused, false);
   assert.equal(createdInDb, true);
 });
+
+test('orchestrator: preset 1 mês normaliza para pagamento único ao criar', async () => {
+  let persistPayload: { isMonthly: boolean; subscriptionDurationMonths: number | null };
+  let generationOpts: { isMonthly: boolean; subscriptionDurationMonths?: number };
+  const prisma = {
+    financialPaymentLink: {
+      findUnique: async () => null,
+      create: async (args: { data: typeof persistPayload }) => {
+        persistPayload = args.data;
+      },
+    },
+    financialLinkPreset: {
+      findUnique: async () => ({
+        id: 'preset-id',
+        sourceKey: 'cotas',
+        isMonthly: true,
+        subscriptionDurationMonths: 1,
+        valueCents: 5000,
+        successUrl: null,
+        autoRedirect: null,
+        active: true,
+        name: 'Cota 1 mês',
+      }),
+    },
+  };
+  const generation = {
+    create: async (_tenant: unknown, opts: typeof generationOpts) => {
+      generationOpts = opts;
+      return {
+        id: 'link-1m',
+        url: 'https://www.asaas.com/c/1m',
+        metadata: { source: 'cotas', tenant: 'igreja-teste' },
+      };
+    },
+  };
+  const service = new PaymentLinksOrchestratorService(
+    prisma as never,
+    generation as never,
+  );
+  await service.createOrReusePublicCotasLink(tenant(), {
+    reuseMode: 'preset_global',
+    presetKey: 'cotas_1x',
+  });
+  assert.equal(generationOpts!.isMonthly, false);
+  assert.equal(generationOpts!.subscriptionDurationMonths, undefined);
+  assert.equal(persistPayload!.isMonthly, false);
+  assert.equal(persistPayload!.subscriptionDurationMonths, null);
+});

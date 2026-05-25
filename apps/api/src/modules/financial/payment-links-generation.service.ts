@@ -24,8 +24,9 @@ export interface CreatePaymentLinkOptions {
   isMonthly: boolean;
   value?: number;
   /**
-   * Com `isMonthly`, número de meses da assinatura (obrigatório no endpoint público).
-   * Envia `endDate` à Asaas para encerrar a recorrência nessa data.
+   * Com assinatura mensal (`isMonthly` true e `subscriptionDurationMonths !== 1`), número
+   * de cobranças mensais. Envia `endDate` à Asaas (`addMonths(hoje, N) - 1 dia`).
+   * Com `subscriptionDurationMonths === 1` usa-se cobrança única (`DETACHED`).
    */
   subscriptionDurationMonths?: number;
   /** Identificador estável do módulo (ex.: `cotas`, `events-<uuid>`). Não use `|`. */
@@ -66,23 +67,26 @@ export class PaymentLinksGenerationService {
       opts.sourceKey,
     );
 
+    const isSingleCharge =
+      !opts.isMonthly || opts.subscriptionDurationMonths === 1;
+
     const body: AsaasPaymentLinkCreateInput = {
       name: opts.asaasLinkName,
       description:
         opts.asaasDescription ??
-        (opts.isMonthly
-          ? opts.subscriptionDurationMonths != null
+        (isSingleCharge
+          ? 'Pagamento único (link público)'
+          : opts.subscriptionDurationMonths != null
             ? `Assinatura mensal — ${opts.subscriptionDurationMonths} meses (link público)`
-            : 'Assinatura mensal (link público)'
-          : 'Pagamento único (link público)'),
+            : 'Assinatura mensal (link público)'),
       billingType: 'UNDEFINED',
-      chargeType: opts.isMonthly ? 'RECURRENT' : 'DETACHED',
+      chargeType: isSingleCharge ? 'DETACHED' : 'RECURRENT',
       dueDateLimitDays: PAYMENT_LINK_DUE_DATE_LIMIT_BUSINESS_DAYS,
       externalReference,
       notificationEnabled: true,
     };
 
-    if (opts.isMonthly) {
+    if (!isSingleCharge) {
       body.subscriptionCycle = 'MONTHLY';
       if (opts.subscriptionDurationMonths != null) {
         body.endDate = computeSubscriptionEndDateYmd(

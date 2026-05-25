@@ -76,13 +76,15 @@ export class PaymentLinksOrchestratorService {
     input: PublicCotasInput,
     mode: 'preset_global' | 'cpf_custom',
   ): Promise<BaseResolvedLinkData> {
+    let base: BaseResolvedLinkData;
     if (mode === 'cpf_custom') {
-      return this.resolveCpfCustomData(tenant, input);
+      base = this.resolveCpfCustomData(tenant, input);
+    } else if (input.presetKey?.trim()) {
+      base = await this.resolvePresetData(tenant, 'cotas', input.presetKey);
+    } else {
+      base = this.resolveGlobalConfigData(tenant, input);
     }
-    if (input.presetKey?.trim()) {
-      return this.resolvePresetData(tenant, 'cotas', input.presetKey);
-    }
-    return this.resolveGlobalConfigData(tenant, input);
+    return this.normalizeSinglePaymentDuration(base);
   }
 
   async createOrReuseEventAutoLink(tenant: Tenant, input: EventAutoInput) {
@@ -92,12 +94,12 @@ export class PaymentLinksOrchestratorService {
       input.presetKey,
       input.fallbackName,
     );
-    const eventResolved: BaseResolvedLinkData = {
+    const eventResolved = this.normalizeSinglePaymentDuration({
       ...resolved,
       reuseMode: 'event_auto',
       sourceKey: `events-${input.eventId}-${input.ticketTypeId}`,
       asaasLinkName: `${resolved.asaasLinkName} - ingresso ${input.ticketTypeId}`,
-    };
+    });
     const reuseKey = this.buildReuseKey(tenant.id, eventResolved, {
       mode: 'event_auto',
       eventId: input.eventId,
@@ -273,6 +275,23 @@ export class PaymentLinksOrchestratorService {
       reuseMode: 'preset_global',
       asaasLinkName: `Cotas - ${tenant.name}`,
     };
+  }
+
+  /**
+   * `subscriptionDurationMonths === 1` significa uma única cobrança; link Asaas deve ser
+   * `DETACHED`, não assinatura mensal (evita 2ª cobrança no mês seguinte).
+   */
+  private normalizeSinglePaymentDuration(
+    data: BaseResolvedLinkData,
+  ): BaseResolvedLinkData {
+    if (data.isMonthly && data.subscriptionDurationMonths === 1) {
+      return {
+        ...data,
+        isMonthly: false,
+        subscriptionDurationMonths: undefined,
+      };
+    }
+    return data;
   }
 
   private buildReuseKey(

@@ -1,3 +1,5 @@
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
@@ -14,6 +16,10 @@ import { RequestLoggingInterceptor } from './common/request-logging.interceptor'
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: [
+        join(__dirname, '../../../.env'),
+        join(__dirname, '../.env'),
+      ].filter(existsSync),
       validate: (env) => {
         const key = env.ENCRYPTION_KEY as string | undefined;
         if (!key || !/^[0-9a-fA-F]{64}$/.test(key)) {
