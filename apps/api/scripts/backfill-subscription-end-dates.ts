@@ -9,10 +9,11 @@
  * A data de referência para calcular endDate é a mais antiga entre:
  *   primeira transação do par, createdAt da assinatura local, createdAt do link.
  *
- * Executar em apps/api (lê ../../.env como o Nest):
- *
+ * Local (apps/api, lê ../../.env):
  *   npx tsx scripts/backfill-subscription-end-dates.ts --dry-run
- *   npx tsx scripts/backfill-subscription-end-dates.ts
+ *
+ * Docker (após rebuild da API; env do compose):
+ *   docker exec -it <api-container> sh -c "cd /app && npx tsx scripts/backfill-subscription-end-dates.ts --dry-run"
  *
  * Opcional: --tenant=demo  (só um slug)
  */

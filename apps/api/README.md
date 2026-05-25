@@ -35,6 +35,15 @@ npm run script:backfill-subscription-end-dates
 npm run script:backfill-subscription-end-dates -- --tenant=demo
 ```
 
+**Docker** (após `docker compose ... up -d --build`; `DATABASE_URL` e credenciais vêm do `env_file` do serviço):
+
+```bash
+docker exec -it churchmanager-dev-churchmanager-backend-api-1 sh -c \
+  "cd /app && npx tsx scripts/backfill-subscription-end-dates.ts --dry-run"
+```
+
+O nome do contentor pode variar (`docker ps`); em produção use o contentor da API equivalente.
+
 Requer transacções com `asaasSubscriptionId` + `asaasPaymentLinkId` em `raw_payload_ref` (webhooks já processados) e link em `financial_payment_links` com `subscriptionDurationMonths >= 2`.
 
 ## Webhooks em desenvolvimento local
@@ -69,4 +78,4 @@ Ver [docs/security-secrets.md](../../docs/security-secrets.md) para operação d
 
 ### Scripts operacionais
 
-- **Limpar links antigos “1 mês recorrente”** (remove no Asaas e marca `active=false` na BD): `npx tsx scripts/cleanup-1month-recurrent-links.ts` — executar com `.env` válido a partir desta pasta (`apps/api`). Ver comentário no topo do ficheiro.
+- **Limpar links antigos “1 mês recorrente”** (remove no Asaas e marca `active=false` na BD): `npx tsx scripts/cleanup-1month-recurrent-links.ts` — local em `apps/api`, ou no contentor: `docker exec … sh -c "cd /app && npx tsx scripts/cleanup-1month-recurrent-links.ts"`. Ver comentário no topo do ficheiro.
