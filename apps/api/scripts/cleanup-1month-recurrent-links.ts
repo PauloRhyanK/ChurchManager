@@ -9,13 +9,13 @@
  * Idempotente: links já removidos (404 no DELETE) contam como sucesso e são desactivados na BD.
  */
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from '../src/app.module';
+import { ScriptsAppModule } from '../src/scripts/scripts-app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AsaasClient } from '../src/modules/financial/asaas/asaas.client';
 import { TenantCredentialsService } from '../src/modules/tenants/tenant-credentials.service';
 
 async function main() {
-  const app = await NestFactory.createApplicationContext(AppModule, {
+  const app = await NestFactory.createApplicationContext(ScriptsAppModule, {
     logger: ['error', 'warn'],
   });
   try {

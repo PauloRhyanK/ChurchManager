@@ -18,7 +18,7 @@
  * Opcional: --tenant=demo  (só um slug)
  */
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from '../src/app.module';
+import { ScriptsAppModule } from '../src/scripts/scripts-app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AsaasSubscriptionDurationSyncService } from '../src/modules/financial/asaas-subscription-duration-sync.service';
 
@@ -54,7 +54,7 @@ function readMeta(raw: unknown): {
 
 async function main() {
   const { dryRun, tenantSlug } = parseArgs(process.argv.slice(2));
-  const app = await NestFactory.createApplicationContext(AppModule, {
+  const app = await NestFactory.createApplicationContext(ScriptsAppModule, {
     logger: ['error', 'warn', 'log'],
   });
 
