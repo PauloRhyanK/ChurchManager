@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Tenant } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { TenantCredentialsService } from '../tenants/tenant-credentials.service';
@@ -15,9 +15,10 @@ export class AsaasSubscriptionDurationSyncService {
   private readonly logger = new Logger(AsaasSubscriptionDurationSyncService.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(TenantCredentialsService)
     private readonly tenantCredentials: TenantCredentialsService,
-    private readonly asaas: AsaasClient,
+    @Inject(AsaasClient) private readonly asaas: AsaasClient,
   ) {}
 
   /**
