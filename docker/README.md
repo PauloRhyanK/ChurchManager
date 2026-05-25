@@ -104,8 +104,23 @@ Mensagens começam por `[entrypoint]`.
 | Ficheiro | Uso |
 |----------|-----|
 | [docker-compose.yml](../docker-compose.yml) | Postgres + API (dev); perfis opcionais `tunnel` (ngrok), `pgadmin` |
+| [docker-compose.dev.yml](../docker-compose.dev.yml) | Stack completa no servidor Debian (API + admin + Postgres + pgAdmin); rede externa `web_gateway` + [nginx-gateway](nginx-gateway/nginx.conf) |
 | [docker-compose.prod.yml](../docker-compose.prod.yml) | API + Postgres + pgAdmin; `POSTGRES_*` no [`.env.production.example`](../.env.production.example); arranque com `--env-file .env.production`. Rede `proxy-network` (NPM) |
 | `docker-compose.override.yml` | Opcional, local, ignorado pelo Git |
+
+## Dev no servidor (nginx-gateway)
+
+Para expor `api.churchmanager.local`, `admin.churchmanager.local` e `db.churchmanager.local` através de um nginx central (como no projeto `nginx-gateway` na VPS):
+
+1. Criar a rede partilhada: `docker network create web_gateway`
+2. No repositório ChurchManager: copiar [`.env.dev.example`](../.env.dev.example) → `.env`, preencher `ENCRYPTION_KEY` e `JWT_SECRET`
+3. Copiar [docker/nginx-gateway/nginx.conf](nginx-gateway/nginx.conf) para `~/workspace/nginx-gateway/nginx.conf` no servidor e recarregar o contentor nginx do gateway
+4. DNS ou `/etc/hosts`: os três hostnames apontam para o IP do nginx-gateway
+5. Na pasta do projeto: `docker compose -f docker-compose.dev.yml --env-file .env up -d --build`
+
+Portos só em `127.0.0.1` no host (acesso directo opcional): Postgres `5438`, API `4060`, admin `4061`, pgAdmin `5052`.
+
+No pgAdmin → *Register Server*: Host `churchmanager-postgres`, Port `5432`, credenciais = `POSTGRES_USER` / `POSTGRES_PASSWORD` do `.env`.
 
 ## Produção
 
