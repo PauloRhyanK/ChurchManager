@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -12,9 +13,9 @@ import { UpdateAsaasCredentialsDto } from './dto/update-asaas-credentials.dto';
 @Injectable()
 export class TenantCredentialsService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly crypto: CryptoService,
-    private readonly asaas: AsaasClient,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(CryptoService) private readonly crypto: CryptoService,
+    @Inject(AsaasClient) private readonly asaas: AsaasClient,
   ) {}
 
   async updateAsaasCredentials(
