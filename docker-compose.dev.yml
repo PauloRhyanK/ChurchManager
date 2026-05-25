@@ -5,6 +5,7 @@
 # 4) Colocar docker/nginx-gateway/nginx.conf no projeto nginx-gateway e recarregar nginx
 #
 # Arranque: docker compose -f docker-compose.dev.yml up -d --build
+# Webhooks Asaas (ngrok): NGROK_AUTHTOKEN no .env → docker compose -f docker-compose.dev.yml --profile tunnel up -d
 
 name: churchmanager-dev
 
@@ -52,7 +53,40 @@ services:
     networks:
       - app_net_dev
       - web_gateway
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Túnel HTTPS para webhooks Asaas (opcional). Ver docs/webhooks-local-dev-ngrok.md
+  churchmanager-ngrok:
+    image: ngrok/ngrok:latest
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    depends_on:
+      churchmanager-backend-api:
+        condition: service_healthy
+    env_file:
+      - .env
+    command: ["http", "--log=stdout", "http://churchmanager-backend-api:3000"]
+    ports:
+      - "127.0.0.1:4040:4040"
+    networks:
+      - app_net_dev
     logging:
       driver: "json-file"
       options:
