@@ -23,20 +23,31 @@ O painel admin mostra **Plataforma → Igrejas** só para esse papel. Em **produ
 
 Compose na raiz: [docker/README.md](../../docker/README.md). Copiar [`.env.example`](../../.env.example) → `.env` na raiz. O entrypoint da API aplica migrações ao arranque; seed só com `RUN_SEED=true`. Prisma CLI: `npm run prisma:migrate` (lê `../../.env` via dotenv-cli).
 
-A API corre no contentor; **scripts operacionais correm no host** (ver abaixo).
+### Scripts operacionais
 
-### Scripts operacionais (no host)
+O `.env` pode manter `DATABASE_URL` com host `db` / `churchmanager-postgres` (válido **dentro** do Docker). Para correr scripts **no host**, não altere o ficheiro: passe a URL na linha de comando (o `dotenv` não sobrescreve variáveis já definidas no shell).
 
-Com Postgres no Docker, use no `.env` da raiz `DATABASE_URL` com `127.0.0.1` e a porta publicada (ex. `5438` no `docker-compose.dev.yml`), não o hostname interno do compose.
+**Opção 1 — host** (exige Postgres acessível; no dev o compose expõe `127.0.0.1:5438`):
 
 ```bash
 cd apps/api
-npm run script:backfill-subscription-end-dates -- --dry-run
-npm run script:backfill-subscription-end-dates
-npm run script:cleanup-1month-recurrent-links
+DATABASE_URL="postgresql://postgres:SENHA@127.0.0.1:5438/churchmanager_db" \
+  npm run script:backfill-subscription-end-dates -- --dry-run
 ```
 
-Backfill: assinaturas com `subscriptionDurationMonths >= 2` e pares subscription/link nos webhooks. Cleanup: remove links antigos “mensal + 1 mês” no Asaas e marca `active=false` na BD.
+**Opção 2 — Docker** (BD só na rede interna; sem mudar `.env`), na **raiz** do repo:
+
+```bash
+docker compose -f docker-compose.dev.yml run --rm --entrypoint sh \
+  -v "$PWD/apps/api/scripts:/app/scripts:ro" \
+  -v "$PWD/apps/api/src:/app/src:ro" \
+  churchmanager-backend-api \
+  -c "./node_modules/.bin/tsx scripts/backfill-subscription-end-dates.ts --dry-run"
+```
+
+Cleanup (`script:cleanup-1month-recurrent-links`): mesma ideia — `DATABASE_URL=...` no host ou `compose run` com os volumes acima.
+
+Backfill: assinaturas com `subscriptionDurationMonths >= 2` e pares nos webhooks. Cleanup: links antigos “mensal + 1 mês” no Asaas + `active=false` na BD.
 
 ## Webhooks em desenvolvimento local
 

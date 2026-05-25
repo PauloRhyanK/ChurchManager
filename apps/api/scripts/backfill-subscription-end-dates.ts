@@ -9,8 +9,13 @@
  * A data de referência para calcular endDate é a mais antiga entre:
  *   primeira transação do par, createdAt da assinatura local, createdAt do link.
  *
- * No host (apps/api):
- *   npm run script:backfill-subscription-end-dates -- --dry-run
+ * Host (Postgres acessível — porta publicada ou URL explícita):
+ *   DATABASE_URL="postgresql://USER:PASS@127.0.0.1:5438/DB" npm run script:backfill-subscription-end-dates -- --dry-run
+ *
+ * Docker (BD só na rede interna; a partir da raiz do repo):
+ *   docker compose -f docker-compose.dev.yml run --rm --entrypoint sh \
+ *     -v "$PWD/apps/api/scripts:/app/scripts:ro" -v "$PWD/apps/api/src:/app/src:ro" \
+ *     churchmanager-backend-api -c "./node_modules/.bin/tsx scripts/backfill-subscription-end-dates.ts --dry-run"
  *
  * Opcional: --tenant=demo
  */
