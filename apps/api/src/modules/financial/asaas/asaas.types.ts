@@ -78,6 +78,19 @@ export interface AsaasPaymentLinkCreateInput {
   callback?: AsaasCallbackInput;
 }
 
+/** Pedido parcial — PUT /v3/subscriptions/{id} */
+export interface AsaasSubscriptionUpdateInput {
+  endDate?: string;
+}
+
+/** Resposta parcial — assinatura */
+export interface AsaasSubscriptionResponse {
+  id: string;
+  endDate?: string;
+  maxPayments?: number;
+  status?: string;
+}
+
 /** Resposta parcial — link de pagamentos criado */
 export interface AsaasPaymentLinkResponse {
   id: string;

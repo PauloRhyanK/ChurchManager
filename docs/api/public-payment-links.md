@@ -13,9 +13,9 @@ O pedido ao Asaas inclui `dueDateLimitDays` (dias úteis para vencimento quando 
 **Comportamento `subscriptionDurationMonths` (backend):**
 
 - **`1`**: o link é criado como **`chargeType: DETACHED`** (cobrança única). Não há recorrência — evita o caso em que assinatura mensal com `endDate` mal dimensionado gerava uma segunda cobrança no mês seguinte.
-- **`>= 2`** com `isMonthly: true`: **`chargeType: RECURRENT`**, `subscriptionCycle: MONTHLY`, e `endDate` (YYYY-MM-DD) = **`addMonths(hoje, N) − 1 dia`** (`date-fns`, calendário local do servidor Node). Isto limita a recorrência para gerar **N** cobranças mensais em vez de `N+1`. Recomenda-se `TZ=America/Sao_Paulo` em produção.
+- **`>= 2`** com `isMonthly: true`: **`chargeType: RECURRENT`**, `subscriptionCycle: MONTHLY`, e `endDate` (YYYY-MM-DD) = **`addMonths(hoje, N) − 1 dia`** no **link** (`POST /paymentLinks`). O painel Asaas em **Dados da assinatura** só preenche “Data de fim da assinatura” no recurso `/subscriptions`; após o primeiro `PAYMENT_CREATED` com `paymentLink`, o backend faz `PUT /subscriptions/{id}` com o mesmo `endDate` (ver `AsaasSubscriptionDurationSyncService`). Recomenda-se `TZ=America/Sao_Paulo` em produção.
 
-Validar o comportamento exacto na [sandbox Asaas](https://docs.asaas.com/docs/welcome-to-asaas).
+Validar o comportamento na [sandbox Asaas](https://docs.asaas.com/docs/welcome-to-asaas). Referência link: [Criar um link de pagamentos](https://docs.asaas.com/reference/criar-um-link-de-pagamentos); assinatura: [Atualizar assinatura](https://docs.asaas.com/reference/atualizar-assinatura-existente).
 
 ## CORS
 

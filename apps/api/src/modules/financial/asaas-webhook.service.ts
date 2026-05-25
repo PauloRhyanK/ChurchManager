@@ -9,6 +9,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { normalizeCpf, isValidCpfDigits } from '../../common/cpf';
 import { TenantCredentialsService } from '../tenants/tenant-credentials.service';
 import { AsaasClient } from './asaas/asaas.client';
+import { AsaasSubscriptionDurationSyncService } from './asaas-subscription-duration-sync.service';
 import type { AsaasCustomerResponse } from './asaas/asaas.types';
 import { buildWebhookIdempotencyKey } from './asaas-webhook-idempotency';
 import { parsePaymentLinkExternalReference } from './payment-link-external-reference';
@@ -95,6 +96,7 @@ export class AsaasWebhookService {
     private readonly prisma: PrismaService,
     private readonly tenantCredentials: TenantCredentialsService,
     private readonly asaas: AsaasClient,
+    private readonly subscriptionDurationSync: AsaasSubscriptionDurationSyncService,
   ) {}
 
   verifyToken(
@@ -246,6 +248,7 @@ export class AsaasWebhookService {
     if (txOutcome === 'duplicate') {
       return { ok: true, duplicate: true };
     }
+    await this.maybeSyncSubscriptionEndFromPayment(tenant, body.payment);
     return { ok: true, duplicate: false };
   }
 
@@ -347,6 +350,7 @@ export class AsaasWebhookService {
     if (txOutcome === 'duplicate') {
       return { ok: true, duplicate: true };
     }
+    await this.maybeSyncSubscriptionEndFromPayment(tenant, body.payment);
     return { ok: true, duplicate: false };
   }
 
@@ -405,6 +409,32 @@ export class AsaasWebhookService {
       return { ok: true, duplicate: true };
     }
     return { ok: true, duplicate: false };
+  }
+
+  /**
+   * Após checkout via link RECURRENT, o Asaas cria assinatura sem "data de fim" no painel;
+   * alinha com `subscriptionDurationMonths` do link guardado em `financial_payment_links`.
+   */
+  private async maybeSyncSubscriptionEndFromPayment(
+    tenant: Tenant,
+    payment: AsaasWebhookBody['payment'] | undefined,
+  ): Promise<void> {
+    const subId = payment?.subscription?.trim();
+    const linkId = payment?.paymentLink?.trim();
+    if (!subId || !linkId) {
+      return;
+    }
+    try {
+      await this.subscriptionDurationSync.applyFromPaymentLink(
+        tenant,
+        subId,
+        linkId,
+      );
+    } catch (e) {
+      this.logger.warn(
+        `Sync endDate assinatura ${subId} ignorado (retry Asaas): ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
   }
 
   /** Eventos não mapeados: apenas dedup na tabela de webhooks (sem GET Asaas). */

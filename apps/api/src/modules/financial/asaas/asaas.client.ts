@@ -14,6 +14,8 @@ import {
   AsaasPaymentResponse,
   AsaasPaymentLinkCreateInput,
   AsaasPaymentLinkResponse,
+  AsaasSubscriptionResponse,
+  AsaasSubscriptionUpdateInput,
 } from './asaas.types';
 
 @Injectable()
@@ -184,6 +186,35 @@ export class AsaasClient {
     if (!res.ok) {
       const msg =
         data.errors?.[0]?.description ?? `Asaas paymentLinks ${res.status}`;
+      throw new InternalServerErrorException(msg);
+    }
+    return data;
+  }
+
+  /**
+   * Atualiza assinatura (ex.: `endDate` — data limite de cobranças).
+   * @see https://docs.asaas.com/reference/atualizar-assinatura-existente
+   */
+  async updateSubscription(input: {
+    apiKey: string;
+    subscriptionId: string;
+    body: AsaasSubscriptionUpdateInput;
+  }): Promise<AsaasSubscriptionResponse> {
+    const res = await fetch(
+      `${this.baseUrl}/subscriptions/${encodeURIComponent(input.subscriptionId)}`,
+      {
+        method: 'PUT',
+        headers: this.headers(input.apiKey),
+        body: JSON.stringify(input.body),
+      },
+    );
+    const data = (await res.json()) as AsaasSubscriptionResponse & {
+      errors?: Array<{ description?: string }>;
+    };
+    if (!res.ok) {
+      const msg =
+        data.errors?.[0]?.description ??
+        `Asaas subscriptions PUT ${res.status}`;
       throw new InternalServerErrorException(msg);
     }
     return data;
