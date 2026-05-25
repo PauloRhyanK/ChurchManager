@@ -1,10 +1,10 @@
 # Dev no servidor Debian (nginx-gateway + rede web_gateway).
 # 1) Na VPS: docker network create web_gateway
-# 2) Copiar .env.dev.example → .env e preencher ENCRYPTION_KEY, JWT_SECRET, etc.
+# 2) Copiar .env.example → .env e preencher ENCRYPTION_KEY, JWT_SECRET, etc.
 # 3) /etc/hosts (ou DNS local): api|admin|db.churchmanager.local → IP do nginx-gateway
 # 4) Colocar docker/nginx-gateway/nginx.conf no projeto nginx-gateway e recarregar nginx
 #
-# Arranque: docker compose -f docker-compose.dev.yml --env-file .env up -d --build
+# Arranque: docker compose -f docker-compose.dev.yml up -d --build
 
 name: churchmanager-dev
 

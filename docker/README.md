@@ -7,15 +7,15 @@ Ordem geral e variáveis (admin + API + 404): **[README na raiz — Início ráp
 ## Pré-requisitos
 
 - Docker e Docker Compose v2
-- Ficheiro `.env.docker` na **raiz do repositório** (não commitado), criado a partir de [`.env.docker.example`](../.env.docker.example)
+- Ficheiro `.env` na **raiz do repositório** (não commitado), criado a partir de [`.env.example`](../.env.example)
 
 ## Arranque rápido (Compose)
 
 Na raiz do monorepo:
 
 ```bash
-cp .env.docker.example .env.docker
-# Editar .env.docker: ENCRYPTION_KEY (64 hex), JWT_SECRET (≥32 caracteres), etc.
+cp .env.example .env
+# Editar .env: ENCRYPTION_KEY (64 hex), JWT_SECRET (≥32 caracteres), DATABASE_URL (host db), etc.
 
 docker compose build
 docker compose up
@@ -33,8 +33,8 @@ O Asaas não consegue chamar `localhost`. Guia completo: [docs/webhooks-local-de
 ### Forma mais simples com Docker: ngrok no Compose
 
 1. Obtém o **authtoken** em [dashboard ngrok](https://dashboard.ngrok.com/get-started/your-authtoken).
-2. No `.env.docker` (raiz), adiciona: `NGROK_AUTHTOKEN=seu_token_aqui`
-3. Sobe a stack **com o perfil `tunnel`** (o serviço `ngrok` lê `NGROK_AUTHTOKEN` a partir do mesmo `.env.docker` que a `api`):
+2. No `.env` (raiz), adiciona: `NGROK_AUTHTOKEN=seu_token_aqui`
+3. Sobe a stack **com o perfil `tunnel`** (o serviço `ngrok` lê `NGROK_AUTHTOKEN` do mesmo `.env` que a `api`):
 
 ```bash
 docker compose --profile tunnel up -d
@@ -56,23 +56,22 @@ Serviço opcional com perfil **`pgadmin`**. UI em `http://localhost:5050` (ou o 
 docker compose --profile pgadmin up -d
 ```
 
-- **Login na UI:** email e palavra por defeito `admin@example.com` / `admin`, a menos que definas `PGADMIN_DEFAULT_EMAIL` e `PGADMIN_DEFAULT_PASSWORD` no `.env.docker` (evita domínios `.local`, que o pgAdmin pode rejeitar).
+- **Login na UI:** email e palavra definidos em `PGADMIN_DEFAULT_EMAIL` e `PGADMIN_DEFAULT_PASSWORD` no `.env` (evita domínios `.local`, que o pgAdmin pode rejeitar).
 - **Ligar ao Postgres:** em *Register → Server*, aba *Connection*:
   - **Host:** `db` (nome do serviço no Compose; não uses `localhost` dentro do diálogo do servidor)
   - **Port:** `5432`
-  - **Maintenance database:** `church_manager`
-  - **Username:** `church`
-  - **Password:** `church` (igual ao `POSTGRES_PASSWORD` do serviço `db` no `docker-compose.yml`)
+  - **Maintenance database:** valor de `POSTGRES_DB` no `.env`
+  - **Username / Password:** `POSTGRES_USER` / `POSTGRES_PASSWORD` do `.env`
 
 Podes combinar perfis, por exemplo: `docker compose --profile pgadmin --profile tunnel up -d`.
 
-**Aviso:** credenciais fracas por defeito; muda-as no `.env.docker` e não expões o porto `5050` em redes não confiáveis.
+**Aviso:** não expões o porto `5050` em redes não confiáveis.
 
 ### pgAdmin em produção (`docker-compose.prod.yml`)
 
-A imagem oficial **só usa** `PGADMIN_DEFAULT_EMAIL` e `PGADMIN_DEFAULT_PASSWORD` quando cria a base interna pela **primeira vez**. Se o volume `pgadmin_data` já existir (primeira subida com outro `.env` ou defaults do compose), o login **não muda** quando editas o `.env.production` — continuam válidas as credenciais da primeira instalação (por exemplo `admin@example.com` / `admin` se foi isso que correu na altura).
+A imagem oficial **só usa** `PGADMIN_DEFAULT_EMAIL` e `PGADMIN_DEFAULT_PASSWORD` quando cria a base interna pela **primeira vez**. Se o volume `pgadmin_data` já existir (primeira subida com outro `.env` ou defaults do compose), o login **não muda** quando editas o `.env` — continuam válidas as credenciais da primeira instalação.
 
-Para aplicar o email/senha novos do `.env.production`: `docker compose -f docker-compose.prod.yml stop pgadmin`, apaga o volume que contém `pgadmin_data` (`docker volume ls` para ver o nome completo, ex. `pastadoprojeto_pgadmin_data`), depois `docker compose --env-file .env.production -f docker-compose.prod.yml up -d`. Isto **apaga só** dados da UI do pgAdmin (servidores guardados no pgAdmin, etc.), não apaga a base Postgres (`pgdata`).
+Para aplicar o email/senha novos do `.env`: `docker compose -f docker-compose.prod.yml stop pgadmin`, apaga o volume que contém `pgadmin_data` (`docker volume ls` para ver o nome completo, ex. `pastadoprojeto_pgadmin_data`), depois `docker compose -f docker-compose.prod.yml up -d`. Isto **apaga só** dados da UI do pgAdmin, não apaga a base Postgres (`pgdata`).
 
 ## O que ver nos logs (`docker compose logs -f api`)
 
@@ -97,7 +96,7 @@ Mensagens começam por `[entrypoint]`.
 
 ## Seed opcional
 
-`RUN_SEED=true` no `.env.docker` ou override — ver [docker-compose.override.example.yml](../docker-compose.override.example.yml). Não recomendado em produção a cada restart. Detalhe: [README raiz](../README.md#dev-quickstart).
+`RUN_SEED=true` no `.env` ou override — ver [docker-compose.override.example.yml](../docker-compose.override.example.yml). Não recomendado em produção a cada restart. Detalhe: [README raiz](../README.md#dev-quickstart).
 
 ## Compose: ficheiros úteis
 
@@ -105,7 +104,7 @@ Mensagens começam por `[entrypoint]`.
 |----------|-----|
 | [docker-compose.yml](../docker-compose.yml) | Postgres + API (dev); perfis opcionais `tunnel` (ngrok), `pgadmin` |
 | [docker-compose.dev.yml](../docker-compose.dev.yml) | Stack completa no servidor Debian (API + admin + Postgres + pgAdmin); rede externa `web_gateway` + [nginx-gateway](nginx-gateway/nginx.conf) |
-| [docker-compose.prod.yml](../docker-compose.prod.yml) | API + Postgres + pgAdmin; `POSTGRES_*` no [`.env.production.example`](../.env.production.example); arranque com `--env-file .env.production`. Rede `proxy-network` (NPM) |
+| [docker-compose.prod.yml](../docker-compose.prod.yml) | API + Postgres + pgAdmin; variáveis no `.env`. Rede `proxy-network` (NPM) |
 | `docker-compose.override.yml` | Opcional, local, ignorado pelo Git |
 
 ## Dev no servidor (nginx-gateway)
@@ -113,10 +112,10 @@ Mensagens começam por `[entrypoint]`.
 Para expor `api.churchmanager.local`, `admin.churchmanager.local` e `db.churchmanager.local` através de um nginx central (como no projeto `nginx-gateway` na VPS):
 
 1. Criar a rede partilhada: `docker network create web_gateway`
-2. No repositório ChurchManager: copiar [`.env.dev.example`](../.env.dev.example) → `.env`, preencher `ENCRYPTION_KEY` e `JWT_SECRET`
+2. No repositório ChurchManager: copiar [`.env.example`](../.env.example) → `.env`, preencher segredos e `API_URL` para o domínio do gateway
 3. Copiar [docker/nginx-gateway/nginx.conf](nginx-gateway/nginx.conf) para `~/workspace/nginx-gateway/nginx.conf` no servidor e recarregar o contentor nginx do gateway
 4. DNS ou `/etc/hosts`: os três hostnames apontam para o IP do nginx-gateway
-5. Na pasta do projeto: `docker compose -f docker-compose.dev.yml --env-file .env up -d --build`
+5. Na pasta do projeto: `docker compose -f docker-compose.dev.yml up -d --build`
 
 Portos só em `127.0.0.1` no host (acesso directo opcional): Postgres `5438`, API `4060`, admin `4061`, pgAdmin `5052`.
 
@@ -132,27 +131,21 @@ No pgAdmin → *Register Server*: Host `churchmanager-postgres`, Port `5432`, cr
 
 ### VPS: imagem do GHCR e erro `pull access denied for church-manager-api`
 
-O `docker-compose.prod.yml` usa `API_IMAGE` na linha `image:` do serviço `api`. O Compose **só** substitui essa variável a partir de:
+O `docker-compose.prod.yml` usa `API_IMAGE` na linha `image:` do serviço `api`. O Compose interpola a partir do ficheiro **`.env`** na raiz do projeto (carregado automaticamente).
 
-1. Variáveis exportadas no shell antes do comando, ou  
-2. Ficheiro passado com **`--env-file .env.production`**, ou  
-3. Ficheiro **`.env`** na mesma pasta (nome fixo; **não** é o `.env.production`).
-
-O bloco `env_file: .env.production` **não** alimenta a interpolação do `image:` — só injeta variáveis **dentro** do contentor.
-
-Por isso, na Locaweb, usa sempre:
+Na VPS:
 
 ```bash
 cd ~/projetos/churchmanager
 sudo docker login ghcr.io -u SEU_USUARIO --password-stdin   # token com read:packages
 
-sudo docker compose --env-file .env.production -f docker-compose.prod.yml pull api
-sudo docker compose --env-file .env.production -f docker-compose.prod.yml up -d api
+sudo docker compose -f docker-compose.prod.yml pull api
+sudo docker compose -f docker-compose.prod.yml up -d api
 ```
 
-Confirma que `.env.production` contém `API_IMAGE=ghcr.io/<user>/churchmanager/api:latest` (caminho exacto na aba **Packages** do GitHub). Sem `--env-file`, o Compose antigo caía no nome local `church-manager-api:latest` e o `pull` falhava.
+Confirma que `.env` contém `API_IMAGE=ghcr.io/<user>/churchmanager/api:latest` (caminho exacto na aba **Packages** do GitHub).
 
-**`sudo`:** se definires `API_IMAGE` só no utilizador normal, `sudo` não a herda; `--env-file` resolve porque lê o ficheiro como root.
+**Migração:** se ainda tens `.env.production` ou `.env.docker`, une o conteúdo num único `.env` e apaga os ficheiros antigos.
 
 ## Build manual da imagem da API
 

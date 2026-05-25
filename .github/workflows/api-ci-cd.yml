@@ -120,6 +120,6 @@ jobs:
           script: |
             cd ~/projetos/churchmanager
             git pull origin main
-            sudo docker compose --env-file .env.production -f docker-compose.prod.yml pull api
-            sudo docker compose --env-file .env.production -f docker-compose.prod.yml up -d api
+            sudo docker compose -f docker-compose.prod.yml pull api
+            sudo docker compose -f docker-compose.prod.yml up -d api
             sudo docker image prune -f

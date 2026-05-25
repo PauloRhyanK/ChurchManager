@@ -1,5 +1,4 @@
-# POSTGRES_*: valores por defeito no YAML; opcionalmente define no `.env.docker` e corre
-# `docker compose --env-file .env.docker up` para interpolação.
+# Variáveis: `.env` na raiz (copiar de `.env.example`). Compose carrega-o automaticamente.
 
 services:
   db:
@@ -25,9 +24,8 @@ services:
     ports:
       - "3000:3000"
     env_file:
-      - .env.docker
+      - .env
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-church}:${POSTGRES_PASSWORD:-church}@db:5432/${POSTGRES_DB:-church_manager}
       PORT: "3000"
     depends_on:
       db:
@@ -55,7 +53,7 @@ services:
       api:
         condition: service_healthy
     env_file:
-      - .env.docker
+      - .env
     command: ["http", "--log=stdout", "http://api:3000"]
     ports:
       - "4040:4040"
@@ -69,7 +67,7 @@ services:
       db:
         condition: service_healthy
     env_file:
-      - .env.docker
+      - .env
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}

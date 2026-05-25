@@ -1,12 +1,11 @@
 # Produção: API + Postgres + pgAdmin. Rede externa `proxy-network` (ex.: NPM).
-# 1) Copia `.env.production.example` → `.env.production` e preenche POSTGRES_*, ENCRYPTION_KEY, JWT_SECRET, etc.
-# 2) Na VPS (obrigatório --env-file para API_IMAGE): `docker compose --env-file .env.production -f docker-compose.prod.yml up -d`
-#    (assim POSTGRES_* e API_IMAGE são lidos na interpolação; alternativa: mesmas chaves num `.env` na raiz.)
+# 1) Copia `.env.example` → `.env` e preenche segredos, API_IMAGE, ADMIN_CORS_ORIGIN, etc.
+# 2) Na VPS: docker compose -f docker-compose.prod.yml up -d
 #
 # pgAdmin — leitura OBRIGATÓria (imagem oficial dpage/pgadmin4):
 # PGADMIN_DEFAULT_EMAIL / PGADMIN_DEFAULT_PASSWORD só definem o login na PRIMEIRA vez que o
 # contentor cria a base em /var/lib/pgadmin. Depois disso ficam guardados no VOLUME Docker
-# `pgadmin_data`. Mudar o `.env.production` NÃO altera email/senha já criados.
+# `pgadmin_data`. Mudar o `.env` NÃO altera email/senha já criados.
 #
 # Se o login falhar com credenciais “certas” no .env:
 #   1) Tenta primeiro o login que foi usado na primeira subida (ex.: admin@example.com / admin).
@@ -14,22 +13,18 @@
 #      Nome real do volume: `docker volume ls` → procura `pgadmin_data` (ex.: churchmanager_pgadmin_data).
 #      docker compose -f docker-compose.prod.yml stop pgadmin
 #      docker volume rm <nome_completo_do_volume>
-#      docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+#      docker compose -f docker-compose.prod.yml up -d
 
 services:
   api:
-    # Interpolação: lê API_IMAGE do ambiente do processo `docker compose` ou de `--env-file`.
-    # NÃO vem de `env_file:` abaixo (isso só entra no contentor). Sem API_IMAGE definida aqui,
-    # o Compose falha com mensagem clara — evita pull de `church-manager-api:latest` por engano.
-    image: "${API_IMAGE:?Defina API_IMAGE e passe --env-file .env.production ao docker compose. Ver .env.production.example e docker/README.md}"
+    image: "${API_IMAGE:?Defina API_IMAGE no .env. Ver .env.example e docker/README.md}"
     build:
       context: ./apps/api
       dockerfile: Dockerfile
     env_file:
-      - .env.production
+      - .env
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-SenhaSuperForte123}@db:5432/${POSTGRES_DB:-churchmanager_db}
     restart: unless-stopped
     depends_on:
       - db
@@ -57,7 +52,7 @@ services:
       - default
 
   # NPM: Forward Hostname = churchmanager_pgadmin, Porta = 80
-  # No pgAdmin → Register Server: Host = db, Port = 5432, user/pass = POSTGRES_USER / POSTGRES_PASSWORD (.env.production)
+  # No pgAdmin → Register Server: Host = db, Port = 5432, user/pass = POSTGRES_USER / POSTGRES_PASSWORD (.env)
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: churchmanager_pgadmin
@@ -65,10 +60,9 @@ services:
     depends_on:
       - db
     env_file:
-      - .env.production
+      - .env
     environment:
       PGADMIN_CONFIG_SERVER_MODE: "True"
-      # Atrás do NPM/proxy; senão cookies podem falhar no login (documentação pgAdmin / reverse proxy).
       PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "False"
     volumes:
       - pgadmin_data:/var/lib/pgadmin
