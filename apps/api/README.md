@@ -23,31 +23,22 @@ O painel admin mostra **Plataforma → Igrejas** só para esse papel. Em **produ
 
 Compose na raiz: [docker/README.md](../../docker/README.md). Copiar [`.env.example`](../../.env.example) → `.env` na raiz. O entrypoint da API aplica migrações ao arranque; seed só com `RUN_SEED=true`. Prisma CLI: `npm run prisma:migrate` (lê `../../.env` via dotenv-cli).
 
-### Scripts operacionais
+### Cobrança “1 mês” que gerava assinatura prolongada
 
-O `.env` pode manter `DATABASE_URL` com host `db` / `churchmanager-postgres` (válido **dentro** do Docker). Para correr scripts **no host**, não altere o ficheiro: passe a URL na linha de comando (o `dotenv` não sobrescreve variáveis já definidas no shell).
+**Prevenção (código neste PR):** `subscriptionDurationMonths === 1` → `DETACHED`; presets normalizados; links legados `RECURRENT`+1 mês não são reutilizados.
 
-**Opção 1 — host** (exige Postgres acessível; no dev o compose expõe `127.0.0.1:5438`):
+**BD (automático no deploy):** migrações `20260430200000_normalize_1month_presets` e `20260525210000_deactivate_1month_recurrent_payment_links`.
+
+**Asaas (uma vez por ambiente, após deploy):** no host com Postgres acessível (`127.0.0.1:5438` no dev):
 
 ```bash
 cd apps/api
 DATABASE_URL="postgresql://postgres:SENHA@127.0.0.1:5438/churchmanager_db" \
-  npm run script:backfill-subscription-end-dates -- --dry-run
+  npm run script:cleanup-1month-recurrent-links -- --dry-run
+# sem --dry-run para aplicar: DELETE link + endDate na assinatura (1 período)
 ```
 
-**Opção 2 — Docker** (BD só na rede interna; sem mudar `.env`), na **raiz** do repo:
-
-```bash
-docker compose -f docker-compose.dev.yml run --rm --entrypoint sh \
-  -v "$PWD/apps/api/scripts:/app/scripts:ro" \
-  -v "$PWD/apps/api/src:/app/src:ro" \
-  churchmanager-backend-api \
-  -c "./node_modules/.bin/tsx scripts/backfill-subscription-end-dates.ts --dry-run"
-```
-
-Cleanup (`script:cleanup-1month-recurrent-links`): mesma ideia — `DATABASE_URL=...` no host ou `compose run` com os volumes acima.
-
-Backfill: assinaturas com `subscriptionDurationMonths >= 2` e pares nos webhooks. Cleanup: links antigos “mensal + 1 mês” no Asaas + `active=false` na BD.
+Novos pedidos de 1 mês passam a gerar cobrança única (`DETACHED`).
 
 ## Webhooks em desenvolvimento local
 

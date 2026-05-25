@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateLinkPresetDto } from './dto/create-link-preset.dto';
 import { UpdateLinkPresetDto } from './dto/update-link-preset.dto';
 import { toValueCents } from './payment-links-reuse.util';
+import { normalizeSinglePaymentCharge } from './payment-link-charge-intent';
 import { toPrismaFinancialLinkModule } from './payment-links-reuse.types';
 
 @Injectable()
@@ -37,6 +38,10 @@ export class PaymentLinkPresetsService {
   }
 
   async createForTenant(tenantId: string, dto: CreateLinkPresetDto) {
+    const charge = normalizeSinglePaymentCharge({
+      isMonthly: dto.isMonthly,
+      subscriptionDurationMonths: dto.subscriptionDurationMonths,
+    });
     const row = await this.prisma.financialLinkPreset.create({
       data: {
         tenantId,
@@ -44,9 +49,9 @@ export class PaymentLinkPresetsService {
         presetKey: dto.presetKey,
         name: dto.name,
         sourceKey: dto.sourceKey,
-        isMonthly: dto.isMonthly,
-        subscriptionDurationMonths: dto.isMonthly
-          ? dto.subscriptionDurationMonths ?? null
+        isMonthly: charge.isMonthly,
+        subscriptionDurationMonths: charge.isMonthly
+          ? charge.subscriptionDurationMonths ?? null
           : null,
         valueCents: toValueCents(dto.value),
         successUrl: dto.successUrl?.trim() || null,
@@ -65,8 +70,14 @@ export class PaymentLinkPresetsService {
       throw new NotFoundException('Preset de link não encontrado');
     }
 
-    const nextIsMonthly = dto.isMonthly ?? existing.isMonthly;
     const nextSuccessUrl = dto.successUrl !== undefined ? dto.successUrl : existing.successUrl;
+    const mergedCharge = normalizeSinglePaymentCharge({
+      isMonthly: dto.isMonthly ?? existing.isMonthly,
+      subscriptionDurationMonths:
+        dto.subscriptionDurationMonths !== undefined
+          ? dto.subscriptionDurationMonths
+          : existing.subscriptionDurationMonths,
+    });
 
     const row = await this.prisma.financialLinkPreset.update({
       where: { id },
@@ -77,9 +88,9 @@ export class PaymentLinkPresetsService {
         ...(dto.presetKey ? { presetKey: dto.presetKey } : {}),
         ...(dto.name ? { name: dto.name } : {}),
         ...(dto.sourceKey ? { sourceKey: dto.sourceKey } : {}),
-        ...(dto.isMonthly !== undefined ? { isMonthly: dto.isMonthly } : {}),
-        subscriptionDurationMonths: nextIsMonthly
-          ? dto.subscriptionDurationMonths ?? existing.subscriptionDurationMonths
+        isMonthly: mergedCharge.isMonthly,
+        subscriptionDurationMonths: mergedCharge.isMonthly
+          ? mergedCharge.subscriptionDurationMonths ?? null
           : null,
         ...(dto.value !== undefined ? { valueCents: toValueCents(dto.value) } : {}),
         ...(dto.successUrl !== undefined

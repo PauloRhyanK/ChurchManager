@@ -18,6 +18,10 @@ import {
   toPrismaLinkMode,
 } from './payment-links-reuse.types';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  isLegacyWrongOneMonthRecurrentLink,
+  normalizeSinglePaymentCharge,
+} from './payment-link-charge-intent';
 
 interface BaseResolvedLinkData {
   module: FinancialLinkModule;
@@ -124,8 +128,7 @@ export class PaymentLinksOrchestratorService {
 
     if (existing?.active) {
       const legacyRecurrentOneMonth =
-        existing.isMonthly === true &&
-        existing.subscriptionDurationMonths === 1 &&
+        isLegacyWrongOneMonthRecurrentLink(existing) &&
         !data.isMonthly;
       if (!legacyRecurrentOneMonth) {
         return {
@@ -287,21 +290,10 @@ export class PaymentLinksOrchestratorService {
     };
   }
 
-  /**
-   * `subscriptionDurationMonths === 1` significa uma única cobrança; link Asaas deve ser
-   * `DETACHED`, não assinatura mensal (evita 2ª cobrança no mês seguinte).
-   */
   private normalizeSinglePaymentDuration(
     data: BaseResolvedLinkData,
   ): BaseResolvedLinkData {
-    if (data.isMonthly && data.subscriptionDurationMonths === 1) {
-      return {
-        ...data,
-        isMonthly: false,
-        subscriptionDurationMonths: undefined,
-      };
-    }
-    return data;
+    return normalizeSinglePaymentCharge(data);
   }
 
   private buildReuseKey(

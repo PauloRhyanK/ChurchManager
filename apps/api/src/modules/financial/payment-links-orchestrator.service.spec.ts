@@ -28,6 +28,9 @@ test('orchestrator: reutiliza link existente por reuseKey', async () => {
         isMonthly: true,
         subscriptionDurationMonths: 12,
       }),
+      update: async () => {
+        throw new Error('não deveria desactivar link válido');
+      },
     },
     financialLinkPreset: {
       findUnique: async () => ({
@@ -149,4 +152,65 @@ test('orchestrator: preset 1 mês normaliza para pagamento único ao criar', asy
   assert.equal(generationOpts!.subscriptionDurationMonths, undefined);
   assert.equal(persistPayload!.isMonthly, false);
   assert.equal(persistPayload!.subscriptionDurationMonths, null);
+});
+
+test('orchestrator: não reutiliza link antigo RECURRENT 1 mês — gera novo DETACHED', async () => {
+  let deactivated = false;
+  let persistPayload: { isMonthly: boolean } | undefined;
+  const prisma = {
+    financialPaymentLink: {
+      findUnique: async () => ({
+        id: 'old-row',
+        providerLinkId: 'link-old-recurrent',
+        url: 'https://www.asaas.com/c/old',
+        sourceKey: 'cotas',
+        active: true,
+        isMonthly: true,
+        subscriptionDurationMonths: 1,
+      }),
+      update: async () => {
+        deactivated = true;
+      },
+      create: async (args: { data: { isMonthly: boolean } }) => {
+        persistPayload = args.data;
+      },
+    },
+    financialLinkPreset: {
+      findUnique: async () => ({
+        id: 'preset-id',
+        sourceKey: 'cotas',
+        isMonthly: true,
+        subscriptionDurationMonths: 1,
+        valueCents: 5000,
+        successUrl: null,
+        autoRedirect: null,
+        active: true,
+        name: 'Cota 1 mês',
+      }),
+    },
+  };
+  let generationOpts: { isMonthly: boolean; subscriptionDurationMonths?: number };
+  const generation = {
+    create: async (_t: unknown, opts: typeof generationOpts) => {
+      generationOpts = opts;
+      return {
+        id: 'link-new-detached',
+        url: 'https://www.asaas.com/c/new',
+        metadata: { source: 'cotas', tenant: 'igreja-teste' },
+      };
+    },
+  };
+  const service = new PaymentLinksOrchestratorService(
+    prisma as never,
+    generation as never,
+  );
+  const out = await service.createOrReusePublicCotasLink(tenant(), {
+    reuseMode: 'preset_global',
+    presetKey: 'cotas_1x',
+  });
+  assert.equal(deactivated, true);
+  assert.equal(out.id, 'link-new-detached');
+  assert.equal(out.metadata.reused, false);
+  assert.equal(generationOpts!.isMonthly, false);
+  assert.equal(persistPayload!.isMonthly, false);
 });

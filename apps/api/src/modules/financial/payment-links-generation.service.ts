@@ -9,6 +9,7 @@ import { TenantCredentialsService } from '../tenants/tenant-credentials.service'
 import { AsaasClient } from './asaas/asaas.client';
 import type { AsaasPaymentLinkCreateInput } from './asaas/asaas.types';
 import { buildPaymentLinkExternalReference } from './payment-link-external-reference';
+import { isSinglePaymentCharge } from './payment-link-charge-intent';
 import { computeSubscriptionEndDateYmd } from './payment-link-subscription-end';
 
 /** `sourceKey` para o endpoint público de cotas (webhooks / relatórios). */
@@ -67,8 +68,7 @@ export class PaymentLinksGenerationService {
       opts.sourceKey,
     );
 
-    const isSingleCharge =
-      !opts.isMonthly || opts.subscriptionDurationMonths === 1;
+    const isSingleCharge = isSinglePaymentCharge(opts);
 
     const body: AsaasPaymentLinkCreateInput = {
       name: opts.asaasLinkName,
