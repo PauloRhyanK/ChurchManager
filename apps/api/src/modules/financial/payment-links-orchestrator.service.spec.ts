@@ -25,6 +25,8 @@ test('orchestrator: reutiliza link existente por reuseKey', async () => {
         url: 'https://www.asaas.com/c/existing',
         sourceKey: 'cotas',
         active: true,
+        isMonthly: true,
+        subscriptionDurationMonths: 12,
       }),
     },
     financialLinkPreset: {

@@ -28,10 +28,6 @@ RUN npm ci --omit=dev \
 
 COPY prisma ./prisma
 COPY --from=builder /app/dist ./dist
-# Scripts operacionais (backfill, cleanup) — NestFactory via tsx + src
-COPY scripts ./scripts
-COPY src ./src
-COPY tsconfig.json nest-cli.json ./
 
 RUN npx prisma generate
 

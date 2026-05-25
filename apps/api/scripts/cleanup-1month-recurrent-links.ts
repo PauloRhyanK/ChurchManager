@@ -2,20 +2,20 @@
  * One-shot: remove no Asaas os payment links com configuração antiga (mensal + 1 mês)
  * e marca-os `active = false` na BD para forçar regeneração no próximo pedido.
  *
- * Executar a partir da pasta `apps/api` (variáveis `.env` como no servidor):
- *
- *   npx tsx scripts/cleanup-1month-recurrent-links.ts
+ * No host (apps/api):
+ *   npm run script:cleanup-1month-recurrent-links
  *
  * Idempotente: links já removidos (404 no DELETE) contam como sucesso e são desactivados na BD.
  */
+import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import { ScriptsAppModule } from '../src/scripts/scripts-app.module';
+import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AsaasClient } from '../src/modules/financial/asaas/asaas.client';
 import { TenantCredentialsService } from '../src/modules/tenants/tenant-credentials.service';
 
 async function main() {
-  const app = await NestFactory.createApplicationContext(ScriptsAppModule, {
+  const app = await NestFactory.createApplicationContext(AppModule, {
     logger: ['error', 'warn'],
   });
   try {

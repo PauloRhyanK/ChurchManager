@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   HttpException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   ServiceUnavailableException,
@@ -22,7 +23,7 @@ import {
 export class AsaasClient {
   private readonly baseUrl: string;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(@Inject(ConfigService) private readonly config: ConfigService) {
     this.baseUrl =
       this.config.get<string>('ASAAS_API_URL') ??
       'https://api-sandbox.asaas.com/v3';

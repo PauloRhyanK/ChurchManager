@@ -122,16 +122,26 @@ export class PaymentLinksOrchestratorService {
       },
     });
 
-    if (existing && existing.active) {
-      return {
-        id: existing.providerLinkId,
-        url: existing.url,
-        metadata: {
-          source: existing.sourceKey,
-          tenant: tenant.slug,
-          reused: true,
-        },
-      };
+    if (existing?.active) {
+      const legacyRecurrentOneMonth =
+        existing.isMonthly === true &&
+        existing.subscriptionDurationMonths === 1 &&
+        !data.isMonthly;
+      if (!legacyRecurrentOneMonth) {
+        return {
+          id: existing.providerLinkId,
+          url: existing.url,
+          metadata: {
+            source: existing.sourceKey,
+            tenant: tenant.slug,
+            reused: true,
+          },
+        };
+      }
+      await this.prisma.financialPaymentLink.update({
+        where: { id: existing.id },
+        data: { active: false },
+      });
     }
 
     const created = await this.generation.create(tenant, {

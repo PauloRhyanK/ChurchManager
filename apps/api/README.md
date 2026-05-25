@@ -23,28 +23,20 @@ O painel admin mostra **Plataforma → Igrejas** só para esse papel. Em **produ
 
 Compose na raiz: [docker/README.md](../../docker/README.md). Copiar [`.env.example`](../../.env.example) → `.env` na raiz. O entrypoint da API aplica migrações ao arranque; seed só com `RUN_SEED=true`. Prisma CLI: `npm run prisma:migrate` (lê `../../.env` via dotenv-cli).
 
-### Script: data de fim em assinaturas Asaas antigas
+A API corre no contentor; **scripts operacionais correm no host** (ver abaixo).
 
-Se assinaturas criadas antes do sync por webhook ficaram sem “Data de fim da assinatura” no painel Asaas:
+### Scripts operacionais (no host)
+
+Com Postgres no Docker, use no `.env` da raiz `DATABASE_URL` com `127.0.0.1` e a porta publicada (ex. `5438` no `docker-compose.dev.yml`), não o hostname interno do compose.
 
 ```bash
 cd apps/api
 npm run script:backfill-subscription-end-dates -- --dry-run
 npm run script:backfill-subscription-end-dates
-# só uma igreja:
-npm run script:backfill-subscription-end-dates -- --tenant=demo
+npm run script:cleanup-1month-recurrent-links
 ```
 
-**Docker** (após `docker compose ... up -d --build`; `DATABASE_URL` e credenciais vêm do `env_file` do serviço):
-
-```bash
-docker exec -it churchmanager-dev-churchmanager-backend-api-1 sh -c \
-  "cd /app && npx tsx scripts/backfill-subscription-end-dates.ts --dry-run"
-```
-
-O nome do contentor pode variar (`docker ps`); em produção use o contentor da API equivalente.
-
-Requer transacções com `asaasSubscriptionId` + `asaasPaymentLinkId` em `raw_payload_ref` (webhooks já processados) e link em `financial_payment_links` com `subscriptionDurationMonths >= 2`.
+Backfill: assinaturas com `subscriptionDurationMonths >= 2` e pares subscription/link nos webhooks. Cleanup: remove links antigos “mensal + 1 mês” no Asaas e marca `active=false` na BD.
 
 ## Webhooks em desenvolvimento local
 
@@ -75,7 +67,4 @@ Prefixo global: `api`.
 
 Ver [docs/financial-schema-and-webhooks.md](../../docs/financial-schema-and-webhooks.md) na raiz do monorepo.
 Ver [docs/security-secrets.md](../../docs/security-secrets.md) para operação de segredo em produção.
-
-### Scripts operacionais
-
-- **Limpar links antigos “1 mês recorrente”** (remove no Asaas e marca `active=false` na BD): `npx tsx scripts/cleanup-1month-recurrent-links.ts` — local em `apps/api`, ou no contentor: `docker exec … sh -c "cd /app && npx tsx scripts/cleanup-1month-recurrent-links.ts"`. Ver comentário no topo do ficheiro.
+Ver [docs/api/public-payment-links.md](../../docs/api/public-payment-links.md) (cotas, presets, cobrança única vs assinatura).

@@ -9,16 +9,14 @@
  * A data de referência para calcular endDate é a mais antiga entre:
  *   primeira transação do par, createdAt da assinatura local, createdAt do link.
  *
- * Local (apps/api, lê ../../.env):
- *   npx tsx scripts/backfill-subscription-end-dates.ts --dry-run
+ * No host (apps/api):
+ *   npm run script:backfill-subscription-end-dates -- --dry-run
  *
- * Docker (após rebuild da API; env do compose):
- *   docker exec -it <api-container> sh -c "cd /app && npx tsx scripts/backfill-subscription-end-dates.ts --dry-run"
- *
- * Opcional: --tenant=demo  (só um slug)
+ * Opcional: --tenant=demo
  */
+import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import { ScriptsAppModule } from '../src/scripts/scripts-app.module';
+import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AsaasSubscriptionDurationSyncService } from '../src/modules/financial/asaas-subscription-duration-sync.service';
 
@@ -54,7 +52,7 @@ function readMeta(raw: unknown): {
 
 async function main() {
   const { dryRun, tenantSlug } = parseArgs(process.argv.slice(2));
-  const app = await NestFactory.createApplicationContext(ScriptsAppModule, {
+  const app = await NestFactory.createApplicationContext(AppModule, {
     logger: ['error', 'warn', 'log'],
   });
 
