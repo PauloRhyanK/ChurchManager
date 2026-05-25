@@ -27,11 +27,12 @@ export class AsaasSubscriptionDurationSyncService {
     tenant: Tenant,
     asaasSubscriptionId: string,
     asaasPaymentLinkId: string,
-  ): Promise<void> {
+    options?: { referenceDate?: Date },
+  ): Promise<{ applied: boolean; endDate?: string; months?: number }> {
     const subId = asaasSubscriptionId.trim();
     const linkId = asaasPaymentLinkId.trim();
     if (!subId || !linkId || !tenant.asaasApiKey) {
-      return;
+      return { applied: false };
     }
 
     const stored = await this.prisma.financialPaymentLink.findFirst({
@@ -39,17 +40,20 @@ export class AsaasSubscriptionDurationSyncService {
       select: {
         isMonthly: true,
         subscriptionDurationMonths: true,
+        createdAt: true,
       },
     });
     if (!stored?.isMonthly) {
-      return;
+      return { applied: false };
     }
     const months = stored.subscriptionDurationMonths;
     if (months == null || months < 2) {
-      return;
+      return { applied: false };
     }
 
-    const endDate = computeSubscriptionEndDateYmd(months);
+    const from =
+      options?.referenceDate ?? stored.createdAt ?? new Date();
+    const endDate = computeSubscriptionEndDateYmd(months, from);
     const apiKey = this.tenantCredentials.getDecryptedApiKey(tenant.asaasApiKey);
     try {
       await this.asaas.updateSubscription({
@@ -60,6 +64,7 @@ export class AsaasSubscriptionDurationSyncService {
       this.logger.log(
         `Assinatura Asaas ${subId}: endDate=${endDate} (${months} meses, link ${linkId})`,
       );
+      return { applied: true, endDate, months };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       this.logger.error(

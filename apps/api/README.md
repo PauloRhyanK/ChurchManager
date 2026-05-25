@@ -23,6 +23,20 @@ O painel admin mostra **Plataforma → Igrejas** só para esse papel. Em **produ
 
 Compose na raiz: [docker/README.md](../../docker/README.md). Copiar [`.env.example`](../../.env.example) → `.env` na raiz. O entrypoint da API aplica migrações ao arranque; seed só com `RUN_SEED=true`. Prisma CLI: `npm run prisma:migrate` (lê `../../.env` via dotenv-cli).
 
+### Script: data de fim em assinaturas Asaas antigas
+
+Se assinaturas criadas antes do sync por webhook ficaram sem “Data de fim da assinatura” no painel Asaas:
+
+```bash
+cd apps/api
+npm run script:backfill-subscription-end-dates -- --dry-run
+npm run script:backfill-subscription-end-dates
+# só uma igreja:
+npm run script:backfill-subscription-end-dates -- --tenant=demo
+```
+
+Requer transacções com `asaasSubscriptionId` + `asaasPaymentLinkId` em `raw_payload_ref` (webhooks já processados) e link em `financial_payment_links` com `subscriptionDurationMonths >= 2`.
+
 ## Webhooks em desenvolvimento local
 
 O Asaas precisa de um URL público (HTTPS). Ver [docs/webhooks-local-dev-ngrok.md](../../docs/webhooks-local-dev-ngrok.md) (ngrok + configuração no Asaas).

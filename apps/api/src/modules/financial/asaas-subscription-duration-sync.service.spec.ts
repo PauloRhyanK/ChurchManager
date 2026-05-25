@@ -40,8 +40,39 @@ test('applyFromPaymentLink: envia endDate para assinatura mensal 6 meses', async
     credentials as never,
     asaas as never,
   );
-  await svc.applyFromPaymentLink(tenant(), 'sub_abc', 'link_2e3');
-  assert.equal(updateBody?.endDate, computeSubscriptionEndDateYmd(6));
+  const result = await svc.applyFromPaymentLink(tenant(), 'sub_abc', 'link_2e3');
+  assert.equal(result.applied, true);
+  assert.equal(updateBody?.endDate, result.endDate);
+  assert.equal(result.endDate, computeSubscriptionEndDateYmd(6));
+});
+
+test('applyFromPaymentLink: usa referenceDate para backfill', async () => {
+  let updateBody: { endDate?: string } | undefined;
+  const ref = new Date('2026-05-25T12:00:00.000Z');
+  const prisma = {
+    financialPaymentLink: {
+      findFirst: async () => ({
+        isMonthly: true,
+        subscriptionDurationMonths: 6,
+        createdAt: new Date('2026-01-01'),
+      }),
+    },
+  };
+  const asaas = {
+    updateSubscription: async (input: { body: { endDate?: string } }) => {
+      updateBody = input.body;
+      return { id: 'sub_1' };
+    },
+  };
+  const svc = new AsaasSubscriptionDurationSyncService(
+    prisma as never,
+    { getDecryptedApiKey: () => 'k' } as never,
+    asaas as never,
+  );
+  await svc.applyFromPaymentLink(tenant(), 'sub_abc', 'link_x', {
+    referenceDate: ref,
+  });
+  assert.equal(updateBody?.endDate, computeSubscriptionEndDateYmd(6, ref));
 });
 
 test('applyFromPaymentLink: ignora cobrança única (1 mês)', async () => {
