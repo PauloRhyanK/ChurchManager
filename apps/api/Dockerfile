@@ -27,6 +27,9 @@ RUN npm ci --omit=dev \
   && npm install prisma@6.19.3 tsx@4.19.3 --no-save
 
 COPY prisma ./prisma
+COPY scripts ./scripts
+COPY src ./src
+COPY tsconfig.json ./
 COPY --from=builder /app/dist ./dist
 
 RUN npx prisma generate
