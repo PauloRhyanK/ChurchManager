@@ -35,7 +35,21 @@ Compose na raiz: [docker/README.md](../../docker/README.md). Copiar [`.env.examp
 cd apps/api
 DATABASE_URL="postgresql://postgres:SENHA@127.0.0.1:5438/churchmanager_db" \
   npm run script:cleanup-1month-recurrent-links -- --dry-run
-# sem --dry-run: DELETE link + endDate na assinatura; se o Asaas recusar PUT, DELETE da assinatura
+# sem --dry-run, por assinatura legada:
+#   - cancela cobranças extras pendentes (DELETE /payments)
+#   - estorna cobranças extras já pagas (POST /payments/{id}/refund)
+#   - encerra assinatura (DELETE /subscriptions; fallback PUT endDate)
+# Mantém só a primeira cobrança. Consulta GET /payments?paymentLink=… se a BD não tiver sub_id.
+```
+
+Se `linksWithoutSubscription` no JSON tiver IDs, esses links ficaram só desactivados na BD — não houve pagamento/assinatura para corrigir no Asaas, ou falta histórico de webhook.
+
+Diagnóstico na BD (produção):
+
+```sql
+SELECT provider_link_id, active, created_at
+FROM financial_payment_links
+WHERE is_monthly = true AND subscription_duration_months = 1;
 ```
 
 Novos pedidos de 1 mês passam a gerar cobrança única (`DETACHED`).

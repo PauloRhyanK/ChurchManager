@@ -28,6 +28,10 @@ export interface AsaasPaymentResponse {
   bankSlipUrl?: string;
   invoiceNumber?: string;
   externalReference?: string;
+  /** ID da assinatura (`sub_...`) quando a cobrança pertence a uma assinatura. */
+  subscription?: string;
+  /** ID do payment link no Asaas. */
+  paymentLink?: string;
   /** PIX */
   pixTransaction?: {
     encodedImage?: string;

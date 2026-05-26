@@ -128,6 +128,88 @@ export class AsaasClient {
     return data;
   }
 
+  /** Lista cobranças (ex.: filtro `paymentLink` para achar assinatura de um link legado). */
+  async listPayments(input: {
+    apiKey: string;
+    paymentLink?: string;
+    subscription?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<AsaasPaymentResponse[]> {
+    const params = new URLSearchParams();
+    if (input.paymentLink?.trim()) {
+      params.set('paymentLink', input.paymentLink.trim());
+    }
+    if (input.subscription?.trim()) {
+      params.set('subscription', input.subscription.trim());
+    }
+    params.set('limit', String(input.limit ?? 100));
+    if (input.offset != null) {
+      params.set('offset', String(input.offset));
+    }
+    const res = await fetch(`${this.baseUrl}/payments?${params}`, {
+      method: 'GET',
+      headers: this.headers(input.apiKey),
+    });
+    const data = (await res.json()) as {
+      data?: AsaasPaymentResponse[];
+      errors?: Array<{ description?: string }>;
+    };
+    if (!res.ok) {
+      const msg =
+        data.errors?.[0]?.description ?? `Asaas payments GET ${res.status}`;
+      throw new InternalServerErrorException(msg);
+    }
+    return data.data ?? [];
+  }
+
+  /** Remove cobrança pendente/vencida (DELETE /payments/{id}). */
+  async deletePayment(input: {
+    apiKey: string;
+    paymentId: string;
+  }): Promise<void> {
+    const res = await fetch(
+      `${this.baseUrl}/payments/${encodeURIComponent(input.paymentId)}`,
+      {
+        method: 'DELETE',
+        headers: this.headers(input.apiKey),
+      },
+    );
+    if (res.ok || res.status === 404) {
+      return;
+    }
+    const data = (await res.json().catch(() => ({}))) as {
+      errors?: Array<{ description?: string }>;
+    };
+    const msg =
+      data.errors?.[0]?.description ?? `Asaas payments DELETE ${res.status}`;
+    throw new InternalServerErrorException(msg);
+  }
+
+  /** Estorna cobrança recebida/confirmada (POST /payments/{id}/refund). */
+  async refundPayment(input: {
+    apiKey: string;
+    paymentId: string;
+  }): Promise<void> {
+    const res = await fetch(
+      `${this.baseUrl}/payments/${encodeURIComponent(input.paymentId)}/refund`,
+      {
+        method: 'POST',
+        headers: this.headers(input.apiKey),
+        body: JSON.stringify({}),
+      },
+    );
+    if (res.ok) {
+      return;
+    }
+    const data = (await res.json().catch(() => ({}))) as {
+      errors?: Array<{ description?: string }>;
+    };
+    const msg =
+      data.errors?.[0]?.description ?? `Asaas payments refund ${res.status}`;
+    throw new InternalServerErrorException(msg);
+  }
+
   async createPayment(input: {
     apiKey: string;
     customerId: string;

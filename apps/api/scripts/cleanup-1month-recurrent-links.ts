@@ -1,10 +1,15 @@
 /**
- * Limpa legado "mensal + 1 mês" que gerou RECURRENT no Asaas:
- * - DELETE do payment link no Asaas (se ainda existir)
- * - active = false na BD (a migration também desactiva links activos no deploy)
- * - PUT endDate na assinatura (1 período); se o Asaas recusar, DELETE da assinatura
+ * Limpa legado "mensal + 1 mês" (RECURRENT no Asaas). Prioridade: assinatura.
  *
- * Host (DATABASE_URL com 127.0.0.1:5438 no dev, se Postgres exposto):
+ * Por assinatura encontrada:
+ *   1) Mantém só a primeira cobrança (paga ou mais antiga por vencimento)
+ *   2) Cancela cobranças extras pendentes/vencidas (DELETE /payments)
+ *   3) Estorna cobranças extras já recebidas (POST /payments/{id}/refund)
+ *   4) Encerra a assinatura (DELETE /subscriptions; fallback PUT endDate)
+ *
+ * Também: active=false na BD; tenta DELETE do payment link (pode falhar se já houve cobrança).
+ *
+ * Host:
  *   DATABASE_URL="postgresql://..." npm run script:cleanup-1month-recurrent-links -- --dry-run
  */
 import 'reflect-metadata';
@@ -14,6 +19,8 @@ import { PrismaService } from '../src/prisma/prisma.service';
 import { AsaasClient } from '../src/modules/financial/asaas/asaas.client';
 import { TenantCredentialsService } from '../src/modules/tenants/tenant-credentials.service';
 import { computeSubscriptionEndDateYmd } from '../src/modules/financial/payment-link-subscription-end';
+import { repairLegacySubscription } from './lib/repair-legacy-subscription';
+import type { FinancialPaymentLink, Tenant } from '@prisma/client';
 
 function parseArgs(argv: string[]) {
   return { dryRun: argv.includes('--dry-run') };
@@ -38,6 +45,187 @@ function readMeta(raw: unknown): {
   return { asaasSubscriptionId: sub, asaasPaymentLinkId: link };
 }
 
+function rawReferencesLinkId(raw: unknown, linkId: string): boolean {
+  if (raw === null || raw === undefined) {
+    return false;
+  }
+  try {
+    return JSON.stringify(raw).includes(linkId);
+  } catch {
+    return false;
+  }
+}
+
+type SubscriptionEndEntry = {
+  tenantId: string;
+  subscriptionId: string;
+  apiKey: string;
+  endDate: string;
+  paymentLink: string;
+  source: string;
+  referenceDate: Date;
+};
+
+type LegacyLinkRow = FinancialPaymentLink & { tenant: Tenant };
+
+async function collectSubscriptionEnds(
+  prisma: PrismaService,
+  asaas: AsaasClient,
+  credentials: TenantCredentialsService,
+  rows: LegacyLinkRow[],
+): Promise<Map<string, SubscriptionEndEntry>> {
+  const linkIds = new Set(rows.map((r) => r.providerLinkId));
+  const rowByLinkId = new Map(rows.map((r) => [r.providerLinkId, r]));
+  const tenantIds = [...new Set(rows.map((r) => r.tenantId))];
+  const ends = new Map<string, SubscriptionEndEntry>();
+
+  const add = (
+    row: LegacyLinkRow,
+    subId: string,
+    referenceDate: Date,
+    source: string,
+  ) => {
+    if (!row.tenant.asaasApiKey) {
+      return;
+    }
+    const key = `${row.tenantId}|${subId}`;
+    const endDate = computeSubscriptionEndDateYmd(1, referenceDate);
+    const apiKey = credentials.getDecryptedApiKey(row.tenant.asaasApiKey);
+    const existing = ends.get(key);
+    if (!existing || referenceDate < existing.referenceDate) {
+      ends.set(key, {
+        tenantId: row.tenantId,
+        subscriptionId: subId,
+        apiKey,
+        endDate,
+        paymentLink: row.providerLinkId,
+        source: existing ? `${existing.source}+${source}` : source,
+        referenceDate,
+      });
+    }
+  };
+
+  if (linkIds.size === 0) {
+    return ends;
+  }
+
+  const txs = await prisma.financialTransaction.findMany({
+    where: { tenantId: { in: tenantIds } },
+    select: {
+      tenantId: true,
+      rawPayloadRef: true,
+      createdAt: true,
+      subscription: { select: { asaasSubscriptionId: true } },
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  for (const tx of txs) {
+    const meta = readMeta(tx.rawPayloadRef);
+    let subId = meta.asaasSubscriptionId;
+    let linkId = meta.asaasPaymentLinkId;
+    if (!subId && tx.subscription?.asaasSubscriptionId) {
+      subId = tx.subscription.asaasSubscriptionId.trim();
+    }
+    if (!linkId) {
+      for (const lid of linkIds) {
+        if (rawReferencesLinkId(tx.rawPayloadRef, lid)) {
+          linkId = lid;
+          break;
+        }
+      }
+    }
+    if (!subId || !linkId || !linkIds.has(linkId)) {
+      continue;
+    }
+    const row = rowByLinkId.get(linkId);
+    if (!row) {
+      continue;
+    }
+    add(row, subId, tx.createdAt, 'transaction');
+  }
+
+  const subs = await prisma.financialSubscription.findMany({
+    where: {
+      tenantId: { in: tenantIds },
+      asaasSubscriptionId: { not: null },
+    },
+    select: {
+      tenantId: true,
+      asaasSubscriptionId: true,
+      createdAt: true,
+      transactions: {
+        select: { rawPayloadRef: true, createdAt: true },
+        orderBy: { createdAt: 'asc' },
+        take: 50,
+      },
+    },
+  });
+
+  for (const sub of subs) {
+    const subId = sub.asaasSubscriptionId?.trim();
+    if (!subId) {
+      continue;
+    }
+    for (const tx of sub.transactions) {
+      const meta = readMeta(tx.rawPayloadRef);
+      let linkId = meta.asaasPaymentLinkId;
+      if (!linkId) {
+        for (const lid of linkIds) {
+          if (rawReferencesLinkId(tx.rawPayloadRef, lid)) {
+            linkId = lid;
+            break;
+          }
+        }
+      }
+      if (!linkId || !linkIds.has(linkId)) {
+        continue;
+      }
+      const row = rowByLinkId.get(linkId);
+      if (!row) {
+        continue;
+      }
+      const ref = tx.createdAt < sub.createdAt ? tx.createdAt : sub.createdAt;
+      add(row, subId, ref, 'financial_subscription');
+    }
+  }
+
+  for (const row of rows) {
+    if (!row.tenant.asaasApiKey) {
+      continue;
+    }
+    const hasPairForLink = [...ends.values()].some(
+      (e) => e.paymentLink === row.providerLinkId,
+    );
+    if (hasPairForLink) {
+      continue;
+    }
+    try {
+      const apiKey = credentials.getDecryptedApiKey(row.tenant.asaasApiKey);
+      const payments = await asaas.listPayments({
+        apiKey,
+        paymentLink: row.providerLinkId,
+        limit: 100,
+      });
+      for (const p of payments) {
+        const subId = p.subscription?.trim();
+        if (!subId) {
+          continue;
+        }
+        const ref = p.dueDate ? new Date(`${p.dueDate}T12:00:00`) : row.createdAt;
+        add(row, subId, ref, 'asaas_payments_api');
+      }
+    } catch (e) {
+      console.warn(
+        `Asaas listPayments (${row.providerLinkId}):`,
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }
+
+  return ends;
+}
+
 async function main() {
   const { dryRun } = parseArgs(process.argv.slice(2));
   const app = await NestFactory.createApplicationContext(AppModule, {
@@ -56,81 +244,47 @@ async function main() {
       include: { tenant: true },
     });
 
-    const linkIds = new Set(rows.map((r) => r.providerLinkId));
-    const subscriptionEnds = new Map<
-      string,
-      {
-        tenantId: string;
-        subscriptionId: string;
-        apiKey: string;
-        endDate: string;
-        paymentLink: string;
-      }
-    >();
+    const subscriptionEnds = await collectSubscriptionEnds(
+      prisma,
+      asaas,
+      credentials,
+      rows,
+    );
 
-    if (linkIds.size > 0) {
-      const txs = await prisma.financialTransaction.findMany({
-        where: {
-          tenantId: { in: [...new Set(rows.map((r) => r.tenantId))] },
-        },
-        select: {
-          tenantId: true,
-          rawPayloadRef: true,
-          createdAt: true,
-        },
-        orderBy: { createdAt: 'asc' },
-      });
-
-      for (const tx of txs) {
-        const meta = readMeta(tx.rawPayloadRef);
-        const subId = meta.asaasSubscriptionId;
-        const linkId = meta.asaasPaymentLinkId;
-        if (!subId || !linkId || !linkIds.has(linkId)) {
-          continue;
-        }
-        const row = rows.find((r) => r.providerLinkId === linkId);
-        if (!row?.tenant.asaasApiKey) {
-          continue;
-        }
-        const endDate = computeSubscriptionEndDateYmd(1, tx.createdAt);
-        const key = `${row.tenantId}|${subId}`;
-        if (!subscriptionEnds.has(key)) {
-          subscriptionEnds.set(key, {
-            tenantId: row.tenantId,
-            subscriptionId: subId,
-            apiKey: credentials.getDecryptedApiKey(row.tenant.asaasApiKey),
-            endDate,
-            paymentLink: linkId,
-          });
-        }
-      }
-    }
+    const linksWithSubscription = new Set(
+      [...subscriptionEnds.values()].map((e) => e.paymentLink),
+    );
 
     let removedAsaas = 0;
     let markedInactive = 0;
-    let subscriptionsUpdated = 0;
-    let subscriptionsRemoved = 0;
+    let subscriptionsRepaired = 0;
+    let paymentsCanceled = 0;
+    let paymentsRefunded = 0;
     let failures = 0;
     const details: Array<Record<string, unknown>> = [];
+    const subscriptionRepairs: Array<Record<string, unknown>> = [];
 
     for (const row of rows) {
       const { tenant } = row;
       if (!tenant.asaasApiKey) {
         failures++;
         details.push({
-          linkRowId: row.id,
           providerLinkId: row.providerLinkId,
+          active: row.active,
           status: 'skipped_no_api_key',
         });
         continue;
       }
 
+      const linkDetail: Record<string, unknown> = {
+        providerLinkId: row.providerLinkId,
+        active: row.active,
+        hasSubscriptionCandidate: linksWithSubscription.has(row.providerLinkId),
+      };
+
       if (dryRun) {
-        details.push({
-          providerLinkId: row.providerLinkId,
-          active: row.active,
-          status: 'dry_run_link',
-        });
+        linkDetail.status = 'dry_run_link';
+        details.push(linkDetail);
         continue;
       }
 
@@ -141,11 +295,10 @@ async function main() {
           linkId: row.providerLinkId,
         });
         removedAsaas++;
+        linkDetail.asaasLinkDeleted = true;
       } catch (e) {
-        console.warn(
-          `Asaas DELETE link (${row.providerLinkId}):`,
-          e instanceof Error ? e.message : e,
-        );
+        linkDetail.asaasLinkDeleteError =
+          e instanceof Error ? e.message : String(e);
       }
 
       if (row.active) {
@@ -154,59 +307,48 @@ async function main() {
           data: { active: false },
         });
         markedInactive++;
+        linkDetail.markedInactive = true;
+      } else {
+        linkDetail.markedInactive = false;
+        linkDetail.note = 'já estava inactive na BD';
       }
+
+      if (!linksWithSubscription.has(row.providerLinkId)) {
+        linkDetail.status = 'link_processed_no_subscription_found';
+        linkDetail.warning =
+          'Nenhuma assinatura encontrada (BD nem Asaas). Se já houve pagamento, verifique webhooks/transacções.';
+      } else {
+        linkDetail.status = 'link_processed';
+      }
+      details.push(linkDetail);
     }
 
     for (const entry of subscriptionEnds.values()) {
-      if (dryRun) {
-        details.push({
-          subscription: entry.subscriptionId,
-          paymentLink: entry.paymentLink,
-          endDate: entry.endDate,
-          status: 'dry_run_subscription',
-        });
-        continue;
+      const repair = await repairLegacySubscription(asaas, {
+        apiKey: entry.apiKey,
+        subscriptionId: entry.subscriptionId,
+        referenceDate: entry.referenceDate,
+        dryRun,
+      });
+      paymentsCanceled += repair.paymentsCanceled;
+      paymentsRefunded += repair.paymentsRefunded;
+      if (repair.subscriptionClosed) {
+        subscriptionsRepaired++;
+      } else if (!dryRun && repair.paymentErrors === 0) {
+        failures++;
       }
-      try {
-        await asaas.updateSubscription({
-          apiKey: entry.apiKey,
-          subscriptionId: entry.subscriptionId,
-          body: { endDate: entry.endDate },
-        });
-        subscriptionsUpdated++;
-        details.push({
-          subscription: entry.subscriptionId,
-          paymentLink: entry.paymentLink,
-          endDate: entry.endDate,
-          status: 'subscription_end_date_set',
-        });
-      } catch (updateErr) {
-        const updateMsg =
-          updateErr instanceof Error ? updateErr.message : String(updateErr);
-        try {
-          await asaas.deleteSubscription({
-            apiKey: entry.apiKey,
-            subscriptionId: entry.subscriptionId,
-          });
-          subscriptionsRemoved++;
-          details.push({
-            subscription: entry.subscriptionId,
-            paymentLink: entry.paymentLink,
-            status: 'subscription_removed',
-            previousError: updateMsg,
-          });
-        } catch (deleteErr) {
-          failures++;
-          details.push({
-            subscription: entry.subscriptionId,
-            paymentLink: entry.paymentLink,
-            status: 'subscription_failed',
-            error: deleteErr instanceof Error ? deleteErr.message : String(deleteErr),
-            updateError: updateMsg,
-          });
-        }
-      }
+      subscriptionRepairs.push({
+        subscription: entry.subscriptionId,
+        paymentLink: entry.paymentLink,
+        source: entry.source,
+        expectedEndDate: entry.endDate,
+        ...repair,
+      });
     }
+
+    const linksWithoutSub = rows.filter(
+      (r) => !linksWithSubscription.has(r.providerLinkId),
+    );
 
     console.log(
       JSON.stringify(
@@ -214,12 +356,15 @@ async function main() {
           dryRun,
           linksFound: rows.length,
           subscriptionCandidates: subscriptionEnds.size,
+          linksWithoutSubscription: linksWithoutSub.map((r) => r.providerLinkId),
           removedAsaasOk: removedAsaas,
           markedInactive,
-          subscriptionsUpdated,
-          subscriptionsRemoved,
+          subscriptionsRepaired,
+          paymentsCanceled,
+          paymentsRefunded,
           failures,
           details,
+          subscriptionRepairs,
         },
         null,
         2,
