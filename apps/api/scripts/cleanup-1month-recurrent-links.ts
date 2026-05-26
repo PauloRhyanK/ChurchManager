@@ -2,10 +2,9 @@
  * Limpa legado "mensal + 1 mês" (RECURRENT no Asaas). Prioridade: assinatura.
  *
  * Por assinatura encontrada:
- *   1) Mantém só a primeira cobrança (paga ou mais antiga por vencimento)
- *   2) Cancela cobranças extras pendentes/vencidas (DELETE /payments)
- *   3) Estorna cobranças extras já recebidas (POST /payments/{id}/refund)
- *   4) Encerra a assinatura (DELETE /subscriptions; fallback PUT endDate)
+ *   - Encerra a assinatura (DELETE /subscriptions; fallback PUT endDate)
+ *   - Não cancela nem estorna cobranças já existentes (evita remover pagamentos válidos)
+ *   - Parcelas pendentes futuras: removidas pelo Asaas ao apagar a assinatura
  *
  * Também: active=false na BD; tenta DELETE do payment link (pode falhar se já houve cobrança).
  *
@@ -327,6 +326,7 @@ async function main() {
       const repair = await repairLegacySubscription(asaas, {
         apiKey: entry.apiKey,
         subscriptionId: entry.subscriptionId,
+        paymentLinkId: entry.paymentLink,
         referenceDate: entry.referenceDate,
         dryRun,
       });
@@ -334,7 +334,7 @@ async function main() {
       paymentsRefunded += repair.paymentsRefunded;
       if (repair.subscriptionClosed) {
         subscriptionsRepaired++;
-      } else if (!dryRun && repair.paymentErrors === 0) {
+      } else if (!dryRun) {
         failures++;
       }
       subscriptionRepairs.push({

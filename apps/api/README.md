@@ -36,10 +36,9 @@ cd apps/api
 DATABASE_URL="postgresql://postgres:SENHA@127.0.0.1:5438/churchmanager_db" \
   npm run script:cleanup-1month-recurrent-links -- --dry-run
 # sem --dry-run, por assinatura legada:
-#   - cancela cobranças extras pendentes (DELETE /payments)
-#   - estorna cobranças extras já pagas (POST /payments/{id}/refund)
 #   - encerra assinatura (DELETE /subscriptions; fallback PUT endDate)
-# Mantém só a primeira cobrança. Consulta GET /payments?paymentLink=… se a BD não tiver sub_id.
+#   - não estorna nem apaga cobranças já pagas/criadas (só impede novas parcelas)
+# Consulta GET /payments?paymentLink=… se a BD não tiver sub_id.
 ```
 
 Se `linksWithoutSubscription` no JSON tiver IDs, esses links ficaram só desactivados na BD — não houve pagamento/assinatura para corrigir no Asaas, ou falta histórico de webhook.

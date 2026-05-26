@@ -3,32 +3,21 @@ import type { AsaasPaymentResponse } from '../../src/modules/financial/asaas/asa
 import { computeSubscriptionEndDateYmd } from '../../src/modules/financial/payment-link-subscription-end';
 
 const PAID_STATUSES = new Set(['RECEIVED', 'CONFIRMED']);
-const CANCELABLE_STATUSES = new Set([
-  'PENDING',
-  'OVERDUE',
-  'AWAITING_RISK_ANALYSIS',
-  'DUNNING_REQUESTED',
-]);
-const REFUNDABLE_STATUSES = new Set(['RECEIVED', 'CONFIRMED']);
-const SKIP_STATUSES = new Set([
-  'REFUNDED',
-  'REFUND_IN_PROGRESS',
-  'DELETED',
-  'CANCELED',
-  'CANCELLED',
-]);
 
 export type RepairSubscriptionInput = {
   apiKey: string;
   subscriptionId: string;
+  /** ID do payment link legado no Asaas — limita auditoria ao checkout errado. */
+  paymentLinkId: string;
   referenceDate: Date;
   dryRun: boolean;
 };
 
 export type RepairSubscriptionResult = {
   subscriptionId: string;
-  paymentsFound: number;
-  firstKeptPaymentId: string | null;
+  paymentLinkId: string;
+  paymentsOnLink: number;
+  firstPaidPaymentId: string | null;
   paymentsCanceled: number;
   paymentsRefunded: number;
   paymentsSkipped: number;
@@ -49,28 +38,17 @@ function sortPayments(payments: AsaasPaymentResponse[]): AsaasPaymentResponse[] 
   });
 }
 
-function pickFirstKeptPaymentId(
-  sorted: AsaasPaymentResponse[],
-): string | null {
-  for (const p of sorted) {
-    if (PAID_STATUSES.has(p.status)) {
-      return p.id;
-    }
-  }
-  return sorted[0]?.id ?? null;
-}
-
-async function listAllSubscriptionPayments(
+async function listAllPaymentsForLink(
   asaas: AsaasClient,
   apiKey: string,
-  subscriptionId: string,
+  paymentLinkId: string,
 ): Promise<AsaasPaymentResponse[]> {
   const all: AsaasPaymentResponse[] = [];
   let offset = 0;
   while (true) {
     const batch = await asaas.listPayments({
       apiKey,
-      subscription: subscriptionId,
+      paymentLink: paymentLinkId,
       limit: 100,
       offset,
     });
@@ -84,18 +62,22 @@ async function listAllSubscriptionPayments(
 }
 
 /**
- * Mantém a primeira cobrança (paga, ou a mais antiga por vencimento),
- * cancela pendentes extras e estorna recebidas extras; encerra a assinatura.
+ * Encerra assinatura legada "1 mês" sem mexer em cobranças já pagas.
+ *
+ * - Não estorna RECEIVED/CONFIRMED (evita devolver valores indevidos).
+ * - Não faz DELETE em cobranças individuais — o Asaas remove pendentes ao apagar a assinatura.
+ * - PUT endDate (fallback) impede novas parcelas após o 1.º período.
  */
 export async function repairLegacySubscription(
   asaas: AsaasClient,
   input: RepairSubscriptionInput,
 ): Promise<RepairSubscriptionResult> {
-  const { apiKey, subscriptionId, referenceDate, dryRun } = input;
+  const { apiKey, subscriptionId, paymentLinkId, referenceDate, dryRun } = input;
   const result: RepairSubscriptionResult = {
     subscriptionId,
-    paymentsFound: 0,
-    firstKeptPaymentId: null,
+    paymentLinkId,
+    paymentsOnLink: 0,
+    firstPaidPaymentId: null,
     paymentsCanceled: 0,
     paymentsRefunded: 0,
     paymentsSkipped: 0,
@@ -105,99 +87,41 @@ export async function repairLegacySubscription(
     details: [],
   };
 
-  const payments = sortPayments(
-    await listAllSubscriptionPayments(asaas, apiKey, subscriptionId),
+  const paymentsOnLink = sortPayments(
+    await listAllPaymentsForLink(asaas, apiKey, paymentLinkId),
   );
-  result.paymentsFound = payments.length;
-  const firstKeptId = pickFirstKeptPaymentId(payments);
-  result.firstKeptPaymentId = firstKeptId;
+  result.paymentsOnLink = paymentsOnLink.length;
 
-  for (const p of payments) {
-    if (!firstKeptId || p.id === firstKeptId) {
-      result.details.push({
-        paymentId: p.id,
-        status: p.status,
-        dueDate: p.dueDate,
-        action: 'kept_first',
-      });
-      continue;
-    }
+  const firstPaid = paymentsOnLink.find((p) => PAID_STATUSES.has(p.status));
+  result.firstPaidPaymentId = firstPaid?.id ?? null;
 
-    if (SKIP_STATUSES.has(p.status)) {
-      result.paymentsSkipped++;
-      result.details.push({
-        paymentId: p.id,
-        status: p.status,
-        action: 'skipped_already_closed',
-      });
-      continue;
-    }
+  const refForEnd =
+    firstPaid?.dueDate != null
+      ? new Date(`${firstPaid.dueDate}T12:00:00`)
+      : referenceDate;
+  const endDate = computeSubscriptionEndDateYmd(1, refForEnd);
+  result.subscriptionEndDate = endDate;
 
-    if (dryRun) {
-      const action = CANCELABLE_STATUSES.has(p.status)
-        ? 'would_cancel'
-        : REFUNDABLE_STATUSES.has(p.status)
-          ? 'would_refund'
-          : 'would_skip_unknown_status';
-      result.details.push({
-        paymentId: p.id,
-        status: p.status,
-        dueDate: p.dueDate,
-        action,
-      });
-      if (action === 'would_cancel') {
-        result.paymentsCanceled++;
-      } else if (action === 'would_refund') {
-        result.paymentsRefunded++;
-      } else {
-        result.paymentsSkipped++;
-      }
-      continue;
-    }
-
-    try {
-      if (CANCELABLE_STATUSES.has(p.status)) {
-        await asaas.deletePayment({ apiKey, paymentId: p.id });
-        result.paymentsCanceled++;
-        result.details.push({
-          paymentId: p.id,
-          status: p.status,
-          action: 'canceled',
-        });
-      } else if (REFUNDABLE_STATUSES.has(p.status)) {
-        await asaas.refundPayment({ apiKey, paymentId: p.id });
-        result.paymentsRefunded++;
-        result.details.push({
-          paymentId: p.id,
-          status: p.status,
-          action: 'refunded',
-        });
-      } else {
-        result.paymentsSkipped++;
-        result.details.push({
-          paymentId: p.id,
-          status: p.status,
-          action: 'skipped_unknown_status',
-        });
-      }
-    } catch (e) {
-      result.paymentErrors++;
-      result.details.push({
-        paymentId: p.id,
-        status: p.status,
-        action: 'error',
-        error: e instanceof Error ? e.message : String(e),
-      });
-    }
+  for (const p of paymentsOnLink) {
+    result.paymentsSkipped++;
+    result.details.push({
+      paymentId: p.id,
+      status: p.status,
+      dueDate: p.dueDate,
+      paymentLink: p.paymentLink ?? null,
+      action: 'unchanged_no_touch',
+      note:
+        'Cobranças existentes não são canceladas nem estornadas por este script.',
+    });
   }
-
-  const endDate = computeSubscriptionEndDateYmd(1, referenceDate);
 
   if (dryRun) {
     result.details.push({
-      action: 'would_close_subscription',
-      method: 'delete_then_endDate_fallback',
+      action: 'would_close_subscription_only',
+      subscriptionId,
+      paymentLinkId,
       endDate,
+      note: 'DELETE /subscriptions remove parcelas pendentes no Asaas; pagas permanecem.',
     });
     return result;
   }
@@ -206,7 +130,10 @@ export async function repairLegacySubscription(
     await asaas.deleteSubscription({ apiKey, subscriptionId });
     result.subscriptionClosed = true;
     result.subscriptionCloseMethod = 'delete';
-    result.details.push({ action: 'subscription_deleted' });
+    result.details.push({
+      action: 'subscription_deleted',
+      endDate,
+    });
     return result;
   } catch (deleteErr) {
     const deleteMsg =
@@ -219,13 +146,13 @@ export async function repairLegacySubscription(
       });
       result.subscriptionClosed = true;
       result.subscriptionCloseMethod = 'endDate';
-      result.subscriptionEndDate = endDate;
       result.details.push({
         action: 'subscription_end_date_set',
         endDate,
         previousDeleteError: deleteMsg,
       });
     } catch (updateErr) {
+      result.paymentErrors++;
       result.details.push({
         action: 'subscription_close_failed',
         endDate,
