@@ -133,6 +133,11 @@ export class AsaasWebhookService {
       where: { idempotencyKey },
     });
     if (existing) {
+      await this.maybeSyncSubscriptionEndFromPaymentOnDuplicate(
+        tenant,
+        body,
+        eventType,
+      );
       return { ok: true, duplicate: true };
     }
 
@@ -246,6 +251,7 @@ export class AsaasWebhookService {
     });
 
     if (txOutcome === 'duplicate') {
+      await this.maybeSyncSubscriptionEndFromPayment(tenant, body.payment);
       return { ok: true, duplicate: true };
     }
     await this.maybeSyncSubscriptionEndFromPayment(tenant, body.payment);
@@ -348,6 +354,7 @@ export class AsaasWebhookService {
     });
 
     if (txOutcome === 'duplicate') {
+      await this.maybeSyncSubscriptionEndFromPayment(tenant, body.payment);
       return { ok: true, duplicate: true };
     }
     await this.maybeSyncSubscriptionEndFromPayment(tenant, body.payment);
@@ -412,6 +419,25 @@ export class AsaasWebhookService {
   }
 
   /**
+   * Reenvio do mesmo `evt_...` no painel Asaas: evento já está em financial_webhook_events,
+   * mas o PUT endDate na assinatura pode nunca ter corrido (deploy antigo, falha transitória).
+   */
+  private async maybeSyncSubscriptionEndFromPaymentOnDuplicate(
+    tenant: Tenant,
+    body: AsaasWebhookBody,
+    eventType: string,
+  ): Promise<void> {
+    if (
+      eventType !== 'PAYMENT_RECEIVED' &&
+      eventType !== 'PAYMENT_CONFIRMED' &&
+      eventType !== 'PAYMENT_CREATED'
+    ) {
+      return;
+    }
+    await this.maybeSyncSubscriptionEndFromPayment(tenant, body.payment);
+  }
+
+  /**
    * Após checkout via link RECURRENT, o Asaas cria assinatura sem "data de fim" no painel;
    * alinha com `subscriptionDurationMonths` do link guardado em `financial_payment_links`.
    */
@@ -422,17 +448,25 @@ export class AsaasWebhookService {
     const subId = payment?.subscription?.trim();
     const linkId = payment?.paymentLink?.trim();
     if (!subId || !linkId) {
+      this.logger.warn(
+        `Webhook sem subscription/paymentLink — não envia PUT endDate (sub=${subId || '—'}, link=${linkId || '—'})`,
+      );
       return;
     }
     try {
-      await this.subscriptionDurationSync.applyFromPaymentLink(
+      const result = await this.subscriptionDurationSync.applyFromPaymentLink(
         tenant,
         subId,
         linkId,
       );
+      if (!result.applied) {
+        this.logger.warn(
+          `PUT endDate não aplicado (sub=${subId}, link=${linkId}, tenant=${tenant.slug})`,
+        );
+      }
     } catch (e) {
       this.logger.warn(
-        `Sync endDate assinatura ${subId} ignorado (retry Asaas): ${e instanceof Error ? e.message : String(e)}`,
+        `Sync endDate assinatura ${subId} falhou (retry Asaas): ${e instanceof Error ? e.message : String(e)}`,
       );
     }
   }

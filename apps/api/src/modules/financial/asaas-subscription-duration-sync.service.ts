@@ -32,7 +32,16 @@ export class AsaasSubscriptionDurationSyncService {
   ): Promise<{ applied: boolean; endDate?: string; months?: number }> {
     const subId = asaasSubscriptionId.trim();
     const linkId = asaasPaymentLinkId.trim();
-    if (!subId || !linkId || !tenant.asaasApiKey) {
+    if (!subId || !linkId) {
+      this.logger.warn(
+        `Sync endDate ignorado: subscription ou paymentLink ausente (sub=${subId || '—'}, link=${linkId || '—'})`,
+      );
+      return { applied: false };
+    }
+    if (!tenant.asaasApiKey) {
+      this.logger.warn(
+        `Sync endDate ignorado: tenant ${tenant.slug} sem asaas_api_key`,
+      );
       return { applied: false };
     }
 
@@ -44,11 +53,23 @@ export class AsaasSubscriptionDurationSyncService {
         createdAt: true,
       },
     });
-    if (!stored?.isMonthly) {
+    if (!stored) {
+      this.logger.warn(
+        `Sync endDate ignorado: link ${linkId} não encontrado em financial_payment_links (tenant ${tenant.slug})`,
+      );
+      return { applied: false };
+    }
+    if (!stored.isMonthly) {
+      this.logger.warn(
+        `Sync endDate ignorado: link ${linkId} não é mensal (is_monthly=false)`,
+      );
       return { applied: false };
     }
     const months = stored.subscriptionDurationMonths;
     if (months == null || months < 2) {
+      this.logger.warn(
+        `Sync endDate ignorado: link ${linkId} com subscription_duration_months=${months ?? 'null'} (< 2)`,
+      );
       return { applied: false };
     }
 
