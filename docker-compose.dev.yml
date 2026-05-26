@@ -12,6 +12,7 @@ name: churchmanager-dev
 services:
   churchmanager-postgres:
     image: postgres:16-alpine
+    container_name: churchmanager-postgres
     ports:
       - "127.0.0.1:5438:5432"
     environment:
@@ -39,6 +40,7 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
+    container_name: churchmanager-backend-api
     env_file:
       - .env
     environment:
@@ -75,6 +77,7 @@ services:
   # Túnel HTTPS para webhooks Asaas (opcional). Ver docs/webhooks-local-dev-ngrok.md
   churchmanager-ngrok:
     image: ngrok/ngrok:latest
+    container_name: churchmanager-ngrok
     profiles: ["tunnel"]
     restart: unless-stopped
     depends_on:
@@ -99,6 +102,7 @@ services:
       dockerfile: Dockerfile
       args:
         API_URL: ${API_URL}
+    container_name: churchmanager-frontend-admin
     env_file:
       - .env
     ports:
@@ -117,6 +121,7 @@ services:
 
   churchmanager-pgadmin:
     image: dpage/pgadmin4:latest
+    container_name: churchmanager-pgadmin
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
