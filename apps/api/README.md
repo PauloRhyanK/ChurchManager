@@ -78,7 +78,11 @@ O Asaas precisa de um URL público (HTTPS). Ver [docs/webhooks-local-dev-ngrok.m
 | GET | `/api/public/tenants/:slug/events?upcomingOnly=true` | Eventos futuros publicados |
 | GET | `/api/public/tenants/:slug/events/:eventId` | Detalhe do evento |
 | POST | `/api/public/tenants/:slug/events/:eventId/registrations` | Inscrição no evento |
-| GET | `/api/admin/tenants/me/events` | CRUD eventos (Bearer JWT) |
+| GET | `/api/public/tenants/:slug/events/:eventId/tickets` | Tipos de ingresso disponíveis |
+| POST | `/api/public/tenants/:slug/events/:eventId/checkout` | Checkout de ingressos (Asaas) |
+| GET | `/api/public/tenants/:slug/events/:eventId/orders/:orderId/payment` | Polling pagamento |
+| GET | `/api/public/tenants/:slug/tickets/:ticketId` | Bilhete pós-compra |
+| GET | `/api/admin/tenants/me/events/:eventId/ticket-types` | CRUD tipos de ingresso (Bearer JWT) |
 | GET | `/api/admin/tenants/me/registrations` | Todas as inscrições com evento (Bearer JWT) |
 | POST | `/api/webhooks/asaas/:slug` | Webhook por tenant (header `asaas-access-token`) |
 

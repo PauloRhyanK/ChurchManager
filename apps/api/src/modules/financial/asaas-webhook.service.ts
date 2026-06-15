@@ -3,6 +3,8 @@ import {
   UnauthorizedException,
   BadRequestException,
   Logger,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { Prisma, Tenant } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -17,6 +19,7 @@ import {
   paymentAsaasMetaPatch,
   type AsaasPaymentWebhookFields,
 } from './asaas-payment-meta.patch';
+import { EventOrdersService } from '../events/event-orders.service';
 
 /** Payload webhook Asaas v3 (campos usados pelo handler). */
 export interface AsaasWebhookBody {
@@ -97,6 +100,8 @@ export class AsaasWebhookService {
     private readonly tenantCredentials: TenantCredentialsService,
     private readonly asaas: AsaasClient,
     private readonly subscriptionDurationSync: AsaasSubscriptionDurationSyncService,
+    @Inject(forwardRef(() => EventOrdersService))
+    private readonly eventOrders: EventOrdersService,
   ) {}
 
   verifyToken(
@@ -252,10 +257,41 @@ export class AsaasWebhookService {
 
     if (txOutcome === 'duplicate') {
       await this.maybeSyncSubscriptionEndFromPayment(tenant, body.payment);
+      if (shouldConfirm) {
+        await this.fulfillEventOrdersForPayment(tenant.id, paymentId);
+      }
       return { ok: true, duplicate: true };
     }
     await this.maybeSyncSubscriptionEndFromPayment(tenant, body.payment);
+    if (shouldConfirm) {
+      await this.fulfillEventOrdersForPayment(tenant.id, paymentId);
+    }
     return { ok: true, duplicate: false };
+  }
+
+  private async fulfillEventOrdersForPayment(
+    tenantId: string,
+    paymentId: string,
+  ): Promise<void> {
+    const txs = await this.prisma.financialTransaction.findMany({
+      where: {
+        tenantId,
+        asaasPaymentId: paymentId,
+        eventOrderId: { not: null },
+        status: 'CONFIRMED',
+      },
+      select: { eventOrderId: true },
+    });
+    const orderIds = [
+      ...new Set(
+        txs
+          .map((row) => row.eventOrderId)
+          .filter((id): id is string => id != null),
+      ),
+    ];
+    if (orderIds.length > 0) {
+      await this.eventOrders.afterTransactionsConfirmed(tenantId, orderIds);
+    }
   }
 
   private async handlePaymentCreated(

@@ -44,6 +44,17 @@ export class EventsService {
     return toEventDto(row);
   }
 
+  /** Detalhe público publicado (contrato M2). */
+  async getPublishedForTenant(tenantId: string, id: string) {
+    const row = await this.prisma.event.findFirst({
+      where: { id, tenantId, published: true },
+    });
+    if (!row) {
+      throw new NotFoundException('Evento não encontrado');
+    }
+    return toEventDto(row);
+  }
+
   /** Detalhe público — sem filtro published (compatível com site legado). */
   async getPublicByTenant(tenantId: string, id: string) {
     const row = await this.prisma.event.findFirst({

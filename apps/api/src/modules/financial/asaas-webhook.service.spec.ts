@@ -37,11 +37,13 @@ test('processRawBody: duplicado na tabela não chama GET customer', async () => 
     },
   };
   const sync = { applyFromPaymentLink: async () => {} };
+  const eventOrders = { afterTransactionsConfirmed: async () => {} };
   const svc = new AsaasWebhookService(
     prisma as never,
     credentials as never,
     asaas as never,
     sync as never,
+    eventOrders as never,
   );
   const out = await svc.processRawBody(
     {
@@ -71,11 +73,13 @@ test('processRawBody: falha de getCustomer propaga (retry Asaas)', async () => {
     },
   };
   const sync = { applyFromPaymentLink: async () => {} };
+  const eventOrders = { afterTransactionsConfirmed: async () => {} };
   const svc = new AsaasWebhookService(
     prisma as never,
     credentials as never,
     asaas as never,
     sync as never,
+    eventOrders as never,
   );
   await assert.rejects(
     () =>

@@ -1,6 +1,7 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TenantsModule } from '../tenants/tenants.module';
 import { AuthModule } from '../auth/auth.module';
+import { EventsModule } from '../events/events.module';
 import { AsaasClient } from './asaas/asaas.client';
 import { PayerProfilesService } from './payer-profiles.service';
 import { PaymentIntentsService } from './payment-intents.service';
@@ -17,7 +18,7 @@ import { TenantsMeLinkPresetsController } from './tenants-me-link-presets.contro
 import { TenantsMeEventsPaymentLinksController } from './tenants-me-events-payment-links.controller';
 
 @Module({
-  imports: [TenantsModule, AuthModule],
+  imports: [TenantsModule, AuthModule, forwardRef(() => EventsModule)],
   controllers: [
     PublicFinancialController,
     AsaasWebhookController,
@@ -36,5 +37,6 @@ import { TenantsMeEventsPaymentLinksController } from './tenants-me-events-payme
     AsaasSubscriptionDurationSyncService,
     CotasOverviewService,
   ],
+  exports: [AsaasClient, PayerProfilesService],
 })
 export class FinancialModule {}

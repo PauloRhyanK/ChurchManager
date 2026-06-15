@@ -43,6 +43,11 @@ export function toEventDto(row: Event) {
     imageUrl: row.imageUrl,
     tag: row.tag,
     published: row.published,
+    slug: row.slug,
+    timezone: row.timezone,
+    registrationClosesAt: row.registrationClosesAt,
+    termsUrl: row.termsUrl,
+    currency: row.currency,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
