@@ -36,8 +36,77 @@ model Tenant {
   linkPresets        FinancialLinkPreset[]
   adminUsers         AdminUser[]
   publicWebOrigins   TenantPublicWebOrigin[]
+  events             Event[]
+  eventRegistrations EventRegistration[]
+  schedules          Schedule[]
 
   @@map("tenants")
+}
+
+model Event {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  title       String    @db.VarChar(255)
+  description String?   @db.Text
+  date        DateTime  @db.Date
+  timeStart   DateTime? @map("time_start") @db.Time(0)
+  timeEnd     DateTime? @map("time_end") @db.Time(0)
+  location    String?   @db.VarChar(255)
+  imageUrl    String?   @map("image_url") @db.Text
+  tag         String?   @db.VarChar(64)
+  published   Boolean   @default(true)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  registrations EventRegistration[]
+
+  @@index([tenantId])
+  @@index([tenantId, date])
+  @@index([tenantId, published])
+  @@map("events")
+}
+
+model EventRegistration {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  eventId   String   @map("event_id") @db.Uuid
+  name      String   @db.VarChar(255)
+  email     String   @db.VarChar(255)
+  phone     String?  @db.VarChar(32)
+  message   String?  @db.Text
+  /// ID de utilizador do site legado (ex. Supabase auth); sem FK.
+  userId    String?  @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, email], map: "event_registrations_event_email_unique")
+  @@index([tenantId])
+  @@index([eventId])
+  @@index([email])
+  @@index([userId])
+  @@map("event_registrations")
+}
+
+model Schedule {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  title       String   @db.VarChar(255)
+  dayOfWeek   String   @map("day_of_week") @db.VarChar(16)
+  timeStart   DateTime @map("time_start") @db.Time(0)
+  location    String?  @db.VarChar(255)
+  description String?  @db.Text
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, active])
+  @@map("schedules")
 }
 
 enum FinancialLinkModule {

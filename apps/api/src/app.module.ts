@@ -8,6 +8,7 @@ import { DynamicCorsMiddleware } from './common/dynamic-cors.middleware';
 import { PrismaModule } from './prisma/prisma.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { FinancialModule } from './modules/financial/financial.module';
+import { EventsModule } from './modules/events/events.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { HealthModule } from './health/health.module';
 import { RequestLoggingInterceptor } from './common/request-logging.interceptor';
@@ -58,6 +59,7 @@ import { RequestLoggingInterceptor } from './common/request-logging.interceptor'
     AuthModule,
     TenantsModule,
     FinancialModule,
+    EventsModule,
   ],
   providers: [
     {

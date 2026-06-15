@@ -74,6 +74,12 @@ O Asaas precisa de um URL público (HTTPS). Ver [docs/webhooks-local-dev-ngrok.m
 | POST | `/api/public/tenants/:slug/payer-profiles` | Pré-cadastro (CPF, nome, email, telefone) |
 | POST | `/api/public/tenants/:slug/payment-intents` | Gera cobrança Asaas (exige pré-cadastro) |
 | POST | `/api/public/tenants/:slug/links` | Gera link de pagamento Asaas (cotas; ver `docs/api/public-payment-links.md`) |
+| GET | `/api/public/tenants/:slug/events/published` | Eventos publicados (home) |
+| GET | `/api/public/tenants/:slug/events?upcomingOnly=true` | Eventos futuros publicados |
+| GET | `/api/public/tenants/:slug/events/:eventId` | Detalhe do evento |
+| POST | `/api/public/tenants/:slug/events/:eventId/registrations` | Inscrição no evento |
+| GET | `/api/admin/tenants/me/events` | CRUD eventos (Bearer JWT) |
+| GET | `/api/admin/tenants/me/registrations` | Todas as inscrições com evento (Bearer JWT) |
 | POST | `/api/webhooks/asaas/:slug` | Webhook por tenant (header `asaas-access-token`) |
 
 Prefixo global: `api`.
@@ -81,5 +87,6 @@ Prefixo global: `api`.
 ## Documentação
 
 Ver [docs/financial-schema-and-webhooks.md](../../docs/financial-schema-and-webhooks.md) na raiz do monorepo.
+Ver [docs/migration/supabase-events-to-church-manager.md](../../docs/migration/supabase-events-to-church-manager.md) para migração do módulo de eventos.
 Ver [docs/security-secrets.md](../../docs/security-secrets.md) para operação de segredo em produção.
 Ver [docs/api/public-payment-links.md](../../docs/api/public-payment-links.md) (cotas, presets, cobrança única vs assinatura).
