@@ -13,7 +13,9 @@
     "prisma:studio": "dotenv -e ../../.env -- prisma studio",
     "prisma:seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
     "script:backfill-subscription-end-dates": "dotenv -e ../../.env -- tsx scripts/backfill-subscription-end-dates.ts",
-    "script:cleanup-1month-recurrent-links": "dotenv -e ../../.env -- tsx scripts/cleanup-1month-recurrent-links.ts"
+    "script:cleanup-1month-recurrent-links": "dotenv -e ../../.env -- tsx scripts/cleanup-1month-recurrent-links.ts",
+    "script:migrate-supabase-editorial": "dotenv -e ../../.env -- tsx scripts/migrate-supabase-editorial.ts",
+    "script:migrate-supabase-admin-users": "dotenv -e ../../.env -- tsx scripts/migrate-supabase-admin-users.ts"
   },
   "prisma": {
     "seed": "dotenv -e ../../.env -- tsx prisma/seed.ts"

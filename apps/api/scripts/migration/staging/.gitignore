@@ -1,0 +1,5 @@
+# Dados reais de export — não versionar (podem conter PII)
+*
+!.gitignore
+!examples/
+!examples/**
