@@ -8,10 +8,12 @@ import { SchedulesService } from './schedules.service';
 import { EventTicketTypesService } from './event-ticket-types.service';
 import { EventCheckoutService } from './event-checkout.service';
 import { EventOrdersService } from './event-orders.service';
+import { EventReportsService } from './event-reports.service';
 import { TenantsMeEventsController } from './tenants-me-events.controller';
 import { TenantsMeRegistrationsController } from './tenants-me-registrations.controller';
 import { TenantsMeSchedulesController } from './tenants-me-schedules.controller';
 import { TenantsMeEventTicketTypesController } from './tenants-me-event-ticket-types.controller';
+import { TenantsMeEventsDashboardController } from './tenants-me-events-dashboard.controller';
 import { PublicEventsController } from './public-events.controller';
 
 @Module({
@@ -21,6 +23,7 @@ import { PublicEventsController } from './public-events.controller';
     TenantsMeRegistrationsController,
     TenantsMeSchedulesController,
     TenantsMeEventTicketTypesController,
+    TenantsMeEventsDashboardController,
     PublicEventsController,
   ],
   providers: [
@@ -30,6 +33,7 @@ import { PublicEventsController } from './public-events.controller';
     EventTicketTypesService,
     EventCheckoutService,
     EventOrdersService,
+    EventReportsService,
   ],
   exports: [
     EventsService,
