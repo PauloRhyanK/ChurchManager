@@ -1,5 +1,5 @@
 import { Search, Bell } from "lucide-react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -14,17 +14,35 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
-const routeNames: Record<string, string> = {
-  "/": "Visão Geral",
-  "/financeiro": "Financeiro",
-  "/eventos": "Eventos",
-  "/site": "Site",
-  "/configuracoes": "Configurações",
+const routeLabels: Record<string, string> = {
+  eventos: "Eventos",
+  financeiro: "Financeiro",
+  configuracoes: "Configurações",
+  site: "Site",
+  plataforma: "Plataforma",
+  igrejas: "Igrejas",
+  inscricoes: "Inscrições",
+  novo: "Novo",
+  editar: "Editar",
 };
+
+function buildBreadcrumbs(pathname: string) {
+  const segments = pathname.split("/").filter(Boolean);
+  const crumbs: { label: string; href?: string }[] = [{ label: "Início", href: "/" }];
+
+  let path = "";
+  for (const segment of segments) {
+    path += `/${segment}`;
+    const label = routeLabels[segment] ?? segment;
+    crumbs.push({ label, href: path });
+  }
+
+  return crumbs;
+}
 
 export function AppHeader() {
   const location = useLocation();
-  const currentRoute = routeNames[location.pathname] || "Página";
+  const crumbs = buildBreadcrumbs(location.pathname);
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-border bg-background/80 backdrop-blur-sm px-4 md:px-6">
@@ -33,17 +51,23 @@ export function AppHeader() {
 
       <Breadcrumb className="hidden md:flex">
         <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink href="/">Início</BreadcrumbLink>
-          </BreadcrumbItem>
-          {location.pathname !== "/" && (
-            <>
-              <BreadcrumbSeparator />
-              <BreadcrumbItem>
-                <BreadcrumbPage>{currentRoute}</BreadcrumbPage>
-              </BreadcrumbItem>
-            </>
-          )}
+          {crumbs.map((crumb, index) => {
+            const isLast = index === crumbs.length - 1;
+            return (
+              <span key={crumb.href ?? crumb.label} className="contents">
+                {index > 0 && <BreadcrumbSeparator />}
+                <BreadcrumbItem>
+                  {isLast ? (
+                    <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
+                  ) : (
+                    <BreadcrumbLink asChild>
+                      <Link to={crumb.href!}>{crumb.label}</Link>
+                    </BreadcrumbLink>
+                  )}
+                </BreadcrumbItem>
+              </span>
+            );
+          })}
         </BreadcrumbList>
       </Breadcrumb>
 

@@ -34,11 +34,11 @@ import { Separator } from "@/components/ui/separator";
 const mainNav = [
   { title: "Visão Geral", url: "/", icon: LayoutDashboard },
   { title: "Financeiro", url: "/financeiro", icon: DollarSign },
+  { title: "Eventos", url: "/eventos", icon: CalendarDays },
 ];
 
 /** Módulos ainda sem backend no painel — mesmo padrão visual (desactivado + Breve). */
 const managementNav = [
-  { title: "Eventos", icon: CalendarDays, soon: true },
   { title: "Site", icon: Globe, soon: true },
   { title: "Escalas", icon: Users, soon: true },
   { title: "Células / Grupos", icon: Grid3X3, soon: true },

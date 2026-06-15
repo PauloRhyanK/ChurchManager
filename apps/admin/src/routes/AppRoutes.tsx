@@ -1,5 +1,9 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { LoginPage } from "@/features/auth/pages/LoginPage";
+import EventDetailRoutePage from "@/features/events/pages/EventDetailRoutePage";
+import EventFormPage from "@/features/events/pages/EventFormPage";
+import EventsListPage from "@/features/events/pages/EventsListPage";
+import RegistrationsPage from "@/features/events/pages/RegistrationsPage";
 import Financial from "@/pages/Financial";
 import Index from "@/pages/Index";
 import { ModuleComingSoon } from "@/pages/ModuleComingSoon";
@@ -17,15 +21,11 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<Index />} />
         <Route path="/financeiro" element={<Financial />} />
-        <Route
-          path="/eventos"
-          element={
-            <ModuleComingSoon
-              title="Eventos"
-              description="Agenda, inscrições e bilhetes integrados ao painel ainda estão em desenvolvimento. Por agora use o Financeiro para cotas e pagamentos."
-            />
-          }
-        />
+        <Route path="/eventos" element={<EventsListPage />} />
+        <Route path="/eventos/novo" element={<EventFormPage />} />
+        <Route path="/eventos/inscricoes" element={<RegistrationsPage />} />
+        <Route path="/eventos/:id" element={<EventDetailRoutePage />} />
+        <Route path="/eventos/:id/editar" element={<EventFormPage />} />
         <Route
           path="/site"
           element={
