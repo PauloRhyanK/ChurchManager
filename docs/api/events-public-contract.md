@@ -1,8 +1,11 @@
-# Contrato público — Eventos e ingressos
+# Contrato público — Eventos e ingressos (alvo / evolução)
+
+> **Para integrar o site hoje**, use a referência alinhada ao código implementado:
+> **[events-api-reference.md](./events-api-reference.md)** (tipos TypeScript, exemplos, fluxos e erros reais).
 
 Escopo: utilizador anónimo ou sessão site (sem JWT administrativo), tenant resolvido por **`slug`**.
 
-**Estado:** a maior parte destes endpoints é **planeada**. As rotas financeiras genéricas actuais (`payer-profiles`, `payment-intents`) podem ser reutilizadas ou encapsuladas por estes fluxos — ver secção 6.
+**Estado:** a maior parte destes endpoints está **implementada**; alguns campos de resposta abaixo descrevem o **contrato-alvo** (ex.: `startsAt`, paginação cursor). A tabela de mapeamento implementação ↔ alvo está em [events-api-reference.md §13](./events-api-reference.md#13-notas-de-implementação-no-front).
 
 ---
 
