@@ -1,11 +1,17 @@
+import { Transform, Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { ALLOWED_BILLING_TYPES } from './create-event-ticket-type.dto';
+import { TicketFieldConfigDto } from './ticket-field-config.dto';
 
 export class UpdateEventTicketTypeDto {
   @IsOptional()
@@ -50,6 +56,39 @@ export class UpdateEventTicketTypeDto {
   salesClosesAt?: string;
 
   @IsOptional()
+  @IsIn(['PUBLIC', 'PRIVATE'])
+  visibility?: 'PUBLIC' | 'PRIVATE';
+
+  @IsOptional()
+  @IsBoolean()
+  allowGuestRegistration?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  @Transform(({ value }) => {
+    const s = String(value ?? '').trim();
+    return s === '' ? null : s;
+  })
+  communityLink?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @IsIn(ALLOWED_BILLING_TYPES, { each: true })
+  allowedBillingTypes?: string[];
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  maxInstallments?: number | null;
+
+  @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TicketFieldConfigDto)
+  fieldConfigs?: TicketFieldConfigDto[];
 }

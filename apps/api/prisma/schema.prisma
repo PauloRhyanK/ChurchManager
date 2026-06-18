@@ -12,6 +12,26 @@ enum AdminUserRole {
   PLATFORM_ADMIN
 }
 
+enum EventFormat {
+  IN_PERSON
+  ONLINE
+}
+
+enum TicketVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum EventFieldType {
+  TEXT
+  EMAIL
+  PHONE
+  CPF
+  TEXTAREA
+  SELECT
+  CHECKBOX
+}
+
 model Tenant {
   id        String   @id @default(uuid()) @db.Uuid
   name      String   @db.VarChar(255)
@@ -37,6 +57,8 @@ model Tenant {
   adminUsers         AdminUser[]
   publicWebOrigins   TenantPublicWebOrigin[]
   events             Event[]
+  eventTags          EventTag[]
+  eventFieldDefs     EventFieldDefinition[]
   eventRegistrations EventRegistration[]
   eventTicketTypes   EventTicketType[]
   eventOrders        EventOrder[]
@@ -47,35 +69,77 @@ model Tenant {
 }
 
 model Event {
-  id          String    @id @default(uuid()) @db.Uuid
-  tenantId    String    @map("tenant_id") @db.Uuid
-  title       String    @db.VarChar(255)
-  description String?   @db.Text
-  date        DateTime  @db.Date
-  timeStart   DateTime? @map("time_start") @db.Time(0)
-  timeEnd     DateTime? @map("time_end") @db.Time(0)
-  location    String?   @db.VarChar(255)
-  imageUrl    String?   @map("image_url") @db.Text
-  tag         String?   @db.VarChar(64)
-  published   Boolean   @default(true)
-  slug        String?   @db.VarChar(120)
-  timezone    String    @default("America/Sao_Paulo") @db.VarChar(64)
+  id          String      @id @default(uuid()) @db.Uuid
+  tenantId    String      @map("tenant_id") @db.Uuid
+  title       String      @db.VarChar(255)
+  description String?     @db.Text
+  format      EventFormat @default(IN_PERSON)
+  /// URL de transmissão para eventos online.
+  onlineUrl   String?     @map("online_url") @db.VarChar(2048)
+  /// Resumo curto exibido em listagens/cards.
+  shortDescription String? @map("short_description") @db.VarChar(500)
+  /// Detalhes longos do evento (texto/HTML) para a página pública.
+  detailsHtml String?     @map("details_html") @db.Text
+  videoUrl    String?     @map("video_url") @db.Text
+  coverImageUrl String?   @map("cover_image_url") @db.Text
+  /// Metadados de mídia (futuro upload Cloudflare): [{ kind, url, provider, assetId?, status? }].
+  mediaMeta   Json?       @map("media_meta")
+  date        DateTime    @db.Date
+  timeStart   DateTime?   @map("time_start") @db.Time(0)
+  timeEnd     DateTime?   @map("time_end") @db.Time(0)
+  location    String?     @db.VarChar(255)
+  /// Legado: imagem única (substituída por coverImageUrl). Mantido para retrocompatibilidade.
+  imageUrl    String?     @map("image_url") @db.Text
+  /// Legado: etiqueta única (substituída por tags). Mantido para retrocompatibilidade.
+  tag         String?     @db.VarChar(64)
+  published   Boolean     @default(true)
+  slug        String?     @db.VarChar(120)
+  timezone    String      @default("America/Sao_Paulo") @db.VarChar(64)
   registrationClosesAt DateTime? @map("registration_closes_at")
-  termsUrl    String?   @map("terms_url") @db.VarChar(2048)
-  currency    String    @default("BRL") @db.VarChar(3)
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  termsUrl    String?     @map("terms_url") @db.VarChar(2048)
+  currency    String      @default("BRL") @db.VarChar(3)
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
 
   tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   registrations EventRegistration[]
   ticketTypes   EventTicketType[]
   orders        EventOrder[]
+  tags          EventTagOnEvent[]
 
   @@index([tenantId])
   @@index([tenantId, date])
   @@index([tenantId, published])
   @@unique([tenantId, slug])
   @@map("events")
+}
+
+/// Etiqueta reutilizável por tenant, associada a eventos via EventTagOnEvent.
+model EventTag {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String   @db.VarChar(64)
+  slug      String   @db.VarChar(80)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  events EventTagOnEvent[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId])
+  @@map("event_tags")
+}
+
+model EventTagOnEvent {
+  eventId String @map("event_id") @db.Uuid
+  tagId   String @map("tag_id") @db.Uuid
+
+  event Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  tag   EventTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([eventId, tagId])
+  @@index([tagId])
+  @@map("event_tags_on_events")
 }
 
 model EventRegistration {
@@ -92,6 +156,7 @@ model EventRegistration {
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  fieldValues EventRegistrationFieldValue[]
 
   @@unique([eventId, email], map: "event_registrations_event_email_unique")
   @@index([tenantId])
@@ -117,31 +182,108 @@ enum EventTicketStatus {
 }
 
 model EventTicketType {
-  id              String    @id @default(uuid()) @db.Uuid
-  tenantId        String    @map("tenant_id") @db.Uuid
-  eventId         String    @map("event_id") @db.Uuid
-  name            String    @db.VarChar(255)
-  description     String?   @db.Text
-  priceCents      Int       @map("price_cents")
-  feeCents        Int       @default(0) @map("fee_cents")
-  quantityTotal   Int?      @map("quantity_total")
-  quantitySold    Int       @default(0) @map("quantity_sold")
-  minPerOrder     Int       @default(1) @map("min_per_order")
-  maxPerOrder     Int       @default(10) @map("max_per_order")
-  salesOpensAt    DateTime? @map("sales_opens_at")
-  salesClosesAt   DateTime? @map("sales_closes_at")
-  active          Boolean   @default(true)
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id              String           @id @default(uuid()) @db.Uuid
+  tenantId        String           @map("tenant_id") @db.Uuid
+  eventId         String           @map("event_id") @db.Uuid
+  name            String           @db.VarChar(255)
+  description     String?          @db.Text
+  priceCents      Int              @map("price_cents")
+  feeCents        Int              @default(0) @map("fee_cents")
+  quantityTotal   Int?             @map("quantity_total")
+  quantitySold    Int              @default(0) @map("quantity_sold")
+  minPerOrder     Int              @default(1) @map("min_per_order")
+  maxPerOrder     Int              @default(10) @map("max_per_order")
+  salesOpensAt    DateTime?        @map("sales_opens_at")
+  salesClosesAt   DateTime?        @map("sales_closes_at")
+  /// PUBLIC = listado no site; PRIVATE = oculto, acessível por link directo.
+  visibility      TicketVisibility @default(PUBLIC)
+  /// Permite inscrição/compra sem login (utilizador anónimo).
+  allowGuestRegistration Boolean   @default(true) @map("allow_guest_registration")
+  /// Link de grupo/comunidade (ex. WhatsApp) exibido após a inscrição.
+  communityLink   String?          @map("community_link") @db.VarChar(2048)
+  /// Tipos de pagamento permitidos: PIX, BOLETO, CREDIT_CARD, UNDEFINED.
+  allowedBillingTypes String[]     @map("allowed_billing_types")
+  /// Máximo de parcelas no cartão (null = à vista).
+  maxInstallments Int?             @map("max_installments")
+  active          Boolean          @default(true)
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
 
-  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  event      Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  orderLines EventOrderLine[]
-  tickets    EventTicket[]
+  tenant       Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  event        Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  orderLines   EventOrderLine[]
+  tickets      EventTicket[]
+  fieldConfigs EventTicketTypeField[]
 
   @@index([tenantId])
   @@index([eventId])
   @@map("event_ticket_types")
+}
+
+/// Definição de campo de inscrição por tenant (padrão do sistema ou personalizado).
+model EventFieldDefinition {
+  id        String         @id @default(uuid()) @db.Uuid
+  tenantId  String         @map("tenant_id") @db.Uuid
+  key       String         @db.VarChar(80)
+  label     String         @db.VarChar(255)
+  type      EventFieldType
+  /// Opções para campos SELECT: string[].
+  options   Json?
+  /// Campo padrão do sistema (não removível pelo utilizador).
+  isSystem  Boolean        @default(false) @map("is_system")
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  tenant            Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  ticketConfigs     EventTicketTypeField[]
+  registrationValues EventRegistrationFieldValue[]
+  orderValues       EventOrderFieldValue[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("event_field_definitions")
+}
+
+/// Configuração de um campo num tipo de ingresso (activo/obrigatório/ordem).
+model EventTicketTypeField {
+  ticketTypeId String  @map("ticket_type_id") @db.Uuid
+  fieldId      String  @map("field_id") @db.Uuid
+  enabled      Boolean @default(true)
+  required     Boolean @default(false)
+  sortOrder    Int     @default(0) @map("sort_order")
+
+  ticketType EventTicketType      @relation(fields: [ticketTypeId], references: [id], onDelete: Cascade)
+  field      EventFieldDefinition @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@id([ticketTypeId, fieldId])
+  @@index([fieldId])
+  @@map("event_ticket_type_fields")
+}
+
+model EventRegistrationFieldValue {
+  registrationId String @map("registration_id") @db.Uuid
+  fieldId        String @map("field_id") @db.Uuid
+  value          String @db.Text
+
+  registration EventRegistration    @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  field        EventFieldDefinition @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@id([registrationId, fieldId])
+  @@index([fieldId])
+  @@map("event_registration_field_values")
+}
+
+model EventOrderFieldValue {
+  orderId String @map("order_id") @db.Uuid
+  fieldId String @map("field_id") @db.Uuid
+  value   String @db.Text
+
+  order EventOrder           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  field EventFieldDefinition @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@id([orderId, fieldId])
+  @@index([fieldId])
+  @@map("event_order_field_values")
 }
 
 model EventOrder {
@@ -163,6 +305,7 @@ model EventOrder {
   lines        EventOrderLine[]
   tickets      EventTicket[]
   transactions FinancialTransaction[]
+  fieldValues  EventOrderFieldValue[]
 
   @@index([tenantId])
   @@index([eventId])

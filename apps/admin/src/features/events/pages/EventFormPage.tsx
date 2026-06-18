@@ -2,7 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -17,6 +18,8 @@ import {
   fetchEvent,
   updateEvent,
 } from "@/features/events/api/tenant-events-api";
+import { EventTagsInput } from "@/features/events/components/EventTagsInput";
+import { ImageUploader } from "@/components/ImageUploader";
 import {
   eventFormSchema,
   eventFormToApiBody,
@@ -40,29 +43,41 @@ export default function EventFormPage() {
     resolver: zodResolver(eventFormSchema),
     defaultValues: {
       title: "",
+      shortDescription: "",
       description: "",
+      detailsHtml: "",
       date: "",
       timeStart: "",
       timeEnd: "",
+      format: "IN_PERSON",
       location: "",
-      imageUrl: "",
-      tag: "",
+      onlineUrl: "",
+      coverImageUrl: "",
+      videoUrl: "",
+      tags: [],
       published: true,
     },
   });
+
+  const format = form.watch("format");
 
   useEffect(() => {
     if (eventQuery.data) {
       const e = eventQuery.data;
       form.reset({
         title: e.title,
+        shortDescription: e.shortDescription ?? "",
         description: e.description ?? "",
+        detailsHtml: e.detailsHtml ?? "",
         date: e.date,
         timeStart: e.timeStart?.slice(0, 5) ?? "",
         timeEnd: e.timeEnd?.slice(0, 5) ?? "",
+        format: e.format ?? "IN_PERSON",
         location: e.location ?? "",
-        imageUrl: e.imageUrl ?? "",
-        tag: e.tag ?? "",
+        onlineUrl: e.onlineUrl ?? "",
+        coverImageUrl: e.coverImageUrl ?? "",
+        videoUrl: e.videoUrl ?? "",
+        tags: e.tags?.map((t) => t.name) ?? [],
         published: e.published,
       });
     }
@@ -126,6 +141,16 @@ export default function EventFormPage() {
                 </div>
 
                 <div className="space-y-2">
+                  <Label htmlFor="shortDescription">Descrição curta</Label>
+                  <Textarea
+                    id="shortDescription"
+                    rows={2}
+                    placeholder="Resumo exibido nos cartões do site"
+                    {...form.register("shortDescription")}
+                  />
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="description">Descrição</Label>
                   <Textarea id="description" rows={4} {...form.register("description")} />
                 </div>
@@ -149,24 +174,81 @@ export default function EventFormPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="location">Local</Label>
-                  <Input id="location" {...form.register("location")} />
+                  <Label>Formato</Label>
+                  <Controller
+                    control={form.control}
+                    name="format"
+                    render={({ field }) => (
+                      <RadioGroup
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        className="flex gap-6"
+                      >
+                        <div className="flex items-center gap-2">
+                          <RadioGroupItem value="IN_PERSON" id="ef-in" />
+                          <Label htmlFor="ef-in" className="font-normal">
+                            Presencial
+                          </Label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <RadioGroupItem value="ONLINE" id="ef-on" />
+                          <Label htmlFor="ef-on" className="font-normal">
+                            Online
+                          </Label>
+                        </div>
+                      </RadioGroup>
+                    )}
+                  />
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                {format === "ONLINE" ? (
                   <div className="space-y-2">
-                    <Label htmlFor="imageUrl">URL da imagem</Label>
-                    <Input id="imageUrl" type="url" {...form.register("imageUrl")} />
-                    {form.formState.errors.imageUrl && (
+                    <Label htmlFor="onlineUrl">Link de transmissão</Label>
+                    <Input id="onlineUrl" type="url" {...form.register("onlineUrl")} />
+                    {form.formState.errors.onlineUrl && (
                       <p className="text-sm text-red-600">
-                        {form.formState.errors.imageUrl.message}
+                        {form.formState.errors.onlineUrl.message}
                       </p>
                     )}
                   </div>
+                ) : (
                   <div className="space-y-2">
-                    <Label htmlFor="tag">Etiqueta</Label>
-                    <Input id="tag" placeholder="Ex.: culto, retiro" {...form.register("tag")} />
+                    <Label htmlFor="location">Local</Label>
+                    <Input id="location" {...form.register("location")} />
                   </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label>Imagem de capa (16:9)</Label>
+                  <Controller
+                    control={form.control}
+                    name="coverImageUrl"
+                    render={({ field }) => (
+                      <ImageUploader
+                        value={field.value}
+                        onChange={field.onChange}
+                      />
+                    )}
+                  />
+                  {form.formState.errors.coverImageUrl && (
+                    <p className="text-sm text-red-600">
+                      {form.formState.errors.coverImageUrl.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Etiquetas</Label>
+                  <Controller
+                    control={form.control}
+                    name="tags"
+                    render={({ field }) => (
+                      <EventTagsInput
+                        value={field.value ?? []}
+                        onChange={field.onChange}
+                      />
+                    )}
+                  />
                 </div>
 
                 <div className="flex items-center justify-between rounded-lg border p-4">

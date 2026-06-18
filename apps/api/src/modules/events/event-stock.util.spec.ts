@@ -6,7 +6,9 @@ import {
   validateCheckoutLine,
 } from './event-stock.util';
 
-const baseType = {
+import { EventTicketType } from '@prisma/client';
+
+const baseType: EventTicketType = {
   id: 't1',
   tenantId: 'tenant',
   eventId: 'e1',
@@ -23,7 +25,8 @@ const baseType = {
   active: true,
   createdAt: new Date(),
   updatedAt: new Date(),
-};
+} as any;
+
 
 test('quantityRemaining calcula vagas restantes', () => {
   assert.equal(quantityRemaining(baseType), 2);

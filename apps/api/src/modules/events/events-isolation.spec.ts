@@ -3,7 +3,10 @@ import test from 'node:test';
 import { NotFoundException } from '@nestjs/common';
 import { EventsService } from './events.service';
 import { EventRegistrationsService } from './event-registrations.service';
+import { EventTagsService } from './event-tags.service';
 import { SchedulesService } from './schedules.service';
+
+const tagsStub = {} as EventTagsService;
 
 const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TENANT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -18,18 +21,26 @@ function createEventsPrismaMock(capture: { where?: unknown }) {
       },
       findFirst: async ({ where }: { where: { id?: string; tenantId?: string } }) => {
         capture.where = where;
-        if (where.tenantId === TENANT_A && where.id === EVENT_A) {
+          if (where.tenantId === TENANT_A && where.id === EVENT_A) {
           return {
             id: EVENT_A,
             tenantId: TENANT_A,
             title: 'Evento A',
             description: null,
+            format: 'IN_PERSON',
+            onlineUrl: null,
+            shortDescription: null,
+            detailsHtml: null,
+            videoUrl: null,
+            coverImageUrl: null,
+            mediaMeta: null,
             date: new Date(Date.UTC(2026, 6, 1)),
             timeStart: null,
             timeEnd: null,
             location: null,
             imageUrl: null,
             tag: null,
+            tags: [],
             published: true,
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -46,7 +57,10 @@ function createEventsPrismaMock(capture: { where?: unknown }) {
 
 test('isolation: EventsService.listForTenant filtra por tenantId', async () => {
   const capture: { where?: unknown } = {};
-  const service = new EventsService(createEventsPrismaMock(capture) as never);
+  const service = new EventsService(
+    createEventsPrismaMock(capture) as never,
+    tagsStub,
+  );
   await service.listForTenant(TENANT_A, { publishedOnly: true });
   assert.deepEqual(capture.where, {
     tenantId: TENANT_A,
@@ -56,7 +70,10 @@ test('isolation: EventsService.listForTenant filtra por tenantId', async () => {
 
 test('isolation: EventsService.getForTenant devolve 404 se evento é de outro tenant', async () => {
   const capture: { where?: unknown } = {};
-  const service = new EventsService(createEventsPrismaMock(capture) as never);
+  const service = new EventsService(
+    createEventsPrismaMock(capture) as never,
+    tagsStub,
+  );
   await assert.rejects(
     () => service.getForTenant(TENANT_B, EVENT_A),
     (err: unknown) => err instanceof NotFoundException,

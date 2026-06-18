@@ -81,6 +81,17 @@ export class PublicEventsController {
     );
   }
 
+  /** Ingresso por id — inclui privados (link directo). */
+  @Get(':slug/events/:eventId/tickets/:ticketId')
+  async getTicketType(
+    @Param('slug') slug: string,
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+    @Param('ticketId', ParseUUIDPipe) ticketId: string,
+  ) {
+    const tenant = await this.tenants.findBySlugOrThrow(slug);
+    return this.ticketTypes.getPublicById(tenant.id, eventId, ticketId);
+  }
+
   @Post(':slug/events/:eventId/checkout')
   @HttpCode(HttpStatus.CREATED)
   async createCheckout(

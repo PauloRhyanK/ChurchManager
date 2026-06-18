@@ -1,7 +1,19 @@
-import { AdminUserRole, PrismaClient } from '@prisma/client';
+import { AdminUserRole, EventFieldType, PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
+
+/** Campos de inscrição padrão criados para cada tenant. */
+const DEFAULT_EVENT_FIELDS: Array<{
+  key: string;
+  label: string;
+  type: EventFieldType;
+}> = [
+  { key: 'name', label: 'Nome completo', type: EventFieldType.TEXT },
+  { key: 'email', label: 'E-mail', type: EventFieldType.EMAIL },
+  { key: 'phone', label: 'Telefone', type: EventFieldType.PHONE },
+  { key: 'cpf', label: 'CPF', type: EventFieldType.CPF },
+];
 
 async function main() {
   const tenant = await prisma.tenant.upsert({
@@ -47,6 +59,20 @@ async function main() {
       role: AdminUserRole.PLATFORM_ADMIN,
     },
   });
+
+  for (const field of DEFAULT_EVENT_FIELDS) {
+    await prisma.eventFieldDefinition.upsert({
+      where: { tenantId_key: { tenantId: tenant.id, key: field.key } },
+      create: {
+        tenantId: tenant.id,
+        key: field.key,
+        label: field.label,
+        type: field.type,
+        isSystem: true,
+      },
+      update: {},
+    });
+  }
 
   await prisma.tenantPublicWebOrigin.upsert({
     where: {

@@ -39,6 +39,15 @@ export class EventCheckoutLineDto {
   quantity!: number;
 }
 
+export class EventFieldValueDto {
+  @IsString()
+  fieldId!: string;
+
+  @IsString()
+  @MaxLength(5000)
+  value!: string;
+}
+
 export class CreateEventCheckoutDto {
   @ValidateNested()
   @Type(() => EventCheckoutPayerDto)
@@ -49,8 +58,19 @@ export class CreateEventCheckoutDto {
   @Type(() => EventCheckoutLineDto)
   lines!: EventCheckoutLineDto[];
 
-  @IsIn(['PIX', 'BOLETO', 'UNDEFINED'])
-  billingType!: 'PIX' | 'BOLETO' | 'UNDEFINED';
+  @IsIn(['PIX', 'BOLETO', 'CREDIT_CARD', 'UNDEFINED'])
+  billingType!: 'PIX' | 'BOLETO' | 'CREDIT_CARD' | 'UNDEFINED';
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  installmentCount?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => EventFieldValueDto)
+  fieldValues?: EventFieldValueDto[];
 
   @IsOptional()
   @IsString()

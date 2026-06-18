@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link2, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Copy, Link2, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,11 +16,13 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EventPaymentLinkDialog } from "@/features/events/components/EventPaymentLinkDialog";
-import { TicketTypeFormDialog } from "@/features/events/components/TicketTypeFormDialog";
+import { EventSiteDetailsTab } from "@/features/events/components/EventSiteDetailsTab";
+import { TicketTypeWizardDialog } from "@/features/events/components/TicketTypeWizardDialog";
 import { fetchEventRegistrations } from "@/features/events/api/tenant-event-registrations-api";
 import { fetchEvent, fetchEventReport } from "@/features/events/api/tenant-events-api";
 import {
   deleteEventTicketType,
+  duplicateEventTicketType,
   fetchEventTicketTypes,
   type EventTicketTypeDto,
 } from "@/features/events/api/tenant-event-ticket-types-api";
@@ -37,10 +39,13 @@ import { BarChart3, Ticket, Users } from "lucide-react";
 
 export function EventDetailPage() {
   const { id = "" } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get("tab") === "site" ? "site" : "ingressos";
   const queryClient = useQueryClient();
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const [paymentLinkTicket, setPaymentLinkTicket] = useState<EventTicketTypeDto | null>(null);
   const [editingTicket, setEditingTicket] = useState<EventTicketTypeDto | null>(null);
+  const [duplicateTicket, setDuplicateTicket] = useState<EventTicketTypeDto | null>(null);
 
   const eventQuery = useQuery({
     queryKey: ["event", id],
@@ -76,6 +81,16 @@ export function EventDetailPage() {
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
 
+  const duplicateTicketMutation = useMutation({
+    mutationFn: (ticketTypeId: string) => duplicateEventTicketType(id, ticketTypeId),
+    onSuccess: () => {
+      toast.success("Ingresso duplicado.");
+      void queryClient.invalidateQueries({ queryKey: ["event-ticket-types", id] });
+      void queryClient.invalidateQueries({ queryKey: ["event-report", id] });
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
+
   const event = eventQuery.data;
   const ticketTypes = ticketTypesQuery.data ?? [];
   const registrations = registrationsQuery.data ?? [];
@@ -83,10 +98,12 @@ export function EventDetailPage() {
 
   function openCreateTicket() {
     setEditingTicket(null);
+    setDuplicateTicket(null);
     setTicketDialogOpen(true);
   }
 
   function openEditTicket(ticket: EventTicketTypeDto) {
+    setDuplicateTicket(null);
     setEditingTicket(ticket);
     setTicketDialogOpen(true);
   }
@@ -137,9 +154,10 @@ export function EventDetailPage() {
         </Button>
       </div>
 
-      <Tabs defaultValue="ingressos">
+      <Tabs defaultValue={initialTab}>
         <TabsList>
           <TabsTrigger value="ingressos">Tipos de ingresso</TabsTrigger>
+          <TabsTrigger value="site">Detalhes do site</TabsTrigger>
           <TabsTrigger value="inscricoes">
             Inscrições ({registrations.length})
           </TabsTrigger>
@@ -173,8 +191,9 @@ export function EventDetailPage() {
                       <TableHead>Nome</TableHead>
                       <TableHead>Preço</TableHead>
                       <TableHead>Vendidos</TableHead>
+                      <TableHead>Visibilidade</TableHead>
                       <TableHead>Estado</TableHead>
-                      <TableHead className="w-[140px]" />
+                      <TableHead className="w-[180px]" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -185,6 +204,11 @@ export function EventDetailPage() {
                         <TableCell>
                           {ticket.quantitySold}
                           {ticket.quantityTotal != null ? ` / ${ticket.quantityTotal}` : ""}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={ticket.visibility === "PUBLIC" ? "outline" : "secondary"}>
+                            {ticket.visibility === "PUBLIC" ? "Público" : "Privado"}
+                          </Badge>
                         </TableCell>
                         <TableCell>
                           <Badge variant={ticket.active ? "outline" : "secondary"}>
@@ -200,6 +224,15 @@ export function EventDetailPage() {
                               onClick={() => setPaymentLinkTicket(ticket)}
                             >
                               <Link2 className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Duplicar"
+                              disabled={duplicateTicketMutation.isPending}
+                              onClick={() => duplicateTicketMutation.mutate(ticket.id)}
+                            >
+                              <Copy className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="ghost"
@@ -230,6 +263,10 @@ export function EventDetailPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="site" className="mt-4">
+          <EventSiteDetailsTab event={event} />
         </TabsContent>
 
         <TabsContent value="inscricoes" className="mt-4">
@@ -335,9 +372,10 @@ export function EventDetailPage() {
         </TabsContent>
       </Tabs>
 
-      <TicketTypeFormDialog
+      <TicketTypeWizardDialog
         eventId={id}
         ticketType={editingTicket}
+        duplicateFrom={duplicateTicket}
         open={ticketDialogOpen}
         onOpenChange={setTicketDialogOpen}
         onSaved={invalidateTicketQueries}

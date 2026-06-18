@@ -3,6 +3,7 @@ import { LoginPage } from "@/features/auth/pages/LoginPage";
 import EventDetailRoutePage from "@/features/events/pages/EventDetailRoutePage";
 import EventFormPage from "@/features/events/pages/EventFormPage";
 import EventsListPage from "@/features/events/pages/EventsListPage";
+import EventSettingsPage from "@/features/events/pages/EventSettingsPage";
 import RegistrationsPage from "@/features/events/pages/RegistrationsPage";
 import Financial from "@/pages/Financial";
 import Index from "@/pages/Index";
@@ -23,6 +24,7 @@ export function AppRoutes() {
         <Route path="/financeiro" element={<Financial />} />
         <Route path="/eventos" element={<EventsListPage />} />
         <Route path="/eventos/novo" element={<EventFormPage />} />
+        <Route path="/eventos/configuracoes" element={<EventSettingsPage />} />
         <Route path="/eventos/inscricoes" element={<RegistrationsPage />} />
         <Route path="/eventos/:id" element={<EventDetailRoutePage />} />
         <Route path="/eventos/:id/editar" element={<EventFormPage />} />

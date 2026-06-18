@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, Loader2, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CreateEventWizardModal } from "@/features/events/components/CreateEventWizardModal";
 import {
   Table,
   TableBody,
@@ -20,6 +22,7 @@ import { getApiErrorMessage } from "@/lib/api";
 
 export default function EventsListPage() {
   const queryClient = useQueryClient();
+  const [createOpen, setCreateOpen] = useState(false);
   const eventsQuery = useQuery({
     queryKey: ["events"],
     queryFn: fetchEvents,
@@ -52,13 +55,14 @@ export default function EventsListPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline">
+              <Link to="/eventos/configuracoes">Configurações</Link>
+            </Button>
+            <Button asChild variant="outline">
               <Link to="/eventos/inscricoes">Inscrições</Link>
             </Button>
-            <Button asChild className="gap-2">
-              <Link to="/eventos/novo">
-                <Plus className="h-4 w-4" />
-                Novo evento
-              </Link>
+            <Button className="gap-2" onClick={() => setCreateOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Novo evento
             </Button>
           </div>
         </div>
@@ -85,8 +89,8 @@ export default function EventsListPage() {
                 A carregar…
               </div>
             ) : items.length === 0 ? (
-              <Button asChild>
-                <Link to="/eventos/novo">Criar primeiro evento</Link>
+              <Button onClick={() => setCreateOpen(true)}>
+                Criar primeiro evento
               </Button>
             ) : (
               <Table>
@@ -152,6 +156,8 @@ export default function EventsListPage() {
           </CardContent>
         </Card>
       </div>
+
+      <CreateEventWizardModal open={createOpen} onOpenChange={setCreateOpen} />
     </DashboardLayout>
   );
 }

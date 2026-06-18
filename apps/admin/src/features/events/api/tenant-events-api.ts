@@ -1,15 +1,31 @@
 import { api } from "@/lib/api";
 
+export type EventFormat = "IN_PERSON" | "ONLINE";
+
+export interface EventTagRef {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 export interface EventDto {
   id: string;
   title: string;
   description: string | null;
+  format: EventFormat;
+  onlineUrl: string | null;
+  shortDescription: string | null;
+  detailsHtml: string | null;
+  videoUrl: string | null;
+  coverImageUrl: string | null;
+  mediaMeta: unknown | null;
   date: string;
   timeStart: string | null;
   timeEnd: string | null;
   location: string | null;
   imageUrl: string | null;
   tag: string | null;
+  tags: EventTagRef[];
   published: boolean;
   slug: string | null;
   timezone: string | null;
@@ -65,12 +81,18 @@ export interface EventReportDto {
 export type CreateEventBody = {
   title: string;
   description?: string | null;
+  format?: EventFormat;
+  onlineUrl?: string | null;
+  shortDescription?: string | null;
+  detailsHtml?: string | null;
+  videoUrl?: string | null;
+  coverImageUrl?: string | null;
   date: string;
   timeStart?: string;
   timeEnd?: string;
   location?: string | null;
   imageUrl?: string | null;
-  tag?: string | null;
+  tags?: string[];
   published?: boolean;
 };
 

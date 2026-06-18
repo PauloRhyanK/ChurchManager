@@ -40,6 +40,15 @@ export class TenantsMeEventTicketTypesController {
     return this.ticketTypes.createForEvent(user.tenantId, eventId, dto);
   }
 
+  @Post(':id/duplicate')
+  async duplicate(
+    @CurrentUser() user: AuthUser,
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.ticketTypes.duplicateForEvent(user.tenantId, eventId, id);
+  }
+
   @Put(':id')
   async update(
     @CurrentUser() user: AuthUser,

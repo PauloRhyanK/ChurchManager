@@ -15,6 +15,7 @@ import { CreateEventCheckoutDto } from './dto/create-event-checkout.dto';
 import { buildEventOrderExternalReference } from './event-order-external-reference';
 import { EventTicketTypesService } from './event-ticket-types.service';
 import { validateCheckoutLine } from './event-stock.util';
+import { collectFieldValues } from './event-field-validation.util';
 
 function formatDueDate(daysFromNow = 0): string {
   const d = new Date();
@@ -66,6 +67,7 @@ export class EventCheckoutService {
     const typeIds = dto.lines.map((l) => l.ticketTypeId);
     const types = await this.prisma.eventTicketType.findMany({
       where: { tenantId: tenant.id, eventId, id: { in: typeIds } },
+      include: { fieldConfigs: { include: { field: true } } },
     });
     if (types.length !== typeIds.length) {
       throw new NotFoundException('Tipo de ingresso não encontrado');
@@ -84,6 +86,49 @@ export class EventCheckoutService {
     if (totalCents <= 0) {
       throw new BadRequestException('Valor total inválido');
     }
+
+    // Tipo de pagamento permitido por todos os ingressos selecionados.
+    for (const type of types) {
+      if (
+        type.allowedBillingTypes.length > 0 &&
+        !type.allowedBillingTypes.includes(dto.billingType)
+      ) {
+        throw new BadRequestException(
+          `Pagamento "${dto.billingType}" não permitido para "${type.name}"`,
+        );
+      }
+    }
+
+    // Parcelamento — só cartão e dentro do limite de cada ingresso.
+    const installmentCount =
+      dto.billingType === 'CREDIT_CARD' && dto.installmentCount
+        ? dto.installmentCount
+        : 1;
+    if (installmentCount > 1) {
+      for (const type of types) {
+        const max = type.maxInstallments ?? 1;
+        if (installmentCount > max) {
+          throw new BadRequestException(
+            `"${type.name}" permite no máximo ${max}x`,
+          );
+        }
+      }
+    }
+
+    // Campos personalizados obrigatórios (agregados dos ingressos do pedido).
+    const requirements = types.flatMap((t) =>
+      t.fieldConfigs.map((fc) => ({
+        fieldId: fc.fieldId,
+        key: fc.field.key,
+        label: fc.field.label,
+        enabled: fc.enabled,
+        required: fc.required,
+      })),
+    );
+    const fieldValuesToPersist = collectFieldValues(
+      requirements,
+      dto.fieldValues,
+    );
 
     const profile = await this.payerProfiles.upsertForTenant(tenant.id, {
       cpf,
@@ -126,6 +171,16 @@ export class EventCheckoutService {
               };
             }),
           },
+          ...(fieldValuesToPersist.length > 0
+            ? {
+                fieldValues: {
+                  create: fieldValuesToPersist.map((fv) => ({
+                    fieldId: fv.fieldId,
+                    value: fv.value,
+                  })),
+                },
+              }
+            : {}),
         },
       });
 
@@ -163,6 +218,7 @@ export class EventCheckoutService {
         tenant.slug,
         orderResult.id,
       ),
+      ...(installmentCount > 1 ? { installmentCount } : {}),
     });
 
     const financialTx = await this.prisma.financialTransaction.create({

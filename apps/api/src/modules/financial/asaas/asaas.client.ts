@@ -219,14 +219,23 @@ export class AsaasClient {
     description?: string;
     externalReference?: string;
     callback?: AsaasCallbackInput;
+    /** Cartão parcelado: número de parcelas (>1). Define totalValue = value. */
+    installmentCount?: number;
   }): Promise<AsaasPaymentResponse> {
+    const installments =
+      input.installmentCount && input.installmentCount > 1
+        ? {
+            installmentCount: input.installmentCount,
+            totalValue: input.value,
+          }
+        : { value: input.value };
     const res = await fetch(`${this.baseUrl}/payments`, {
       method: 'POST',
       headers: this.headers(input.apiKey),
       body: JSON.stringify({
         customer: input.customerId,
         billingType: input.billingType,
-        value: input.value,
+        ...installments,
         dueDate: input.dueDate,
         description: input.description,
         externalReference: input.externalReference,

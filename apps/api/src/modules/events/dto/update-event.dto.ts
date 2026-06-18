@@ -1,6 +1,8 @@
 import { Transform } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
+  IsIn,
   IsOptional,
   IsString,
   Matches,
@@ -9,6 +11,11 @@ import {
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
+
+function nullableTrim({ value }: { value: unknown }): string | null {
+  const s = String(value ?? '').trim();
+  return s === '' ? null : s;
+}
 
 export class UpdateEventDto {
   @IsOptional()
@@ -20,11 +27,42 @@ export class UpdateEventDto {
   @IsOptional()
   @IsString()
   @MaxLength(10000)
-  @Transform(({ value }) => {
-    const s = String(value ?? '').trim();
-    return s === '' ? null : s;
-  })
+  @Transform(nullableTrim)
   description?: string | null;
+
+  @IsOptional()
+  @IsIn(['IN_PERSON', 'ONLINE'])
+  format?: 'IN_PERSON' | 'ONLINE';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  @Transform(nullableTrim)
+  onlineUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  @Transform(nullableTrim)
+  shortDescription?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50000)
+  @Transform(nullableTrim)
+  detailsHtml?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  @Transform(nullableTrim)
+  videoUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  @Transform(nullableTrim)
+  coverImageUrl?: string | null;
 
   @IsOptional()
   @IsString()
@@ -42,29 +80,20 @@ export class UpdateEventDto {
   @IsOptional()
   @IsString()
   @MaxLength(255)
-  @Transform(({ value }) => {
-    const s = String(value ?? '').trim();
-    return s === '' ? null : s;
-  })
+  @Transform(nullableTrim)
   location?: string | null;
 
   @IsOptional()
   @IsString()
   @MaxLength(2048)
-  @Transform(({ value }) => {
-    const s = String(value ?? '').trim();
-    return s === '' ? null : s;
-  })
+  @Transform(nullableTrim)
   imageUrl?: string | null;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(64)
-  @Transform(({ value }) => {
-    const s = String(value ?? '').trim();
-    return s === '' ? null : s;
-  })
-  tag?: string | null;
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(64, { each: true })
+  tags?: string[];
 
   @IsOptional()
   @IsBoolean()

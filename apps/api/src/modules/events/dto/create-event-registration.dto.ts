@@ -1,5 +1,14 @@
-import { Transform } from 'class-transformer';
-import { IsEmail, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  IsArray,
+  IsEmail,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
+import { EventFieldValueDto } from './create-event-checkout.dto';
 
 export class CreateEventRegistrationDto {
   @IsString()
@@ -33,4 +42,14 @@ export class CreateEventRegistrationDto {
   @IsOptional()
   @IsUUID()
   userId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  ticketTypeId?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => EventFieldValueDto)
+  fieldValues?: EventFieldValueDto[];
 }

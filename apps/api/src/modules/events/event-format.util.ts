@@ -31,17 +31,27 @@ export function parseTimeOnly(value: string | undefined | null): Date | null {
   return new Date(Date.UTC(1970, 0, 1, h, min, sec));
 }
 
-export function toEventDto(row: Event) {
+export type EventTagDto = { id: string; name: string; slug: string };
+
+export function toEventDto(row: Event, tags: EventTagDto[] = []) {
   return {
     id: row.id,
     title: row.title,
     description: row.description,
+    format: row.format,
+    onlineUrl: row.onlineUrl,
+    shortDescription: row.shortDescription,
+    detailsHtml: row.detailsHtml,
+    videoUrl: row.videoUrl,
+    coverImageUrl: row.coverImageUrl ?? row.imageUrl,
+    mediaMeta: row.mediaMeta ?? null,
     date: formatDateOnly(row.date),
     timeStart: formatTimeOnly(row.timeStart),
     timeEnd: formatTimeOnly(row.timeEnd),
     location: row.location,
     imageUrl: row.imageUrl,
     tag: row.tag,
+    tags,
     published: row.published,
     slug: row.slug,
     timezone: row.timezone,
