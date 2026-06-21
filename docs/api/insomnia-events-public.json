@@ -1,0 +1,302 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-06-21T20:50:00.000Z",
+  "__export_source": "insomnia.desktop.app:v8.6.1",
+  "resources": [
+    {
+      "_id": "wrk_events_public",
+      "parentId": null,
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "name": "Church Manager - Módulo de Eventos (Público)",
+      "description": "Coleção de requests públicos para o Módulo de Eventos (Consumo / Site Público)",
+      "scope": "collection",
+      "_type": "workspace"
+    },
+    {
+      "_id": "env_events_local",
+      "parentId": "wrk_events_public",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "name": "Ambiente Local",
+      "data": {
+        "base_url": "http://localhost:3001/api",
+        "slug": "demo",
+        "eventId": "coloque-o-uuid-do-evento-aqui",
+        "ticketId": "coloque-o-uuid-do-ingresso-aqui",
+        "orderId": "coloque-o-uuid-do-pedido-aqui",
+        "ticketIssuedId": "coloque-o-uuid-do-ingresso-emitido-aqui"
+      },
+      "dataPropertyOrder": {
+        "&": [
+          "base_url",
+          "slug",
+          "eventId",
+          "ticketId",
+          "orderId",
+          "ticketIssuedId"
+        ]
+      },
+      "color": "#7d69f2",
+      "isPrivate": false,
+      "metaSortKey": 1700000000000,
+      "_type": "environment"
+    },
+    {
+      "_id": "req_list_events",
+      "parentId": "wrk_events_public",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "url": "{{ _.base_url }}/public/tenants/{{ _.slug }}/events",
+      "name": "Listar Eventos (Filtro futuros)",
+      "description": "Lista eventos publicados. Use a query `upcomingOnly=true` para retornar apenas eventos de hoje em diante.",
+      "method": "GET",
+      "body": {},
+      "parameters": [
+        {
+          "name": "upcomingOnly",
+          "value": "true",
+          "disabled": false,
+          "id": "param_upcoming"
+        }
+      ],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": 100,
+      "isPrivate": false,
+      "_type": "request"
+    },
+    {
+      "_id": "req_list_published",
+      "parentId": "wrk_events_public",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "url": "{{ _.base_url }}/public/tenants/{{ _.slug }}/events/published",
+      "name": "Listar Todos Publicados",
+      "description": "Lista todos os eventos publicados para o tenant de forma cronológica (sem o filtro de apenas futuros).",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": 200,
+      "isPrivate": false,
+      "_type": "request"
+    },
+    {
+      "_id": "req_get_event",
+      "parentId": "wrk_events_public",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "url": "{{ _.base_url }}/public/tenants/{{ _.slug }}/events/{{ _.eventId }}",
+      "name": "Obter Detalhes do Evento",
+      "description": "Recupera as informações detalhadas de um evento específico.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": 300,
+      "isPrivate": false,
+      "_type": "request"
+    },
+    {
+      "_id": "req_list_tickets",
+      "parentId": "wrk_events_public",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "url": "{{ _.base_url }}/public/tenants/{{ _.slug }}/events/{{ _.eventId }}/tickets",
+      "name": "Listar Ingressos (Tipos)",
+      "description": "Lista os tipos de ingressos disponíveis publicamente para o evento informado.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": 400,
+      "isPrivate": false,
+      "_type": "request"
+    },
+    {
+      "_id": "req_get_ticket_type",
+      "parentId": "wrk_events_public",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "url": "{{ _.base_url }}/public/tenants/{{ _.slug }}/events/{{ _.eventId }}/tickets/{{ _.ticketId }}",
+      "name": "Obter Tipo de Ingresso por ID",
+      "description": "Retorna o tipo de ingresso por ID. Permite acessar tipos privados se houver o ID correto (link direto).",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": 500,
+      "isPrivate": false,
+      "_type": "request"
+    },
+    {
+      "_id": "req_checkout",
+      "parentId": "wrk_events_public",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "url": "{{ _.base_url }}/public/tenants/{{ _.slug }}/events/{{ _.eventId }}/checkout",
+      "name": "Realizar Checkout (Comprar Ingresso)",
+      "description": "Gera um checkout de pagamento no Asaas para os ingressos selecionados. billingType aceita: PIX, BOLETO, CREDIT_CARD, UNDEFINED.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"payer\": {\n    \"cpf\": \"12345678909\",\n    \"name\": \"João da Silva\",\n    \"email\": \"joao@example.com\",\n    \"phone\": \"11999999999\"\n  },\n  \"lines\": [\n    {\n      \"ticketTypeId\": \"{{ _.ticketId }}\",\n      \"quantity\": 1\n    }\n  ],\n  \"billingType\": \"PIX\",\n  \"fieldValues\": [\n    {\n      \"fieldId\": \"coloque-o-id-do-campo-customizado-se-houver\",\n      \"value\": \"Resposta exemplo do formulário\"\n    }\n  ]\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json",
+          "id": "header_ct"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": 600,
+      "isPrivate": false,
+      "_type": "request"
+    },
+    {
+      "_id": "req_order_payment",
+      "parentId": "wrk_events_public",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "url": "{{ _.base_url }}/public/tenants/{{ _.slug }}/events/{{ _.eventId }}/orders/{{ _.orderId }}/payment",
+      "name": "Consultar Status do Pagamento (Pedido)",
+      "description": "Usado para verificar se o pagamento foi concluído com sucesso e obter informações adicionais do status da transação.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": 700,
+      "isPrivate": false,
+      "_type": "request"
+    },
+    {
+      "_id": "req_get_ticket_issued",
+      "parentId": "wrk_events_public",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "url": "{{ _.base_url }}/public/tenants/{{ _.slug }}/tickets/{{ _.ticketIssuedId }}",
+      "name": "Obter Ingresso Emitido",
+      "description": "Retorna o bilhete/ingresso emitido após o sucesso da compra ou inscrição.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": 800,
+      "isPrivate": false,
+      "_type": "request"
+    },
+    {
+      "_id": "req_register",
+      "parentId": "wrk_events_public",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "url": "{{ _.base_url }}/public/tenants/{{ _.slug }}/events/{{ _.eventId }}/registrations",
+      "name": "Criar Inscrição Direta (Gratuito/Geral)",
+      "description": "Realiza uma inscrição direta num evento sem fluxo de checkout de pagamento.",
+      "method": "POST",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"Maria Oliveira\",\n  \"email\": \"maria@example.com\",\n  \"phone\": \"11988888888\",\n  \"message\": \"Gostaria de participar do evento\",\n  \"ticketTypeId\": \"{{ _.ticketId }}\",\n  \"fieldValues\": [\n    {\n      \"fieldId\": \"coloque-o-id-do-campo-customizado-se-houver\",\n      \"value\": \"Resposta exemplo do formulário\"\n    }\n  ]\n}"
+      },
+      "parameters": [],
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json",
+          "id": "header_ct_reg"
+        }
+      ],
+      "authentication": {},
+      "metaSortKey": 900,
+      "isPrivate": false,
+      "_type": "request"
+    },
+    {
+      "_id": "req_check_registration",
+      "parentId": "wrk_events_public",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "url": "{{ _.base_url }}/public/tenants/{{ _.slug }}/events/{{ _.eventId }}/registrations/check",
+      "name": "Verificar se está Inscrito",
+      "description": "Verifica se um determinado e-mail ou ID de usuário já possui inscrição ativa no evento informado.",
+      "method": "GET",
+      "body": {},
+      "parameters": [
+        {
+          "name": "email",
+          "value": "maria@example.com",
+          "disabled": false,
+          "id": "param_chk_email"
+        },
+        {
+          "name": "userId",
+          "value": "",
+          "disabled": true,
+          "id": "param_chk_user"
+        }
+      ],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": 1000,
+      "isPrivate": false,
+      "_type": "request"
+    },
+    {
+      "_id": "req_list_mine",
+      "parentId": "wrk_events_public",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "url": "{{ _.base_url }}/public/tenants/{{ _.slug }}/registrations/mine",
+      "name": "Listar Minhas Inscrições",
+      "description": "Lista todas as inscrições efetuadas por um participante usando e-mail ou ID de usuário.",
+      "method": "GET",
+      "body": {},
+      "parameters": [
+        {
+          "name": "email",
+          "value": "maria@example.com",
+          "disabled": false,
+          "id": "param_mine_email"
+        },
+        {
+          "name": "userId",
+          "value": "",
+          "disabled": true,
+          "id": "param_mine_user"
+        }
+      ],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": 1100,
+      "isPrivate": false,
+      "_type": "request"
+    },
+    {
+      "_id": "req_list_schedules",
+      "parentId": "wrk_events_public",
+      "modified": 1700000000000,
+      "created": 1700000000000,
+      "url": "{{ _.base_url }}/public/tenants/{{ _.slug }}/schedules",
+      "name": "Listar Agendas (Schedules)",
+      "description": "Lista todas as agendas/schedules públicas associadas ao tenant.",
+      "method": "GET",
+      "body": {},
+      "parameters": [],
+      "headers": [],
+      "authentication": {},
+      "metaSortKey": 1200,
+      "isPrivate": false,
+      "_type": "request"
+    }
+  ]
+}
