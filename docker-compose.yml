@@ -19,46 +19,46 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  api:
-    build:
-      context: ./apps/api
-      dockerfile: Dockerfile
-    ports:
-      - "3001:3000"
-    env_file:
-      - .env
-    environment:
-      PORT: "3000"
-    depends_on:
-      db:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
-        ]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 90s
+#  api:
+#    build:
+#      context: ./apps/api
+#      dockerfile: Dockerfile
+#    ports:
+#      - "3001:3000"
+#    env_file:
+#      - .env
+#    environment:
+#      PORT: "3000"
+#    depends_on:
+#      db:
+#        condition: service_healthy
+#    restart: unless-stopped
+#    healthcheck:
+#      test:
+#        [
+#          "CMD",
+#          "node",
+#          "-e",
+#          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+#        ]
+#      interval: 15s
+#      timeout: 5s
+#      retries: 5
+#      start_period: 90s
 
   # Túnel HTTPS para webhooks Asaas em dev (opcional). Ver docker/README.md e docs/webhooks-local-dev-ngrok.md
-  ngrok:
-    image: ngrok/ngrok:latest
-    profiles: ["tunnel"]
-    restart: unless-stopped
-    depends_on:
-      api:
-        condition: service_healthy
-    env_file:
-      - .env
-    command: ["http", "--log=stdout", "http://api:3000"]
-    ports:
-      - "4040:4040"
+#  ngrok:
+#    image: ngrok/ngrok:latest
+#    profiles: ["tunnel"]
+#    restart: unless-stopped
+#    depends_on:
+#      api:
+#        condition: service_healthy
+#    env_file:
+#      - .env
+#    command: ["http", "--log=stdout", "http://api:3000"]
+#    ports:
+#      - "4040:4040"
 
   # pgAdmin 4 — só dev local. Não uses em produção exposto à internet.
   pgadmin:
