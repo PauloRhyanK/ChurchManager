@@ -24,17 +24,17 @@ type Props = { event: EventDto };
 
 export function EventSiteDetailsTab({ event }: Props) {
   const queryClient = useQueryClient();
-  const [coverImageUrl, setCoverImageUrl] = useState("");
-  const [videoUrl, setVideoUrl] = useState("");
-  const [shortDescription, setShortDescription] = useState("");
-  const [detailsHtml, setDetailsHtml] = useState("");
+  const [coverImageUrl, setCoverImageUrl] = useState(event.coverImageUrl ?? "");
+  const [videoUrl, setVideoUrl] = useState(event.videoUrl ?? "");
+  const [shortDescription, setShortDescription] = useState(event.shortDescription ?? "");
+  const [detailsHtml, setDetailsHtml] = useState(event.detailsHtml ?? "");
 
   useEffect(() => {
     setCoverImageUrl(event.coverImageUrl ?? "");
     setVideoUrl(event.videoUrl ?? "");
     setShortDescription(event.shortDescription ?? "");
     setDetailsHtml(event.detailsHtml ?? "");
-  }, [event]);
+  }, [event.id]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -44,9 +44,13 @@ export function EventSiteDetailsTab({ event }: Props) {
         shortDescription: shortDescription.trim() || null,
         detailsHtml: detailsHtml.trim() || null,
       }),
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast.success("Detalhes do site actualizados.");
       void queryClient.invalidateQueries({ queryKey: ["event", event.id] });
+      setCoverImageUrl(data.coverImageUrl ?? "");
+      setVideoUrl(data.videoUrl ?? "");
+      setShortDescription(data.shortDescription ?? "");
+      setDetailsHtml(data.detailsHtml ?? "");
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
@@ -60,13 +64,6 @@ export function EventSiteDetailsTab({ event }: Props) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          <Info className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>
-            Upload de imagem via Cloudflare R2 activado. Vídeos ainda devem usar URL do YouTube ou Vimeo.
-          </span>
-        </div>
-
         <div className="space-y-2">
           <Label>Imagem de capa (16:9)</Label>
           <ImageUploader

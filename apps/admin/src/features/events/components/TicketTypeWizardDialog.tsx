@@ -50,6 +50,7 @@ import { getApiErrorMessage } from "@/lib/api";
 
 type Props = {
   eventId: string;
+  eventDate?: string;
   ticketType: EventTicketTypeDto | null;
   /** Modo duplicação: pré-preenche como novo a partir de um existente. */
   duplicateFrom?: EventTicketTypeDto | null;
@@ -116,15 +117,27 @@ function buildFieldConfigs(
   });
 }
 
-function baseValues(source: EventTicketTypeDto | null): TicketTypeFormValues {
+function getTodayDatetimeLocal(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function getEventDatetimeLocal(eventDateStr: string): string {
+  return `${eventDateStr}T23:59`;
+}
+
+function baseValues(source: EventTicketTypeDto | null, eventDate?: string): TicketTypeFormValues {
   if (!source) {
+    const todayStr = getTodayDatetimeLocal();
+    const eventStr = eventDate ? getEventDatetimeLocal(eventDate) : "";
     return {
       name: "",
       description: "",
       active: true,
       visibility: "PUBLIC",
-      salesOpensAt: "",
-      salesClosesAt: "",
+      salesOpensAt: todayStr,
+      salesClosesAt: eventStr,
       allowGuestRegistration: true,
       communityLink: "",
       allowedBillingTypes: ["PIX"],
@@ -170,6 +183,7 @@ const STEP_FIELDS: Record<number, (keyof TicketTypeFormValues)[]> = {
 
 export function TicketTypeWizardDialog({
   eventId,
+  eventDate,
   ticketType,
   duplicateFrom,
   open,
@@ -180,6 +194,7 @@ export function TicketTypeWizardDialog({
   const source = ticketType ?? duplicateFrom ?? null;
   const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
+  const [hasInitialized, setHasInitialized] = useState(false);
 
   const fieldsQuery = useQuery({
     queryKey: ["event-field-definitions"],
@@ -189,22 +204,29 @@ export function TicketTypeWizardDialog({
 
   const form = useForm<TicketTypeFormValues>({
     resolver: zodResolver(ticketTypeFormSchema),
-    defaultValues: baseValues(source),
+    defaultValues: baseValues(source, eventDate),
   });
 
   useEffect(() => {
-    if (open) {
-      setStep(1);
+    if (!open) {
+      setHasInitialized(false);
+      return;
+    }
+
+    if (!hasInitialized && !fieldsQuery.isLoading) {
       const initial = baseValues(
         duplicateFrom ? { ...duplicateFrom, name: `${duplicateFrom.name} (cópia)` } : source,
+        eventDate,
       );
       if (fieldsQuery.data) {
         initial.fieldConfigs = buildFieldConfigs(fieldsQuery.data, source);
       }
       form.reset(initial);
+      setStep(1);
+      setHasInitialized(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, ticketType, duplicateFrom, fieldsQuery.data]);
+  }, [open, hasInitialized, fieldsQuery.isLoading, fieldsQuery.data, ticketType, duplicateFrom, source, eventDate, form]);
 
   const saveMutation = useMutation({
     mutationFn: async (values: TicketTypeFormValues) => {
@@ -273,12 +295,17 @@ export function TicketTypeWizardDialog({
         <form
           className="space-y-4"
           onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") {
+              e.preventDefault();
+            }
+          }}
           noValidate
         >
           {step === 1 && <Step1 form={form} />}
           {step === 2 && <Step2 form={form} />}
-          {step === 3 && (
-            <Step3 form={form} defs={fieldsQuery.data ?? []} />
+          {step === 3 && fieldsQuery.data && (
+            <Step3 form={form} defs={fieldsQuery.data} />
           )}
 
           <DialogFooter className="gap-2 sm:justify-between">
@@ -302,11 +329,11 @@ export function TicketTypeWizardDialog({
                 Cancelar
               </Button>
               {step < 3 ? (
-                <Button type="button" onClick={goNext}>
+                <Button key="next-btn" type="button" onClick={goNext}>
                   Seguinte
                 </Button>
               ) : (
-                <Button type="submit" disabled={saveMutation.isPending}>
+                <Button key="submit-btn" type="submit" disabled={saveMutation.isPending}>
                   {saveMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
@@ -484,20 +511,14 @@ function Step2({ form }: StepProps) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label htmlFor="tt-price">Preço (R$)</Label>
-          <Input id="tt-price" placeholder="0,00" {...form.register("priceInput")} />
-          {form.formState.errors.priceInput && (
-            <p className="text-sm text-red-600">
-              {form.formState.errors.priceInput.message}
-            </p>
-          )}
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="tt-fee">Taxa (R$)</Label>
-          <Input id="tt-fee" placeholder="0,00" {...form.register("feeInput")} />
-        </div>
+      <div className="space-y-2">
+        <Label htmlFor="tt-price">Preço (R$)</Label>
+        <Input id="tt-price" placeholder="0,00" {...form.register("priceInput")} />
+        {form.formState.errors.priceInput && (
+          <p className="text-sm text-red-600">
+            {form.formState.errors.priceInput.message}
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-3 gap-3">
@@ -533,6 +554,7 @@ function Step3({
   const [adding, setAdding] = useState(false);
   const [label, setLabel] = useState("");
   const [type, setType] = useState<EventFieldType>("TEXT");
+  const [optionsText, setOptionsText] = useState("");
 
   const knownIds = useMemo(
     () => new Set(configs.map((c) => c.fieldId)),
@@ -564,8 +586,12 @@ function Step3({
   }
 
   const createFieldMutation = useMutation({
-    mutationFn: () =>
-      createEventFieldDefinition({ label: label.trim(), type }),
+    mutationFn: () => {
+      const options = type === "SELECT"
+        ? optionsText.split(",").map((o) => o.trim()).filter(Boolean)
+        : undefined;
+      return createEventFieldDefinition({ label: label.trim(), type, options });
+    },
     onSuccess: (created) => {
       form.setValue("fieldConfigs", [
         ...form.getValues("fieldConfigs"),
@@ -583,6 +609,7 @@ function Step3({
       });
       setLabel("");
       setType("TEXT");
+      setOptionsText("");
       setAdding(false);
       toast.success("Campo personalizado criado.");
     },
@@ -617,6 +644,12 @@ function Step3({
                   {FIELD_TYPE_LABELS[config.type as EventFieldType] ??
                     config.type}
                   {config.isSystem ? " · padrão" : ""}
+                  {config.type === "SELECT" && (() => {
+                    const def = defs.find((d) => d.id === config.fieldId);
+                    return def?.options && def.options.length > 0
+                      ? ` (${def.options.join(", ")})`
+                      : "";
+                  })()}
                 </p>
               </div>
             </div>
@@ -654,7 +687,7 @@ function Step3({
               </SelectTrigger>
               <SelectContent>
                 {(
-                  ["TEXT", "EMAIL", "PHONE", "CPF", "TEXTAREA", "CHECKBOX"] as EventFieldType[]
+                  ["TEXT", "EMAIL", "PHONE", "CPF", "TEXTAREA", "SELECT", "CHECKBOX"] as EventFieldType[]
                 ).map((t) => (
                   <SelectItem key={t} value={t}>
                     {FIELD_TYPE_LABELS[t]}
@@ -663,6 +696,17 @@ function Step3({
               </SelectContent>
             </Select>
           </div>
+          {type === "SELECT" && (
+            <div className="space-y-2 animate-in fade-in duration-200">
+              <Label htmlFor="nf-options">Opções do campo</Label>
+              <Input
+                id="nf-options"
+                value={optionsText}
+                onChange={(e) => setOptionsText(e.target.value)}
+                placeholder="Separadas por vírgula. Ex: P, M, G"
+              />
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             <Button
               type="button"

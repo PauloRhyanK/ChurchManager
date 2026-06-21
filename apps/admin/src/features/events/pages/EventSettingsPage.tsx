@@ -40,8 +40,20 @@ import {
   deleteEventFieldDefinition,
   fetchEventFieldDefinitions,
   type EventFieldType,
+  type EventFieldDefinitionDto,
 } from "@/features/events/api/tenant-event-fields-api";
+import type { EventTagDto } from "@/features/events/api/tenant-event-tags-api";
 import { getApiErrorMessage } from "@/lib/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const FIELD_TYPE_LABELS: Record<EventFieldType, string> = {
   TEXT: "Texto",
@@ -58,6 +70,10 @@ export default function EventSettingsPage() {
   const [tagName, setTagName] = useState("");
   const [fieldLabel, setFieldLabel] = useState("");
   const [fieldType, setFieldType] = useState<EventFieldType>("TEXT");
+  const [fieldOptionsText, setFieldOptionsText] = useState("");
+
+  const [tagToDelete, setTagToDelete] = useState<EventTagDto | null>(null);
+  const [fieldToDelete, setFieldToDelete] = useState<EventFieldDefinitionDto | null>(null);
 
   const tagsQuery = useQuery({ queryKey: ["event-tags"], queryFn: fetchEventTags });
   const fieldsQuery = useQuery({
@@ -85,11 +101,20 @@ export default function EventSettingsPage() {
   });
 
   const createFieldMutation = useMutation({
-    mutationFn: () =>
-      createEventFieldDefinition({ label: fieldLabel.trim(), type: fieldType }),
+    mutationFn: () => {
+      const options = fieldType === "SELECT"
+        ? fieldOptionsText.split(",").map((o) => o.trim()).filter(Boolean)
+        : undefined;
+      return createEventFieldDefinition({
+        label: fieldLabel.trim(),
+        type: fieldType,
+        options,
+      });
+    },
     onSuccess: () => {
       setFieldLabel("");
       setFieldType("TEXT");
+      setFieldOptionsText("");
       void queryClient.invalidateQueries({ queryKey: ["event-field-definitions"] });
       toast.success("Campo criado.");
     },
@@ -188,11 +213,7 @@ export default function EventSettingsPage() {
                             className="text-destructive"
                             disabled={deleteTagMutation.isPending}
                             onClick={() => {
-                              const warn =
-                                tag.usageCount > 0
-                                  ? `«${tag.name}» está em ${tag.usageCount} evento(s). Remover mesmo assim?`
-                                  : `Remover «${tag.name}»?`;
-                              if (window.confirm(warn)) deleteTagMutation.mutate(tag.id);
+                              setTagToDelete(tag);
                             }}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -216,32 +237,50 @@ export default function EventSettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <form
-              className="flex flex-wrap gap-2"
+              className="flex flex-wrap gap-2 items-end"
               onSubmit={(e) => {
                 e.preventDefault();
                 if (fieldLabel.trim()) createFieldMutation.mutate();
               }}
             >
-              <Input
-                value={fieldLabel}
-                onChange={(e) => setFieldLabel(e.target.value)}
-                placeholder="Rótulo (ex.: Empresa)"
-                className="max-w-xs"
-              />
-              <Select value={fieldType} onValueChange={(v) => setFieldType(v as EventFieldType)}>
-                <SelectTrigger className="w-44">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(["TEXT", "EMAIL", "PHONE", "CPF", "TEXTAREA", "CHECKBOX"] as EventFieldType[]).map(
-                    (t) => (
-                      <SelectItem key={t} value={t}>
-                        {FIELD_TYPE_LABELS[t]}
-                      </SelectItem>
-                    ),
-                  )}
-                </SelectContent>
-              </Select>
+              <div className="space-y-1">
+                <Label htmlFor="field-label" className="text-xs">Rótulo</Label>
+                <Input
+                  id="field-label"
+                  value={fieldLabel}
+                  onChange={(e) => setFieldLabel(e.target.value)}
+                  placeholder="Rótulo (ex.: Empresa)"
+                  className="w-60"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Tipo</Label>
+                <Select value={fieldType} onValueChange={(v) => setFieldType(v as EventFieldType)}>
+                  <SelectTrigger className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(["TEXT", "EMAIL", "PHONE", "CPF", "TEXTAREA", "SELECT", "CHECKBOX"] as EventFieldType[]).map(
+                      (t) => (
+                        <SelectItem key={t} value={t}>
+                          {FIELD_TYPE_LABELS[t]}
+                        </SelectItem>
+                      ),
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              {fieldType === "SELECT" && (
+                <div className="space-y-1 w-full sm:w-80 animate-in fade-in duration-200">
+                  <Label htmlFor="field-options" className="text-xs">Opções do campo</Label>
+                  <Input
+                    id="field-options"
+                    value={fieldOptionsText}
+                    onChange={(e) => setFieldOptionsText(e.target.value)}
+                    placeholder="Opções separadas por vírgula (ex.: P, M, G)"
+                  />
+                </div>
+              )}
               <Button
                 type="submit"
                 disabled={!fieldLabel.trim() || createFieldMutation.isPending}
@@ -273,7 +312,12 @@ export default function EventSettingsPage() {
                     <TableRow key={field.id}>
                       <TableCell className="font-medium">{field.label}</TableCell>
                       <TableCell className="text-muted-foreground">
-                        {FIELD_TYPE_LABELS[field.type]}
+                        <div>{FIELD_TYPE_LABELS[field.type]}</div>
+                        {field.type === "SELECT" && field.options && field.options.length > 0 && (
+                          <div className="text-xs text-muted-foreground/70 mt-0.5">
+                            Opções: {field.options.join(", ")}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant={field.isSystem ? "secondary" : "outline"}>
@@ -289,9 +333,7 @@ export default function EventSettingsPage() {
                               className="text-destructive"
                               disabled={deleteFieldMutation.isPending}
                               onClick={() => {
-                                if (window.confirm(`Remover «${field.label}»?`)) {
-                                  deleteFieldMutation.mutate(field.id);
-                                }
+                                setFieldToDelete(field);
                               }}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -307,6 +349,68 @@ export default function EventSettingsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Alert Dialog para excluir etiquetas */}
+      <AlertDialog open={Boolean(tagToDelete)} onOpenChange={(open) => !open && setTagToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover etiqueta?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {tagToDelete && tagToDelete.usageCount > 0 ? (
+                <span>
+                  A etiqueta <strong>«{tagToDelete.name}»</strong> está em uso em <strong>{tagToDelete.usageCount}</strong> evento(s).
+                  Tem a certeza de que deseja removê-la? Esta ação não pode ser desfeita.
+                </span>
+              ) : (
+                <span>
+                  Tem a certeza de que deseja remover a etiqueta <strong>«{tagToDelete?.name}»</strong>? Esta ação não pode ser desfeita.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (tagToDelete) {
+                  deleteTagMutation.mutate(tagToDelete.id);
+                  setTagToDelete(null);
+                }
+              }}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Alert Dialog para excluir campos personalizados */}
+      <AlertDialog open={Boolean(fieldToDelete)} onOpenChange={(open) => !open && setFieldToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover campo personalizado?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem a certeza de que deseja remover o campo <strong>«{fieldToDelete?.label}»</strong>?
+              Os dados recolhidos para este campo em inscrições anteriores podem não estar mais visíveis. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (fieldToDelete) {
+                  deleteFieldMutation.mutate(fieldToDelete.id);
+                  setFieldToDelete(null);
+                }
+              }}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }

@@ -374,6 +374,7 @@ export function EventDetailPage() {
 
       <TicketTypeWizardDialog
         eventId={id}
+        eventDate={event?.date}
         ticketType={editingTicket}
         duplicateFrom={duplicateTicket}
         open={ticketDialogOpen}

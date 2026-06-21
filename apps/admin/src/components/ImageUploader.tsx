@@ -16,24 +16,6 @@ export function ImageUploader({ value, onChange, disabled }: ImageUploaderProps)
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const validateAspectRatio = (file: File): Promise<boolean> => {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.src = URL.createObjectURL(file);
-      img.onload = () => {
-        URL.revokeObjectURL(img.src);
-        const ratio = img.width / img.height;
-        // 16:9 is 1.777777...
-        // Allow a small margin of tolerance (1.72 to 1.83)
-        const is169 = Math.abs(ratio - 16 / 9) < 0.06;
-        resolve(is169);
-      };
-      img.onerror = () => {
-        resolve(false);
-      };
-    });
-  };
-
   const handleUpload = async (file: File) => {
     if (!file.type.startsWith("image/")) {
       toast.error("O ficheiro selecionado não é uma imagem.");
@@ -41,13 +23,6 @@ export function ImageUploader({ value, onChange, disabled }: ImageUploaderProps)
     }
 
     setIsUploading(true);
-    const isValidRatio = await validateAspectRatio(file);
-
-    if (!isValidRatio) {
-      toast.error("A imagem deve ter a proporção de 16:9 (ex: 1920x1080, 1280x720).");
-      setIsUploading(false);
-      return;
-    }
 
     const formData = new FormData();
     formData.append("file", file);
