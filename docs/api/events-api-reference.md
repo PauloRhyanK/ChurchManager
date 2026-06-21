@@ -65,11 +65,24 @@ sequenceDiagram
 ## 2. Tipos TypeScript (copiar para o front)
 
 ```typescript
+export interface PublicEventTagDto {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 /** Resposta padrão de evento (listagem e detalhe). */
 export interface PublicEventDto {
   id: string;
   title: string;
   description: string | null;
+  format: 'IN_PERSON' | 'ONLINE' | 'HYBRID';
+  onlineUrl: string | null;
+  shortDescription: string | null;
+  detailsHtml: string | null;
+  videoUrl: string | null;
+  coverImageUrl: string | null;
+  mediaMeta: any | null;
   /** YYYY-MM-DD (UTC, campo @db.Date). */
   date: string;
   /** HH:MM:SS ou null. */
@@ -78,6 +91,7 @@ export interface PublicEventDto {
   location: string | null;
   imageUrl: string | null;
   tag: string | null;
+  tags: PublicEventTagDto[];
   published: boolean;
   slug: string | null;
   timezone: string | null;
@@ -94,6 +108,15 @@ export interface PublicEventListResponse {
   nextCursor: string | null;
 }
 
+export interface PublicTicketFieldDto {
+  fieldId: string;
+  key: string;
+  label: string;
+  type: 'TEXT' | 'EMAIL' | 'PHONE' | 'CPF' | 'TEXTAREA' | 'SELECT' | 'CHECKBOX';
+  options: string[] | null;
+  required: boolean;
+}
+
 export interface PublicTicketTypeDto {
   id: string;
   name: string;
@@ -106,7 +129,13 @@ export interface PublicTicketTypeDto {
   maxPerOrder: number;
   salesOpensAt: string | null;
   salesClosesAt: string | null;
+  visibility: 'PUBLIC' | 'PRIVATE';
+  allowGuestRegistration: boolean;
+  communityLink: string | null;
+  allowedBillingTypes: string[];
+  maxInstallments: number | null;
   isSoldOut: boolean;
+  fields: PublicTicketFieldDto[];
 }
 
 export interface PublicTicketsResponse {
@@ -123,7 +152,9 @@ export interface EventCheckoutRequest {
     phone?: string;
   };
   lines: Array<{ ticketTypeId: string; quantity: number }>;
-  billingType: "PIX" | "BOLETO" | "UNDEFINED";
+  billingType: "PIX" | "BOLETO" | "CREDIT_CARD" | "UNDEFINED";
+  installmentCount?: number;
+  fieldValues?: Array<{ fieldId: string; value: string }>;
   /** Recomendado: UUID ou string única por tentativa de checkout. */
   idempotencyKey?: string;
 }
@@ -183,6 +214,8 @@ export interface EventRegistrationRequest {
   phone?: string | null;
   message?: string | null;
   userId?: string | null;
+  ticketTypeId?: string | null;
+  fieldValues?: Array<{ fieldId: string; value: string }>;
 }
 
 export interface EventRegistrationDto {
@@ -194,6 +227,7 @@ export interface EventRegistrationDto {
   message: string | null;
   userId: string | null;
   createdAt: string;
+  communityLink: string | null;
 }
 ```
 
@@ -279,7 +313,22 @@ Lista tipos **activos** e **em janela de venda** (`salesOpensAt` / `salesClosesA
       "maxPerOrder": 10,
       "salesOpensAt": "2026-04-01T00:00:00.000Z",
       "salesClosesAt": null,
-      "isSoldOut": false
+      "visibility": "PUBLIC",
+      "allowGuestRegistration": true,
+      "communityLink": "https://chat.whatsapp.com/...",
+      "allowedBillingTypes": ["PIX", "BOLETO", "CREDIT_CARD"],
+      "maxInstallments": 3,
+      "isSoldOut": false,
+      "fields": [
+        {
+          "fieldId": "uuid-do-campo",
+          "key": "camiseta_tamanho",
+          "label": "Tamanho da Camiseta",
+          "type": "SELECT",
+          "options": ["P", "M", "G"],
+          "required": true
+        }
+      ]
     }
   ]
 }
@@ -417,11 +466,32 @@ Para eventos sem venda de ingressos (formulário “Quero participar”).
   "email": "joao@exemplo.com",
   "phone": "11988887777",
   "message": "Opcional",
-  "userId": "uuid-opcional-se-houver-conta"
+  "userId": "uuid-opcional-se-houver-conta",
+  "ticketTypeId": "uuid-do-ingresso-opcional",
+  "fieldValues": [
+    {
+      "fieldId": "uuid-do-campo-customizado-opcional",
+      "value": "Resposta customizada"
+    }
+  ]
 }
 ```
 
-**Resposta `201`:** `EventRegistrationDto`
+**Resposta `201`**
+
+```json
+{
+  "id": "uuid-da-inscricao",
+  "eventId": "uuid-do-evento",
+  "name": "João Souza",
+  "email": "joao@exemplo.com",
+  "phone": "11988887777",
+  "message": "Opcional",
+  "userId": "uuid-opcional-se-houver-conta",
+  "createdAt": "2026-06-21T20:00:00.000Z",
+  "communityLink": "https://chat.whatsapp.com/..."
+}
+```
 
 **Erros**
 
@@ -590,9 +660,7 @@ await fetch(`${API}/public/tenants/${slug}/events/${eventId}/checkout`, {
 | Contrato-alvo (futuro) | Implementação actual |
 |------------------------|----------------------|
 | `startsAt` / `endsAt` ISO | `date` + `timeStart` / `timeEnd` |
-| `coverImageUrl` | `imageUrl` |
 | `venueName` | `location` |
-| `shortDescription` | usar `description` truncado no front |
 | `nextCursor` paginação | sempre `null` |
 | `GET .../orders/:orderId/tickets` | ainda não exposto — usar `GET /tickets/:id` |
 
