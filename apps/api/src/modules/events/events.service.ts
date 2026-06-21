@@ -106,7 +106,7 @@ export class EventsService {
           timeStart: parseTimeOnly(dto.timeStart),
           timeEnd: parseTimeOnly(dto.timeEnd),
           location: dto.location ?? null,
-          imageUrl: dto.imageUrl ?? null,
+          imageUrl: dto.imageUrl ?? dto.coverImageUrl ?? null,
           tag: dto.tags?.[0] ?? null,
           published: dto.published ?? true,
         },
@@ -146,8 +146,11 @@ export class EventsService {
             ? { detailsHtml: dto.detailsHtml }
             : {}),
           ...(dto.videoUrl !== undefined ? { videoUrl: dto.videoUrl } : {}),
-          ...(dto.coverImageUrl !== undefined
-            ? { coverImageUrl: dto.coverImageUrl }
+          ...(dto.coverImageUrl !== undefined || dto.imageUrl !== undefined
+            ? {
+                coverImageUrl: dto.coverImageUrl !== undefined ? dto.coverImageUrl : dto.imageUrl,
+                imageUrl: dto.imageUrl !== undefined ? dto.imageUrl : dto.coverImageUrl,
+              }
             : {}),
           ...(dto.date !== undefined ? { date: parseDateOnly(dto.date) } : {}),
           ...(dto.timeStart !== undefined
@@ -157,7 +160,6 @@ export class EventsService {
             ? { timeEnd: parseTimeOnly(dto.timeEnd) }
             : {}),
           ...(dto.location !== undefined ? { location: dto.location } : {}),
-          ...(dto.imageUrl !== undefined ? { imageUrl: dto.imageUrl } : {}),
           ...(dto.tags !== undefined ? { tag: dto.tags[0] ?? null } : {}),
           ...(dto.published !== undefined ? { published: dto.published } : {}),
         },

@@ -80,6 +80,7 @@ export interface AsaasPaymentLinkCreateInput {
   externalReference?: string;
   notificationEnabled?: boolean;
   callback?: AsaasCallbackInput;
+  maxInstallmentCount?: number;
 }
 
 /** Pedido parcial — PUT /v3/subscriptions/{id} */

@@ -7,7 +7,7 @@ import {
 import { Tenant } from '@prisma/client';
 import { TenantCredentialsService } from '../tenants/tenant-credentials.service';
 import { AsaasClient } from './asaas/asaas.client';
-import type { AsaasPaymentLinkCreateInput } from './asaas/asaas.types';
+import type { AsaasPaymentLinkCreateInput, AsaasPaymentLinkBillingType } from './asaas/asaas.types';
 import { buildPaymentLinkExternalReference } from './payment-link-external-reference';
 import { isSinglePaymentCharge } from './payment-link-charge-intent';
 import { computeSubscriptionEndDateYmd } from './payment-link-subscription-end';
@@ -39,6 +39,9 @@ export interface CreatePaymentLinkOptions {
   successUrl?: string;
   /** Só com `successUrl`. Repassado ao Asaas em `callback.autoRedirect`. */
   autoRedirect?: boolean;
+  billingType?: AsaasPaymentLinkBillingType;
+  maxInstallmentCount?: number;
+  endDate?: string;
 }
 
 /**
@@ -79,14 +82,20 @@ export class PaymentLinksGenerationService {
           : opts.subscriptionDurationMonths != null
             ? `Assinatura mensal — ${opts.subscriptionDurationMonths} meses (link público)`
             : 'Assinatura mensal (link público)'),
-      billingType: 'UNDEFINED',
+      billingType: opts.billingType ?? 'UNDEFINED',
       chargeType: isSingleCharge ? 'DETACHED' : 'RECURRENT',
       dueDateLimitDays: PAYMENT_LINK_DUE_DATE_LIMIT_BUSINESS_DAYS,
       externalReference,
       notificationEnabled: true,
     };
 
-    if (!isSingleCharge) {
+    if (opts.maxInstallmentCount !== undefined) {
+      body.maxInstallmentCount = opts.maxInstallmentCount;
+    }
+
+    if (opts.endDate) {
+      body.endDate = opts.endDate;
+    } else if (!isSingleCharge) {
       body.subscriptionCycle = 'MONTHLY';
       if (opts.subscriptionDurationMonths != null) {
         body.endDate = computeSubscriptionEndDateYmd(

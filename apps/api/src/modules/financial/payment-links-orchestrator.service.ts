@@ -22,6 +22,7 @@ import {
   isLegacyWrongOneMonthRecurrentLink,
   normalizeSinglePaymentCharge,
 } from './payment-link-charge-intent';
+import { AsaasPaymentLinkBillingType } from './asaas/asaas.types';
 
 interface BaseResolvedLinkData {
   module: FinancialLinkModule;
@@ -36,6 +37,9 @@ interface BaseResolvedLinkData {
   cpf?: string;
   payerName?: string;
   asaasLinkName: string;
+  billingType?: AsaasPaymentLinkBillingType;
+  maxInstallmentCount?: number;
+  endDate?: string;
 }
 
 interface PublicCotasInput {
@@ -92,23 +96,82 @@ export class PaymentLinksOrchestratorService {
   }
 
   async createOrReuseEventAutoLink(tenant: Tenant, input: EventAutoInput) {
-    const resolved = await this.resolvePresetData(
-      tenant,
-      'events',
-      input.presetKey,
-      input.fallbackName,
-    );
-    const eventResolved = this.normalizeSinglePaymentDuration({
+    const ticketType = await this.prisma.eventTicketType.findUnique({
+      where: { id: input.ticketTypeId },
+    });
+    if (!ticketType) {
+      throw new NotFoundException('Ingresso não encontrado');
+    }
+
+    let resolved: BaseResolvedLinkData;
+    if (input.presetKey) {
+      resolved = await this.resolvePresetData(
+        tenant,
+        'events',
+        input.presetKey,
+        input.fallbackName,
+      );
+    } else {
+      // Tenta achar qualquer preset ativo de eventos do tenant para herdar redirects
+      const defaultPreset = await this.prisma.financialLinkPreset.findFirst({
+        where: {
+          tenantId: tenant.id,
+          module: toPrismaFinancialLinkModule('events'),
+          active: true,
+        },
+      });
+      resolved = {
+        module: 'events',
+        sourceKey: `events-${input.eventId}-${input.ticketTypeId}`,
+        isMonthly: false,
+        successUrl: defaultPreset?.successUrl ?? undefined,
+        autoRedirect: defaultPreset?.autoRedirect ?? undefined,
+        reuseMode: 'event_auto',
+        presetId: defaultPreset?.id,
+        asaasLinkName: input.fallbackName || ticketType.name,
+      };
+    }
+
+    // Alinha o link de pagamento com as configurações reais do ingresso
+    resolved.value = fromValueCents(ticketType.priceCents);
+
+    let billingType: AsaasPaymentLinkBillingType = 'UNDEFINED';
+    if (ticketType.allowedBillingTypes.length === 1) {
+      const type = ticketType.allowedBillingTypes[0];
+      if (type === 'PIX' || type === 'BOLETO' || type === 'CREDIT_CARD') {
+        billingType = type;
+      }
+    }
+
+    const endDate = ticketType.salesClosesAt
+      ? ticketType.salesClosesAt.toISOString().split('T')[0]
+      : undefined;
+
+    const maxInstallmentCount =
+      ticketType.allowedBillingTypes.includes('CREDIT_CARD') && ticketType.maxInstallments
+        ? ticketType.maxInstallments
+        : undefined;
+
+    const eventResolved: BaseResolvedLinkData = this.normalizeSinglePaymentDuration({
       ...resolved,
       reuseMode: 'event_auto',
       sourceKey: `events-${input.eventId}-${input.ticketTypeId}`,
-      asaasLinkName: `${resolved.asaasLinkName} - ingresso ${input.ticketTypeId}`,
+      asaasLinkName: `${resolved.asaasLinkName} - ingresso ${ticketType.name}`,
+      billingType,
+      maxInstallmentCount,
+      endDate,
     });
+
     const reuseKey = this.buildReuseKey(tenant.id, eventResolved, {
       mode: 'event_auto',
       eventId: input.eventId,
       ticketTypeId: input.ticketTypeId,
+      // Garante que qualquer alteração de preço, formas de pagamento, parcelamento ou data recrie o link
+      allowedBillingTypes: ticketType.allowedBillingTypes.join(','),
+      maxInstallments: ticketType.maxInstallments,
+      salesClosesAt: ticketType.salesClosesAt?.toISOString() ?? null,
     });
+
     return this.createOrReuse(tenant, eventResolved, reuseKey);
   }
 
@@ -155,6 +218,9 @@ export class PaymentLinksOrchestratorService {
       asaasLinkName: data.asaasLinkName,
       successUrl: data.successUrl,
       autoRedirect: data.autoRedirect,
+      billingType: data.billingType,
+      maxInstallmentCount: data.maxInstallmentCount,
+      endDate: data.endDate,
     });
 
     const persistData: Prisma.FinancialPaymentLinkUncheckedCreateInput = {

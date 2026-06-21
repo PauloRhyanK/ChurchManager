@@ -153,3 +153,23 @@ test('isolation: EventRegistrationsService.createForEvent grava tenantId do dest
     userId: null,
   });
 });
+
+test('isolation: EventsService.updateForTenant clears coverImageUrl and imageUrl when coverImageUrl is null', async () => {
+  let updateData: any = null;
+  const prisma = {
+    event: {
+      findFirst: async () => ({ id: EVENT_A, tags: [], date: new Date() }),
+      update: async ({ data }: { data: any }) => {
+        updateData = data;
+        return {};
+      },
+    },
+    $transaction: async (fn: any) => fn(prisma),
+  };
+  const service = new EventsService(prisma as never, tagsStub);
+  await service.updateForTenant(TENANT_A, EVENT_A, { coverImageUrl: null });
+  assert.deepEqual(updateData, {
+    coverImageUrl: null,
+    imageUrl: null,
+  });
+});
