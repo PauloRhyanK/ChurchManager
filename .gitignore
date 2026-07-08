@@ -69,6 +69,7 @@ web_modules/
 .env
 .env.*
 !.env.example
+!.env.qa.example
 
 # Docker Compose local overrides
 docker-compose.override.yml

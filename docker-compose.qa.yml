@@ -1,0 +1,155 @@
+# QA no servidor — clone separado na branch `qa` (ver docker/README.md).
+# 1) No clone QA: cp .env.qa.example .env e preencher segredos
+# 2) Na VPS: docker network create proxy-network  (se ainda não existir)
+# 3) NPM: hosts para api-qa.*, admin-qa.* e pgadmin-qa.* → contentores abaixo
+#
+# Arranque (na pasta ~/projetos/churchmanager-qa):
+#   docker compose -f docker-compose.qa.yml up -d --build
+# Webhooks Asaas (ngrok):
+#   docker compose -f docker-compose.qa.yml --profile tunnel up -d
+
+name: churchmanager-qa
+
+services:
+  qa-db:
+    image: postgres:16-alpine
+    container_name: churchmanager-qa-db
+    ports:
+      - "127.0.0.1:5439:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata_qa:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - qa_internal
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  qa-api:
+    image: ${API_IMAGE:-churchmanager-api:qa}
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: churchmanager-qa-api
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@qa-db:5432/${POSTGRES_DB}
+      PORT: "3000"
+    ports:
+      - "127.0.0.1:4070:3000"
+    depends_on:
+      qa-db:
+        condition: service_healthy
+    networks:
+      - qa_internal
+      - proxy-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  qa-ngrok:
+    image: ngrok/ngrok:latest
+    container_name: churchmanager-qa-ngrok
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    depends_on:
+      qa-api:
+        condition: service_healthy
+    env_file:
+      - .env
+    command: ["http", "--log=stdout", "http://qa-api:3000"]
+    ports:
+      - "127.0.0.1:4041:4040"
+    networks:
+      - qa_internal
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  qa-admin:
+    build:
+      context: ./apps/admin
+      dockerfile: Dockerfile
+      args:
+        API_URL: ${API_URL}
+    container_name: churchmanager-qa-admin
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:4071:80"
+    depends_on:
+      - qa-api
+    networks:
+      - qa_internal
+      - proxy-network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  qa-pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: churchmanager-qa-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "127.0.0.1:5053:80"
+    volumes:
+      - pgadmin_data_qa:/var/lib/pgadmin
+    depends_on:
+      qa-db:
+        condition: service_healthy
+    networks:
+      - qa_internal
+      - proxy-network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  pgdata_qa:
+  pgadmin_data_qa:
+
+networks:
+  qa_internal:
+    driver: bridge
+  proxy-network:
+    external: true
