@@ -1,102 +1,203 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  ParseUUIDPipe,
-  Post,
-  Put,
-  UseGuards,
-  UploadedFile,
-  UseInterceptors,
-  BadRequestException,
-} from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
-import { SkipThrottle } from '@nestjs/throttler';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { PermissionLevel, PermissionModule } from '@prisma/client';
-import { CurrentUser } from '../auth/current-user.decorator';
-import type { AuthUser } from '../auth/auth-user';
-import { PermissionsGuard } from '../access/permissions.guard';
-import { RequirePermission } from '../access/require-permission.decorator';
-import { CreateEventDto } from './dto/create-event.dto';
-import { UpdateEventDto } from './dto/update-event.dto';
-import { EventsService } from './events.service';
-import { StorageService } from '../storage/storage.service';
-
-@Controller('admin/tenants/me/events')
-@SkipThrottle({ links: true })
-@UseGuards(AuthGuard('jwt'), PermissionsGuard)
-@RequirePermission(PermissionModule.EVENTS, PermissionLevel.VIEW)
-export class TenantsMeEventsController {
-  constructor(
-    private readonly events: EventsService,
-    private readonly storage: StorageService,
-  ) {}
-
-  @Get()
-  async list(@CurrentUser() user: AuthUser) {
-    return { items: await this.events.listForTenant(user.tenantId) };
-  }
-
-  @Get('locations')
-  async listLocations(@CurrentUser() user: AuthUser) {
-    return { items: await this.events.listDistinctLocations(user.tenantId) };
-  }
-
-  @Get(':id')
-  async get(
-    @CurrentUser() user: AuthUser,
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
-    return this.events.getForTenant(user.tenantId, id);
-  }
-
-  @Post()
-  @RequirePermission(PermissionModule.EVENTS, PermissionLevel.EDIT)
-  async create(@CurrentUser() user: AuthUser, @Body() dto: CreateEventDto) {
-    return this.events.createForTenant(user.tenantId, dto);
-  }
-
-  @Post('upload-cover')
-  @RequirePermission(PermissionModule.EVENTS, PermissionLevel.EDIT)
-  @UseInterceptors(FileInterceptor('file'))
-  async uploadCover(
-    @CurrentUser() user: AuthUser,
-    @UploadedFile() file: Express.Multer.File,
-  ) {
-    if (!file) {
-      throw new BadRequestException('Ficheiro não enviado.');
-    }
-    if (!file.mimetype.startsWith('image/')) {
-      throw new BadRequestException('O ficheiro deve ser uma imagem.');
-    }
-    const url = await this.storage.uploadFile(
-      file.buffer,
-      file.originalname,
-      `tenants/${user.tenantId}/events/covers`,
-    );
-    return { url };
-  }
-
-  @Put(':id')
-  @RequirePermission(PermissionModule.EVENTS, PermissionLevel.EDIT)
-  async update(
-    @CurrentUser() user: AuthUser,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateEventDto,
-  ) {
-    return this.events.updateForTenant(user.tenantId, id, dto);
-  }
-
-  @Delete(':id')
-  @RequirePermission(PermissionModule.EVENTS, PermissionLevel.EDIT)
-  async remove(
-    @CurrentUser() user: AuthUser,
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
-    return this.events.removeForTenant(user.tenantId, id);
-  }
-}
-
+import {
+
+  Body,
+
+  Controller,
+
+  Delete,
+
+  Get,
+
+  Param,
+
+  ParseUUIDPipe,
+
+  Post,
+
+  Put,
+
+  UseGuards,
+
+  UploadedFile,
+
+  UseInterceptors,
+
+  BadRequestException,
+
+} from '@nestjs/common';
+
+import { AuthGuard } from '@nestjs/passport';
+
+import { SkipThrottle } from '@nestjs/throttler';
+
+import { FileInterceptor } from '@nestjs/platform-express';
+
+import { PermissionLevel, PermissionModule } from '@prisma/client';
+
+import { CurrentUser } from '../auth/current-user.decorator';
+
+import type { AuthUser } from '../auth/auth-user';
+
+import { PermissionsGuard } from '../access/permissions.guard';
+
+import { RequirePermission } from '../access/require-permission.decorator';
+
+import { CreateEventDto } from './dto/create-event.dto';
+
+import { UpdateEventDto } from './dto/update-event.dto';
+
+import { EventsService } from './events.service';
+
+import { StorageService } from '../storage/storage.service';
+
+
+
+@Controller('admin/tenants/me/events')
+
+@SkipThrottle({ links: true })
+
+@UseGuards(AuthGuard('jwt'), PermissionsGuard)
+
+@RequirePermission(PermissionModule.EVENTS, PermissionLevel.VIEW)
+
+export class TenantsMeEventsController {
+
+  constructor(
+
+    private readonly events: EventsService,
+
+    private readonly storage: StorageService,
+
+  ) {}
+
+
+
+  @Get()
+
+  async list(@CurrentUser() user: AuthUser) {
+
+    return { items: await this.events.listForTenant(user.tenantId) };
+
+  }
+
+
+
+  @Get('locations')
+
+  async listLocations(@CurrentUser() user: AuthUser) {
+
+    return { items: await this.events.listDistinctLocations(user.tenantId) };
+
+  }
+
+
+
+  @Get(':id')
+
+  async get(
+
+    @CurrentUser() user: AuthUser,
+
+    @Param('id', ParseUUIDPipe) id: string,
+
+  ) {
+
+    return this.events.getForTenant(user.tenantId, id);
+
+  }
+
+
+
+  @Post()
+
+  @RequirePermission(PermissionModule.EVENTS, PermissionLevel.EDIT)
+
+  async create(@CurrentUser() user: AuthUser, @Body() dto: CreateEventDto) {
+
+    return this.events.createForTenant(user.tenantId, dto);
+
+  }
+
+
+
+  @Post('upload-cover')
+
+  @RequirePermission(PermissionModule.EVENTS, PermissionLevel.EDIT)
+
+  @UseInterceptors(FileInterceptor('file'))
+
+  async uploadCover(
+
+    @CurrentUser() user: AuthUser,
+
+    @UploadedFile() file: Express.Multer.File,
+
+  ) {
+
+    if (!file) {
+
+      throw new BadRequestException('Ficheiro não enviado.');
+
+    }
+
+    if (!file.mimetype.startsWith('image/')) {
+
+      throw new BadRequestException('O ficheiro deve ser uma imagem.');
+
+    }
+
+    const url = await this.storage.uploadFile(
+
+      file.buffer,
+
+      file.originalname,
+
+      `tenants/${user.tenantId}/events/covers`,
+
+    );
+
+    return { url };
+
+  }
+
+
+
+  @Put(':id')
+
+  @RequirePermission(PermissionModule.EVENTS, PermissionLevel.EDIT)
+
+  async update(
+
+    @CurrentUser() user: AuthUser,
+
+    @Param('id', ParseUUIDPipe) id: string,
+
+    @Body() dto: UpdateEventDto,
+
+  ) {
+
+    return this.events.updateForTenant(user.tenantId, id, dto);
+
+  }
+
+
+
+  @Delete(':id')
+
+  @RequirePermission(PermissionModule.EVENTS, PermissionLevel.EDIT)
+
+  async remove(
+
+    @CurrentUser() user: AuthUser,
+
+    @Param('id', ParseUUIDPipe) id: string,
+
+  ) {
+
+    return this.events.removeForTenant(user.tenantId, id);
+
+  }
+
+}
+
+

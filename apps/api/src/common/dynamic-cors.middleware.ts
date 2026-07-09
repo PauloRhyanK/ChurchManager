@@ -14,6 +14,30 @@ function requestPath(req: Request): string {
   return `${base}${p}`.split('?')[0] || '';
 }
 
+/** Remove barra final para comparação estável (ex.: .env com trailing slash). */
+export function normalizeOrigin(origin: string): string {
+  return origin.endsWith('/') ? origin.slice(0, -1) : origin;
+}
+
+/**
+ * Origin explícito do browser ou derivado do Referer (proxies às vezes removem Origin).
+ */
+export function requestOrigin(req: Request): string | undefined {
+  const originHeader = req.headers.origin;
+  if (typeof originHeader === 'string' && originHeader.length > 0) {
+    return originHeader;
+  }
+  const referer = req.headers.referer;
+  if (typeof referer === 'string' && referer.length > 0) {
+    try {
+      return new URL(referer).origin;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 /**
  * Extrai o slug do tenant. O prefixo global `api` **não** se aplica ao middleware Nest
  * (`/public/tenants/:slug/...`); mantemos também `/api/public/...` por segurança.
@@ -37,17 +61,18 @@ export class DynamicCorsMiddleware implements NestMiddleware {
     const raw = this.config.get<string>('ADMIN_CORS_ORIGIN') ?? '';
     return raw
       .split(',')
-      .map((o) => o.trim())
+      .map((o) => normalizeOrigin(o.trim()))
       .filter(Boolean);
+  }
+
+  private adminOriginAllowed(origin: string): boolean {
+    const normalized = normalizeOrigin(origin);
+    return this.adminOriginsFromEnv().includes(normalized);
   }
 
   async use(req: Request, res: Response, next: NextFunction): Promise<void> {
     const path = requestPath(req);
-    const originHeader = req.headers.origin;
-    const origin =
-      typeof originHeader === 'string' && originHeader.length > 0
-        ? originHeader
-        : undefined;
+    const origin = requestOrigin(req);
 
     const adminFamily =
       path.startsWith('/api/auth') ||
@@ -61,8 +86,8 @@ export class DynamicCorsMiddleware implements NestMiddleware {
 
     let reflect: string | undefined;
     if (origin) {
-      if (adminFamily && this.adminOriginsFromEnv().includes(origin)) {
-        reflect = origin;
+      if (adminFamily && this.adminOriginAllowed(origin)) {
+        reflect = normalizeOrigin(origin);
       } else if (publicSlug) {
         const allowed =
           await this.publicWebOrigins.getAllowedOriginsForSlug(publicSlug);

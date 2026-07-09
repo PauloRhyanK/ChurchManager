@@ -105,6 +105,7 @@ Mensagens começam por `[entrypoint]`.
 | [docker-compose.yml](../docker-compose.yml) | Postgres + API (dev); perfis opcionais `tunnel` (ngrok), `pgadmin` |
 | [docker-compose.dev.yml](../docker-compose.dev.yml) | Stack completa no servidor Debian (API + admin + Postgres + pgAdmin); perfil opcional `tunnel` (ngrok); rede `web_gateway` |
 | [docker-compose.prod.yml](../docker-compose.prod.yml) | API + Postgres + pgAdmin; variáveis no `.env`. Rede `proxy-network` (NPM) |
+| [docker-compose.qa.yml](../docker-compose.qa.yml) | QA no servidor (clone `churchmanager-qa`, branch `qa`); variáveis no `.env` |
 | `docker-compose.override.yml` | Opcional, local, ignorado pelo Git |
 
 ## Dev no servidor (nginx-gateway)
@@ -129,6 +130,116 @@ docker compose -f docker-compose.dev.yml logs -f churchmanager-ngrok
 URL público: `https://<subdomínio-ngrok>/api/webhooks/asaas/<slug>` — ver [webhooks-local-dev-ngrok.md](../docs/webhooks-local-dev-ngrok.md).
 
 No pgAdmin → *Register Server*: Host `churchmanager-postgres`, Port `5432`, credenciais = `POSTGRES_USER` / `POSTGRES_PASSWORD` do `.env`.
+
+## QA (servidor)
+
+Ambiente de testes na VPS, **isolado de produção** com clone Git separado e branch `qa`. Cada pasta tem o seu `.env`, base de dados e volumes Docker próprios.
+
+### Porquê clone + branch (em vez de partilhar a pasta de prod)
+
+| | Clone separado + branch `qa` | Mesma pasta, ficheiro `.env.qa` |
+|--|------------------------------|----------------------------------|
+| Isolamento | `git pull` em QA não mexe em prod | Risco de checkout na pasta errada |
+| Comandos | `docker compose -f docker-compose.qa.yml up` | Sempre `--env-file .env.qa` |
+| Branches | QA testa `qa`; prod fica em `main` | Só uma branch de cada vez na pasta |
+| Segredos | `.env` distinto em cada clone | Um `.env` de prod + um `.env.qa` na mesma árvore |
+
+### Estrutura na VPS
+
+```
+~/projetos/
+├── churchmanager/          # branch main  → docker-compose.prod.yml  → .env (prod)
+└── churchmanager-qa/       # branch qa    → docker-compose.qa.yml    → .env (valores QA)
+```
+
+Volumes Docker (automáticos): `pgdata_qa`, `pgadmin_data_qa` — não partilham dados com produção.
+
+| Serviço Compose | Contentor | Porta localhost | NPM (Forward Hostname) |
+|-----------------|-----------|-----------------|------------------------|
+| `qa-api` | `churchmanager-qa-api` | `4070` | `churchmanager-qa-api` → 3000 |
+| `qa-admin` | `churchmanager-qa-admin` | `4071` | `churchmanager-qa-admin` → 80 |
+| `qa-db` | `churchmanager-qa-db` | `5439` | (só interno) |
+| `qa-pgadmin` | `churchmanager-qa-pgadmin` | `5053` | `churchmanager-qa-pgadmin` → 80 |
+
+### Setup inicial (uma vez)
+
+```bash
+# 1) Clone QA (na VPS)
+cd ~/projetos
+git clone <url-do-repo> churchmanager-qa
+cd churchmanager-qa
+git checkout -b qa origin/main   # ou: git checkout qa  (se a branch já existir no remoto)
+
+# 2) Variáveis — copiar template e preencher (segredos NOVOS, não os de prod)
+cp .env.qa.example .env
+nano .env
+
+# 3) Rede do NPM (partilhada com prod; só criar uma vez)
+sudo docker network create proxy-network
+
+# 4) Subir stack
+sudo docker compose -f docker-compose.qa.yml up -d --build
+```
+
+No **NPM**, criar Proxy Host com TLS para `admin-qa` (e opcionalmente `api-qa` para webhooks/Insomnia). O painel usa **same-origin**: pedidos vão para `https://admin-qa.../api/...` e o nginx do contentor admin (`docker/admin-qa.nginx.conf`) faz proxy interno para `qa-api`.
+
+No `.env` QA:
+```env
+API_URL=https://admin-qa.seudominio.com/api
+ADMIN_CORS_ORIGIN=https://admin-qa.seudominio.com
+```
+
+Depois de alterar `API_URL`, rebuild do admin: `docker compose -f docker-compose.qa.yml up -d --build qa-admin`.
+
+### Fluxo de trabalho (branch `qa`)
+
+```bash
+# Desenvolver localmente → merge ou push para branch qa
+git push origin qa
+
+# Na VPS (clone QA)
+cd ~/projetos/churchmanager-qa
+git pull origin qa
+sudo docker compose -f docker-compose.qa.yml up -d --build
+
+# Quando QA estiver validado → merge qa → main (deploy prod à parte)
+```
+
+### Comandos do dia-a-dia (no clone QA)
+
+```bash
+cd ~/projetos/churchmanager-qa
+
+# Atualizar e rebuild
+git pull origin qa
+sudo docker compose -f docker-compose.qa.yml up -d --build
+
+# Só API com imagem GHCR (sem rebuild local)
+# Definir API_IMAGE no .env, depois:
+sudo docker compose -f docker-compose.qa.yml pull qa-api
+sudo docker compose -f docker-compose.qa.yml up -d qa-api
+
+# Logs / parar
+sudo docker compose -f docker-compose.qa.yml logs -f qa-api
+sudo docker compose -f docker-compose.qa.yml down
+```
+
+### Variáveis (`.env` no clone QA)
+
+Usa [`.env.qa.example`](../.env.qa.example) como base. Pontos críticos:
+
+| Variável | Notas |
+|----------|-------|
+| `POSTGRES_*`, `DATABASE_URL` | Base `churchmanager_qa` separada de produção |
+| `ENCRYPTION_KEY`, `JWT_SECRET` | **Novos** valores; nunca copiar de prod |
+| `API_URL` | URL pública da API com `/api` (usada no build do admin) |
+| `ADMIN_CORS_ORIGIN` | URL pública do painel admin |
+| `ASAAS_API_URL` | Manter sandbox: `https://api-sandbox.asaas.com/v3` |
+| `R2_*` | Bucket ou prefixo dedicado a QA |
+| `RUN_SEED` | `true` só na primeira subida; depois remover |
+| `API_IMAGE` | Opcional; se definido, puxa imagem do GHCR em vez de build local |
+
+Guia completo Cloudflare + NPM + R2: [docs/qa-cloudflare-npm-r2.md](../docs/qa-cloudflare-npm-r2.md).
 
 ## Produção
 
