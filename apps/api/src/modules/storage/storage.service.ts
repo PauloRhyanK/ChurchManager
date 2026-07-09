@@ -1,5 +1,5 @@
 import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
 
@@ -63,6 +63,40 @@ export class StorageService {
     } catch (error) {
       this.logger.error(`Falha no upload para o R2: ${error}`);
       throw new InternalServerErrorException('Não foi possível fazer o upload da imagem.');
+    }
+  }
+
+  /**
+   * Remove um ficheiro do R2 a partir do URL público devolvido por uploadFile.
+   * Ignora URLs externas ou que não pertençam ao bucket configurado.
+   */
+  async deleteFileByPublicUrl(publicUrl: string | null | undefined): Promise<void> {
+    if (!publicUrl?.trim()) return;
+
+    const publicBaseUrl = process.env.R2_PUBLIC_URL;
+    if (!publicBaseUrl) return;
+
+    const cleanBaseUrl = publicBaseUrl.endsWith('/')
+      ? publicBaseUrl.slice(0, -1)
+      : publicBaseUrl;
+
+    if (!publicUrl.startsWith(`${cleanBaseUrl}/`)) {
+      return;
+    }
+
+    const key = publicUrl.slice(cleanBaseUrl.length + 1);
+    if (!key) return;
+
+    try {
+      await this.s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Key: key,
+        }),
+      );
+      this.logger.log(`Ficheiro removido do R2: ${key}`);
+    } catch (error) {
+      this.logger.warn(`Falha ao remover ficheiro do R2 (${key}): ${error}`);
     }
   }
 
