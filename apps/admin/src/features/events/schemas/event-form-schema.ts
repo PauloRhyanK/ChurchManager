@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  isEventDateNotPast,
+  isTimeEndAfterStart,
+} from "@/features/events/lib/event-form-validation";
 
 const timeOptional = z
   .string()
@@ -8,13 +12,35 @@ const timeOptional = z
 
 const urlOptional = (max: number) =>
   z
-    .string()
-    .max(max)
+    .union([z.string().max(max), z.literal(""), z.null()])
     .optional()
-    .or(z.literal(""))
     .refine((v) => !v || v === "" || /^https?:\/\/.+/i.test(v), "URL inválida");
 
-export const eventFormSchema = z.object({
+function refineEventDateAndTime(
+  values: { date: string; timeStart?: string; timeEnd?: string },
+  ctx: z.RefinementCtx,
+) {
+  if (values.date && !isEventDateNotPast(values.date)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["date"],
+      message: "A data deve ser hoje ou posterior",
+    });
+  }
+  if (
+    values.timeStart?.trim() &&
+    values.timeEnd?.trim() &&
+    !isTimeEndAfterStart(values.timeStart, values.timeEnd)
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["timeEnd"],
+      message: "O horário de fim deve ser posterior ao de início",
+    });
+  }
+}
+
+const eventFormBaseSchema = z.object({
   title: z.string().trim().min(1, "Título obrigatório").max(255),
   shortDescription: z.string().max(500).optional().or(z.literal("")),
   description: z.string().max(10000).optional().or(z.literal("")),
@@ -31,10 +57,12 @@ export const eventFormSchema = z.object({
   published: z.boolean(),
 });
 
+export const eventFormSchema = eventFormBaseSchema.superRefine(refineEventDateAndTime);
+
 export type EventFormValues = z.infer<typeof eventFormSchema>;
 
 /** Step 1 do wizard de criação — apenas informações básicas. */
-export const eventBasicSchema = eventFormSchema
+export const eventBasicSchema = eventFormBaseSchema
   .pick({
     title: true,
     shortDescription: true,
@@ -54,6 +82,7 @@ export const eventBasicSchema = eventFormSchema
         message: "Informe o link de transmissão",
       });
     }
+    refineEventDateAndTime(values, ctx);
   });
 
 export type EventBasicValues = z.infer<typeof eventBasicSchema>;

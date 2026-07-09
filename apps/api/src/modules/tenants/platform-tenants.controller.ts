@@ -8,12 +8,13 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { Throttle } from '@nestjs/throttler';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import { PlatformAdminGuard } from '../auth/platform-admin.guard';
 import { CreatePlatformTenantDto } from './dto/create-platform-tenant.dto';
 import { TenantsService } from './tenants.service';
 
 @Controller('admin/platform/tenants')
+@SkipThrottle({ links: true })
 @UseGuards(AuthGuard('jwt'), PlatformAdminGuard)
 export class PlatformTenantsController {
   constructor(private readonly tenants: TenantsService) {}

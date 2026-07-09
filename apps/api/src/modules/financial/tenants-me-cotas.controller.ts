@@ -7,12 +7,14 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/auth-user';
 import { CotasOverviewService } from './cotas-overview.service';
 import { ListCotasQueryDto } from './dto/list-cotas-query.dto';
 
 @Controller('admin/tenants/me')
+@SkipThrottle({ links: true })
 @UseGuards(AuthGuard('jwt'))
 export class TenantsMeCotasController {
   constructor(private readonly cotas: CotasOverviewService) {}

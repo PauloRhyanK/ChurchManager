@@ -1,11 +1,13 @@
 import { Controller, Get, Param, ParseUUIDPipe, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { SkipThrottle } from '@nestjs/throttler';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/auth-user';
 import { EventReportsService } from './event-reports.service';
 
 /** Endpoints de agregação admin — separados do CRUD para manter responsabilidades claras. */
 @Controller('admin/tenants/me/events-dashboard')
+@SkipThrottle({ links: true })
 @UseGuards(AuthGuard('jwt'))
 export class TenantsMeEventsDashboardController {
   constructor(private readonly reports: EventReportsService) {}

@@ -47,7 +47,7 @@ import { RequestLoggingInterceptor } from './common/request-logging.interceptor'
       {
         name: 'links',
         ttl: 60_000,
-        limit: 5,
+        limit: 20,
       },
       {
         name: 'platform',

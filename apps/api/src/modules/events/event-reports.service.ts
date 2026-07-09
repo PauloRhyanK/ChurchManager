@@ -58,13 +58,13 @@ export class EventReportsService {
   async getEventReport(tenantId: string, eventId: string) {
     const event = await this.prisma.event.findFirst({
       where: { id: eventId, tenantId },
-      select: { id: true, title: true, date: true, published: true },
+      select: { id: true, title: true, date: true, published: true, createdAt: true },
     });
     if (!event) {
       throw new NotFoundException('Evento não encontrado');
     }
 
-    const [ticketTypes, ordersByStatus, registrationCount, ticketCount] =
+    const [ticketTypes, ordersByStatus, registrationCount, ticketCount, registrations, orders, revenueByType] =
       await Promise.all([
         this.prisma.eventTicketType.findMany({
           where: { tenantId, eventId },
@@ -76,6 +76,7 @@ export class EventReportsService {
             quantityTotal: true,
             quantitySold: true,
             active: true,
+            salesOpensAt: true,
           },
         }),
         this.prisma.eventOrder.groupBy({
@@ -90,7 +91,55 @@ export class EventReportsService {
         this.prisma.eventTicket.count({
           where: { tenantId, order: { eventId } },
         }),
+        this.prisma.eventRegistration.findMany({
+          where: { tenantId, eventId },
+          select: { createdAt: true },
+        }),
+        this.prisma.eventOrder.findMany({
+          where: { tenantId, eventId },
+          select: { createdAt: true },
+        }),
+        this.prisma.eventOrderLine.findMany({
+          where: {
+            order: { tenantId, eventId, status: 'CONFIRMED' },
+          },
+          select: {
+            ticketTypeId: true,
+            quantity: true,
+            unitPriceCents: true,
+          },
+        }),
       ]);
+
+    const revenueByTypeMap = new Map<string, number>();
+    for (const line of revenueByType) {
+      const prev = revenueByTypeMap.get(line.ticketTypeId) ?? 0;
+      revenueByTypeMap.set(
+        line.ticketTypeId,
+        prev + line.quantity * line.unitPriceCents,
+      );
+    }
+
+    const salesOpensDates = ticketTypes
+      .map((row) => row.salesOpensAt)
+      .filter((d): d is Date => d != null);
+    const salesPeriodStart =
+      salesOpensDates.length > 0
+        ? new Date(Math.min(...salesOpensDates.map((d) => d.getTime())))
+        : event.createdAt;
+
+    const dayCounts = new Map<string, number>();
+    const addDay = (date: Date) => {
+      if (date < salesPeriodStart) return;
+      const key = date.toISOString().slice(0, 10);
+      dayCounts.set(key, (dayCounts.get(key) ?? 0) + 1);
+    };
+    for (const row of registrations) addDay(row.createdAt);
+    for (const row of orders) addDay(row.createdAt);
+
+    const registrationsByDay = [...dayCounts.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, count]) => ({ date, count }));
 
     const ordersSummary = ordersByStatus.map((row) => ({
       status: row.status,
@@ -119,6 +168,8 @@ export class EventReportsService {
       ticketsSold,
       confirmedRevenueCents,
       ordersSummary,
+      salesPeriodStart: salesPeriodStart.toISOString(),
+      registrationsByDay,
       ticketTypes: ticketTypes.map((row) => ({
         id: row.id,
         name: row.name,
@@ -130,6 +181,7 @@ export class EventReportsService {
             ? Math.max(0, row.quantityTotal - row.quantitySold)
             : null,
         active: row.active,
+        revenueCents: revenueByTypeMap.get(row.id) ?? 0,
       })),
     };
   }

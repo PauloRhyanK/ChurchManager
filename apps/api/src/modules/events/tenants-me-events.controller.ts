@@ -13,6 +13,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { SkipThrottle } from '@nestjs/throttler';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/auth-user';
@@ -22,6 +23,7 @@ import { EventsService } from './events.service';
 import { StorageService } from '../storage/storage.service';
 
 @Controller('admin/tenants/me/events')
+@SkipThrottle({ links: true })
 @UseGuards(AuthGuard('jwt'))
 export class TenantsMeEventsController {
   constructor(
@@ -32,6 +34,11 @@ export class TenantsMeEventsController {
   @Get()
   async list(@CurrentUser() user: AuthUser) {
     return { items: await this.events.listForTenant(user.tenantId) };
+  }
+
+  @Get('locations')
+  async listLocations(@CurrentUser() user: AuthUser) {
+    return { items: await this.events.listDistinctLocations(user.tenantId) };
   }
 
   @Get(':id')

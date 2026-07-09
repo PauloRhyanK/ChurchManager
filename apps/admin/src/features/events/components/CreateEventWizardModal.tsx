@@ -19,10 +19,12 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { createEvent } from "@/features/events/api/tenant-events-api";
 import { EventTagsInput } from "@/features/events/components/EventTagsInput";
+import { EventLocationInput } from "@/features/events/components/EventLocationInput";
 import {
   eventBasicSchema,
   type EventBasicValues,
 } from "@/features/events/schemas/event-form-schema";
+import { todayDateInputMin } from "@/features/events/lib/event-form-validation";
 import { getApiErrorMessage } from "@/lib/api";
 
 type Props = {
@@ -117,7 +119,12 @@ export function CreateEventWizardModal({ open, onOpenChange }: Props) {
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="ev-date">Data</Label>
-              <Input id="ev-date" type="date" {...form.register("date")} />
+              <Input
+                id="ev-date"
+                type="date"
+                min={todayDateInputMin()}
+                {...form.register("date")}
+              />
               {form.formState.errors.date && (
                 <p className="text-sm text-red-600">
                   {form.formState.errors.date.message}
@@ -131,6 +138,11 @@ export function CreateEventWizardModal({ open, onOpenChange }: Props) {
             <div className="space-y-2">
               <Label htmlFor="ev-end">Fim</Label>
               <Input id="ev-end" type="time" {...form.register("timeEnd")} />
+              {form.formState.errors.timeEnd && (
+                <p className="text-sm text-red-600">
+                  {form.formState.errors.timeEnd.message}
+                </p>
+              )}
             </div>
           </div>
 
@@ -180,7 +192,17 @@ export function CreateEventWizardModal({ open, onOpenChange }: Props) {
           ) : (
             <div className="space-y-2">
               <Label htmlFor="ev-location">Local</Label>
-              <Input id="ev-location" {...form.register("location")} />
+              <Controller
+                control={form.control}
+                name="location"
+                render={({ field }) => (
+                  <EventLocationInput
+                    id="ev-location"
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
             </div>
           )}
 
