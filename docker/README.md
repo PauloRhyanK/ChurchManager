@@ -177,9 +177,27 @@ nano .env
 # 3) Rede do NPM (partilhada com prod; só criar uma vez)
 sudo docker network create proxy-network
 
-# 4) Subir stack
+# 4) Subir stack (ver aviso abaixo sobre build na VPS)
 sudo docker compose -f docker-compose.qa.yml up -d --build
 ```
+
+> ⚠️ **Não construir imagens na mesma VPS de produção.** O `--build` compila a API
+> (NestJS) e o admin (Vite/Rollup) na máquina. Só o build do admin pode consumir
+> **>1GB de RAM** e, sem swap/limites, dispara o **OOM killer** — congelando a VPS e
+> derrubando a produção que corre ao lado.
+>
+> **Recomendado:** construir as imagens em CI (ou local), dar push para o GHCR e na VPS
+> fazer apenas `pull`. Define `API_IMAGE` e `ADMIN_IMAGE` no `.env` QA e usa:
+>
+> ```bash
+> sudo docker compose -f docker-compose.qa.yml pull
+> sudo docker compose -f docker-compose.qa.yml up -d
+> ```
+>
+> **Se mesmo assim precisares de build na VPS:** garante **swap** (`free -h`), constrói
+> **um serviço de cada vez** (`build qa-api`, depois `build qa-admin`) e usa
+> `ADMIN_BUILD_MEMORY` no `.env` para limitar o heap do Node no build. Os serviços QA já
+> têm `mem_limit`/`cpus` em runtime para não sufocar a produção.
 
 No **NPM**, criar Proxy Host com TLS para `admin-qa` (e opcionalmente `api-qa` para webhooks/Insomnia). O painel usa **same-origin**: pedidos vão para `https://admin-qa.../api/...` e o nginx do contentor admin (`docker/admin-qa.nginx.conf`) faz proxy interno para `qa-api`.
 
@@ -210,14 +228,16 @@ sudo docker compose -f docker-compose.qa.yml up -d --build
 ```bash
 cd ~/projetos/churchmanager-qa
 
-# Atualizar e rebuild
+# Atualizar usando imagens do GHCR (RECOMENDADO — sem build na VPS)
+# Definir API_IMAGE e ADMIN_IMAGE no .env, depois:
 git pull origin qa
-sudo docker compose -f docker-compose.qa.yml up -d --build
+sudo docker compose -f docker-compose.qa.yml pull
+sudo docker compose -f docker-compose.qa.yml up -d
 
-# Só API com imagem GHCR (sem rebuild local)
-# Definir API_IMAGE no .env, depois:
-sudo docker compose -f docker-compose.qa.yml pull qa-api
-sudo docker compose -f docker-compose.qa.yml up -d qa-api
+# Alternativa (evitar): rebuild na VPS, um serviço de cada vez para não estourar a RAM
+sudo docker compose -f docker-compose.qa.yml build qa-api
+sudo docker compose -f docker-compose.qa.yml build qa-admin
+sudo docker compose -f docker-compose.qa.yml up -d
 
 # Logs / parar
 sudo docker compose -f docker-compose.qa.yml logs -f qa-api
@@ -238,6 +258,8 @@ Usa [`.env.qa.example`](../.env.qa.example) como base. Pontos críticos:
 | `R2_*` | Bucket ou prefixo dedicado a QA |
 | `RUN_SEED` | `true` só na primeira subida; depois remover |
 | `API_IMAGE` | Opcional; se definido, puxa imagem do GHCR em vez de build local |
+| `ADMIN_IMAGE` | Opcional; imagem do admin no GHCR. Evita compilar o Vite na VPS (principal causa de OOM) |
+| `ADMIN_BUILD_MEMORY` | Só se construíres o admin na VPS: limite de heap do Node no build (MB, ex.: 1024) |
 
 Guia completo Cloudflare + NPM + R2: [docs/qa-cloudflare-npm-r2.md](../docs/qa-cloudflare-npm-r2.md).
 
