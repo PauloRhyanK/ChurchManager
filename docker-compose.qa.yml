@@ -106,8 +106,6 @@ services:
     container_name: churchmanager-qa-admin
     env_file:
       - .env
-    volumes:
-      - ./docker/admin-qa.nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "127.0.0.1:4071:80"
     depends_on:
