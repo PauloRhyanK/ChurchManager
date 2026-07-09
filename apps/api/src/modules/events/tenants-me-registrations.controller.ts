@@ -6,12 +6,18 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { SkipThrottle } from '@nestjs/throttler';
+import { PermissionLevel, PermissionModule } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/auth-user';
+import { PermissionsGuard } from '../access/permissions.guard';
+import { RequirePermission } from '../access/require-permission.decorator';
 import { EventRegistrationsService } from './event-registrations.service';
 
 @Controller('admin/tenants/me')
-@UseGuards(AuthGuard('jwt'))
+@SkipThrottle({ links: true })
+@UseGuards(AuthGuard('jwt'), PermissionsGuard)
+@RequirePermission(PermissionModule.EVENT_REGISTRATIONS, PermissionLevel.VIEW)
 export class TenantsMeRegistrationsController {
   constructor(private readonly registrations: EventRegistrationsService) {}
 

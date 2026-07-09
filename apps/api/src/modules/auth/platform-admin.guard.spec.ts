@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ForbiddenException } from '@nestjs/common';
-import { AdminUserRole } from '@prisma/client';
+import { AdminUserRole, AdminUserStatus } from '@prisma/client';
 import { PlatformAdminGuard } from './platform-admin.guard';
 import type { AuthUser } from './auth-user';
 
@@ -23,6 +23,8 @@ test('PlatformAdminGuard permite PLATFORM_ADMIN', () => {
         tenantSlug: 'demo',
         email: 'a@b.c',
         role: AdminUserRole.PLATFORM_ADMIN,
+        status: AdminUserStatus.ACTIVE,
+        permissions: {},
       }),
     ),
     true,
@@ -40,6 +42,8 @@ test('PlatformAdminGuard bloqueia TENANT_ADMIN', () => {
           tenantSlug: 'x',
           email: 'a@b.c',
           role: AdminUserRole.TENANT_ADMIN,
+          status: AdminUserStatus.ACTIVE,
+          permissions: {},
         }),
       ),
     ForbiddenException,

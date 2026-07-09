@@ -10,10 +10,15 @@ import {
   Church,
   LogOut,
   Building2,
+  UserCog,
+  ShieldCheck,
+  Link2,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { clearStoredSession, getStoredSession } from "@/lib/auth-storage";
+import type { PermissionModule } from "@/lib/auth-storage";
+import { usePermissions } from "@/features/access/hooks/use-permissions";
 import {
   Sidebar,
   SidebarContent,
@@ -31,10 +36,21 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 
-const mainNav = [
-  { title: "Visão Geral", url: "/", icon: LayoutDashboard },
-  { title: "Financeiro", url: "/financeiro", icon: DollarSign },
-  { title: "Eventos", url: "/eventos", icon: CalendarDays },
+const mainNav: {
+  title: string;
+  url: string;
+  icon: typeof LayoutDashboard;
+  module?: PermissionModule;
+}[] = [
+  { title: "Visão Geral", url: "/", icon: LayoutDashboard, module: "DASHBOARD" },
+  { title: "Financeiro", url: "/financeiro", icon: DollarSign, module: "FINANCIAL" },
+  { title: "Eventos", url: "/eventos", icon: CalendarDays, module: "EVENTS" },
+];
+
+const equipeNav = [
+  { title: "Utilizadores", url: "/equipe/usuarios", icon: UserCog },
+  { title: "Grupos", url: "/equipe/grupos", icon: ShieldCheck },
+  { title: "Links de cadastro", url: "/equipe/links-cadastro", icon: Link2 },
 ];
 
 /** Módulos ainda sem backend no painel — mesmo padrão visual (desactivado + Breve). */
@@ -55,6 +71,12 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const session = getStoredSession();
+  const { can } = usePermissions();
+
+  const visibleMainNav = mainNav.filter(
+    (item) => !item.module || can(item.module, "VIEW"),
+  );
+  const canSeeEquipe = can("USERS", "VIEW");
 
   const isActive = (path: string) =>
     path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
@@ -91,7 +113,7 @@ export function AppSidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {mainNav.map((item) => (
+              {visibleMainNav.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
@@ -113,6 +135,39 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {canSeeEquipe && (
+          <>
+            <Separator className="my-2 mx-3" />
+            <SidebarGroup>
+              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-3 mb-1">
+                Equipe
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {equipeNav.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive(item.url)}
+                        tooltip={item.title}
+                      >
+                        <NavLink
+                          to={item.url}
+                          className="rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                          activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                        >
+                          <item.icon className="h-4 w-4" />
+                          {!collapsed && <span>{item.title}</span>}
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
+        )}
 
         <Separator className="my-2 mx-3" />
 

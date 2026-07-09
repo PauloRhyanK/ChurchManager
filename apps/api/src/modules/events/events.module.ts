@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TenantsModule } from '../tenants/tenants.module';
 import { AuthModule } from '../auth/auth.module';
+import { AccessModule } from '../access/access.module';
 import { FinancialModule } from '../financial/financial.module';
 import { EventsService } from './events.service';
 import { EventRegistrationsService } from './event-registrations.service';
@@ -21,7 +22,12 @@ import { TenantsMeEventFieldsController } from './tenants-me-event-fields.contro
 import { PublicEventsController } from './public-events.controller';
 
 @Module({
-  imports: [TenantsModule, AuthModule, forwardRef(() => FinancialModule)],
+  imports: [
+    TenantsModule,
+    AuthModule,
+    AccessModule,
+    forwardRef(() => FinancialModule),
+  ],
   controllers: [
     TenantsMeEventsController,
     TenantsMeRegistrationsController,

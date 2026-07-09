@@ -10,8 +10,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { SkipThrottle } from '@nestjs/throttler';
+import { PermissionLevel, PermissionModule } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/auth-user';
+import { PermissionsGuard } from '../access/permissions.guard';
+import { RequirePermission } from '../access/require-permission.decorator';
 import {
   CreateEventFieldDefinitionDto,
   UpdateEventFieldDefinitionDto,
@@ -19,7 +23,9 @@ import {
 import { EventFieldDefinitionsService } from './event-field-definitions.service';
 
 @Controller('admin/tenants/me/event-field-definitions')
-@UseGuards(AuthGuard('jwt'))
+@SkipThrottle({ links: true })
+@UseGuards(AuthGuard('jwt'), PermissionsGuard)
+@RequirePermission(PermissionModule.EVENTS, PermissionLevel.VIEW)
 export class TenantsMeEventFieldsController {
   constructor(private readonly fields: EventFieldDefinitionsService) {}
 
@@ -29,6 +35,7 @@ export class TenantsMeEventFieldsController {
   }
 
   @Post()
+  @RequirePermission(PermissionModule.EVENTS, PermissionLevel.EDIT)
   async create(
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateEventFieldDefinitionDto,
@@ -37,6 +44,7 @@ export class TenantsMeEventFieldsController {
   }
 
   @Put(':id')
+  @RequirePermission(PermissionModule.EVENTS, PermissionLevel.EDIT)
   async update(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -46,6 +54,7 @@ export class TenantsMeEventFieldsController {
   }
 
   @Delete(':id')
+  @RequirePermission(PermissionModule.EVENTS, PermissionLevel.EDIT)
   async remove(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,

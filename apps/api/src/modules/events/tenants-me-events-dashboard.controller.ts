@@ -1,14 +1,18 @@
 import { Controller, Get, Param, ParseUUIDPipe, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
+import { PermissionLevel, PermissionModule } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/auth-user';
+import { PermissionsGuard } from '../access/permissions.guard';
+import { RequirePermission } from '../access/require-permission.decorator';
 import { EventReportsService } from './event-reports.service';
 
 /** Endpoints de agregação admin — separados do CRUD para manter responsabilidades claras. */
 @Controller('admin/tenants/me/events-dashboard')
 @SkipThrottle({ links: true })
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard('jwt'), PermissionsGuard)
+@RequirePermission(PermissionModule.EVENTS, PermissionLevel.VIEW)
 export class TenantsMeEventsDashboardController {
   constructor(private readonly reports: EventReportsService) {}
 

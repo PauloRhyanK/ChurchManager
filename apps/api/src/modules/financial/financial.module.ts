@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TenantsModule } from '../tenants/tenants.module';
 import { AuthModule } from '../auth/auth.module';
+import { AccessModule } from '../access/access.module';
 import { EventsModule } from '../events/events.module';
 import { AsaasClient } from './asaas/asaas.client';
 import { PayerProfilesService } from './payer-profiles.service';
@@ -18,7 +19,12 @@ import { TenantsMeLinkPresetsController } from './tenants-me-link-presets.contro
 import { TenantsMeEventsPaymentLinksController } from './tenants-me-events-payment-links.controller';
 
 @Module({
-  imports: [TenantsModule, AuthModule, forwardRef(() => EventsModule)],
+  imports: [
+    TenantsModule,
+    AuthModule,
+    AccessModule,
+    forwardRef(() => EventsModule),
+  ],
   controllers: [
     PublicFinancialController,
     AsaasWebhookController,

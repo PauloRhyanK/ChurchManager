@@ -12,9 +12,12 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
+import { PermissionLevel, PermissionModule } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/auth-user';
+import { PermissionsGuard } from '../access/permissions.guard';
+import { RequirePermission } from '../access/require-permission.decorator';
 import { CreatePublicWebOriginDto } from './dto/create-public-web-origin.dto';
 import { UpdateAsaasCredentialsDto } from './dto/update-asaas-credentials.dto';
 import { UpdatePaymentSuccessRedirectDto } from './dto/update-payment-success-redirect.dto';
@@ -24,7 +27,8 @@ import { successUrlAllowedByPublicOrigins } from './public-web-origin.util';
 
 @Controller('admin/tenants/me')
 @SkipThrottle({ links: true })
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(AuthGuard('jwt'), PermissionsGuard)
+@RequirePermission(PermissionModule.SETTINGS, PermissionLevel.VIEW)
 export class TenantsMeController {
   constructor(
     private readonly prisma: PrismaService,
@@ -54,6 +58,7 @@ export class TenantsMeController {
   }
 
   @Put('payment-success-redirect')
+  @RequirePermission(PermissionModule.SETTINGS, PermissionLevel.EDIT)
   async updatePaymentSuccessRedirect(
     @CurrentUser() user: AuthUser,
     @Body() dto: UpdatePaymentSuccessRedirectDto,
@@ -123,6 +128,7 @@ export class TenantsMeController {
   }
 
   @Put('asaas-credentials')
+  @RequirePermission(PermissionModule.SETTINGS, PermissionLevel.EDIT)
   async updateAsaasCredentials(
     @CurrentUser() user: AuthUser,
     @Body() dto: UpdateAsaasCredentialsDto,
@@ -138,6 +144,7 @@ export class TenantsMeController {
   }
 
   @Post('public-web-origins')
+  @RequirePermission(PermissionModule.SETTINGS, PermissionLevel.EDIT)
   async createPublicWebOrigin(
     @CurrentUser() user: AuthUser,
     @Body() dto: CreatePublicWebOriginDto,
@@ -151,6 +158,7 @@ export class TenantsMeController {
   }
 
   @Delete('public-web-origins/:id')
+  @RequirePermission(PermissionModule.SETTINGS, PermissionLevel.EDIT)
   async deletePublicWebOrigin(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
