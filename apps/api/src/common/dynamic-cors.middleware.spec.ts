@@ -42,6 +42,13 @@ test('isAdminFamilyPath cobre onboarding público (signup e convites)', () => {
   assert.equal(isAdminFamilyPath('/api/public/invitations/abc/accept'), true);
 });
 
+test('isAdminFamilyPath cobre recuperação de senha', () => {
+  assert.equal(isAdminFamilyPath('/api/public/password-reset'), true);
+  assert.equal(isAdminFamilyPath('/public/password-reset'), true);
+  assert.equal(isAdminFamilyPath('/api/public/password-reset/abc'), true);
+  assert.equal(isAdminFamilyPath('/public/password-reset/abc'), true);
+});
+
 test('isAdminFamilyPath não cobre sites públicos por tenant', () => {
   assert.equal(isAdminFamilyPath('/api/public/tenants/demo/links'), false);
   assert.equal(isAdminFamilyPath('/api/public/events'), false);

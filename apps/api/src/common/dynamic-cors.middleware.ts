@@ -66,6 +66,8 @@ export function isAdminFamilyPath(path: string): boolean {
     '/public/signup',
     '/api/public/invitations',
     '/public/invitations',
+    '/api/public/password-reset',
+    '/public/password-reset',
   ];
   if (prefixes.some((p) => path === p || path.startsWith(`${p}/`))) {
     return true;
