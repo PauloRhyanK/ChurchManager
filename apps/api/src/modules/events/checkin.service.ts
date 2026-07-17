@@ -8,29 +8,12 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EventTicketTypesService } from './event-ticket-types.service';
 import { generatePublicCode } from './event-orders.service';
 import { formatDateOnly, formatTimeOnly, startOfTodayUtc } from './event-format.util';
+import { ticketMatch } from './event-ticket-match.util';
 import { IssueFreeTicketsDto } from './dto/checkin-issue-free-tickets.dto';
 
 interface AuthActor {
   userId: string;
   email: string;
-}
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
- * Filtro que resolve um ingresso por `publicCode` (QR) ou `id`. O `id` só entra
- * na consulta quando o valor é um UUID válido — caso contrário o Postgres lança
- * erro ao converter o código do QR para a coluna `id @db.Uuid`.
- */
-function ticketMatch(tenantId: string, codeOrId: string) {
-  const value = codeOrId.trim();
-  return {
-    tenantId,
-    OR: UUID_RE.test(value)
-      ? [{ publicCode: value }, { id: value }]
-      : [{ publicCode: value }],
-  };
 }
 
 @Injectable()

@@ -8,6 +8,7 @@ import { EventOrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventTicketTypesService } from './event-ticket-types.service';
 import { formatDateOnly, formatTimeOnly } from './event-format.util';
+import { ticketMatch } from './event-ticket-match.util';
 
 export function generatePublicCode(): string {
   return randomBytes(9).toString('base64url');
@@ -51,10 +52,7 @@ export class EventOrdersService {
 
   async getPublicTicket(tenantId: string, ticketId: string) {
     const row = await this.prisma.eventTicket.findFirst({
-      where: {
-        tenantId,
-        OR: [{ id: ticketId }, { publicCode: ticketId }],
-      },
+      where: ticketMatch(tenantId, ticketId),
       include: {
         ticketType: { select: { name: true } },
         order: {
