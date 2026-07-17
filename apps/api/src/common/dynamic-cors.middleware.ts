@@ -50,6 +50,29 @@ export function extractPublicTenantSlug(path: string): string | null {
   return null;
 }
 
+/**
+ * Rotas cuja origem é o painel admin (autorizadas via `ADMIN_CORS_ORIGIN`):
+ * login/admin/health e o onboarding público (signup e convites), cujas páginas
+ * (`/cadastro/:token`, `/convite/:token`) são servidas pelo domínio do admin.
+ * O prefixo global `api` pode ou não estar presente ao chegar ao middleware Nest.
+ */
+export function isAdminFamilyPath(path: string): boolean {
+  const prefixes = [
+    '/api/auth',
+    '/auth',
+    '/api/admin',
+    '/admin',
+    '/api/public/signup',
+    '/public/signup',
+    '/api/public/invitations',
+    '/public/invitations',
+  ];
+  if (prefixes.some((p) => path === p || path.startsWith(`${p}/`))) {
+    return true;
+  }
+  return path === '/api/health' || path === '/health';
+}
+
 @Injectable()
 export class DynamicCorsMiddleware implements NestMiddleware {
   constructor(
@@ -74,13 +97,7 @@ export class DynamicCorsMiddleware implements NestMiddleware {
     const path = requestPath(req);
     const origin = requestOrigin(req);
 
-    const adminFamily =
-      path.startsWith('/api/auth') ||
-      path.startsWith('/auth') ||
-      path.startsWith('/api/admin') ||
-      path.startsWith('/admin') ||
-      path === '/api/health' ||
-      path === '/health';
+    const adminFamily = isAdminFamilyPath(path);
 
     const publicSlug = extractPublicTenantSlug(path);
 
