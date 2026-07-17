@@ -6,7 +6,6 @@ import EventsListPage from "@/features/events/pages/EventsListPage";
 import EventSettingsPage from "@/features/events/pages/EventSettingsPage";
 import RegistrationsPage from "@/features/events/pages/RegistrationsPage";
 import CheckinPage from "@/features/checkin/pages/CheckinPage";
-import OnsiteRegistrationPage from "@/features/checkin/pages/OnsiteRegistrationPage";
 import UsersListPage from "@/features/access/pages/UsersListPage";
 import InviteUserPage from "@/features/access/pages/InviteUserPage";
 import PermissionGroupsPage from "@/features/access/pages/PermissionGroupsPage";
@@ -53,7 +52,10 @@ export function AppRoutes() {
 
         <Route element={<PermissionRoute module="CHECKIN" />}>
           <Route path="/checkin" element={<CheckinPage />} />
-          <Route path="/checkin/inscricoes" element={<OnsiteRegistrationPage />} />
+          <Route
+            path="/checkin/inscricoes"
+            element={<Navigate to="/checkin" replace />}
+          />
         </Route>
 
         <Route path="/equipe/usuarios" element={<UsersListPage />} />

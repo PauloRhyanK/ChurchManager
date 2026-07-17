@@ -14,7 +14,6 @@ import {
   ShieldCheck,
   Link2,
   QrCode,
-  ClipboardList,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -51,7 +50,6 @@ const mainNav: {
 
 const internoNav = [
   { title: "Check-in", url: "/checkin", icon: QrCode },
-  { title: "Fazer inscrições", url: "/checkin/inscricoes", icon: ClipboardList },
 ];
 
 const equipeNav = [

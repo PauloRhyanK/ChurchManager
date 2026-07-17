@@ -31,7 +31,7 @@ export const PERMISSION_MODULES: PermissionModuleMeta[] = [
   {
     module: "CHECKIN",
     label: "Funcionamento interno",
-    description: "Check-in de eventos e inscrições no local (voluntários).",
+    description: "Check-in de eventos (leitura de QR e entrada).",
   },
   {
     module: "FINANCIAL",
@@ -99,7 +99,7 @@ export const GROUP_TEMPLATES: GroupTemplate[] = [
   },
   {
     name: "Voluntário (check-in)",
-    description: "Check-in e inscrições no local, sem gerir eventos.",
+    description: "Check-in na entrada do evento, sem gerir eventos.",
     entries: [{ module: "CHECKIN", level: "EDIT" }],
   },
   {

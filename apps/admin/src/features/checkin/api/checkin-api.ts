@@ -34,14 +34,6 @@ export interface CheckinLookupDto {
   lote: CheckinLoteDto;
 }
 
-export interface CheckinTicketTypeDto {
-  id: string;
-  name: string;
-  priceCents: number;
-  feeCents: number;
-  isFree: boolean;
-}
-
 export async function fetchCheckinEvents(scope: "today" | "all" = "today") {
   const { data } = await api.get<{ items: CheckinEventDto[] }>(
     "/admin/tenants/me/checkin/events",
@@ -76,36 +68,6 @@ export async function checkInTicket(ticketId: string) {
 export async function undoCheckIn(ticketId: string) {
   const { data } = await api.post<CheckinTicketDto>(
     `/admin/tenants/me/checkin/tickets/${encodeURIComponent(ticketId)}/undo`,
-  );
-  return data;
-}
-
-export async function fetchEventTicketTypes(eventId: string) {
-  const { data } = await api.get<{ items: CheckinTicketTypeDto[] }>(
-    `/admin/tenants/me/checkin/events/${eventId}/ticket-types`,
-  );
-  return data.items;
-}
-
-export async function issueFreeTickets(
-  eventId: string,
-  ticketTypeId: string,
-  holderNames: string[],
-) {
-  const { data } = await api.post<{ orderId: string; tickets: CheckinTicketDto[] }>(
-    `/admin/tenants/me/checkin/events/${eventId}/issue-free-tickets`,
-    { ticketTypeId, holderNames },
-  );
-  return data;
-}
-
-export async function createOnsiteRegistration(
-  eventId: string,
-  payload: { name: string; email: string; phone?: string | null },
-) {
-  const { data } = await api.post(
-    `/admin/tenants/me/checkin/events/${eventId}/registrations`,
-    payload,
   );
   return data;
 }
