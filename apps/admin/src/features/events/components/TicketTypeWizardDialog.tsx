@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -309,6 +310,10 @@ export function TicketTypeWizardDialog({
           <DialogTitle>
             {isEdit ? "Editar ingresso" : "Novo ingresso"} — passo {step} de 3
           </DialogTitle>
+          <DialogDescription>
+            Configure o tipo de ingresso em três passos: dados gerais, preço e
+            campos da inscrição.
+          </DialogDescription>
         </DialogHeader>
 
         <form

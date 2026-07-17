@@ -28,17 +28,19 @@ export function isFreeTicketPrice(priceInput: string): boolean {
   return cents === 0;
 }
 
-export const ticketTypeStep2Schema = z
-  .object({
-    allowedBillingTypes: z.array(z.enum(BILLING_TYPES)),
-    maxInstallments: z.string().optional().or(z.literal("")),
-    priceInput: z.string().min(1, "Preço obrigatório"),
-    feeInput: z.string().optional().or(z.literal("")),
-    quantityTotal: z.string().optional().or(z.literal("")),
-    minPerOrder: z.coerce.number().int().min(1).max(100).default(1),
-    maxPerOrder: z.coerce.number().int().min(1).max(100).default(10),
-  })
-  .superRefine((values, ctx) => {
+/** Object schema only — `.merge()` requires ZodObject, not ZodEffects. */
+export const ticketTypeStep2ObjectSchema = z.object({
+  allowedBillingTypes: z.array(z.enum(BILLING_TYPES)),
+  maxInstallments: z.string().optional().or(z.literal("")),
+  priceInput: z.string().min(1, "Preço obrigatório"),
+  feeInput: z.string().optional().or(z.literal("")),
+  quantityTotal: z.string().optional().or(z.literal("")),
+  minPerOrder: z.coerce.number().int().min(1).max(100).default(1),
+  maxPerOrder: z.coerce.number().int().min(1).max(100).default(10),
+});
+
+export const ticketTypeStep2Schema = ticketTypeStep2ObjectSchema.superRefine(
+  (values, ctx) => {
     const free = isFreeTicketPrice(values.priceInput);
     if (!free && values.allowedBillingTypes.length < 1) {
       ctx.addIssue({
@@ -47,7 +49,8 @@ export const ticketTypeStep2Schema = z
         message: "Selecione ao menos um tipo de pagamento",
       });
     }
-  });
+  },
+);
 
 export const ticketFieldConfigSchema = z.object({
   fieldId: z.string(),
@@ -63,9 +66,17 @@ export const ticketTypeStep3Schema = z.object({
 });
 
 export const ticketTypeFormSchema = ticketTypeStep1Schema
-  .merge(ticketTypeStep2Schema)
+  .merge(ticketTypeStep2ObjectSchema)
   .merge(ticketTypeStep3Schema)
   .superRefine((values, ctx) => {
+    const free = isFreeTicketPrice(values.priceInput);
+    if (!free && values.allowedBillingTypes.length < 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["allowedBillingTypes"],
+        message: "Selecione ao menos um tipo de pagamento",
+      });
+    }
     if (
       values.salesOpensAt?.trim() &&
       values.salesClosesAt?.trim() &&
