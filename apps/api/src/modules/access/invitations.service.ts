@@ -11,7 +11,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
 import { generateAccessToken } from './access-token.util';
 import { AcceptInvitationDto } from './dto/public-onboarding.dto';
-import { buildOnboardingUrl } from './onboarding-url';
+import { buildOnboardingUrl, resolveAdminWebBaseUrl } from './onboarding-url';
 import { PermissionGroupsService } from './permission-groups.service';
 
 @Injectable()
@@ -158,9 +158,10 @@ export class InvitationsService {
   }
 
   private buildInviteUrl(token: string): string {
-    return buildOnboardingUrl(
-      this.config.get<string>('ADMIN_WEB_BASE_URL'),
-      `/convite/${token}`,
-    );
+    const base = resolveAdminWebBaseUrl({
+      adminWebBaseUrl: this.config.get<string>('ADMIN_WEB_BASE_URL'),
+      adminCorsOrigin: this.config.get<string>('ADMIN_CORS_ORIGIN'),
+    });
+    return buildOnboardingUrl(base, `/convite/${token}`);
   }
 }

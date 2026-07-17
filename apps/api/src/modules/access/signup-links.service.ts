@@ -14,7 +14,7 @@ import {
   UpdateSignupLinkDto,
 } from './dto/signup-link.dto';
 import { PublicSignupDto } from './dto/public-onboarding.dto';
-import { buildOnboardingUrl } from './onboarding-url';
+import { buildOnboardingUrl, resolveAdminWebBaseUrl } from './onboarding-url';
 import { PermissionGroupsService } from './permission-groups.service';
 
 @Injectable()
@@ -194,7 +194,10 @@ export class SignupLinksService {
       id: row.id,
       token: row.token,
       url: buildOnboardingUrl(
-        this.config.get<string>('ADMIN_WEB_BASE_URL'),
+        resolveAdminWebBaseUrl({
+          adminWebBaseUrl: this.config.get<string>('ADMIN_WEB_BASE_URL'),
+          adminCorsOrigin: this.config.get<string>('ADMIN_CORS_ORIGIN'),
+        }),
         `/cadastro/${row.token}`,
       ),
       label: row.label,

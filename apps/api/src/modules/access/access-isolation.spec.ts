@@ -42,7 +42,7 @@ test('isolation: PermissionGroupsService.getForTenant devolve 404 para outro ten
   assert.deepEqual(capture.where, { id: GROUP_A, tenantId: TENANT_B });
 });
 
-test('isolation: TenantUsersService.listForTenant filtra por tenantId e exclui pendentes', async () => {
+test('isolation: TenantUsersService.listForTenant filtra por tenantId e exclui pendentes/convidados', async () => {
   const capture: { where?: unknown } = {};
   const prisma = {
     adminUser: {
@@ -56,7 +56,25 @@ test('isolation: TenantUsersService.listForTenant filtra por tenantId e exclui p
   await service.listForTenant(TENANT_A);
   assert.deepEqual(capture.where, {
     tenantId: TENANT_A,
-    status: { not: 'PENDING_APPROVAL' },
+    status: { notIn: ['PENDING_APPROVAL', 'INVITED'] },
+  });
+});
+
+test('isolation: TenantUsersService.listPendingForTenant inclui PENDING_APPROVAL e INVITED', async () => {
+  const capture: { where?: unknown } = {};
+  const prisma = {
+    adminUser: {
+      findMany: async ({ where }: { where: unknown }) => {
+        capture.where = where;
+        return [];
+      },
+    },
+  };
+  const service = new TenantUsersService(prisma as never, {} as never);
+  await service.listPendingForTenant(TENANT_A);
+  assert.deepEqual(capture.where, {
+    tenantId: TENANT_A,
+    status: { in: ['PENDING_APPROVAL', 'INVITED'] },
   });
 });
 

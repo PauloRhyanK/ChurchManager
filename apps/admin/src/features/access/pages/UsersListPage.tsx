@@ -96,7 +96,7 @@ export default function UsersListPage() {
   const rejectMutation = useMutation({
     mutationFn: rejectUser,
     onSuccess: () => {
-      toast.success("Cadastro rejeitado");
+      toast.success("Removido dos pendentes");
       invalidate();
     },
     onError: (err) => toast.error(getApiErrorMessage(err)),
@@ -131,7 +131,7 @@ export default function UsersListPage() {
 
         <Tabs defaultValue="active">
           <TabsList>
-            <TabsTrigger value="active">Ativos e convidados</TabsTrigger>
+            <TabsTrigger value="active">Ativos</TabsTrigger>
             <TabsTrigger value="pending" className="gap-2">
               Pendentes
               {pendingCount > 0 && (
@@ -255,10 +255,10 @@ export default function UsersListPage() {
           <TabsContent value="pending" className="mt-4">
             <Card className="border-0 shadow-sm">
               <CardHeader>
-                <CardTitle>Cadastros pendentes</CardTitle>
+                <CardTitle>Pendentes</CardTitle>
                 <CardDescription>
-                  Pessoas que se registaram por um link de cadastro e aguardam
-                  aprovação.
+                  Convites ainda não aceites e cadastros por link público à
+                  espera de aprovação.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -270,13 +270,14 @@ export default function UsersListPage() {
                   </p>
                 ) : pendingCount === 0 ? (
                   <p className="text-sm text-muted-foreground py-8 text-center">
-                    Nenhum cadastro pendente.
+                    Nenhum pendente.
                   </p>
                 ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Utilizador</TableHead>
+                        <TableHead>Estado</TableHead>
                         <TableHead className="w-48" />
                       </TableRow>
                     </TableHeader>
@@ -292,34 +293,43 @@ export default function UsersListPage() {
                             </div>
                           </TableCell>
                           <TableCell>
+                            <UserStatusBadge status={user.status} />
+                          </TableCell>
+                          <TableCell>
                             {canEdit && (
                               <div className="flex justify-end gap-2">
-                                <Button
-                                  size="sm"
-                                  className="gap-1"
-                                  disabled={approveMutation.isPending}
-                                  onClick={() => approveMutation.mutate(user.id)}
-                                >
-                                  <Check className="h-4 w-4" />
-                                  Aprovar
-                                </Button>
+                                {user.status === "PENDING_APPROVAL" && (
+                                  <Button
+                                    size="sm"
+                                    className="gap-1"
+                                    disabled={approveMutation.isPending}
+                                    onClick={() =>
+                                      approveMutation.mutate(user.id)
+                                    }
+                                  >
+                                    <Check className="h-4 w-4" />
+                                    Aprovar
+                                  </Button>
+                                )}
                                 <Button
                                   variant="ghost"
                                   size="sm"
                                   className="gap-1"
                                   disabled={rejectMutation.isPending}
                                   onClick={() => {
-                                    if (
-                                      window.confirm(
-                                        `Rejeitar o cadastro de ${user.email}?`,
-                                      )
-                                    ) {
+                                    const label =
+                                      user.status === "INVITED"
+                                        ? `Cancelar o convite de ${user.email}?`
+                                        : `Rejeitar o cadastro de ${user.email}?`;
+                                    if (window.confirm(label)) {
                                       rejectMutation.mutate(user.id);
                                     }
                                   }}
                                 >
                                   <X className="h-4 w-4" />
-                                  Rejeitar
+                                  {user.status === "INVITED"
+                                    ? "Cancelar"
+                                    : "Rejeitar"}
                                 </Button>
                               </div>
                             )}

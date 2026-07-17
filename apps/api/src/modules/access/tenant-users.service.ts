@@ -31,7 +31,12 @@ export class TenantUsersService {
 
   async listForTenant(tenantId: string) {
     const rows = await this.prisma.adminUser.findMany({
-      where: { tenantId, status: { not: AdminUserStatus.PENDING_APPROVAL } },
+      where: {
+        tenantId,
+        status: {
+          notIn: [AdminUserStatus.PENDING_APPROVAL, AdminUserStatus.INVITED],
+        },
+      },
       orderBy: [{ status: 'asc' }, { email: 'asc' }],
       select: userSelect,
     });
@@ -40,7 +45,12 @@ export class TenantUsersService {
 
   async listPendingForTenant(tenantId: string) {
     const rows = await this.prisma.adminUser.findMany({
-      where: { tenantId, status: AdminUserStatus.PENDING_APPROVAL },
+      where: {
+        tenantId,
+        status: {
+          in: [AdminUserStatus.PENDING_APPROVAL, AdminUserStatus.INVITED],
+        },
+      },
       orderBy: { createdAt: 'asc' },
       select: userSelect,
     });
@@ -111,12 +121,22 @@ export class TenantUsersService {
     if (!existing) {
       throw new NotFoundException('Utilizador não encontrado');
     }
-    if (existing.status !== AdminUserStatus.PENDING_APPROVAL) {
+    if (
+      existing.status !== AdminUserStatus.PENDING_APPROVAL &&
+      existing.status !== AdminUserStatus.INVITED
+    ) {
       throw new BadRequestException(
-        'Só é possível rejeitar cadastros pendentes.',
+        'Só é possível rejeitar cadastros pendentes ou convites não aceites.',
       );
     }
-    await this.prisma.adminUser.delete({ where: { id } });
+    await this.prisma.$transaction(async (tx) => {
+      if (existing.status === AdminUserStatus.INVITED) {
+        await tx.adminUserInvitation.deleteMany({
+          where: { tenantId, userId: id },
+        });
+      }
+      await tx.adminUser.delete({ where: { id } });
+    });
     return { ok: true };
   }
 

@@ -205,6 +205,7 @@ No `.env` QA:
 ```env
 API_URL=https://admin-qa.seudominio.com/api
 ADMIN_CORS_ORIGIN=https://admin-qa.seudominio.com
+ADMIN_WEB_BASE_URL=https://admin-qa.seudominio.com
 ```
 
 Depois de alterar `API_URL`, rebuild do admin: `docker compose -f docker-compose.qa.yml up -d --build qa-admin`.
@@ -254,6 +255,7 @@ Usa [`.env.qa.example`](../.env.qa.example) como base. Pontos críticos:
 | `ENCRYPTION_KEY`, `JWT_SECRET` | **Novos** valores; nunca copiar de prod |
 | `API_URL` | URL pública da API com `/api` (usada no build do admin) |
 | `ADMIN_CORS_ORIGIN` | URL pública do painel admin |
+| `ADMIN_WEB_BASE_URL` | Base das URLs de convite/cadastro (ex.: `https://admin-qa.seudominio.com`). Se omitido, usa `ADMIN_CORS_ORIGIN` |
 | `ASAAS_API_URL` | Manter sandbox: `https://api-sandbox.asaas.com/v3` |
 | `R2_*` | Bucket ou prefixo dedicado a QA |
 | `RUN_SEED` | `true` só na primeira subida; depois remover |
