@@ -3,23 +3,29 @@ import {
   ConflictException,
   GoneException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AdminUserRole, AdminUserStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
+import { Mailer } from '../mail/mailer';
 import { generateAccessToken } from './access-token.util';
 import { AcceptInvitationDto } from './dto/public-onboarding.dto';
+import { buildInvitationEmail } from './invitation.email';
 import { buildOnboardingUrl, resolveAdminWebBaseUrl } from './onboarding-url';
 import { PermissionGroupsService } from './permission-groups.service';
 
 @Injectable()
 export class InvitationsService {
+  private readonly logger = new Logger(InvitationsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly groups: PermissionGroupsService,
+    private readonly mailer: Mailer,
   ) {}
 
   async createInvite(
@@ -39,6 +45,14 @@ export class InvitationsService {
     });
     if (existingUser) {
       throw new ConflictException('Já existe um utilizador com este e-mail.');
+    }
+
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true },
+    });
+    if (!tenant) {
+      throw new NotFoundException('Igreja não encontrada.');
     }
 
     const days = this.expiryDays();
@@ -69,11 +83,30 @@ export class InvitationsService {
       });
     });
 
+    const url = this.buildInviteUrl(invitation.token);
+
+    try {
+      await this.mailer.send(
+        buildInvitationEmail({
+          to: invitation.email,
+          name: data.name ?? null,
+          churchName: tenant.name,
+          url,
+          expiresInDays: days,
+        }),
+      );
+    } catch (error) {
+      // O convite fica válido mesmo se o e-mail falhar; o link é devolvido na resposta.
+      this.logger.error(
+        `Falha ao enviar e-mail de convite para ${invitation.email}: ${error}`,
+      );
+    }
+
     return {
       id: invitation.id,
       email: invitation.email,
       token: invitation.token,
-      url: this.buildInviteUrl(invitation.token),
+      url,
       expiresAt: invitation.expiresAt,
     };
   }
