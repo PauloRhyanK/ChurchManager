@@ -6,6 +6,8 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
 import { PlatformAdminGuard } from './platform-admin.guard';
+import { PasswordResetService } from './password-reset.service';
+import { PublicPasswordResetController } from './public-password-reset.controller';
 
 @Module({
   imports: [
@@ -31,8 +33,8 @@ import { PlatformAdminGuard } from './platform-admin.guard';
       inject: [ConfigService],
     }),
   ],
-  controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, PlatformAdminGuard],
+  controllers: [AuthController, PublicPasswordResetController],
+  providers: [AuthService, JwtStrategy, PlatformAdminGuard, PasswordResetService],
   exports: [AuthService, JwtModule, PassportModule, PlatformAdminGuard],
 })
 export class AuthModule {}

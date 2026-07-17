@@ -1,5 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { LoginPage } from "@/features/auth/pages/LoginPage";
+import { ForgotPasswordPage } from "@/features/auth/pages/ForgotPasswordPage";
+import ResetPasswordPage from "@/features/auth/pages/ResetPasswordPage";
 import EventDetailRoutePage from "@/features/events/pages/EventDetailRoutePage";
 import EventFormPage from "@/features/events/pages/EventFormPage";
 import EventsListPage from "@/features/events/pages/EventsListPage";
@@ -27,6 +29,8 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/recuperar-senha" element={<ForgotPasswordPage />} />
+      <Route path="/recuperar-senha/:token" element={<ResetPasswordPage />} />
       <Route path="/cadastro/:token" element={<PublicSignupPage />} />
       <Route path="/convite/:token" element={<AcceptInvitationPage />} />
 

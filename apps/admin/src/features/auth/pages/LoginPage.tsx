@@ -69,6 +69,11 @@ export function LoginPage() {
               {form.formState.errors.password && (
                 <p className="text-sm text-red-600">{form.formState.errors.password.message}</p>
               )}
+              <div className="text-right">
+                <Link to="/recuperar-senha" className="text-xs text-muted-foreground underline">
+                  Esqueci minha senha
+                </Link>
+              </div>
             </div>
 
             <Button type="submit" className="w-full gap-2" disabled={mutation.isPending}>
