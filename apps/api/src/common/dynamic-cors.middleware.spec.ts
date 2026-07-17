@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   extractPublicTenantSlug,
+  isAdminFamilyPath,
   normalizeOrigin,
   requestOrigin,
 } from './dynamic-cors.middleware';
@@ -25,6 +26,25 @@ test('normalizeOrigin remove barra final', () => {
     normalizeOrigin('https://admin-qa.example.com/'),
     'https://admin-qa.example.com',
   );
+});
+
+test('isAdminFamilyPath cobre login, admin e health', () => {
+  assert.equal(isAdminFamilyPath('/api/auth/login'), true);
+  assert.equal(isAdminFamilyPath('/api/admin/tenants/me'), true);
+  assert.equal(isAdminFamilyPath('/api/health'), true);
+  assert.equal(isAdminFamilyPath('/health'), true);
+});
+
+test('isAdminFamilyPath cobre onboarding público (signup e convites)', () => {
+  assert.equal(isAdminFamilyPath('/api/public/signup/abc'), true);
+  assert.equal(isAdminFamilyPath('/public/signup/abc'), true);
+  assert.equal(isAdminFamilyPath('/api/public/invitations/abc'), true);
+  assert.equal(isAdminFamilyPath('/api/public/invitations/abc/accept'), true);
+});
+
+test('isAdminFamilyPath não cobre sites públicos por tenant', () => {
+  assert.equal(isAdminFamilyPath('/api/public/tenants/demo/links'), false);
+  assert.equal(isAdminFamilyPath('/api/public/events'), false);
 });
 
 test('requestOrigin usa Referer quando Origin ausente', () => {
