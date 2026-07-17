@@ -443,6 +443,7 @@ model AdminUser {
   tenant           Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   permissionGroups AdminUserPermissionGroup[]
   invitations      AdminUserInvitation[]
+  passwordResets   AdminPasswordReset[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -539,6 +540,23 @@ model AdminUserInvitation {
   @@index([tenantId])
   @@index([email])
   @@map("admin_user_invitations")
+}
+
+/// Pedido de recuperação de senha. Token opaco de uso único com expiração.
+model AdminPasswordReset {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  email     String    @db.VarChar(255)
+  token     String    @unique @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user AdminUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([email])
+  @@map("admin_password_resets")
 }
 
 model FinancialPayerProfile {

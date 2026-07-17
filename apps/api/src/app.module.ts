@@ -13,6 +13,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { AccessModule } from './modules/access/access.module';
 import { HealthModule } from './health/health.module';
 import { StorageModule } from './modules/storage/storage.module';
+import { MailModule } from './modules/mail/mail.module';
 import { RequestLoggingInterceptor } from './common/request-logging.interceptor';
 
 @Module({
@@ -57,6 +58,7 @@ import { RequestLoggingInterceptor } from './common/request-logging.interceptor'
       },
     ]),
     PrismaModule,
+    MailModule,
     HealthModule,
     AuthModule,
     AccessModule,
