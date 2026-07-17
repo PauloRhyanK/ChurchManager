@@ -71,10 +71,10 @@ export class TenantsMeUsersController {
 
   @Delete(':id')
   @RequirePermission(PermissionModule.USERS, PermissionLevel.EDIT)
-  async reject(
+  async remove(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.users.reject(user.tenantId, id);
+    return this.users.remove(user.tenantId, id, user.userId);
   }
 }

@@ -113,28 +113,26 @@ export class TenantUsersService {
     return this.getForTenant(tenantId, id);
   }
 
-  async reject(tenantId: string, id: string) {
+  /**
+   * Remove um utilizador do tenant (qualquer estado: ativo, suspenso, pendente
+   * ou convidado). Limpa convites associados; os pedidos de recuperação de
+   * senha caem por cascata. Não permite remover a própria conta.
+   */
+  async remove(tenantId: string, id: string, requesterId: string) {
+    if (id === requesterId) {
+      throw new BadRequestException('Não pode remover a sua própria conta.');
+    }
     const existing = await this.prisma.adminUser.findFirst({
       where: { id, tenantId },
-      select: { id: true, status: true },
+      select: { id: true },
     });
     if (!existing) {
       throw new NotFoundException('Utilizador não encontrado');
     }
-    if (
-      existing.status !== AdminUserStatus.PENDING_APPROVAL &&
-      existing.status !== AdminUserStatus.INVITED
-    ) {
-      throw new BadRequestException(
-        'Só é possível rejeitar cadastros pendentes ou convites não aceites.',
-      );
-    }
     await this.prisma.$transaction(async (tx) => {
-      if (existing.status === AdminUserStatus.INVITED) {
-        await tx.adminUserInvitation.deleteMany({
-          where: { tenantId, userId: id },
-        });
-      }
+      await tx.adminUserInvitation.deleteMany({
+        where: { tenantId, userId: id },
+      });
       await tx.adminUser.delete({ where: { id } });
     });
     return { ok: true };

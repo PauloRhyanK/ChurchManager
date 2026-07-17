@@ -75,3 +75,10 @@ export async function rejectUser(id: string) {
   );
   return data;
 }
+
+export async function deleteTenantUser(id: string) {
+  const { data } = await api.delete<{ ok: boolean }>(
+    `/admin/tenants/me/users/${id}`,
+  );
+  return data;
+}

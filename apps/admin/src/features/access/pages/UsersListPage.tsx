@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, UserPlus, Users, X } from "lucide-react";
+import { Check, Loader2, Trash2, UserPlus, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Table,
@@ -33,9 +34,11 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getApiErrorMessage } from "@/lib/api";
+import { getStoredSession } from "@/lib/auth-storage";
 import { fetchPermissionGroups } from "../api/permission-groups-api";
 import {
   approveUser,
+  deleteTenantUser,
   fetchPendingUsers,
   fetchTenantUsers,
   rejectUser,
@@ -50,6 +53,7 @@ export default function UsersListPage() {
   const queryClient = useQueryClient();
   const { can } = usePermissions();
   const canEdit = can("USERS", "EDIT");
+  const currentUserId = getStoredSession()?.user.id ?? null;
   const [editing, setEditing] = useState<TenantUserDto | null>(null);
 
   const usersQuery = useQuery({
@@ -97,6 +101,15 @@ export default function UsersListPage() {
     mutationFn: rejectUser,
     onSuccess: () => {
       toast.success("Removido dos pendentes");
+      invalidate();
+    },
+    onError: (err) => toast.error(getApiErrorMessage(err)),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteTenantUser,
+    onSuccess: () => {
+      toast.success("Utilizador excluído");
       invalidate();
     },
     onError: (err) => toast.error(getApiErrorMessage(err)),
@@ -209,7 +222,7 @@ export default function UsersListPage() {
                                     size="sm"
                                     onClick={() => setEditing(user)}
                                   >
-                                    Grupos
+                                    Editar
                                   </Button>
                                   {user.status === "SUSPENDED" ? (
                                     <Button
@@ -240,6 +253,26 @@ export default function UsersListPage() {
                                       Suspender
                                     </Button>
                                   ) : null}
+                                  {user.id !== currentUserId && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="gap-1 text-red-600 hover:text-red-700"
+                                      disabled={deleteMutation.isPending}
+                                      onClick={() => {
+                                        if (
+                                          window.confirm(
+                                            `Excluir o utilizador ${user.email}? Esta ação não pode ser desfeita.`,
+                                          )
+                                        ) {
+                                          deleteMutation.mutate(user.id);
+                                        }
+                                      }}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                      Excluir
+                                    </Button>
+                                  )}
                                 </div>
                               )}
                           </TableCell>
@@ -345,7 +378,7 @@ export default function UsersListPage() {
         </Tabs>
       </div>
 
-      <EditGroupsDialog
+      <EditUserDialog
         user={editing}
         groups={groupsQuery.data ?? []}
         onClose={() => setEditing(null)}
@@ -367,30 +400,35 @@ function LoadingRow() {
   );
 }
 
-interface EditGroupsDialogProps {
+interface EditUserDialogProps {
   user: TenantUserDto | null;
   groups: { id: string; name: string }[];
   onClose: () => void;
   onSaved: () => void;
 }
 
-function EditGroupsDialog({
+function EditUserDialog({
   user,
   groups,
   onClose,
   onSaved,
-}: EditGroupsDialogProps) {
+}: EditUserDialogProps) {
+  const [name, setName] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
 
   useEffect(() => {
+    setName(user?.name ?? "");
     setSelected(user ? user.groups.map((g) => g.id) : []);
   }, [user]);
 
   const mutation = useMutation({
     mutationFn: () =>
-      updateTenantUser(user!.id, { groupIds: selected }),
+      updateTenantUser(user!.id, {
+        name: name.trim() || null,
+        groupIds: selected,
+      }),
     onSuccess: () => {
-      toast.success("Grupos atualizados");
+      toast.success("Utilizador atualizado");
       onSaved();
     },
     onError: (err) => toast.error(getApiErrorMessage(err)),
@@ -406,30 +444,48 @@ function EditGroupsDialog({
     <Dialog open={Boolean(user)} onOpenChange={(open) => !open && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Grupos de {user?.name || user?.email}</DialogTitle>
+          <DialogTitle>Editar {user?.name || user?.email}</DialogTitle>
           <DialogDescription>
-            Selecione os grupos de permissões deste utilizador.
+            Atualize o nome e os grupos de permissões deste utilizador.
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3 py-2 max-h-72 overflow-y-auto">
-          {groups.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Nenhum grupo disponível. Crie grupos primeiro.
-            </p>
-          ) : (
-            groups.map((group) => (
-              <div key={group.id} className="flex items-center gap-2">
-                <Checkbox
-                  id={`grp-${group.id}`}
-                  checked={selected.includes(group.id)}
-                  onCheckedChange={() => toggle(group.id)}
-                />
-                <Label htmlFor={`grp-${group.id}`} className="font-normal">
-                  {group.name}
-                </Label>
-              </div>
-            ))
-          )}
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="edit-user-email">E-mail</Label>
+            <Input id="edit-user-email" value={user?.email ?? ""} readOnly disabled />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="edit-user-name">Nome</Label>
+            <Input
+              id="edit-user-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Nome do utilizador"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Grupos de permissões</Label>
+            <div className="space-y-3 max-h-56 overflow-y-auto rounded-md border p-3">
+              {groups.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Nenhum grupo disponível. Crie grupos primeiro.
+                </p>
+              ) : (
+                groups.map((group) => (
+                  <div key={group.id} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`grp-${group.id}`}
+                      checked={selected.includes(group.id)}
+                      onCheckedChange={() => toggle(group.id)}
+                    />
+                    <Label htmlFor={`grp-${group.id}`} className="font-normal">
+                      {group.name}
+                    </Label>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
