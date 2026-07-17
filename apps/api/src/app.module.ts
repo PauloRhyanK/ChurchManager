@@ -10,6 +10,7 @@ import { TenantsModule } from './modules/tenants/tenants.module';
 import { FinancialModule } from './modules/financial/financial.module';
 import { EventsModule } from './modules/events/events.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { AccessModule } from './modules/access/access.module';
 import { HealthModule } from './health/health.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { RequestLoggingInterceptor } from './common/request-logging.interceptor';
@@ -47,7 +48,7 @@ import { RequestLoggingInterceptor } from './common/request-logging.interceptor'
       {
         name: 'links',
         ttl: 60_000,
-        limit: 5,
+        limit: 20,
       },
       {
         name: 'platform',
@@ -58,6 +59,7 @@ import { RequestLoggingInterceptor } from './common/request-logging.interceptor'
     PrismaModule,
     HealthModule,
     AuthModule,
+    AccessModule,
     TenantsModule,
     FinancialModule,
     EventsModule,

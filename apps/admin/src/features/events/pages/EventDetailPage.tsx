@@ -31,8 +31,8 @@ import {
   formatEventDate,
   formatMoneyCents,
   formatTime,
-  orderStatusLabel,
 } from "@/features/events/lib/format";
+import { EventReportSection } from "@/features/events/components/EventReportSection";
 import { getApiErrorMessage } from "@/lib/api";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { BarChart3, Ticket, Users } from "lucide-react";
@@ -340,33 +340,7 @@ export function EventDetailPage() {
                 />
               </div>
 
-              {report.ordersSummary.length > 0 && (
-                <Card className="border-0 shadow-sm">
-                  <CardHeader>
-                    <CardTitle className="text-base">Pedidos por estado</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Estado</TableHead>
-                          <TableHead>Quantidade</TableHead>
-                          <TableHead>Total</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {report.ordersSummary.map((row) => (
-                          <TableRow key={row.status}>
-                            <TableCell>{orderStatusLabel(row.status)}</TableCell>
-                            <TableCell>{row.count}</TableCell>
-                            <TableCell>{formatMoneyCents(row.totalCents)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              )}
+              <EventReportSection report={report} />
             </>
           ) : null}
         </TabsContent>

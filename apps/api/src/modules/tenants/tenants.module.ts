@@ -7,9 +7,10 @@ import { TenantsMeController } from './tenants-me.controller';
 import { CryptoService } from '../../common/crypto.service';
 import { AsaasClient } from '../financial/asaas/asaas.client';
 import { AuthModule } from '../auth/auth.module';
+import { AccessModule } from '../access/access.module';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, AccessModule],
   controllers: [TenantsMeController, PlatformTenantsController],
   providers: [
     TenantsService,

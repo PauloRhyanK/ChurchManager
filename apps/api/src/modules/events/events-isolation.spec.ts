@@ -7,6 +7,9 @@ import { EventTagsService } from './event-tags.service';
 import { SchedulesService } from './schedules.service';
 
 const tagsStub = {} as EventTagsService;
+const storageStub = {
+  deleteFileByPublicUrl: async () => {},
+};
 
 const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TENANT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -60,6 +63,7 @@ test('isolation: EventsService.listForTenant filtra por tenantId', async () => {
   const service = new EventsService(
     createEventsPrismaMock(capture) as never,
     tagsStub,
+    storageStub as never,
   );
   await service.listForTenant(TENANT_A, { publishedOnly: true });
   assert.deepEqual(capture.where, {
@@ -73,6 +77,7 @@ test('isolation: EventsService.getForTenant devolve 404 se evento é de outro te
   const service = new EventsService(
     createEventsPrismaMock(capture) as never,
     tagsStub,
+    storageStub as never,
   );
   await assert.rejects(
     () => service.getForTenant(TENANT_B, EVENT_A),
@@ -158,7 +163,34 @@ test('isolation: EventsService.updateForTenant clears coverImageUrl and imageUrl
   let updateData: any = null;
   const prisma = {
     event: {
-      findFirst: async () => ({ id: EVENT_A, tags: [], date: new Date() }),
+      findFirst: async () => ({
+        id: EVENT_A,
+        tenantId: TENANT_A,
+        title: 'Evento A',
+        description: null,
+        format: 'IN_PERSON',
+        onlineUrl: null,
+        shortDescription: null,
+        detailsHtml: null,
+        videoUrl: null,
+        coverImageUrl: 'https://cdn.example/old.jpg',
+        mediaMeta: null,
+        date: new Date(Date.UTC(2026, 6, 1)),
+        timeStart: null,
+        timeEnd: null,
+        location: null,
+        imageUrl: 'https://cdn.example/old.jpg',
+        tag: null,
+        tags: [],
+        published: true,
+        slug: null,
+        timezone: null,
+        registrationClosesAt: null,
+        termsUrl: null,
+        currency: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }),
       update: async ({ data }: { data: any }) => {
         updateData = data;
         return {};
@@ -166,7 +198,7 @@ test('isolation: EventsService.updateForTenant clears coverImageUrl and imageUrl
     },
     $transaction: async (fn: any) => fn(prisma),
   };
-  const service = new EventsService(prisma as never, tagsStub);
+  const service = new EventsService(prisma as never, tagsStub, storageStub as never);
   await service.updateForTenant(TENANT_A, EVENT_A, { coverImageUrl: null });
   assert.deepEqual(updateData, {
     coverImageUrl: null,

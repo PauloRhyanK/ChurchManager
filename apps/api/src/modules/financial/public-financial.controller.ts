@@ -61,7 +61,7 @@ export class PublicFinancialController {
     });
   }
 
-  /** Gera link de pagamento Asaas (cota única ou mensal). Rate limit: throttler `links` (5/min/IP). */
+  /** Gera link de pagamento Asaas (cota única ou mensal). Rate limit: throttler `links` (20/min/IP). */
   @Post(':slug/links')
   @HttpCode(201)
   @SkipThrottle({ links: false })

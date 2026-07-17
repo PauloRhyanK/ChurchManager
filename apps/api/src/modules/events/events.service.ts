@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { StorageService } from '../storage/storage.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventTagsService } from './event-tags.service';
@@ -31,11 +32,30 @@ function mapTags(row: EventWithTags): EventTagDto[] {
   }));
 }
 
+function resolveCoverImageUpdate(
+  dto: UpdateEventDto,
+): string | null | undefined {
+  if (dto.coverImageUrl === undefined && dto.imageUrl === undefined) {
+    return undefined;
+  }
+  if (dto.coverImageUrl !== undefined) {
+    return dto.coverImageUrl;
+  }
+  return dto.imageUrl ?? null;
+}
+
+function uniqueCoverUrls(
+  ...urls: Array<string | null | undefined>
+): string[] {
+  return [...new Set(urls.filter((url): url is string => Boolean(url?.trim())))];
+}
+
 @Injectable()
 export class EventsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tags: EventTagsService,
+    private readonly storage: StorageService,
   ) {}
 
   async listForTenant(tenantId: string, options: ListEventsOptions = {}) {
@@ -52,6 +72,18 @@ export class EventsService {
       ...eventWithTags,
     });
     return rows.map((row) => toEventDto(row, mapTags(row)));
+  }
+
+  async listDistinctLocations(tenantId: string): Promise<string[]> {
+    const rows = await this.prisma.event.findMany({
+      where: { tenantId, location: { not: null } },
+      select: { location: true },
+      distinct: ['location'],
+      orderBy: { location: 'asc' },
+    });
+    return rows
+      .map((row) => row.location?.trim())
+      .filter((loc): loc is string => Boolean(loc));
   }
 
   async getForTenant(tenantId: string, id: string) {
@@ -123,11 +155,17 @@ export class EventsService {
   async updateForTenant(tenantId: string, id: string, dto: UpdateEventDto) {
     const existing = await this.prisma.event.findFirst({
       where: { id, tenantId },
-      select: { id: true },
+      select: { id: true, coverImageUrl: true, imageUrl: true },
     });
     if (!existing) {
       throw new NotFoundException('Evento não encontrado');
     }
+
+    const nextCoverImageUrl = resolveCoverImageUpdate(dto);
+    const previousCoverUrls = uniqueCoverUrls(
+      existing.coverImageUrl,
+      existing.imageUrl,
+    );
 
     await this.prisma.$transaction(async (tx) => {
       await tx.event.update({
@@ -146,10 +184,10 @@ export class EventsService {
             ? { detailsHtml: dto.detailsHtml }
             : {}),
           ...(dto.videoUrl !== undefined ? { videoUrl: dto.videoUrl } : {}),
-          ...(dto.coverImageUrl !== undefined || dto.imageUrl !== undefined
+          ...(nextCoverImageUrl !== undefined
             ? {
-                coverImageUrl: dto.coverImageUrl !== undefined ? dto.coverImageUrl : dto.imageUrl,
-                imageUrl: dto.imageUrl !== undefined ? dto.imageUrl : dto.coverImageUrl,
+                coverImageUrl: nextCoverImageUrl,
+                imageUrl: nextCoverImageUrl,
               }
             : {}),
           ...(dto.date !== undefined ? { date: parseDateOnly(dto.date) } : {}),
@@ -168,6 +206,16 @@ export class EventsService {
         await this.tags.setEventTags(tx, tenantId, id, dto.tags);
       }
     });
+
+    if (nextCoverImageUrl !== undefined) {
+      const urlsToDelete = previousCoverUrls.filter(
+        (url) => url !== nextCoverImageUrl,
+      );
+      await Promise.all(
+        urlsToDelete.map((url) => this.storage.deleteFileByPublicUrl(url)),
+      );
+    }
+
     return this.getForTenant(tenantId, id);
   }
 

@@ -34,7 +34,18 @@ export function EventSiteDetailsTab({ event }: Props) {
     setVideoUrl(event.videoUrl ?? "");
     setShortDescription(event.shortDescription ?? "");
     setDetailsHtml(event.detailsHtml ?? "");
-  }, [event.id]);
+  }, [event.id, event.coverImageUrl, event.videoUrl, event.shortDescription, event.detailsHtml]);
+
+  const coverMutation = useMutation({
+    mutationFn: (coverUrl: string | null) =>
+      updateEvent(event.id, { coverImageUrl: coverUrl }),
+    onSuccess: (data) => {
+      toast.success("Capa do evento actualizada.");
+      void queryClient.invalidateQueries({ queryKey: ["event", event.id] });
+      setCoverImageUrl(data.coverImageUrl ?? "");
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -68,7 +79,12 @@ export function EventSiteDetailsTab({ event }: Props) {
           <Label>Imagem de capa (16:9)</Label>
           <ImageUploader
             value={coverImageUrl}
-            onChange={(url) => setCoverImageUrl(url ?? "")}
+            disabled={coverMutation.isPending}
+            onChange={(url) => {
+              const next = url ?? "";
+              setCoverImageUrl(next);
+              coverMutation.mutate(next.trim() || null);
+            }}
           />
         </div>
 

@@ -11,6 +11,9 @@ import {
 } from './dto/event-field-definition.dto';
 import { slugifyTag } from './event-tags.service';
 
+/** Tipos de campo cujas opções são configuráveis (escolha entre valores). */
+const TYPES_WITH_OPTIONS: EventFieldType[] = ['SELECT', 'CHECKBOX'];
+
 /** Campos padrão garantidos para cada tenant (lazy). */
 const DEFAULT_FIELDS: Array<{
   key: string;
@@ -130,12 +133,14 @@ export class EventFieldDefinitionsService {
     type: EventFieldType,
     options?: string[],
   ): string[] | undefined {
-    if (type !== 'SELECT') return undefined;
+    if (!TYPES_WITH_OPTIONS.includes(type)) return undefined;
     const cleaned = (options ?? [])
       .map((o) => o.trim())
       .filter((o) => o.length > 0);
     if (cleaned.length === 0) {
-      throw new BadRequestException('Campo SELECT requer ao menos uma opção');
+      throw new BadRequestException(
+        'Este tipo de campo requer ao menos uma opção',
+      );
     }
     return cleaned;
   }

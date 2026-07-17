@@ -3,8 +3,17 @@
 # 2) Na VPS: docker network create proxy-network  (se ainda não existir)
 # 3) NPM: hosts para api-qa.*, admin-qa.* e pgadmin-qa.* → contentores abaixo
 #
-# Arranque (na pasta ~/projetos/churchmanager-qa):
-#   docker compose -f docker-compose.qa.yml up -d --build
+# ATENÇÃO — NÃO construir imagens na VPS de produção.
+#   `--build` compila API (nest) e admin (Vite/Rollup) na máquina; o admin sozinho
+#   pode consumir >1GB de RAM e disparar o OOM killer, congelando a VPS (e a prod).
+#   Preferir: build em CI/local → push GHCR → definir API_IMAGE/ADMIN_IMAGE no .env → só pull:
+#     docker compose -f docker-compose.qa.yml pull
+#     docker compose -f docker-compose.qa.yml up -d
+#
+# Arranque quando REALMENTE precisas de build na VPS (um serviço de cada vez, tem swap):
+#   docker compose -f docker-compose.qa.yml build qa-api
+#   docker compose -f docker-compose.qa.yml build qa-admin
+#   docker compose -f docker-compose.qa.yml up -d
 # Webhooks Asaas (ngrok):
 #   docker compose -f docker-compose.qa.yml --profile tunnel up -d
 
@@ -31,6 +40,8 @@ services:
     networks:
       - qa_internal
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
     logging:
       driver: "json-file"
       options:
@@ -70,6 +81,8 @@ services:
       retries: 5
       start_period: 90s
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1.0
     logging:
       driver: "json-file"
       options:
@@ -98,11 +111,13 @@ services:
         max-file: "3"
 
   qa-admin:
+    image: ${ADMIN_IMAGE:-churchmanager-admin:qa}
     build:
       context: ./apps/admin
       dockerfile: Dockerfile
       args:
         API_URL: ${API_URL}
+        NODE_BUILD_MEMORY: ${ADMIN_BUILD_MEMORY:-1024}
     container_name: churchmanager-qa-admin
     env_file:
       - .env
@@ -114,6 +129,8 @@ services:
       - qa_internal
       - proxy-network
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.5
     logging:
       driver: "json-file"
       options:
@@ -138,6 +155,8 @@ services:
       - qa_internal
       - proxy-network
     restart: unless-stopped
+    mem_limit: 384m
+    cpus: 0.5
     logging:
       driver: "json-file"
       options:

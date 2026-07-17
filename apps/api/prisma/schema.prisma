@@ -10,6 +10,31 @@ datasource db {
 enum AdminUserRole {
   TENANT_ADMIN
   PLATFORM_ADMIN
+  TENANT_MEMBER
+}
+
+enum AdminUserStatus {
+  ACTIVE
+  PENDING_APPROVAL
+  INVITED
+  SUSPENDED
+}
+
+enum PermissionModule {
+  DASHBOARD
+  EVENTS
+  EVENT_REGISTRATIONS
+  EVENT_TICKETS
+  CHECKIN
+  FINANCIAL
+  SITE
+  SETTINGS
+  USERS
+}
+
+enum PermissionLevel {
+  VIEW
+  EDIT
 }
 
 enum EventFormat {
@@ -55,6 +80,9 @@ model Tenant {
   paymentLinks       FinancialPaymentLink[]
   linkPresets        FinancialLinkPreset[]
   adminUsers         AdminUser[]
+  permissionGroups   PermissionGroup[]
+  signupLinks        TenantSignupLink[]
+  invitations        AdminUserInvitation[]
   publicWebOrigins   TenantPublicWebOrigin[]
   events             Event[]
   eventTags          EventTag[]
@@ -314,11 +342,13 @@ model EventOrder {
 }
 
 model EventOrderLine {
-  id             String @id @default(uuid()) @db.Uuid
-  orderId        String @map("order_id") @db.Uuid
-  ticketTypeId   String @map("ticket_type_id") @db.Uuid
+  id             String   @id @default(uuid()) @db.Uuid
+  orderId        String   @map("order_id") @db.Uuid
+  ticketTypeId   String   @map("ticket_type_id") @db.Uuid
   quantity       Int
-  unitPriceCents Int    @map("unit_price_cents")
+  unitPriceCents Int      @map("unit_price_cents")
+  /// Nome por ingresso da linha (índice = unidade). Vazio => herda o nome do pagador.
+  holderNames    String[] @map("holder_names")
 
   order      EventOrder      @relation(fields: [orderId], references: [id], onDelete: Cascade)
   ticketType EventTicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
@@ -335,6 +365,11 @@ model EventTicket {
   publicCode   String            @unique @map("public_code") @db.VarChar(32)
   holderName   String            @map("holder_name") @db.VarChar(255)
   status       EventTicketStatus @default(VALID)
+  /// Presença (check-in). Nulo => ainda não deu entrada.
+  checkedInAt       DateTime? @map("checked_in_at")
+  /// Voluntário que registou a entrada (sem FK; snapshot preservado).
+  checkedInByUserId String?   @map("checked_in_by_user_id") @db.Uuid
+  checkedInByName   String?   @map("checked_in_by_name") @db.VarChar(255)
   createdAt    DateTime          @default(now()) @map("created_at")
 
   tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -343,6 +378,7 @@ model EventTicket {
 
   @@index([tenantId])
   @@index([orderId])
+  @@index([tenantId, checkedInAt])
   @@map("event_tickets")
 }
 
@@ -391,18 +427,118 @@ model TenantPublicWebOrigin {
 }
 
 model AdminUser {
-  id           String        @id @default(uuid()) @db.Uuid
-  tenantId     String        @map("tenant_id") @db.Uuid
-  email        String        @unique @db.VarChar(255)
-  passwordHash String        @map("password_hash") @db.VarChar(255)
-  role         AdminUserRole @default(TENANT_ADMIN)
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
+  id           String          @id @default(uuid()) @db.Uuid
+  tenantId     String          @map("tenant_id") @db.Uuid
+  email        String          @unique @db.VarChar(255)
+  name         String?         @db.VarChar(255)
+  /// Nulo enquanto o utilizador está em INVITED (ainda não definiu senha).
+  passwordHash String?         @map("password_hash") @db.VarChar(255)
+  role         AdminUserRole   @default(TENANT_ADMIN)
+  status       AdminUserStatus @default(ACTIVE)
+  approvedAt   DateTime?       @map("approved_at")
+  approvedById String?         @map("approved_by_id") @db.Uuid
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+
+  tenant           Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  permissionGroups AdminUserPermissionGroup[]
+  invitations      AdminUserInvitation[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("admin_users")
+}
+
+/// Grupo de permissões por tenant. Reúne acessos por módulo (VIEW/EDIT).
+model PermissionGroup {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  name        String   @db.VarChar(255)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant  Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entries PermissionGroupEntry[]
+  members AdminUserPermissionGroup[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("permission_groups")
+}
+
+/// Permissão atómica de um grupo: um módulo com um nível de acesso.
+model PermissionGroupEntry {
+  id      String           @id @default(uuid()) @db.Uuid
+  groupId String           @map("group_id") @db.Uuid
+  module  PermissionModule
+  level   PermissionLevel
+
+  group PermissionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, module])
+  @@index([groupId])
+  @@map("permission_group_entries")
+}
+
+/// Associação N:N entre utilizadores e grupos de permissões.
+model AdminUserPermissionGroup {
+  id      String @id @default(uuid()) @db.Uuid
+  userId  String @map("user_id") @db.Uuid
+  groupId String @map("group_id") @db.Uuid
+
+  user  AdminUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group PermissionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+  @@index([userId])
+  @@index([groupId])
+  @@map("admin_user_permission_groups")
+}
+
+/// Link de cadastro aberto (auto-registo com aprovação posterior).
+model TenantSignupLink {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  token           String    @unique @db.VarChar(255)
+  label           String?   @db.VarChar(255)
+  /// Ids de PermissionGroup atribuídos ao aprovar quem se regista por este link.
+  defaultGroupIds Json?     @map("default_group_ids")
+  expiresAt       DateTime? @map("expires_at")
+  maxUses         Int?      @map("max_uses")
+  useCount        Int       @default(0) @map("use_count")
+  isActive        Boolean   @default(true) @map("is_active")
+  createdById     String?   @map("created_by_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
-  @@map("admin_users")
+  @@map("tenant_signup_links")
+}
+
+/// Convite individual por e-mail. Cria um AdminUser em INVITED até definir senha.
+model AdminUserInvitation {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  email       String    @db.VarChar(255)
+  token       String    @unique @db.VarChar(255)
+  userId      String?   @map("user_id") @db.Uuid
+  /// Ids de PermissionGroup a atribuir quando o convite é aceite.
+  groupIds    Json?     @map("group_ids")
+  expiresAt   DateTime  @map("expires_at")
+  completedAt DateTime? @map("completed_at")
+  invitedById String?   @map("invited_by_id") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   AdminUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([email])
+  @@map("admin_user_invitations")
 }
 
 model FinancialPayerProfile {

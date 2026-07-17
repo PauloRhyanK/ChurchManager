@@ -19,12 +19,14 @@ import {
   updateEvent,
 } from "@/features/events/api/tenant-events-api";
 import { EventTagsInput } from "@/features/events/components/EventTagsInput";
+import { EventLocationInput } from "@/features/events/components/EventLocationInput";
 import { ImageUploader } from "@/components/ImageUploader";
 import {
   eventFormSchema,
   eventFormToApiBody,
   type EventFormValues,
 } from "@/features/events/schemas/event-form-schema";
+import { todayDateInputMin } from "@/features/events/lib/event-form-validation";
 import { getApiErrorMessage } from "@/lib/api";
 
 export default function EventFormPage() {
@@ -98,6 +100,17 @@ export default function EventFormPage() {
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
 
+  const coverMutation = useMutation({
+    mutationFn: (coverUrl: string | null) => updateEvent(id!, { coverImageUrl: coverUrl }),
+    onSuccess: (data) => {
+      toast.success("Capa do evento actualizada.");
+      form.setValue("coverImageUrl", data.coverImageUrl ?? "");
+      void queryClient.invalidateQueries({ queryKey: ["event", id] });
+      void queryClient.invalidateQueries({ queryKey: ["events"] });
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
+
   return (
     <DashboardLayout>
       <div className="mx-auto max-w-2xl space-y-6">
@@ -158,7 +171,12 @@ export default function EventFormPage() {
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div className="space-y-2">
                     <Label htmlFor="date">Data</Label>
-                    <Input id="date" type="date" {...form.register("date")} />
+                    <Input
+                      id="date"
+                      type="date"
+                      min={todayDateInputMin()}
+                      {...form.register("date")}
+                    />
                     {form.formState.errors.date && (
                       <p className="text-sm text-red-600">{form.formState.errors.date.message}</p>
                     )}
@@ -170,6 +188,11 @@ export default function EventFormPage() {
                   <div className="space-y-2">
                     <Label htmlFor="timeEnd">Fim</Label>
                     <Input id="timeEnd" type="time" {...form.register("timeEnd")} />
+                    {form.formState.errors.timeEnd && (
+                      <p className="text-sm text-red-600">
+                        {form.formState.errors.timeEnd.message}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -214,7 +237,17 @@ export default function EventFormPage() {
                 ) : (
                   <div className="space-y-2">
                     <Label htmlFor="location">Local</Label>
-                    <Input id="location" {...form.register("location")} />
+                    <Controller
+                      control={form.control}
+                      name="location"
+                      render={({ field }) => (
+                        <EventLocationInput
+                          id="location"
+                          value={field.value ?? ""}
+                          onChange={field.onChange}
+                        />
+                      )}
+                    />
                   </div>
                 )}
 
@@ -226,7 +259,13 @@ export default function EventFormPage() {
                     render={({ field }) => (
                       <ImageUploader
                         value={field.value}
-                        onChange={field.onChange}
+                        disabled={coverMutation.isPending}
+                        onChange={(url) => {
+                          field.onChange(url);
+                          if (isEdit) {
+                            coverMutation.mutate(url?.trim() || null);
+                          }
+                        }}
                       />
                     )}
                   />

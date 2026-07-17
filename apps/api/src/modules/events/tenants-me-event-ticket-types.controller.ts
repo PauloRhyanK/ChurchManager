@@ -10,14 +10,20 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { SkipThrottle } from '@nestjs/throttler';
+import { PermissionLevel, PermissionModule } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/auth-user';
+import { PermissionsGuard } from '../access/permissions.guard';
+import { RequirePermission } from '../access/require-permission.decorator';
 import { CreateEventTicketTypeDto } from './dto/create-event-ticket-type.dto';
 import { UpdateEventTicketTypeDto } from './dto/update-event-ticket-type.dto';
 import { EventTicketTypesService } from './event-ticket-types.service';
 
 @Controller('admin/tenants/me/events/:eventId/ticket-types')
-@UseGuards(AuthGuard('jwt'))
+@SkipThrottle({ links: true })
+@UseGuards(AuthGuard('jwt'), PermissionsGuard)
+@RequirePermission(PermissionModule.EVENT_TICKETS, PermissionLevel.VIEW)
 export class TenantsMeEventTicketTypesController {
   constructor(private readonly ticketTypes: EventTicketTypesService) {}
 
@@ -32,6 +38,7 @@ export class TenantsMeEventTicketTypesController {
   }
 
   @Post()
+  @RequirePermission(PermissionModule.EVENT_TICKETS, PermissionLevel.EDIT)
   async create(
     @CurrentUser() user: AuthUser,
     @Param('eventId', ParseUUIDPipe) eventId: string,
@@ -41,6 +48,7 @@ export class TenantsMeEventTicketTypesController {
   }
 
   @Post(':id/duplicate')
+  @RequirePermission(PermissionModule.EVENT_TICKETS, PermissionLevel.EDIT)
   async duplicate(
     @CurrentUser() user: AuthUser,
     @Param('eventId', ParseUUIDPipe) eventId: string,
@@ -50,6 +58,7 @@ export class TenantsMeEventTicketTypesController {
   }
 
   @Put(':id')
+  @RequirePermission(PermissionModule.EVENT_TICKETS, PermissionLevel.EDIT)
   async update(
     @CurrentUser() user: AuthUser,
     @Param('eventId', ParseUUIDPipe) eventId: string,
@@ -60,6 +69,7 @@ export class TenantsMeEventTicketTypesController {
   }
 
   @Delete(':id')
+  @RequirePermission(PermissionModule.EVENT_TICKETS, PermissionLevel.EDIT)
   async remove(
     @CurrentUser() user: AuthUser,
     @Param('eventId', ParseUUIDPipe) eventId: string,

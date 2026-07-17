@@ -75,7 +75,13 @@ export interface EventReportDto {
     quantitySold: number;
     quantityRemaining: number | null;
     active: boolean;
+    revenueCents: number;
   }>;
+  registrationsByDay: Array<{
+    date: string;
+    count: number;
+  }>;
+  salesPeriodStart: string | null;
 }
 
 export type CreateEventBody = {
@@ -100,6 +106,11 @@ export type UpdateEventBody = Partial<CreateEventBody>;
 
 export async function fetchEvents() {
   const { data } = await api.get<{ items: EventDto[] }>("/admin/tenants/me/events");
+  return data.items;
+}
+
+export async function fetchEventLocations() {
+  const { data } = await api.get<{ items: string[] }>("/admin/tenants/me/events/locations");
   return data.items;
 }
 

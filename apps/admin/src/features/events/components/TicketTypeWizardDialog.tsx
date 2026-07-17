@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -28,6 +29,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   createEventFieldDefinition,
   fetchEventFieldDefinitions,
+  fieldTypeHasOptions,
   type EventFieldDefinitionDto,
   type EventFieldType,
 } from "@/features/events/api/tenant-event-fields-api";
@@ -42,6 +44,7 @@ import {
 } from "@/features/events/lib/format";
 import {
   BILLING_TYPES,
+  isFreeTicketPrice,
   ticketTypeFormSchema,
   type TicketFieldConfigValue,
   type TicketTypeFormValues,
@@ -176,7 +179,7 @@ function baseValues(source: EventTicketTypeDto | null, eventDate?: string): Tick
 }
 
 const STEP_FIELDS: Record<number, (keyof TicketTypeFormValues)[]> = {
-  1: ["name", "description", "communityLink"],
+  1: ["name", "description", "communityLink", "salesOpensAt", "salesClosesAt"],
   2: ["allowedBillingTypes", "priceInput", "minPerOrder", "maxPerOrder"],
   3: ["fieldConfigs"],
 };
@@ -253,7 +256,9 @@ export function TicketTypeWizardDialog({
         visibility: values.visibility,
         allowGuestRegistration: values.allowGuestRegistration,
         communityLink: values.communityLink?.trim() || null,
-        allowedBillingTypes: values.allowedBillingTypes,
+        allowedBillingTypes: isFreeTicketPrice(values.priceInput)
+          ? ["UNDEFINED"]
+          : values.allowedBillingTypes,
         maxInstallments: values.maxInstallments?.trim()
           ? Number(values.maxInstallments)
           : null,
@@ -280,7 +285,23 @@ export function TicketTypeWizardDialog({
 
   async function goNext() {
     const valid = await form.trigger(STEP_FIELDS[step]);
-    if (valid) setStep((s) => Math.min(3, s + 1));
+    if (!valid) return;
+
+    if (step === 2) {
+      const priceCents = parseMoneyToCents(form.getValues("priceInput"));
+      const paid = priceCents != null && priceCents > 0;
+      if (paid) {
+        const configs = form.getValues("fieldConfigs");
+        form.setValue(
+          "fieldConfigs",
+          configs.map((c) =>
+            c.type === "CPF" ? { ...c, enabled: true, required: true } : c,
+          ),
+        );
+      }
+    }
+
+    setStep((s) => Math.min(3, s + 1));
   }
 
   return (
@@ -290,6 +311,10 @@ export function TicketTypeWizardDialog({
           <DialogTitle>
             {isEdit ? "Editar ingresso" : "Novo ingresso"} — passo {step} de 3
           </DialogTitle>
+          <DialogDescription>
+            Configure o tipo de ingresso em três passos: dados gerais, preço e
+            campos da inscrição.
+          </DialogDescription>
         </DialogHeader>
 
         <form
@@ -412,6 +437,11 @@ function Step1({ form }: StepProps) {
             type="datetime-local"
             {...form.register("salesClosesAt")}
           />
+          {form.formState.errors.salesClosesAt && (
+            <p className="text-sm text-red-600">
+              {form.formState.errors.salesClosesAt.message}
+            </p>
+          )}
         </div>
       </div>
 
@@ -466,6 +496,8 @@ function Step1({ form }: StepProps) {
 
 function Step2({ form }: StepProps) {
   const selected = form.watch("allowedBillingTypes");
+  const priceInput = form.watch("priceInput");
+  const isFree = isFreeTicketPrice(priceInput ?? "");
   const hasCard = selected.includes("CREDIT_CARD");
 
   function toggleBilling(type: (typeof BILLING_TYPES)[number], checked: boolean) {
@@ -475,29 +507,38 @@ function Step2({ form }: StepProps) {
     form.setValue("allowedBillingTypes", next, { shouldValidate: true });
   }
 
+  function setFreeTicket() {
+    form.setValue("priceInput", "0,00", { shouldValidate: true });
+    form.setValue("allowedBillingTypes", [], { shouldValidate: true });
+    form.setValue("feeInput", "");
+    form.setValue("maxInstallments", "");
+  }
+
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <Label>Tipos de pagamento</Label>
-        <div className="flex flex-wrap gap-4">
-          {BILLING_TYPES.map((type) => (
-            <label key={type} className="flex items-center gap-2 text-sm">
-              <Checkbox
-                checked={selected.includes(type)}
-                onCheckedChange={(c) => toggleBilling(type, Boolean(c))}
-              />
-              {BILLING_LABELS[type]}
-            </label>
-          ))}
+      {!isFree && (
+        <div className="space-y-2">
+          <Label>Tipos de pagamento</Label>
+          <div className="flex flex-wrap gap-4">
+            {BILLING_TYPES.map((type) => (
+              <label key={type} className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  checked={selected.includes(type)}
+                  onCheckedChange={(c) => toggleBilling(type, Boolean(c))}
+                />
+                {BILLING_LABELS[type]}
+              </label>
+            ))}
+          </div>
+          {form.formState.errors.allowedBillingTypes && (
+            <p className="text-sm text-red-600">
+              {form.formState.errors.allowedBillingTypes.message}
+            </p>
+          )}
         </div>
-        {form.formState.errors.allowedBillingTypes && (
-          <p className="text-sm text-red-600">
-            {form.formState.errors.allowedBillingTypes.message}
-          </p>
-        )}
-      </div>
+      )}
 
-      {hasCard && (
+      {hasCard && !isFree && (
         <div className="space-y-2">
           <Label htmlFor="tt-installments">Máximo de parcelas (cartão)</Label>
           <Input
@@ -512,8 +553,18 @@ function Step2({ form }: StepProps) {
       )}
 
       <div className="space-y-2">
-        <Label htmlFor="tt-price">Preço (R$)</Label>
+        <div className="flex items-center justify-between gap-2">
+          <Label htmlFor="tt-price">Preço (R$)</Label>
+          <Button type="button" variant="outline" size="sm" onClick={setFreeTicket}>
+            Ingresso gratuito
+          </Button>
+        </div>
         <Input id="tt-price" placeholder="0,00" {...form.register("priceInput")} />
+        {isFree && (
+          <p className="text-xs text-muted-foreground">
+            Ingresso gratuito — sem cobrança no checkout.
+          </p>
+        )}
         {form.formState.errors.priceInput && (
           <p className="text-sm text-red-600">
             {form.formState.errors.priceInput.message}
@@ -587,7 +638,7 @@ function Step3({
 
   const createFieldMutation = useMutation({
     mutationFn: () => {
-      const options = type === "SELECT"
+      const options = fieldTypeHasOptions(type)
         ? optionsText.split(",").map((o) => o.trim()).filter(Boolean)
         : undefined;
       return createEventFieldDefinition({ label: label.trim(), type, options });
@@ -644,12 +695,13 @@ function Step3({
                   {FIELD_TYPE_LABELS[config.type as EventFieldType] ??
                     config.type}
                   {config.isSystem ? " · padrão" : ""}
-                  {config.type === "SELECT" && (() => {
-                    const def = defs.find((d) => d.id === config.fieldId);
-                    return def?.options && def.options.length > 0
-                      ? ` (${def.options.join(", ")})`
-                      : "";
-                  })()}
+                  {fieldTypeHasOptions(config.type as EventFieldType) &&
+                    (() => {
+                      const def = defs.find((d) => d.id === config.fieldId);
+                      return def?.options && def.options.length > 0
+                        ? ` (${def.options.join(", ")})`
+                        : "";
+                    })()}
                 </p>
               </div>
             </div>
@@ -696,7 +748,7 @@ function Step3({
               </SelectContent>
             </Select>
           </div>
-          {type === "SELECT" && (
+          {fieldTypeHasOptions(type) && (
             <div className="space-y-2 animate-in fade-in duration-200">
               <Label htmlFor="nf-options">Opções do campo</Label>
               <Input
@@ -719,7 +771,11 @@ function Step3({
             <Button
               type="button"
               size="sm"
-              disabled={!label.trim() || createFieldMutation.isPending}
+              disabled={
+                !label.trim() ||
+                (fieldTypeHasOptions(type) && !optionsText.trim()) ||
+                createFieldMutation.isPending
+              }
               onClick={() => createFieldMutation.mutate()}
             >
               {createFieldMutation.isPending && (

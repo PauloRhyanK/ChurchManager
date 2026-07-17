@@ -15,6 +15,19 @@ export default defineConfig(({ mode }) => ({
     },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  build: {
+    // Não calcular tamanho gzip de cada chunk: é a fase (após "modules transformed")
+    // que segura toda a saída em memória e mais contribui para o OOM em VPS pequenas.
+    reportCompressedSize: false,
+    // esbuild consome muito menos memória que terser na minificação.
+    minify: "esbuild",
+    sourcemap: false,
+    chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      // Menos operações de ficheiro em paralelo → menor pico de memória no write.
+      maxParallelFileOps: 2,
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
