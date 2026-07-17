@@ -48,8 +48,14 @@ const mainNav: {
   { title: "Eventos", url: "/eventos", icon: CalendarDays, module: "EVENTS" },
 ];
 
-const internoNav = [
-  { title: "Check-in", url: "/checkin", icon: QrCode },
+const internoNav: {
+  title: string;
+  url: string;
+  icon: typeof QrCode;
+  /** Exact match — evita marcar o item em rotas irmãs sob o mesmo prefixo. */
+  end?: boolean;
+}[] = [
+  { title: "Check-in", url: "/checkin", icon: QrCode, end: true },
 ];
 
 const equipeNav = [
@@ -84,8 +90,12 @@ export function AppSidebar() {
   const canSeeInterno = can("CHECKIN", "VIEW");
   const canSeeEquipe = can("USERS", "VIEW");
 
-  const isActive = (path: string) =>
-    path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
+  const isActive = (path: string, end = false) => {
+    if (path === "/" || end) return location.pathname === path;
+    return (
+      location.pathname === path || location.pathname.startsWith(`${path}/`)
+    );
+  };
 
   function logout() {
     clearStoredSession();
@@ -155,12 +165,12 @@ export function AppSidebar() {
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton
                         asChild
-                        isActive={isActive(item.url)}
+                        isActive={isActive(item.url, item.end)}
                         tooltip={item.title}
                       >
                         <NavLink
                           to={item.url}
-                          end={item.url === "/checkin"}
+                          end={item.end}
                           className="rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                           activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                         >
