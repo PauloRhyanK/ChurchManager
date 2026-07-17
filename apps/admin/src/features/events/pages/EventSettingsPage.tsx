@@ -39,6 +39,7 @@ import {
   createEventFieldDefinition,
   deleteEventFieldDefinition,
   fetchEventFieldDefinitions,
+  fieldTypeHasOptions,
   type EventFieldType,
   type EventFieldDefinitionDto,
 } from "@/features/events/api/tenant-event-fields-api";
@@ -102,7 +103,7 @@ export default function EventSettingsPage() {
 
   const createFieldMutation = useMutation({
     mutationFn: () => {
-      const options = fieldType === "SELECT"
+      const options = fieldTypeHasOptions(fieldType)
         ? fieldOptionsText.split(",").map((o) => o.trim()).filter(Boolean)
         : undefined;
       return createEventFieldDefinition({
@@ -270,7 +271,7 @@ export default function EventSettingsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              {fieldType === "SELECT" && (
+              {fieldTypeHasOptions(fieldType) && (
                 <div className="space-y-1 w-full sm:w-80 animate-in fade-in duration-200">
                   <Label htmlFor="field-options" className="text-xs">Opções do campo</Label>
                   <Input
@@ -283,7 +284,11 @@ export default function EventSettingsPage() {
               )}
               <Button
                 type="submit"
-                disabled={!fieldLabel.trim() || createFieldMutation.isPending}
+                disabled={
+                  !fieldLabel.trim() ||
+                  (fieldTypeHasOptions(fieldType) && !fieldOptionsText.trim()) ||
+                  createFieldMutation.isPending
+                }
                 className="gap-2"
               >
                 {createFieldMutation.isPending ? (
@@ -313,7 +318,7 @@ export default function EventSettingsPage() {
                       <TableCell className="font-medium">{field.label}</TableCell>
                       <TableCell className="text-muted-foreground">
                         <div>{FIELD_TYPE_LABELS[field.type]}</div>
-                        {field.type === "SELECT" && field.options && field.options.length > 0 && (
+                        {fieldTypeHasOptions(field.type) && field.options && field.options.length > 0 && (
                           <div className="text-xs text-muted-foreground/70 mt-0.5">
                             Opções: {field.options.join(", ")}
                           </div>

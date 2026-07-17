@@ -29,6 +29,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   createEventFieldDefinition,
   fetchEventFieldDefinitions,
+  fieldTypeHasOptions,
   type EventFieldDefinitionDto,
   type EventFieldType,
 } from "@/features/events/api/tenant-event-fields-api";
@@ -637,7 +638,7 @@ function Step3({
 
   const createFieldMutation = useMutation({
     mutationFn: () => {
-      const options = type === "SELECT"
+      const options = fieldTypeHasOptions(type)
         ? optionsText.split(",").map((o) => o.trim()).filter(Boolean)
         : undefined;
       return createEventFieldDefinition({ label: label.trim(), type, options });
@@ -694,12 +695,13 @@ function Step3({
                   {FIELD_TYPE_LABELS[config.type as EventFieldType] ??
                     config.type}
                   {config.isSystem ? " · padrão" : ""}
-                  {config.type === "SELECT" && (() => {
-                    const def = defs.find((d) => d.id === config.fieldId);
-                    return def?.options && def.options.length > 0
-                      ? ` (${def.options.join(", ")})`
-                      : "";
-                  })()}
+                  {fieldTypeHasOptions(config.type as EventFieldType) &&
+                    (() => {
+                      const def = defs.find((d) => d.id === config.fieldId);
+                      return def?.options && def.options.length > 0
+                        ? ` (${def.options.join(", ")})`
+                        : "";
+                    })()}
                 </p>
               </div>
             </div>
@@ -746,7 +748,7 @@ function Step3({
               </SelectContent>
             </Select>
           </div>
-          {type === "SELECT" && (
+          {fieldTypeHasOptions(type) && (
             <div className="space-y-2 animate-in fade-in duration-200">
               <Label htmlFor="nf-options">Opções do campo</Label>
               <Input
@@ -769,7 +771,11 @@ function Step3({
             <Button
               type="button"
               size="sm"
-              disabled={!label.trim() || createFieldMutation.isPending}
+              disabled={
+                !label.trim() ||
+                (fieldTypeHasOptions(type) && !optionsText.trim()) ||
+                createFieldMutation.isPending
+              }
               onClick={() => createFieldMutation.mutate()}
             >
               {createFieldMutation.isPending && (

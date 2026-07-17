@@ -9,6 +9,11 @@ export type EventFieldType =
   | "SELECT"
   | "CHECKBOX";
 
+/** Tipos cujas opções (valores de escolha) são configuráveis pelo utilizador. */
+export function fieldTypeHasOptions(type: EventFieldType): boolean {
+  return type === "SELECT" || type === "CHECKBOX";
+}
+
 export interface EventFieldDefinitionDto {
   id: string;
   key: string;
