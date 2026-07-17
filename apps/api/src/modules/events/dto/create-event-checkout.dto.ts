@@ -37,6 +37,13 @@ export class EventCheckoutLineDto {
   @IsInt()
   @Min(1)
   quantity!: number;
+
+  /** Nome por ingresso (índice = unidade). Ausente/curto => herda o nome do pagador. */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @MaxLength(255, { each: true })
+  holderNames?: string[];
 }
 
 export class EventFieldValueDto {

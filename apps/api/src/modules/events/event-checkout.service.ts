@@ -168,6 +168,10 @@ export class EventCheckoutService {
                 ticketTypeId: line.ticketTypeId,
                 quantity: line.quantity,
                 unitPriceCents: type.priceCents + type.feeCents,
+                holderNames: (line.holderNames ?? [])
+                  .slice(0, line.quantity)
+                  .map((n) => n.trim())
+                  .filter((n) => n.length > 0),
               };
             }),
           },

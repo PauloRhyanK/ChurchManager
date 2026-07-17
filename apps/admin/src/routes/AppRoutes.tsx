@@ -5,6 +5,8 @@ import EventFormPage from "@/features/events/pages/EventFormPage";
 import EventsListPage from "@/features/events/pages/EventsListPage";
 import EventSettingsPage from "@/features/events/pages/EventSettingsPage";
 import RegistrationsPage from "@/features/events/pages/RegistrationsPage";
+import CheckinPage from "@/features/checkin/pages/CheckinPage";
+import OnsiteRegistrationPage from "@/features/checkin/pages/OnsiteRegistrationPage";
 import UsersListPage from "@/features/access/pages/UsersListPage";
 import InviteUserPage from "@/features/access/pages/InviteUserPage";
 import PermissionGroupsPage from "@/features/access/pages/PermissionGroupsPage";
@@ -19,6 +21,7 @@ import NotFound from "@/pages/NotFound";
 import Settings from "@/pages/Settings";
 import PlatformChurches from "@/pages/PlatformChurches";
 import { PlatformAdminRoute } from "./PlatformAdminRoute";
+import { PermissionRoute } from "./PermissionRoute";
 import { ProtectedRoute } from "./ProtectedRoute";
 
 export function AppRoutes() {
@@ -47,6 +50,11 @@ export function AppRoutes() {
           }
         />
         <Route path="/configuracoes" element={<Settings />} />
+
+        <Route element={<PermissionRoute module="CHECKIN" />}>
+          <Route path="/checkin" element={<CheckinPage />} />
+          <Route path="/checkin/inscricoes" element={<OnsiteRegistrationPage />} />
+        </Route>
 
         <Route path="/equipe/usuarios" element={<UsersListPage />} />
         <Route path="/equipe/usuarios/convidar" element={<InviteUserPage />} />

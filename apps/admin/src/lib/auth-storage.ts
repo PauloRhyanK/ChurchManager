@@ -14,6 +14,7 @@ export type PermissionModule =
   | "EVENTS"
   | "EVENT_REGISTRATIONS"
   | "EVENT_TICKETS"
+  | "CHECKIN"
   | "FINANCIAL"
   | "SITE"
   | "SETTINGS"

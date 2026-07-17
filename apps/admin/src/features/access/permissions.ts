@@ -29,6 +29,11 @@ export const PERMISSION_MODULES: PermissionModuleMeta[] = [
     description: "Tipos de ingresso dos eventos.",
   },
   {
+    module: "CHECKIN",
+    label: "Funcionamento interno",
+    description: "Check-in de eventos e inscrições no local (voluntários).",
+  },
+  {
     module: "FINANCIAL",
     label: "Financeiro",
     description: "Cotas, presets e links de pagamento.",
@@ -91,6 +96,11 @@ export const GROUP_TEMPLATES: GroupTemplate[] = [
       { module: "EVENT_REGISTRATIONS", level: "EDIT" },
       { module: "EVENT_TICKETS", level: "EDIT" },
     ],
+  },
+  {
+    name: "Voluntário (check-in)",
+    description: "Check-in e inscrições no local, sem gerir eventos.",
+    entries: [{ module: "CHECKIN", level: "EDIT" }],
   },
   {
     name: "Financeiro",

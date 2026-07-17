@@ -6,6 +6,7 @@ export const PERMISSION_MODULES: PermissionModule[] = [
   PermissionModule.EVENTS,
   PermissionModule.EVENT_REGISTRATIONS,
   PermissionModule.EVENT_TICKETS,
+  PermissionModule.CHECKIN,
   PermissionModule.FINANCIAL,
   PermissionModule.SITE,
   PermissionModule.SETTINGS,

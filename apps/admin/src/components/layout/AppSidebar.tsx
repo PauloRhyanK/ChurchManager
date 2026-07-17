@@ -13,6 +13,8 @@ import {
   UserCog,
   ShieldCheck,
   Link2,
+  QrCode,
+  ClipboardList,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -47,6 +49,11 @@ const mainNav: {
   { title: "Eventos", url: "/eventos", icon: CalendarDays, module: "EVENTS" },
 ];
 
+const internoNav = [
+  { title: "Check-in", url: "/checkin", icon: QrCode },
+  { title: "Fazer inscrições", url: "/checkin/inscricoes", icon: ClipboardList },
+];
+
 const equipeNav = [
   { title: "Utilizadores", url: "/equipe/usuarios", icon: UserCog },
   { title: "Grupos", url: "/equipe/grupos", icon: ShieldCheck },
@@ -76,6 +83,7 @@ export function AppSidebar() {
   const visibleMainNav = mainNav.filter(
     (item) => !item.module || can(item.module, "VIEW"),
   );
+  const canSeeInterno = can("CHECKIN", "VIEW");
   const canSeeEquipe = can("USERS", "VIEW");
 
   const isActive = (path: string) =>
@@ -135,6 +143,40 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {canSeeInterno && (
+          <>
+            <Separator className="my-2 mx-3" />
+            <SidebarGroup>
+              <SidebarGroupLabel className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-3 mb-1">
+                Funcionamento interno
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {internoNav.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive(item.url)}
+                        tooltip={item.title}
+                      >
+                        <NavLink
+                          to={item.url}
+                          end={item.url === "/checkin"}
+                          className="rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                          activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                        >
+                          <item.icon className="h-4 w-4" />
+                          {!collapsed && <span>{item.title}</span>}
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </>
+        )}
 
         {canSeeEquipe && (
           <>

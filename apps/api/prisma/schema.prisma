@@ -25,6 +25,7 @@ enum PermissionModule {
   EVENTS
   EVENT_REGISTRATIONS
   EVENT_TICKETS
+  CHECKIN
   FINANCIAL
   SITE
   SETTINGS
@@ -341,11 +342,13 @@ model EventOrder {
 }
 
 model EventOrderLine {
-  id             String @id @default(uuid()) @db.Uuid
-  orderId        String @map("order_id") @db.Uuid
-  ticketTypeId   String @map("ticket_type_id") @db.Uuid
+  id             String   @id @default(uuid()) @db.Uuid
+  orderId        String   @map("order_id") @db.Uuid
+  ticketTypeId   String   @map("ticket_type_id") @db.Uuid
   quantity       Int
-  unitPriceCents Int    @map("unit_price_cents")
+  unitPriceCents Int      @map("unit_price_cents")
+  /// Nome por ingresso da linha (índice = unidade). Vazio => herda o nome do pagador.
+  holderNames    String[] @map("holder_names")
 
   order      EventOrder      @relation(fields: [orderId], references: [id], onDelete: Cascade)
   ticketType EventTicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
@@ -362,6 +365,11 @@ model EventTicket {
   publicCode   String            @unique @map("public_code") @db.VarChar(32)
   holderName   String            @map("holder_name") @db.VarChar(255)
   status       EventTicketStatus @default(VALID)
+  /// Presença (check-in). Nulo => ainda não deu entrada.
+  checkedInAt       DateTime? @map("checked_in_at")
+  /// Voluntário que registou a entrada (sem FK; snapshot preservado).
+  checkedInByUserId String?   @map("checked_in_by_user_id") @db.Uuid
+  checkedInByName   String?   @map("checked_in_by_name") @db.VarChar(255)
   createdAt    DateTime          @default(now()) @map("created_at")
 
   tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -370,6 +378,7 @@ model EventTicket {
 
   @@index([tenantId])
   @@index([orderId])
+  @@index([tenantId, checkedInAt])
   @@map("event_tickets")
 }
 

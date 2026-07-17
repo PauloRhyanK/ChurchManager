@@ -12,6 +12,7 @@ import { EventOrdersService } from './event-orders.service';
 import { EventReportsService } from './event-reports.service';
 import { EventTagsService } from './event-tags.service';
 import { EventFieldDefinitionsService } from './event-field-definitions.service';
+import { CheckinService } from './checkin.service';
 import { TenantsMeEventsController } from './tenants-me-events.controller';
 import { TenantsMeRegistrationsController } from './tenants-me-registrations.controller';
 import { TenantsMeSchedulesController } from './tenants-me-schedules.controller';
@@ -19,6 +20,7 @@ import { TenantsMeEventTicketTypesController } from './tenants-me-event-ticket-t
 import { TenantsMeEventsDashboardController } from './tenants-me-events-dashboard.controller';
 import { TenantsMeEventTagsController } from './tenants-me-event-tags.controller';
 import { TenantsMeEventFieldsController } from './tenants-me-event-fields.controller';
+import { TenantsMeCheckinController } from './tenants-me-checkin.controller';
 import { PublicEventsController } from './public-events.controller';
 
 @Module({
@@ -36,6 +38,7 @@ import { PublicEventsController } from './public-events.controller';
     TenantsMeEventsDashboardController,
     TenantsMeEventTagsController,
     TenantsMeEventFieldsController,
+    TenantsMeCheckinController,
     PublicEventsController,
   ],
   providers: [
@@ -48,6 +51,7 @@ import { PublicEventsController } from './public-events.controller';
     EventReportsService,
     EventTagsService,
     EventFieldDefinitionsService,
+    CheckinService,
   ],
   exports: [
     EventsService,

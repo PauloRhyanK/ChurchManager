@@ -9,7 +9,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EventTicketTypesService } from './event-ticket-types.service';
 import { formatDateOnly, formatTimeOnly } from './event-format.util';
 
-function generatePublicCode(): string {
+export function generatePublicCode(): string {
   return randomBytes(9).toString('base64url');
 }
 
@@ -108,17 +108,18 @@ export class EventOrdersService {
       return;
     }
 
-    const holderName = order.payer?.name ?? 'Participante';
+    const payerName = order.payer?.name ?? 'Participante';
     const ticketsData: Prisma.EventTicketCreateManyInput[] = [];
 
     for (const line of order.lines) {
       for (let i = 0; i < line.quantity; i++) {
+        const named = line.holderNames[i]?.trim();
         ticketsData.push({
           tenantId: order.tenantId,
           orderId: order.id,
           ticketTypeId: line.ticketTypeId,
           publicCode: generatePublicCode(),
-          holderName,
+          holderName: named && named.length > 0 ? named : payerName,
         });
       }
     }
