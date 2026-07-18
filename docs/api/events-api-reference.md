@@ -21,6 +21,7 @@ Documento de visão/alvo histórico (campos futuros): [events-public-contract.md
 3. [Listar eventos](#3-listar-eventos)
 4. [Detalhe do evento](#4-detalhe-do-evento)
 5. [Tipos de ingresso](#5-tipos-de-ingresso)
+5.1. [Ingresso por id (inclui privados)](#51-ingresso-por-id-inclui-privados)
 6. [Checkout (pagamento)](#6-checkout-pagamento)
 7. [Polling do pagamento](#7-polling-do-pagamento)
 8. [Bilhete pós-compra](#8-bilhete-pós-compra)
@@ -151,7 +152,16 @@ export interface EventCheckoutRequest {
     email: string;
     phone?: string;
   };
-  lines: Array<{ ticketTypeId: string; quantity: number }>;
+  lines: Array<{
+    ticketTypeId: string;
+    quantity: number;
+    /**
+     * Nome por ingresso — índice = unidade (0 = 1.º bilhete da linha).
+     * Ausente, vazio ou mais curto que `quantity`: as unidades restantes
+     * herdam `payer.name`. Excedentes são ignorados.
+     */
+    holderNames?: string[];
+  }>;
   billingType: "PIX" | "BOLETO" | "CREDIT_CARD" | "UNDEFINED";
   installmentCount?: number;
   fieldValues?: Array<{ fieldId: string; value: string }>;
@@ -163,14 +173,20 @@ export interface EventCheckoutResponse {
   orderId: string;
   eventId: string;
   transactionId: string;
-  asaasPaymentId: string;
+  /** null numa resposta idempotente (ver secção 6). */
+  asaasPaymentId: string | null;
   status: "PENDING" | "CONFIRMED";
-  billingType: string;
+  /** null numa resposta idempotente. */
+  billingType: string | null;
   /** Valor em reais (decimal). */
   value: number;
+  /** Sempre null numa resposta idempotente. */
   dueDate: string | null;
+  /** Sempre null numa resposta idempotente. */
   invoiceUrl: string | null;
+  /** Sempre null numa resposta idempotente. */
   bankSlipUrl: string | null;
+  /** Sempre null numa resposta idempotente. */
   pix: {
     encodedImage: string | null;
     payload: string | null;
@@ -292,7 +308,9 @@ Só devolve eventos **publicados**. Rascunhos respondem `404`.
 
 ### `GET /api/public/tenants/:slug/events/:eventId/tickets`
 
-Lista tipos **activos** e **em janela de venda** (`salesOpensAt` / `salesClosesAt`).
+Lista tipos **activos**, com `visibility: "PUBLIC"` e **em janela de venda** (`salesOpensAt` / `salesClosesAt`).
+
+> Ingressos `PRIVATE` **não** aparecem aqui — só via [secção 5.1](#51-ingresso-por-id-inclui-privados) (link directo).
 
 **Resposta `200`**
 
@@ -338,6 +356,18 @@ Lista tipos **activos** e **em janela de venda** (`salesOpensAt` / `salesClosesA
 
 **Erros:** `404` se evento não publicado ou inexistente.
 
+### 5.1 Ingresso por id (inclui privados)
+
+#### `GET /api/public/tenants/:slug/events/:eventId/tickets/:ticketId`
+
+Devolve **um** tipo de ingresso por UUID, incluindo `visibility: "PRIVATE"`. É o caminho para páginas de **link directo** (ingressos que não devem constar da listagem pública).
+
+Filtra apenas por `active: true` — **não** aplica a janela de venda. Um ingresso fora da janela devolve `200` com `isSoldOut: true`; o site deve tratar esse caso como “vendas encerradas” e não abrir o checkout.
+
+**Resposta `200`:** um `PublicTicketTypeDto` (mesmo formato dos itens da secção 5, objecto plano).
+
+**Erros:** `404` evento não publicado, ingresso inexistente, inactivo ou de outro evento/tenant.
+
 ---
 
 ## 6. Checkout (pagamento)
@@ -357,9 +387,14 @@ Cria pedido (`EventOrder`), reserva stock e gera cobrança Asaas. O site **nunca
     "phone": "11999999999"
   },
   "lines": [
-    { "ticketTypeId": "uuid-do-tipo", "quantity": 2 }
+    {
+      "ticketTypeId": "uuid-do-tipo",
+      "quantity": 2,
+      "holderNames": ["Maria Silva", "João Silva"]
+    }
   ],
   "billingType": "PIX",
+  "installmentCount": 1,
   "idempotencyKey": "opcional-uuid-da-sessao"
 }
 ```
@@ -368,8 +403,15 @@ Cria pedido (`EventOrder`), reserva stock e gera cobrança Asaas. O site **nunca
 |-------|--------|
 | `payer.cpf` | 11 dígitos; validação de dígitos verificadores |
 | `lines` | Pelo menos uma linha; respeitar `minPerOrder` / `maxPerOrder` |
-| `billingType` | `PIX` — QR/cópia e cola; `BOLETO` — `bankSlipUrl`; `UNDEFINED` — utilizador escolhe no Asaas |
-| `idempotencyKey` | Se repetido para o mesmo tenant/evento, devolve a transacção existente |
+| `lines[].holderNames` | Opcional. Nome por ingresso, índice = unidade. Unidades sem nome herdam `payer.name`; excedentes são ignorados |
+| `billingType` | `PIX` — QR/cópia e cola; `BOLETO` — `bankSlipUrl`; `CREDIT_CARD` — pagar em `invoiceUrl`; `UNDEFINED` — utilizador escolhe no Asaas. Tem de constar de `allowedBillingTypes` de **todos** os tipos do pedido |
+| `installmentCount` | Só aplicado com `billingType: "CREDIT_CARD"` (ignorado nos restantes). Não pode exceder o `maxInstallments` de nenhum tipo do pedido |
+| `fieldValues` | Obrigatório para cada campo com `required: true` em `fields` (secção 5). Campos de sistema (`name`, `email`, `phone`, `cpf`) são satisfeitos por `payer` |
+| `idempotencyKey` | Único global. Se repetido para o mesmo tenant/evento, devolve a transacção existente (ver aviso abaixo) |
+
+> **A resposta idempotente é degradada.** Na repetição da mesma `idempotencyKey`, a API devolve `dueDate`, `invoiceUrl`, `bankSlipUrl` e `pix` sempre a `null` (`asaasPaymentId` e `billingType` também podem vir `null`). O site **não** consegue reconstruir o QR PIX a partir dessa resposta — guarde os dados de pagamento da **primeira** resposta e gere uma `idempotencyKey` nova por tentativa de checkout, usando a mesma chave apenas para retry de rede da mesma tentativa.
+>
+> Reutilizar uma `idempotencyKey` noutro evento ou tenant não devolve a ordem existente — responde `409`. Idem se o pedido anterior ficou sem cobrança associada, ou se dois checkouts com a mesma chave nova correrem em paralelo. Em qualquer `409` de idempotência, gere uma chave nova antes de repetir.
 
 **Resposta `201`:** `EventCheckoutResponse`
 
@@ -385,10 +427,11 @@ Cria pedido (`EventOrder`), reserva stock e gera cobrança Asaas. O site **nunca
 
 | HTTP | Quando |
 |------|--------|
-| `400` | CPF inválido, quantidade fora do limite, fora da janela de venda, valor zero |
+| `400` | CPF inválido, quantidade fora do limite, fora da janela de venda, valor zero, `billingType` fora de `allowedBillingTypes`, `installmentCount` acima do `maxInstallments`, campo obrigatório em falta (`Campo obrigatório: <label>`) |
 | `404` | Evento ou tipo de ingresso inexistente |
 | `409` | Stock esgotado (concorrência) — refetch `/tickets` e pedir ao utilizador para tentar de novo |
-| `503` | Tenant sem `asaasApiKey` configurada |
+| `409` | `idempotencyKey` inutilizável (outro tenant/evento, pedido anterior incompleto, ou checkout em curso) — repetir com chave nova |
+| `500` | Tenant sem `asaasApiKey` configurada (`Credencial Asaas da igreja não configurada`) |
 
 ---
 
@@ -448,6 +491,24 @@ O campo `publicCode` é o payload recomendado para QR na entrada.
 
 **Erros:** `404` bilhete inexistente ou pedido ainda não confirmado.
 
+### QR code do bilhete
+
+#### `GET /api/public/tenants/:slug/tickets/:ticketId/qr.png`
+
+PNG do QR (320×320) para a página pública do bilhete. Aceita os mesmos identificadores da rota acima (UUID ou `publicCode`). O payload codificado é o `publicCode` — exactamente o que o check-in lê.
+
+```html
+<img src="{API}/public/tenants/{slug}/tickets/{code}/qr.png" alt="QR do ingresso" />
+```
+
+Responde `image/png` com `Cache-Control: private, max-age=3600`. Erros: `404` nas mesmas condições da rota de detalhe.
+
+### E-mail de confirmação
+
+Assim que o webhook Asaas confirma o pagamento, a API emite os bilhetes e **envia-os por e-mail ao pagador** (endereço de `payer.email` no checkout), com um QR por bilhete embutido no corpo e em anexo. O site não precisa de fazer nada para isso acontecer.
+
+O link “abrir bilhete” do e-mail aponta para a primeira origem registada em `tenant_public_web_origins` + o caminho de `EVENT_TICKET_PUBLIC_PATH` (por omissão `/ingresso/{code}`) — **o site deve servir essa rota**. Sem origem registada, o e-mail sai apenas com QR e código.
+
 > **Nota:** Não existe endpoint público para listar todos os bilhetes de um pedido. O site pode guardar `orderId` e, após `CONFIRMED`, pedir bilhetes individualmente se tiver os IDs (fase futura: `GET .../orders/:orderId/tickets`).
 
 ---
@@ -497,8 +558,12 @@ Para eventos sem venda de ingressos (formulário “Quero participar”).
 
 | HTTP | Quando |
 |------|--------|
+| `400` | `ticketTypeId` com `allowGuestRegistration: false` e sem `userId` (`É necessário iniciar sessão para se inscrever neste ingresso`) |
+| `400` | Campo obrigatório em falta em `fieldValues` (`Campo obrigatório: <label>`) |
 | `409` | E-mail já inscrito neste evento |
-| `404` | Evento inexistente |
+| `404` | Evento inexistente, ou `ticketTypeId` inexistente neste evento |
+
+`ticketTypeId` é opcional, mas é o que activa a validação de campos personalizados e o que devolve `communityLink` na resposta. Sem ele, `communityLink` vem `null` e `fieldValues` é ignorado.
 
 ### `GET /api/public/tenants/:slug/events/:eventId/registrations/check`
 
@@ -523,8 +588,8 @@ Se omitir `email` e `userId`, devolve `{ "registered": false }`.
 
 | Query | Obrigatório |
 |-------|-------------|
-| `email` | Sim |
-| `userId` | Não |
+| `email` | Sim — omitir responde `400` |
+| `userId` | Não — quando presente, alarga a pesquisa (`email` **ou** `userId`) |
 
 **Resposta `200`**
 
@@ -594,11 +659,11 @@ Formato típico Nest (validação):
 
 | HTTP | Situação comum em eventos |
 |------|---------------------------|
-| `400` | Body inválido, regras de negócio (stock, CPF, quantidade) |
+| `400` | Body inválido, regras de negócio (stock, CPF, quantidade, campos obrigatórios, forma de pagamento) |
 | `404` | Tenant, evento, pedido ou bilhete não encontrado |
-| `409` | Stock insuficiente no checkout |
+| `409` | Stock insuficiente no checkout, e-mail já inscrito, ou `idempotencyKey` inutilizável |
 | `429` | Rate limit global (retry com backoff) |
-| `503` | Asaas não configurado no tenant |
+| `500` | Asaas não configurado no tenant |
 
 ---
 
@@ -669,3 +734,4 @@ await fetch(`${API}/public/tenants/${slug}/events/${eventId}/checkout`, {
 - Webhooks e confirmação de pagamento: [financial-schema-and-webhooks.md](../financial-schema-and-webhooks.md)
 - Cotas (fluxo financeiro separado): [cotas-payment-contract.md](./cotas-payment-contract.md)
 - Coleção Insomnia (rotas públicas): [insomnia-site-public.json](./insomnia-site-public.json)
+- Coleção Insomnia (só eventos): [insomnia-events-public.json](./insomnia-events-public.json)

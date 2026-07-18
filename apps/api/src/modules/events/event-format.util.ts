@@ -102,6 +102,37 @@ export function toScheduleDto(row: Schedule) {
   };
 }
 
+const MONTHS_PT = [
+  'janeiro',
+  'fevereiro',
+  'março',
+  'abril',
+  'maio',
+  'junho',
+  'julho',
+  'agosto',
+  'setembro',
+  'outubro',
+  'novembro',
+  'dezembro',
+];
+
+/**
+ * Data legível em pt-BR a partir dos campos já normalizados (`YYYY-MM-DD` e
+ * `HH:MM:SS`). Trabalha sobre as strings — não reinterpreta fusos.
+ */
+export function formatEventDateTimePtBr(
+  date: string,
+  timeStart: string | null,
+): string {
+  const [y, m, d] = date.split('-').map(Number);
+  const month = MONTHS_PT[m - 1] ?? '';
+  const day = `${d} de ${month} de ${y}`;
+  if (!timeStart) return day;
+  const [h, min] = timeStart.split(':');
+  return `${day}, ${h}:${min}`;
+}
+
 /** Início do dia UTC para filtro date >= hoje. */
 export function startOfTodayUtc(): Date {
   const now = new Date();

@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Tenant } from '@prisma/client';
+import { Prisma, Tenant } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { normalizeCpf, isValidCpfDigits } from '../../common/cpf';
 import { AsaasClient } from '../financial/asaas/asaas.client';
@@ -41,11 +41,23 @@ export class EventCheckoutService {
           transactions: { orderBy: { createdAt: 'desc' }, take: 1 },
         },
       });
-      if (existing && existing.tenantId === tenant.id && existing.eventId === eventId) {
+      if (existing) {
+        // A chave é única global: se pertence a outro tenant/evento, não há
+        // resposta idempotente possível — 409 em vez de colidir no create.
+        if (existing.tenantId !== tenant.id || existing.eventId !== eventId) {
+          throw new ConflictException(
+            'idempotencyKey já utilizada noutro pedido; gere uma chave nova',
+          );
+        }
         const tx = existing.transactions[0];
         if (tx) {
           return this.buildCheckoutResponse(existing.id, eventId, tx);
         }
+        // Pedido criado sem cobrança associada (falha anterior a meio do
+        // checkout): reusar a chave voltaria a colidir no create.
+        throw new ConflictException(
+          'Pedido anterior ficou incompleto; refaça o checkout com uma idempotencyKey nova',
+        );
       }
     }
 
@@ -152,41 +164,55 @@ export class EventCheckoutService {
         }
       }
 
-      const order = await tx.eventOrder.create({
-        data: {
-          tenantId: tenant.id,
-          eventId,
-          payerProfileId: profile.id,
-          status: 'PENDING',
-          totalCents,
-          currency: event.currency,
-          idempotencyKey: dto.idempotencyKey?.trim() || null,
-          lines: {
-            create: dto.lines.map((line) => {
-              const type = typeMap.get(line.ticketTypeId)!;
-              return {
-                ticketTypeId: line.ticketTypeId,
-                quantity: line.quantity,
-                unitPriceCents: type.priceCents + type.feeCents,
-                holderNames: (line.holderNames ?? [])
-                  .slice(0, line.quantity)
-                  .map((n) => n.trim())
-                  .filter((n) => n.length > 0),
-              };
-            }),
+      const order = await tx.eventOrder
+        .create({
+          data: {
+            tenantId: tenant.id,
+            eventId,
+            payerProfileId: profile.id,
+            status: 'PENDING',
+            totalCents,
+            currency: event.currency,
+            idempotencyKey: dto.idempotencyKey?.trim() || null,
+            lines: {
+              create: dto.lines.map((line) => {
+                const type = typeMap.get(line.ticketTypeId)!;
+                return {
+                  ticketTypeId: line.ticketTypeId,
+                  quantity: line.quantity,
+                  unitPriceCents: type.priceCents + type.feeCents,
+                  holderNames: (line.holderNames ?? [])
+                    .slice(0, line.quantity)
+                    .map((n) => n.trim())
+                    .filter((n) => n.length > 0),
+                };
+              }),
+            },
+            ...(fieldValuesToPersist.length > 0
+              ? {
+                  fieldValues: {
+                    create: fieldValuesToPersist.map((fv) => ({
+                      fieldId: fv.fieldId,
+                      value: fv.value,
+                    })),
+                  },
+                }
+              : {}),
           },
-          ...(fieldValuesToPersist.length > 0
-            ? {
-                fieldValues: {
-                  create: fieldValuesToPersist.map((fv) => ({
-                    fieldId: fv.fieldId,
-                    value: fv.value,
-                  })),
-                },
-              }
-            : {}),
-        },
-      });
+        })
+        .catch((err) => {
+          // Corrida entre dois checkouts com a mesma idempotencyKey nova: o
+          // índice único é o árbitro, e o perdedor recebe 409 em vez de 500.
+          if (
+            err instanceof Prisma.PrismaClientKnownRequestError &&
+            err.code === 'P2002'
+          ) {
+            throw new ConflictException(
+              'Checkout já em curso para esta idempotencyKey; aguarde e consulte o pedido',
+            );
+          }
+          throw err;
+        });
 
       return order;
     });

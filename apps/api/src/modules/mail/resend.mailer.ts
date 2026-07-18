@@ -41,6 +41,16 @@ export class ResendMailer extends Mailer {
         subject: message.subject,
         html: message.html,
         text: message.text,
+        ...(message.attachments?.length
+          ? {
+              attachments: message.attachments.map((a) => ({
+                filename: a.filename,
+                content: a.content,
+                contentType: a.contentType,
+                contentId: a.contentId,
+              })),
+            }
+          : {}),
       });
       if (error) {
         throw new Error(`${error.name}: ${error.message}`);

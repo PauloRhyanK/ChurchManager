@@ -9,6 +9,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { EventTicketTypesService } from './event-ticket-types.service';
 import { formatDateOnly, formatTimeOnly } from './event-format.util';
 import { ticketMatch } from './event-ticket-match.util';
+import { TicketDeliveryService } from './ticket-delivery.service';
 
 export function generatePublicCode(): string {
   return randomBytes(9).toString('base64url');
@@ -21,6 +22,7 @@ export class EventOrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ticketTypes: EventTicketTypesService,
+    private readonly delivery: TicketDeliveryService,
   ) {}
 
   async getPaymentStatus(
@@ -91,10 +93,15 @@ export class EventOrdersService {
     };
   }
 
+  /**
+   * Emite os bilhetes do pedido. Devolve `true` apenas na transição para
+   * CONFIRMED — o chamador usa isso para entregar os bilhetes por e-mail
+   * depois do commit.
+   */
   async fulfillConfirmedOrder(
     orderId: string,
     tx: Prisma.TransactionClient,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const order = await tx.eventOrder.findUnique({
       where: { id: orderId },
       include: {
@@ -103,7 +110,7 @@ export class EventOrdersService {
       },
     });
     if (!order || order.status === 'CONFIRMED') {
-      return;
+      return false;
     }
 
     const payerName = order.payer?.name ?? 'Participante';
@@ -133,6 +140,8 @@ export class EventOrdersService {
         confirmedAt: new Date(),
       },
     });
+
+    return true;
   }
 
   async markOrderFailed(
@@ -166,12 +175,27 @@ export class EventOrdersService {
     eventOrderIds: string[],
   ): Promise<void> {
     for (const orderId of eventOrderIds) {
+      let fulfilled = false;
       try {
-        await this.prisma.$transaction(async (tx) => {
-          await this.fulfillConfirmedOrder(orderId, tx);
-        });
+        fulfilled = await this.prisma.$transaction(async (tx) =>
+          this.fulfillConfirmedOrder(orderId, tx),
+        );
       } catch (err) {
         this.logger.error(`Falha ao emitir bilhetes do pedido ${orderId}`, err);
+        continue;
+      }
+
+      if (!fulfilled) continue;
+
+      // A entrega é secundária à emissão: uma falha de e-mail não pode fazer o
+      // webhook responder erro e provocar reentrega do Asaas.
+      try {
+        await this.delivery.sendTicketsForOrder(orderId);
+      } catch (err) {
+        this.logger.error(
+          `Bilhetes do pedido ${orderId} emitidos, mas o e-mail falhou`,
+          err,
+        );
       }
     }
   }

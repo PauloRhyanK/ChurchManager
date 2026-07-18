@@ -36,6 +36,7 @@
     "date-fns": "^4.1.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "resend": "^6.17.2",
     "rxjs": "^7.8.2"
@@ -47,6 +48,7 @@
     "@types/multer": "^2.1.0",
     "@types/node": "^22.13.10",
     "@types/passport-jwt": "^4.0.1",
+    "@types/qrcode": "^1.5.6",
     "dotenv-cli": "^8.0.0",
     "prisma": "^6.5.0",
     "tsx": "^4.19.3",

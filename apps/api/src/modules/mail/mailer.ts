@@ -5,11 +5,24 @@
  * concreto (Resend, SMTP, SendGrid…). Para trocar a tecnologia de envio basta
  * fornecer outra implementação desta classe no MailModule.
  */
+export interface EmailAttachment {
+  filename: string;
+  content: Buffer;
+  contentType?: string;
+  /**
+   * Quando definido, o anexo é embutido no corpo e pode ser referenciado no
+   * HTML por `cid:<contentId>` — evita o bloqueio de imagens remotas que a
+   * maioria dos clientes aplica por omissão.
+   */
+  contentId?: string;
+}
+
 export interface EmailMessage {
   to: string;
   subject: string;
   html: string;
   text?: string;
+  attachments?: EmailAttachment[];
 }
 
 export abstract class Mailer {

@@ -4,13 +4,15 @@ import { NotFoundException } from '@nestjs/common';
 import { EventOrdersService } from './event-orders.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { EventTicketTypesService } from './event-ticket-types.service';
+import type { TicketDeliveryService } from './ticket-delivery.service';
 
 const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
-function service(prisma: unknown) {
+function service(prisma: unknown, delivery: unknown = {}) {
   return new EventOrdersService(
     prisma as PrismaService,
     {} as EventTicketTypesService,
+    delivery as TicketDeliveryService,
   );
 }
 

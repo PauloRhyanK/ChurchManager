@@ -1,13 +1,16 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
   ParseUUIDPipe,
   Post,
   Query,
+  StreamableFile,
 } from '@nestjs/common';
 import { TenantsService } from '../tenants/tenants.service';
 import { CreateEventRegistrationDto } from './dto/create-event-registration.dto';
@@ -18,6 +21,7 @@ import { SchedulesService } from './schedules.service';
 import { EventTicketTypesService } from './event-ticket-types.service';
 import { EventCheckoutService } from './event-checkout.service';
 import { EventOrdersService } from './event-orders.service';
+import { renderTicketQrPng } from './ticket-qr';
 
 @Controller('public/tenants')
 export class PublicEventsController {
@@ -122,6 +126,22 @@ export class PublicEventsController {
     return this.orders.getPublicTicket(tenant.id, ticketId);
   }
 
+  /**
+   * QR code do bilhete em PNG — usado pela página pública do bilhete no site.
+   * O `publicCode` é o próprio segredo, por isso a rota não é autenticada.
+   */
+  @Get(':slug/tickets/:ticketId/qr.png')
+  @Header('Content-Type', 'image/png')
+  @Header('Cache-Control', 'private, max-age=3600')
+  async getTicketQr(
+    @Param('slug') slug: string,
+    @Param('ticketId') ticketId: string,
+  ): Promise<StreamableFile> {
+    const tenant = await this.tenants.findBySlugOrThrow(slug);
+    const ticket = await this.orders.getPublicTicket(tenant.id, ticketId);
+    return new StreamableFile(await renderTicketQrPng(ticket.publicCode));
+  }
+
   @Post(':slug/events/:eventId/registrations')
   async createRegistration(
     @Param('slug') slug: string,
@@ -155,9 +175,12 @@ export class PublicEventsController {
   @Get(':slug/registrations/mine')
   async listMyRegistrations(
     @Param('slug') slug: string,
-    @Query('email') email: string,
+    @Query('email') email?: string,
     @Query('userId') userId?: string,
   ) {
+    if (!email?.trim()) {
+      throw new BadRequestException('Informe o e-mail do participante');
+    }
     const tenant = await this.tenants.findBySlugOrThrow(slug);
     const items = await this.registrations.listForParticipant(
       tenant.id,

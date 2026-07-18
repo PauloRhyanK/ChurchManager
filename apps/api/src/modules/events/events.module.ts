@@ -13,6 +13,7 @@ import { EventReportsService } from './event-reports.service';
 import { EventTagsService } from './event-tags.service';
 import { EventFieldDefinitionsService } from './event-field-definitions.service';
 import { CheckinService } from './checkin.service';
+import { TicketDeliveryService } from './ticket-delivery.service';
 import { TenantsMeEventsController } from './tenants-me-events.controller';
 import { TenantsMeRegistrationsController } from './tenants-me-registrations.controller';
 import { TenantsMeSchedulesController } from './tenants-me-schedules.controller';
@@ -52,6 +53,7 @@ import { PublicEventsController } from './public-events.controller';
     EventTagsService,
     EventFieldDefinitionsService,
     CheckinService,
+    TicketDeliveryService,
   ],
   exports: [
     EventsService,
