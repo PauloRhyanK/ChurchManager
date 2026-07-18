@@ -9,9 +9,24 @@ interface ImageUploaderProps {
   value: string | null | undefined;
   onChange: (url: string | null) => void;
   disabled?: boolean;
+  /** Endpoint de upload — cada módulo usa o seu, porque os guards diferem. */
+  uploadPath?: string;
+  /** Texto principal da zona de largada. */
+  prompt?: string;
+  /** Texto de apoio por baixo do prompt. */
+  hint?: string;
+  successMessage?: string;
 }
 
-export function ImageUploader({ value, onChange, disabled }: ImageUploaderProps) {
+export function ImageUploader({
+  value,
+  onChange,
+  disabled,
+  uploadPath = "/admin/tenants/me/events/upload-cover",
+  prompt = "Arraste ou clique para carregar a capa do evento",
+  hint = "Proporção recomendada de 16:9 (ex: 1920x1080)",
+  successMessage = "Imagem de capa carregada com sucesso.",
+}: ImageUploaderProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -28,18 +43,14 @@ export function ImageUploader({ value, onChange, disabled }: ImageUploaderProps)
     formData.append("file", file);
 
     try {
-      const response = await api.post<{ url: string }>(
-        "/admin/tenants/me/events/upload-cover",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
+      const response = await api.post<{ url: string }>(uploadPath, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
 
       onChange(response.data.url);
-      toast.success("Imagem de capa carregada com sucesso.");
+      toast.success(successMessage);
     } catch (err) {
       toast.error(getApiErrorMessage(err));
     } finally {
@@ -97,7 +108,7 @@ export function ImageUploader({ value, onChange, disabled }: ImageUploaderProps)
           <AspectRatio ratio={16 / 9} className="overflow-hidden">
             <img
               src={value}
-              alt="Capa do Evento"
+              alt={prompt}
               className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-102"
             />
           </AspectRatio>
@@ -154,12 +165,8 @@ export function ImageUploader({ value, onChange, disabled }: ImageUploaderProps)
                 <UploadCloud className="h-6 w-6" />
               </div>
               <div className="space-y-1">
-                <p className="text-sm font-semibold">
-                  Arraste ou clique para carregar a capa do evento
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Proporção recomendada de 16:9 (ex: 1920x1080)
-                </p>
+                <p className="text-sm font-semibold">{prompt}</p>
+                <p className="text-xs text-muted-foreground">{hint}</p>
               </div>
             </div>
           )}

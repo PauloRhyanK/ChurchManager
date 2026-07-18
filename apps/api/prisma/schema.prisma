@@ -92,6 +92,7 @@ model Tenant {
   eventOrders        EventOrder[]
   eventTickets       EventTicket[]
   schedules          Schedule[]
+  siteContent        SiteContent[]
 
   @@map("tenants")
 }
@@ -401,6 +402,24 @@ model Schedule {
   @@index([tenantId])
   @@index([tenantId, active])
   @@map("schedules")
+}
+
+/// Conteúdo editável do site público, uma linha por secção (`key`).
+/// O formato de `value` é validado na aplicação pelo registry em
+/// `modules/site/site-content.registry.ts` — chaves fora do registry são rejeitadas.
+model SiteContent {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  key       String   @db.VarChar(64)
+  value     Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("site_content")
 }
 
 enum FinancialLinkModule {

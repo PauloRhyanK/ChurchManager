@@ -8,6 +8,7 @@ import EventsListPage from "@/features/events/pages/EventsListPage";
 import EventSettingsPage from "@/features/events/pages/EventSettingsPage";
 import RegistrationsPage from "@/features/events/pages/RegistrationsPage";
 import CheckinPage from "@/features/checkin/pages/CheckinPage";
+import SitePage from "@/features/site/pages/SitePage";
 import UsersListPage from "@/features/access/pages/UsersListPage";
 import InviteUserPage from "@/features/access/pages/InviteUserPage";
 import PermissionGroupsPage from "@/features/access/pages/PermissionGroupsPage";
@@ -17,7 +18,6 @@ import PublicSignupPage from "@/features/access/pages/PublicSignupPage";
 import AcceptInvitationPage from "@/features/access/pages/AcceptInvitationPage";
 import Financial from "@/pages/Financial";
 import Index from "@/pages/Index";
-import { ModuleComingSoon } from "@/pages/ModuleComingSoon";
 import NotFound from "@/pages/NotFound";
 import Settings from "@/pages/Settings";
 import PlatformChurches from "@/pages/PlatformChurches";
@@ -43,15 +43,9 @@ export function AppRoutes() {
         <Route path="/eventos/inscricoes" element={<RegistrationsPage />} />
         <Route path="/eventos/:id" element={<EventDetailRoutePage />} />
         <Route path="/eventos/:id/editar" element={<EventFormPage />} />
-        <Route
-          path="/site"
-          element={
-            <ModuleComingSoon
-              title="Gestão do site"
-              description="Conteúdo público, banners e CMS por igreja serão adicionados aqui numa próxima versão."
-            />
-          }
-        />
+        <Route element={<PermissionRoute module="SITE" />}>
+          <Route path="/site" element={<SitePage />} />
+        </Route>
         <Route path="/configuracoes" element={<Settings />} />
 
         <Route element={<PermissionRoute module="CHECKIN" />}>

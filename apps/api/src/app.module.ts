@@ -9,6 +9,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { FinancialModule } from './modules/financial/financial.module';
 import { EventsModule } from './modules/events/events.module';
+import { SiteModule } from './modules/site/site.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AccessModule } from './modules/access/access.module';
 import { HealthModule } from './health/health.module';
@@ -65,6 +66,7 @@ import { RequestLoggingInterceptor } from './common/request-logging.interceptor'
     TenantsModule,
     FinancialModule,
     EventsModule,
+    SiteModule,
     StorageModule,
   ],
   providers: [

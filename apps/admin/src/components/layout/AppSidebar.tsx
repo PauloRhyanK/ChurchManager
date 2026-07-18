@@ -46,6 +46,7 @@ const mainNav: {
   { title: "Visão Geral", url: "/", icon: LayoutDashboard, module: "DASHBOARD" },
   { title: "Financeiro", url: "/financeiro", icon: DollarSign, module: "FINANCIAL" },
   { title: "Eventos", url: "/eventos", icon: CalendarDays, module: "EVENTS" },
+  { title: "Site", url: "/site", icon: Globe, module: "SITE" },
 ];
 
 const internoNav: {
@@ -66,7 +67,6 @@ const equipeNav = [
 
 /** Módulos ainda sem backend no painel — mesmo padrão visual (desactivado + Breve). */
 const managementNav = [
-  { title: "Site", icon: Globe, soon: true },
   { title: "Escalas", icon: Users, soon: true },
   { title: "Células / Grupos", icon: Grid3X3, soon: true },
 ];
