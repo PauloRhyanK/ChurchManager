@@ -169,6 +169,20 @@ test('validação exige campos obrigatórios dos itens de lista', () => {
   );
 });
 
+test('defaults cobrem todos os campos do spec de cada secção', () => {
+  // O contrato público (docs/api/site-content-contract.md) garante que todos os
+  // campos de uma secção existem sempre na resposta. Isso só se mantém enquanto
+  // os defaults tiverem uma entrada por campo — a mesclagem não inventa chaves.
+  for (const section of SITE_SECTIONS) {
+    for (const field of section.fields) {
+      assert.ok(
+        field.name in section.defaults,
+        `secção "${section.key}": falta default para o campo "${field.name}"`,
+      );
+    }
+  }
+});
+
 test('todos os defaults do registry passam na própria validação', () => {
   for (const section of SITE_SECTIONS) {
     assert.doesNotThrow(

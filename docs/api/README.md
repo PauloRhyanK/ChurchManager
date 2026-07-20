@@ -23,6 +23,7 @@ Documentação orientada ao consumo pelo site/app. Os caminhos assumem o **prefi
 | [events-public-contract.md](./events-public-contract.md) | Contrato-alvo / evolução futura (alguns campos ainda não expostos) |
 | [cotas-payment-contract.md](./cotas-payment-contract.md) | Links/cobranças Asaas para **cotas** (valor fixo da cota vs valor livre) |
 | [public-payment-links.md](./public-payment-links.md) | **`POST .../links`** — link de pagamento Asaas (único vs mensal, valor opcional) |
+| [site-content-contract.md](./site-content-contract.md) | **`GET .../site-content`** — conteúdo institucional editável no painel (missão, células, igrejas, pastores, ministérios, ofertório, rodapé) |
 
 ## Implementação vs planeamento
 
