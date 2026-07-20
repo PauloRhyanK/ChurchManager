@@ -7,6 +7,14 @@ import { validateSectionValue } from './site-content.validation';
 
 const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
+const noopRevalidation = {
+  notifyContentChanged: () => {},
+};
+
+function createService(prisma: ReturnType<typeof createPrismaMock>) {
+  return new SiteContentService(prisma as never, noopRevalidation as never);
+}
+
 interface StoredRow {
   key: string;
   value: unknown;
@@ -46,14 +54,14 @@ function createPrismaMock(capture: { where?: unknown; data?: unknown } = {}) {
 
 test('isolation: listForTenant filtra por tenantId', async () => {
   const capture: { where?: unknown } = {};
-  const service = new SiteContentService(createPrismaMock(capture) as never);
+  const service = createService(createPrismaMock(capture));
   await service.listForTenant(TENANT_A);
   assert.deepEqual(capture.where, { tenantId: TENANT_A });
 });
 
 test('isolation: updateForTenant grava com a chave composta do tenant', async () => {
   const capture: { where?: unknown; data?: unknown } = {};
-  const service = new SiteContentService(createPrismaMock(capture) as never);
+  const service = createService(createPrismaMock(capture));
   await service.updateForTenant(TENANT_A, 'contact', {
     phone: '(27) 90000-0000',
   });
@@ -63,7 +71,7 @@ test('isolation: updateForTenant grava com a chave composta do tenant', async ()
 });
 
 test('secção fora do registry devolve 404', async () => {
-  const service = new SiteContentService(createPrismaMock() as never);
+  const service = createService(createPrismaMock());
   await assert.rejects(
     () => service.updateForTenant(TENANT_A, 'nao-existe', {}),
     NotFoundException,
@@ -71,7 +79,7 @@ test('secção fora do registry devolve 404', async () => {
 });
 
 test('secção nunca gravada devolve os defaults do registry', async () => {
-  const service = new SiteContentService(createPrismaMock() as never);
+  const service = createService(createPrismaMock());
   const section = await service.getForTenant(TENANT_A, 'mission');
   assert.equal(section.updatedAt, null);
   assert.equal(section.value.badge, 'Nossa Missão');
@@ -84,7 +92,7 @@ test('valor gravado é mesclado por cima dos defaults', async () => {
     value: { badge: 'Editado' },
     updatedAt: new Date('2026-07-18T12:00:00.000Z'),
   });
-  const service = new SiteContentService(prisma as never);
+  const service = createService(prisma);
   const section = await service.getForTenant(TENANT_A, 'mission');
   assert.equal(section.value.badge, 'Editado');
   // Campo não gravado continua a vir do default, em vez de ficar vazio.
@@ -105,7 +113,7 @@ test('listPublicForTenant remove itens marcados como inativos', async () => {
       updatedAt: new Date(),
     },
   ];
-  const service = new SiteContentService(prisma as never);
+  const service = createService(prisma);
   const sections = await service.listPublicForTenant(TENANT_A);
   assert.deepEqual(sections.ministries.items, [{ name: 'Visível', active: true }]);
 });
@@ -167,6 +175,25 @@ test('validação exige campos obrigatórios dos itens de lista', () => {
     () => validateSectionValue(section, { items: [{ location: 'Sem nome' }] }),
     BadRequestException,
   );
+});
+
+test('validação exige endereço em igrejas visíveis no site', () => {
+  const section = findSectionSpec('churches')!;
+  assert.throws(
+    () =>
+      validateSectionValue(section, {
+        items: [{ name: 'Filial Teste', active: true, address: '  ' }],
+      }),
+    BadRequestException,
+  );
+});
+
+test('validação permite igreja oculta sem endereço', () => {
+  const section = findSectionSpec('churches')!;
+  const value = validateSectionValue(section, {
+    items: [{ name: 'Rascunho', active: false, address: '' }],
+  });
+  assert.equal((value.items as Record<string, unknown>[])[0].name, 'Rascunho');
 });
 
 test('defaults cobrem todos os campos do spec de cada secção', () => {

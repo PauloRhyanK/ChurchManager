@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Pencil } from "lucide-react";
+import { Info, Loader2, Pencil } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -78,6 +80,20 @@ export default function SitePage() {
             Gerencie o conteúdo da página oficial da igreja.
           </p>
         </div>
+
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertTitle>Conteúdo fora desta página</AlertTitle>
+          <AlertDescription>
+            A secção <strong>Eventos</strong> na home vem do módulo{" "}
+            <Link to="/eventos" className="underline font-medium">
+              Eventos
+            </Link>{" "}
+            (publicados, com data futura). A <strong>Programação</strong> vem da
+            API de horários — ainda não há ecrã no painel para editá-la; contacte
+            o suporte técnico se precisar de alterações.
+          </AlertDescription>
+        </Alert>
 
         {sectionsQuery.isPending ? (
           <div className="flex items-center justify-center py-20">

@@ -124,6 +124,21 @@ export function validateSectionValue(
   const errors: string[] = [];
   const value = validateFields(section.fields, raw, '', errors);
 
+  if (section.key === 'churches' && Array.isArray(value.items)) {
+    value.items.forEach((entry, index) => {
+      if (!entry || typeof entry !== 'object') return;
+      const item = entry as Record<string, unknown>;
+      const visible = item.active !== false;
+      const address =
+        typeof item.address === 'string' ? item.address.trim() : '';
+      if (visible && !address) {
+        errors.push(
+          `items[${index}].address: preencha o endereço completo para o mapa`,
+        );
+      }
+    });
+  }
+
   if (errors.length > 0) {
     throw new BadRequestException(errors);
   }

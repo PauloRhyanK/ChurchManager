@@ -3,7 +3,24 @@
 Conteúdo institucional editável no painel (**Gestão do Site**, `/site`) e consumido pelo site público.
 Substitui o que hoje está hardcoded em `src/constants.tsx` e nos componentes de secção do repositório do site.
 
-> **Estado:** implementado na API (`SiteModule`). O site público **ainda não consome** — este documento é o guia para ligar.
+> **Estado:** implementado na API (`SiteModule`). O site público consome este endpoint.
+
+---
+
+## Alinhamento com o site (2026)
+
+O site **não renderiza** todos os campos do JSON. O painel **Gestão do Site** foi alinhado ao que aparece no site:
+
+| Campo / secção | No site | No painel |
+|----------------|---------|-----------|
+| `churches.items[].address` | **Crítico** — mapa embed + texto em `/igrejas` | Obrigatório para itens visíveis (`active !== false`) |
+| `churches.items[].pastor` | Não exibido | Removido do formulário; pode existir em dados antigos até nova gravação |
+| `churches.items[].mapsUrl` | Só botão «Como chegar» externo | Opcional |
+| `pastors.items[]` | Só `name` + `image` em `/time-pastoral` | Formulário só com nome, foto e visibilidade |
+| `pastors.items[].role`, `.location`, `.church` | Não exibidos | Removidos do formulário |
+| `visit` | Secção removida da home atual | Continua editável (dados na API) |
+| **Eventos na home** | `GET .../events?upcomingOnly=true` | Módulo **Eventos** do painel, não esta API |
+| **Programação na home** | `GET .../schedules` | Sem ecrã no painel (só API) |
 
 ---
 
@@ -73,7 +90,7 @@ Substitui `CelulasSection.tsx`.
 | `ctaUrl` | string | `/membros` |
 
 ### `visit` — Venha nos visitar
-Substitui o bloco `#onde` em `src/app/(site)/page.tsx`.
+Conteúdo institucional de endereço/horários. **A home atual do site já não inclui este bloco**; a chave continua na API para compatibilidade.
 
 | Campo | Tipo | Notas |
 |-------|------|-------|
@@ -84,7 +101,7 @@ Substitui o bloco `#onde` em `src/app/(site)/page.tsx`.
 | `mapsUrl` | string | link "Como chegar" |
 
 ### `churches` — Igrejas & Missões
-Substitui `MISSION_CHURCHES` + os textos fixos de `Missions.tsx`.
+Home (bloco missões) e página **Nossas Igrejas** (`/igrejas`).
 
 Cabeçalho: `badge`, `titlePart1`, `titleHighlight`, `intro`.
 
@@ -93,22 +110,22 @@ Cabeçalho: `badge`, `titlePart1`, `titleHighlight`, `intro`.
 | Campo | Tipo | Notas |
 |-------|------|-------|
 | `name` | string | obrigatório |
-| `location` | string | cidade |
-| `address` | string | |
-| `pastor` | string | |
+| `location` | string | cidade; fallback se `address` vazio no site |
+| `address` | string | **obrigatório no painel** para itens visíveis — endereço geocodável para mapa embed |
+| `pastor` | string | legado — **não exibido no site**; pode vir em JSON antigo |
 | `image` | string | URL absoluto ou caminho relativo (`/pastor.jpg`) |
-| `mapsUrl` | string | |
+| `mapsUrl` | string | botão externo «Como chegar»; mapa embed usa `address` |
 | `isHeadquarters` | boolean | **use isto para identificar a sede**, não a posição no array |
-| `active` | boolean | sempre `true` nesta rota |
+| `active` | boolean | sempre `true` nesta rota pública |
 
 ### `pastors` — Time Pastoral
-Substitui `MISSIONS` (nome enganoso no código antigo — é a lista de pastores).
+Página `/time-pastoral` — grid **só nome e foto**.
 
 Cabeçalho: `badge`, `titlePart1`, `titleHighlight`, `intro`.
 
-`items[]`: `name` (obrigatório), `role`, `location`, `image`, `church`, `active`.
+`items[]`: `name` (obrigatório), `image`, `active`.
 
-> `church` é o **nome** da igreja, não um ID — deve bater com `churches.items[].name`. É uma ligação por texto, assumida para manter o modelo simples; se divergir, o painel não avisa.
+Campos legados (`role`, `location`, `church`) podem existir em gravações antigas mas **não são editados no painel** nem renderizados no site.
 
 ### `ministries` — Ministérios
 Substitui `MINISTRIES`. Só `items[]`: `name` (obrigatório), `description`, `icon`, `image`, `active`.
@@ -200,7 +217,17 @@ Como as secções são todas servidas juntas, **busque uma vez no layout ou na p
 
 ### Cache e revalidação
 
-`revalidate: 300` significa que uma edição no painel demora até 5 min a aparecer. Se quiser imediato, o site já tem `REVALIDATION_SECRET` configurado — exponha uma rota de revalidação por tag (`revalidateTag("site-content")`) e chame-a a seguir a guardar. **Isso ainda não existe**; hoje a propagação é por tempo.
+O site usa cache ISR/tag `site-content` (ex.: `revalidate: 300` ou tag dedicada).
+
+**ChurchManager (painel):** após `PUT` ou `DELETE` numa secção, se `SITE_REVALIDATION_SECRET` estiver definido na API **e** existir pelo menos uma origem em `tenant_public_web_origins`, a API faz:
+
+```http
+GET {primeira_origem}/api/revalidate-site-content?secret={SITE_REVALIDATION_SECRET}
+```
+
+Fire-and-forget — falhas só entram em log; o save no painel não falha. Em dev local, omita o secret ou não registe origem.
+
+**Preview/QA do site:** conteúdo pode correr com `no-store`; o webhook pode não ser necessário.
 
 ### CORS
 

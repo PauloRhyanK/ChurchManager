@@ -7,6 +7,7 @@ import {
   type SiteSectionSpec,
 } from './site-content.registry';
 import { validateSectionValue } from './site-content.validation';
+import { SiteRevalidationService } from './site-revalidation.service';
 
 export interface SiteSectionDto {
   key: string;
@@ -20,7 +21,10 @@ export interface SiteSectionDto {
 
 @Injectable()
 export class SiteContentService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly siteRevalidation: SiteRevalidationService,
+  ) {}
 
   /**
    * Devolve sempre as secções todas do registry. As que ainda não foram
@@ -90,6 +94,8 @@ export class SiteContentService {
       update: { value: value as Prisma.InputJsonValue },
     });
 
+    this.siteRevalidation.notifyContentChanged(tenantId);
+
     return this.toDto(section, row.value, row.updatedAt);
   }
 
@@ -97,6 +103,7 @@ export class SiteContentService {
   async resetForTenant(tenantId: string, key: string): Promise<SiteSectionDto> {
     const section = this.requireSection(key);
     await this.prisma.siteContent.deleteMany({ where: { tenantId, key } });
+    this.siteRevalidation.notifyContentChanged(tenantId);
     return this.toDto(section, undefined, undefined);
   }
 
