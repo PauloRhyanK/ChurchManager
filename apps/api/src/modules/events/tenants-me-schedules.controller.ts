@@ -23,7 +23,7 @@ import { SchedulesService } from './schedules.service';
 @Controller('admin/tenants/me/schedules')
 @SkipThrottle({ links: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
-@RequirePermission(PermissionModule.EVENTS, PermissionLevel.VIEW)
+@RequirePermission(PermissionModule.CHURCH, PermissionLevel.VIEW)
 export class TenantsMeSchedulesController {
   constructor(private readonly schedules: SchedulesService) {}
 
@@ -33,13 +33,13 @@ export class TenantsMeSchedulesController {
   }
 
   @Post()
-  @RequirePermission(PermissionModule.EVENTS, PermissionLevel.EDIT)
+  @RequirePermission(PermissionModule.CHURCH, PermissionLevel.EDIT)
   async create(@CurrentUser() user: AuthUser, @Body() dto: CreateScheduleDto) {
     return this.schedules.createForTenant(user.tenantId, dto);
   }
 
   @Put(':id')
-  @RequirePermission(PermissionModule.EVENTS, PermissionLevel.EDIT)
+  @RequirePermission(PermissionModule.CHURCH, PermissionLevel.EDIT)
   async update(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -49,7 +49,7 @@ export class TenantsMeSchedulesController {
   }
 
   @Delete(':id')
-  @RequirePermission(PermissionModule.EVENTS, PermissionLevel.EDIT)
+  @RequirePermission(PermissionModule.CHURCH, PermissionLevel.EDIT)
   async remove(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,

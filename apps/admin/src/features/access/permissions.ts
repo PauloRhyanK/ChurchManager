@@ -41,7 +41,12 @@ export const PERMISSION_MODULES: PermissionModuleMeta[] = [
   {
     module: "SITE",
     label: "Site",
-    description: "Conteúdo público do site (em breve).",
+    description: "Conteúdo público do site.",
+  },
+  {
+    module: "CHURCH",
+    label: "Igreja",
+    description: "Informações da igreja, filiais, pastores, ministérios, redes sociais e agenda.",
   },
   {
     module: "SETTINGS",

@@ -18,7 +18,8 @@ export type PermissionModule =
   | "FINANCIAL"
   | "SITE"
   | "SETTINGS"
-  | "USERS";
+  | "USERS"
+  | "CHURCH";
 
 export type PermissionLevel = "VIEW" | "EDIT";
 

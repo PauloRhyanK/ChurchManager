@@ -1,6 +1,10 @@
+import dns from 'node:dns';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+
+// VPS/Docker sem IPv6 de saída: Node tentava AAAA primeiro → fetch failed para Vercel.
+dns.setDefaultResultOrder('ipv4first');
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);

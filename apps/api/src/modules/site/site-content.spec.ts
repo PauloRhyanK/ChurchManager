@@ -23,6 +23,9 @@ interface StoredRow {
 
 function createPrismaMock(capture: { where?: unknown; data?: unknown } = {}) {
   return {
+    tenant: {
+      findMany: async () => [],
+    },
     siteContent: {
       findMany: async ({ where }: { where: unknown }): Promise<StoredRow[]> => {
         capture.where = where;
@@ -49,6 +52,18 @@ function createPrismaMock(capture: { where?: unknown; data?: unknown } = {}) {
         return { count: 1 };
       },
     },
+    churchBranch: {
+      findMany: async () => [],
+    },
+    pastor: {
+      findMany: async () => [],
+    },
+    ministry: {
+      findMany: async () => [],
+    },
+    churchConfig: {
+      findUnique: async () => null,
+    },
   };
 }
 
@@ -63,7 +78,7 @@ test('isolation: updateForTenant grava com a chave composta do tenant', async ()
   const capture: { where?: unknown; data?: unknown } = {};
   const service = createService(createPrismaMock(capture));
   await service.updateForTenant(TENANT_A, 'contact', {
-    phone: '(27) 90000-0000',
+    tagline: 'Minha família.',
   });
   assert.deepEqual(capture.where, {
     tenantId_key: { tenantId: TENANT_A, key: 'contact' },
@@ -99,57 +114,84 @@ test('valor gravado é mesclado por cima dos defaults', async () => {
   assert.equal(section.value.signature, 'Igreja Paraíso — Casa de Deus. Minha família.');
 });
 
-test('listPublicForTenant remove itens marcados como inativos', async () => {
+test('listPublicForTenant mescla dados do banco nas secções', async () => {
   const prisma = createPrismaMock();
-  prisma.siteContent.findMany = async () => [
+  prisma.churchBranch.findMany = async () => [
     {
-      key: 'ministries',
-      value: {
-        items: [
-          { name: 'Visível', active: true },
-          { name: 'Escondido', active: false },
-        ],
-      },
+      id: '1',
+      tenantId: TENANT_A,
+      name: 'Igreja Teste Sede',
+      location: 'Santa Maria',
+      address: 'Rua Principal',
+      image: '/imagem.jpg',
+      mapsUrl: 'https://maps.google.com',
+      isHeadquarters: true,
+      active: true,
+      sortOrder: 0,
+      createdAt: new Date(),
       updatedAt: new Date(),
     },
   ];
+  prisma.churchConfig.findUnique = async () => ({
+    id: 'config-1',
+    tenantId: TENANT_A,
+    pixKey: 'pix-teste',
+    bankName: 'Sicoob',
+    bankCode: '756',
+    agency: '3007',
+    account: '1234',
+    holderName: 'Favorecido',
+    holderDocument: '00.000/0001-00',
+    youtubeUrl: 'https://youtube.com',
+    instagramUrl: 'https://instagram.com',
+    facebookUrl: null,
+    phone: '27 99999-9999',
+    email: 'email@igreja.com',
+    address: 'Endereço Completo',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
   const service = createService(prisma);
   const sections = await service.listPublicForTenant(TENANT_A);
-  assert.deepEqual(sections.ministries.items, [{ name: 'Visível', active: true }]);
-});
-
-test('validação rejeita ícone fora da lista permitida', () => {
-  const section = findSectionSpec('ministries')!;
-  assert.throws(
-    () =>
-      validateSectionValue(section, {
-        items: [{ name: 'Teste', icon: 'IconeInventado' }],
-      }),
-    BadRequestException,
-  );
+  
+  assert.deepEqual(sections.churches.items, [
+    {
+      name: 'Igreja Teste Sede',
+      location: 'Santa Maria',
+      address: 'Rua Principal',
+      image: '/imagem.jpg',
+      mapsUrl: 'https://maps.google.com',
+      isHeadquarters: true,
+      active: true,
+    },
+  ]);
+  
+  assert.equal(sections.giving.pixKey, 'pix-teste');
+  assert.equal(sections.contact.phone, '27 99999-9999');
+  assert.equal(sections.contact.youtubeUrl, 'https://youtube.com');
 });
 
 test('validação rejeita URL malformado', () => {
-  const section = findSectionSpec('contact')!;
+  const section = findSectionSpec('celulas')!;
   assert.throws(
-    () => validateSectionValue(section, { youtubeUrl: 'javascript:alert(1)' }),
+    () => validateSectionValue(section, { ctaUrl: 'javascript:alert(1)' }),
     BadRequestException,
   );
 });
 
 test('validação aceita caminho relativo em campos de imagem', () => {
-  const section = findSectionSpec('pastors')!;
+  const section = findSectionSpec('visit')!;
   const value = validateSectionValue(section, {
-    items: [{ name: 'Pr. Teste', image: '/prTeste.jpg' }],
+    backgroundImage: '/visit.jpg',
   });
-  assert.equal((value.items as Record<string, unknown>[])[0].image, '/prTeste.jpg');
+  assert.equal(value.backgroundImage, '/visit.jpg');
 });
 
 test('PUT parcial não apaga os campos não enviados', () => {
   const section = findSectionSpec('contact')!;
-  const value = validateSectionValue(section, { phone: '(27) 91234-5678' });
-  // `copyright` fica de fora do objeto gravado, logo continua a vir do default.
-  assert.deepEqual(Object.keys(value), ['phone']);
+  const value = validateSectionValue(section, { tagline: 'Nova Tagline' });
+  assert.deepEqual(Object.keys(value), ['tagline']);
 });
 
 test('string vazia é gravada, para permitir limpar um campo de propósito', () => {
@@ -169,37 +211,7 @@ test('validação descarta propriedades fora do registry', () => {
   assert.deepEqual(Object.keys(value).sort(), ['channelHandle', 'sectionTitle']);
 });
 
-test('validação exige campos obrigatórios dos itens de lista', () => {
-  const section = findSectionSpec('churches')!;
-  assert.throws(
-    () => validateSectionValue(section, { items: [{ location: 'Sem nome' }] }),
-    BadRequestException,
-  );
-});
-
-test('validação exige endereço em igrejas visíveis no site', () => {
-  const section = findSectionSpec('churches')!;
-  assert.throws(
-    () =>
-      validateSectionValue(section, {
-        items: [{ name: 'Filial Teste', active: true, address: '  ' }],
-      }),
-    BadRequestException,
-  );
-});
-
-test('validação permite igreja oculta sem endereço', () => {
-  const section = findSectionSpec('churches')!;
-  const value = validateSectionValue(section, {
-    items: [{ name: 'Rascunho', active: false, address: '' }],
-  });
-  assert.equal((value.items as Record<string, unknown>[])[0].name, 'Rascunho');
-});
-
 test('defaults cobrem todos os campos do spec de cada secção', () => {
-  // O contrato público (docs/api/site-content-contract.md) garante que todos os
-  // campos de uma secção existem sempre na resposta. Isso só se mantém enquanto
-  // os defaults tiverem uma entrada por campo — a mesclagem não inventa chaves.
   for (const section of SITE_SECTIONS) {
     for (const field of section.fields) {
       assert.ok(

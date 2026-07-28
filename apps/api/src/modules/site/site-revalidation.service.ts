@@ -1,6 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
+import {
+  formatFetchError,
+  pickRevalidationOrigin,
+} from './site-revalidation.util';
 
 /**
  * Pede ao site público (Next.js) que invalide o cache de `site-content`
@@ -29,18 +33,19 @@ export class SiteRevalidationService {
       where: { tenantId },
       orderBy: { createdAt: 'asc' },
       select: { origin: true },
-      take: 1,
     });
-    const rawOrigin = rows[0]?.origin?.trim();
-    if (!rawOrigin) {
+    const origin = pickRevalidationOrigin(rows.map((r) => r.origin));
+    if (!origin) {
       return;
     }
 
-    const origin = rawOrigin.replace(/\/$/, '');
     const url = `${origin}/api/revalidate-site-content?secret=${encodeURIComponent(secret)}`;
 
     try {
-      const res = await fetch(url, { method: 'GET' });
+      const res = await fetch(url, {
+        method: 'GET',
+        signal: AbortSignal.timeout(20_000),
+      });
       if (!res.ok) {
         this.logger.warn(
           `Revalidação site-content falhou (${res.status}) para ${origin}`,
@@ -49,7 +54,9 @@ export class SiteRevalidationService {
       }
       this.logger.log(`Revalidação site-content solicitada (${origin})`);
     } catch (error) {
-      this.logger.warn(`Revalidação site-content erro: ${error}`);
+      this.logger.warn(
+        `Revalidação site-content erro para ${origin}: ${formatFetchError(error)}`,
+      );
     }
   }
 }

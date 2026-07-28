@@ -11,6 +11,6 @@ import { TenantsMeSiteContentController } from './tenants-me-site-content.contro
   imports: [TenantsModule, AuthModule, AccessModule],
   controllers: [TenantsMeSiteContentController, PublicSiteContentController],
   providers: [SiteContentService, SiteRevalidationService],
-  exports: [SiteContentService],
+  exports: [SiteContentService, SiteRevalidationService],
 })
 export class SiteModule {}

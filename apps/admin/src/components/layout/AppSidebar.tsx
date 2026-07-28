@@ -47,6 +47,7 @@ const mainNav: {
   { title: "Financeiro", url: "/financeiro", icon: DollarSign, module: "FINANCIAL" },
   { title: "Eventos", url: "/eventos", icon: CalendarDays, module: "EVENTS" },
   { title: "Site", url: "/site", icon: Globe, module: "SITE" },
+  { title: "Igreja", url: "/igreja", icon: Church, module: "CHURCH" },
 ];
 
 const internoNav: {

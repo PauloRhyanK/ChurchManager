@@ -30,6 +30,7 @@ enum PermissionModule {
   SITE
   SETTINGS
   USERS
+  CHURCH
 }
 
 enum PermissionLevel {
@@ -93,6 +94,10 @@ model Tenant {
   eventTickets       EventTicket[]
   schedules          Schedule[]
   siteContent        SiteContent[]
+  branches           ChurchBranch[]
+  pastors            Pastor[]
+  ministries         Ministry[]
+  churchConfig       ChurchConfig?
 
   @@map("tenants")
 }
@@ -740,3 +745,89 @@ model FinancialPaymentLink {
   @@index([tenantId, cpf])
   @@map("financial_payment_links")
 }
+
+model ChurchBranch {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  name           String   @db.VarChar(255)
+  location       String?  @db.VarChar(255)
+  address        String?  @db.Text
+  image          String?  @db.VarChar(512)
+  mapsUrl        String?  @db.VarChar(2048)
+  isHeadquarters Boolean  @default(false) @map("is_headquarters")
+  active         Boolean  @default(true)
+  sortOrder      Int      @default(0) @map("sort_order")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("church_branches")
+}
+
+model Pastor {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String   @db.VarChar(255)
+  image     String?  @db.VarChar(512)
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("pastors")
+}
+
+model Ministry {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  name        String   @db.VarChar(255)
+  description String?  @db.Text
+  icon        String?  @db.VarChar(64)
+  image       String?  @db.VarChar(512)
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("ministries")
+}
+
+model ChurchConfig {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @unique @map("tenant_id") @db.Uuid
+  
+  // Ofertório
+  pixKey         String?  @map("pix_key") @db.VarChar(160)
+  bankName       String?  @map("bank_name") @db.VarChar(80)
+  bankCode       String?  @map("bank_code") @db.VarChar(10)
+  agency         String?  @map("agency") @db.VarChar(20)
+  account        String?  @map("account") @db.VarChar(30)
+  holderName     String?  @map("holder_name") @db.VarChar(160)
+  holderDocument String?  @map("holder_document") @db.VarChar(30)
+
+  // Redes Sociais
+  youtubeUrl     String?  @map("youtube_url") @db.VarChar(512)
+  instagramUrl   String?  @map("instagram_url") @db.VarChar(512)
+  facebookUrl    String?  @map("facebook_url") @db.VarChar(512)
+  
+  // Contato geral
+  phone          String?  @map("phone") @db.VarChar(40)
+  email          String?  @map("email") @db.VarChar(160)
+  address        String?  @map("address") @db.Text
+
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("church_configs")
+}
+

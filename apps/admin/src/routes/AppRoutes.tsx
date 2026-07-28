@@ -9,6 +9,7 @@ import EventSettingsPage from "@/features/events/pages/EventSettingsPage";
 import RegistrationsPage from "@/features/events/pages/RegistrationsPage";
 import CheckinPage from "@/features/checkin/pages/CheckinPage";
 import SitePage from "@/features/site/pages/SitePage";
+import ChurchPage from "@/features/church/pages/ChurchPage";
 import UsersListPage from "@/features/access/pages/UsersListPage";
 import InviteUserPage from "@/features/access/pages/InviteUserPage";
 import PermissionGroupsPage from "@/features/access/pages/PermissionGroupsPage";
@@ -45,6 +46,9 @@ export function AppRoutes() {
         <Route path="/eventos/:id/editar" element={<EventFormPage />} />
         <Route element={<PermissionRoute module="SITE" />}>
           <Route path="/site" element={<SitePage />} />
+        </Route>
+        <Route element={<PermissionRoute module="CHURCH" />}>
+          <Route path="/igreja" element={<ChurchPage />} />
         </Route>
         <Route path="/configuracoes" element={<Settings />} />
 

@@ -16,6 +16,7 @@ import { HealthModule } from './health/health.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { MailModule } from './modules/mail/mail.module';
 import { RequestLoggingInterceptor } from './common/request-logging.interceptor';
+import { ChurchModule } from './modules/church/church.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { RequestLoggingInterceptor } from './common/request-logging.interceptor'
     EventsModule,
     SiteModule,
     StorageModule,
+    ChurchModule,
   ],
   providers: [
     {

@@ -237,38 +237,6 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
       { name: 'titlePart1', label: 'Título — 1.ª linha', type: 'text', maxLength: 120 },
       { name: 'titleHighlight', label: 'Título — parte destacada', type: 'text', maxLength: 120 },
       { name: 'intro', label: 'Parágrafo de introdução', type: 'textarea', maxLength: LONG_TEXT_MAX },
-      {
-        name: 'items',
-        label: 'Igrejas',
-        type: 'list',
-        itemLabel: 'Igreja',
-        maxItems: 50,
-        fields: [
-          { name: 'name', label: 'Nome', type: 'text', required: true, maxLength: 160 },
-          { name: 'location', label: 'Cidade', type: 'text', maxLength: 160 },
-          {
-            name: 'address',
-            label: 'Endereço completo',
-            type: 'textarea',
-            maxLength: TEXT_MAX,
-            help: 'Obrigatório para igrejas visíveis no site. Endereço geocodável (rua, nº, bairro, cidade – UF). Usado no mapa e no texto; se vazio, o site usa a cidade como fallback.',
-          },
-          { name: 'image', label: 'Imagem', type: 'image' },
-          {
-            name: 'mapsUrl',
-            label: 'Link "Como chegar"',
-            type: 'url',
-            help: 'Abre o Google Maps numa nova aba. Se vazio, o botão some; o mapa na página usa o endereço acima.',
-          },
-          {
-            name: 'isHeadquarters',
-            label: 'É a sede',
-            type: 'boolean',
-            help: 'Marca a igreja como sede independentemente da ordem da lista.',
-          },
-          { name: 'active', label: 'Visível no site', type: 'boolean' },
-        ],
-      },
     ],
     defaults: {
       badge: 'Nossa Presença',
@@ -276,62 +244,6 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
       titleHighlight: 'igrejas & missões',
       intro:
         'Estamos presentes em diversas cidades através de nossas filiais e campos missionários, servindo às famílias locais com amor e dedicação.',
-      items: [
-        {
-          name: 'Igreja Paraíso — Sede',
-          location: 'Santa Maria de Jetibá - ES',
-          address: 'Rua Helmut Gums, 438 - Virada, Santa Maria de Jetibá - ES',
-          image: '/pastor.jpg',
-          mapsUrl: 'https://maps.app.goo.gl/UsxnnZ69miAvFzvs6',
-          isHeadquarters: true,
-          active: true,
-        },
-        {
-          name: 'Igreja Paraíso — Itaguaçu',
-          location: 'Itaguaçu - ES',
-          address: 'Centro, Itaguaçu - ES, CEP 29690-000',
-          image: '/prRobsonJ.jpg',
-          mapsUrl: 'https://maps.google.com/?q=Igreja+Paraiso+Itaguacu',
-          isHeadquarters: false,
-          active: true,
-        },
-        {
-          name: 'Igreja Paraíso — Santa Teresa',
-          location: 'Santa Teresa - ES',
-          address: 'Centro, Santa Teresa - ES, CEP 29650-000',
-          image: '/pastorTiagoP.jpg',
-          mapsUrl: 'https://maps.google.com/?q=Igreja+Paraiso+Santa+Teresa',
-          isHeadquarters: false,
-          active: true,
-        },
-        {
-          name: 'Igreja Paraíso — Rio Possmoser',
-          location: 'Rio Possmoser - ES',
-          address: 'Rio Possmoser, Santa Maria de Jetibá - ES',
-          image: '/prJhefersonM.jpg',
-          mapsUrl: 'https://maps.google.com/?q=Igreja+Paraiso+Rio+Possmoser',
-          isHeadquarters: false,
-          active: true,
-        },
-        {
-          name: 'Igreja Paraíso — Aracruz',
-          location: 'Aracruz - ES',
-          address: 'Centro, Aracruz - ES, CEP 29190-000',
-          image: '/prHerbertN.jpg',
-          mapsUrl: 'https://maps.google.com/?q=Igreja+Paraiso+Aracruz',
-          isHeadquarters: false,
-          active: true,
-        },
-        {
-          name: 'Igreja Paraíso — Anchieta',
-          location: 'Anchieta - ES',
-          address: 'Centro, Anchieta - ES, CEP 29230-000',
-          image: '/prClovesS.jpg',
-          mapsUrl: 'https://maps.google.com/?q=Igreja+Paraiso+Anchieta',
-          isHeadquarters: false,
-          active: true,
-        },
-      ],
     },
   },
 
@@ -345,115 +257,12 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
       { name: 'titlePart1', label: 'Título — 1.ª linha', type: 'text', maxLength: 120 },
       { name: 'titleHighlight', label: 'Título — parte destacada', type: 'text', maxLength: 120 },
       { name: 'intro', label: 'Parágrafo de introdução', type: 'textarea', maxLength: LONG_TEXT_MAX },
-      {
-        name: 'items',
-        label: 'Pastores',
-        type: 'list',
-        itemLabel: 'Pastor',
-        maxItems: 50,
-        fields: [
-          { name: 'name', label: 'Nome', type: 'text', required: true, maxLength: 160 },
-          { name: 'image', label: 'Foto', type: 'image' },
-          { name: 'active', label: 'Visível no site', type: 'boolean' },
-        ],
-      },
     ],
     defaults: {
       badge: 'Nosso Time',
       titlePart1: 'TIME',
       titleHighlight: 'pastoral',
       intro: '',
-      items: [
-        {
-          name: 'Pr. Clétson Barros',
-          image: '/prCletsonB.jpg',
-          active: true,
-        },
-        {
-          name: 'Pr. Leandro Hins de Brito',
-          image: '/prLeandroB.jpg',
-          active: true,
-        },
-        {
-          name: 'Pr. Robson Jose Maria',
-          image: '/prRobsonJ.jpg',
-          active: true,
-        },
-        {
-          name: 'Pr. Tiago Pio',
-          image: '/pastorTiagoP.jpg',
-          active: true,
-        },
-        {
-          name: 'Pr. Jheferson M. Rosa',
-          image: '/prJhefersonM.jpg',
-          active: true,
-        },
-        {
-          name: 'Pr. Herbert Neiva',
-          image: '/prHerbertN.jpg',
-          active: true,
-        },
-        {
-          name: 'Pr. Cloves Souza',
-          image: '/prClovesS.jpg',
-          active: true,
-        },
-      ],
-    },
-  },
-
-  {
-    key: 'ministries',
-    title: 'Ministérios',
-    description: 'Ignição, Eleve, Diamante e outros ministérios da igreja.',
-    icon: 'Sparkles',
-    fields: [
-      {
-        name: 'items',
-        label: 'Ministérios',
-        type: 'list',
-        itemLabel: 'Ministério',
-        maxItems: 20,
-        fields: [
-          { name: 'name', label: 'Nome', type: 'text', required: true, maxLength: 120 },
-          { name: 'description', label: 'Descrição', type: 'textarea', maxLength: LONG_TEXT_MAX },
-          { name: 'icon', label: 'Ícone', type: 'icon' },
-          { name: 'image', label: 'Imagem', type: 'image' },
-          { name: 'active', label: 'Visível no site', type: 'boolean' },
-        ],
-      },
-    ],
-    defaults: {
-      items: [
-        {
-          name: 'Ignição',
-          description:
-            'Ministério infantil: Ensinando os pequenos no caminho em que devem andar com alegria e cor.',
-          icon: 'Heart',
-          image:
-            'https://images.unsplash.com/photo-1472162072942-cd5147eb3902?q=80&w=600',
-          active: true,
-        },
-        {
-          name: 'Eleve',
-          description:
-            'Juventude: Uma geração apaixonada por Jesus que busca transformar o mundo.',
-          icon: 'Music',
-          image:
-            'https://images.unsplash.com/photo-1523580494863-6f3031224c94?q=80&w=600',
-          active: true,
-        },
-        {
-          name: 'Diamante',
-          description:
-            'Ministério de Mulheres: Preciosas para Deus, brilhando em todas as áreas da vida.',
-          icon: 'Users',
-          image:
-            'https://images.unsplash.com/photo-1573164713714-d95e436ab8d6?q=80&w=600',
-          active: true,
-        },
-      ],
     },
   },
 
@@ -468,31 +277,6 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
       { name: 'titleHighlight', label: 'Título — parte destacada', type: 'text', maxLength: 120 },
       { name: 'titlePart2', label: 'Título — 3.ª parte', type: 'text', maxLength: 120 },
       { name: 'intro', label: 'Parágrafo de introdução', type: 'textarea', maxLength: LONG_TEXT_MAX },
-      {
-        name: 'pixKey',
-        label: 'Chave PIX',
-        type: 'text',
-        maxLength: 160,
-        help: 'Confirme com a tesouraria — a chave atual usa o domínio do nome antigo.',
-      },
-      { name: 'bankName', label: 'Banco', type: 'text', maxLength: 80 },
-      { name: 'bankCode', label: 'Código do banco', type: 'text', maxLength: 10 },
-      { name: 'agency', label: 'Agência', type: 'text', maxLength: 20 },
-      {
-        name: 'account',
-        label: 'Conta corrente',
-        type: 'text',
-        maxLength: 30,
-        help: 'O valor em produção é um placeholder — substitua pelo número real.',
-      },
-      { name: 'holderName', label: 'Favorecido', type: 'text', maxLength: 160 },
-      {
-        name: 'holderDocument',
-        label: 'CNPJ',
-        type: 'text',
-        maxLength: 30,
-        help: 'O valor em produção é um placeholder — substitua pelo CNPJ real.',
-      },
     ],
     defaults: {
       badge: 'Dízimos e Ofertas',
@@ -501,13 +285,6 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
       titlePart2: 'vidas.',
       intro:
         'Acreditamos que a generosidade é uma resposta de amor à graça de Deus. Ao contribuir, você apoia as ações sociais, o sustento da igreja local e os projetos de expansão do Reino de Deus.',
-      pixKey: 'projeto@visaodofuturo.com.br',
-      bankName: 'Sicoob',
-      bankCode: '756',
-      agency: '3007',
-      account: '',
-      holderName: 'Igreja Paraíso',
-      holderDocument: '',
     },
   },
 
@@ -517,24 +294,12 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
     description: 'Telefone, endereço, redes sociais e copyright do rodapé.',
     icon: 'Phone',
     fields: [
-      { name: 'phone', label: 'Telefone', type: 'text', maxLength: 40 },
-      { name: 'email', label: 'E-mail', type: 'text', maxLength: 160 },
-      { name: 'address', label: 'Endereço', type: 'textarea', maxLength: TEXT_MAX },
       { name: 'tagline', label: 'Tagline', type: 'text', maxLength: 200 },
       { name: 'copyright', label: 'Copyright', type: 'text', maxLength: 200 },
-      { name: 'youtubeUrl', label: 'YouTube', type: 'url' },
-      { name: 'instagramUrl', label: 'Instagram', type: 'url' },
-      { name: 'facebookUrl', label: 'Facebook', type: 'url' },
     ],
     defaults: {
-      phone: '(27) 99875-7008',
-      email: '',
-      address: 'Rua Helmut Gums, 438 - Virada, Santa Maria de Jetibá - ES',
       tagline: 'Casa de Deus. Minha família.',
       copyright: '© 2026 Igreja Paraíso. Feitos para a Eternidade.',
-      youtubeUrl: 'https://www.youtube.com/@paraisoigreja',
-      instagramUrl: 'https://www.instagram.com/paraisoigreja/',
-      facebookUrl: 'https://www.facebook.com/paraisoigreja/',
     },
   },
 
