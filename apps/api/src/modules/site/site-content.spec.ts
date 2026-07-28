@@ -53,16 +53,16 @@ function createPrismaMock(capture: { where?: unknown; data?: unknown } = {}) {
       },
     },
     churchBranch: {
-      findMany: async () => [],
+      findMany: async () => [] as any[],
     },
     pastor: {
-      findMany: async () => [],
+      findMany: async () => [] as any[],
     },
     ministry: {
-      findMany: async () => [],
+      findMany: async () => [] as any[],
     },
     churchConfig: {
-      findUnique: async () => null,
+      findUnique: async () => null as any,
     },
   };
 }

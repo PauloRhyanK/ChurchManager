@@ -55,7 +55,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ImageUploader } from "@/components/ImageUploader";
-import { SITE_IMAGE_UPLOAD_PATH } from "@/features/site/api/tenant-site-content-api";
+const CHURCH_IMAGE_UPLOAD_PATH = "/admin/tenants/me/church-config/upload-image";
 import { getSiteIcon } from "@/features/site/components/site-icons";
 import { getApiErrorMessage } from "@/lib/api";
 import {
@@ -953,7 +953,7 @@ export default function ChurchPage() {
               <ImageUploader
                 value={editingBranch?.image ?? ""}
                 onChange={(url) => setEditingBranch((prev) => ({ ...prev, image: url ?? "" }))}
-                uploadPath={SITE_IMAGE_UPLOAD_PATH}
+                uploadPath={CHURCH_IMAGE_UPLOAD_PATH}
                 prompt="Arraste ou clique para enviar foto"
                 hint="Use imagens horizontais para melhor visualização."
                 successMessage="Imagem enviada."
@@ -1033,7 +1033,7 @@ export default function ChurchPage() {
               <ImageUploader
                 value={editingPastor?.image ?? ""}
                 onChange={(url) => setEditingPastor((prev) => ({ ...prev, image: url ?? "" }))}
-                uploadPath={SITE_IMAGE_UPLOAD_PATH}
+                uploadPath={CHURCH_IMAGE_UPLOAD_PATH}
                 prompt="Arraste ou clique para enviar foto"
                 successMessage="Foto enviada."
               />
@@ -1152,7 +1152,7 @@ export default function ChurchPage() {
               <ImageUploader
                 value={editingMinistry?.image ?? ""}
                 onChange={(url) => setEditingMinistry((prev) => ({ ...prev, image: url ?? "" }))}
-                uploadPath={SITE_IMAGE_UPLOAD_PATH}
+                uploadPath={CHURCH_IMAGE_UPLOAD_PATH}
                 prompt="Arraste ou clique para enviar foto"
                 successMessage="Imagem enviada."
               />

@@ -61,8 +61,9 @@ export class StorageService {
       return `${cleanBaseUrl}/${uniqueFileName}`;
 
     } catch (error) {
-      this.logger.error(`Falha no upload para o R2: ${error}`);
-      throw new InternalServerErrorException('Não foi possível fazer o upload da imagem.');
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Falha no upload para o R2: ${msg}`);
+      throw new InternalServerErrorException(`Não foi possível fazer o upload da imagem: ${msg}`);
     }
   }
 
