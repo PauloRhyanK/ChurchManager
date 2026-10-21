@@ -27,7 +27,7 @@ export class ResendMailer extends Mailer {
         'RESEND_API_KEY não configurada. O envio de e-mails irá falhar.',
       );
     }
-    this.client = new Resend(apiKey ?? 'missing-api-key');
+    this.client = new Resend(apiKey || 'missing-api-key');
     this.from =
       this.config.get<string>('MAIL_FROM')?.trim() ||
       'Church Manager <no-reply@churchmanager.local>';
