@@ -35,6 +35,12 @@ import { PublicPasswordResetController } from './public-password-reset.controlle
   ],
   controllers: [AuthController, PublicPasswordResetController],
   providers: [AuthService, JwtStrategy, PlatformAdminGuard, PasswordResetService],
-  exports: [AuthService, JwtModule, PassportModule, PlatformAdminGuard],
+  exports: [
+    AuthService,
+    JwtModule,
+    PassportModule,
+    PlatformAdminGuard,
+    PasswordResetService,
+  ],
 })
 export class AuthModule {}

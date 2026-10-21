@@ -309,18 +309,27 @@ export function AppSidebar() {
 
         {!collapsed && (
           <div className="mt-2 flex items-center gap-3 rounded-lg bg-secondary/50 p-3">
-            <Avatar className="h-8 w-8">
-              <AvatarImage src="" />
-              <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
-                PA
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{session?.user.tenantSlug ?? "Administrador"}</p>
-              <p className="text-xs text-muted-foreground truncate">
-                {session?.user.email ?? "admin@igreja.com"}
-              </p>
-            </div>
+            <NavLink
+              to="/minha-conta"
+              className="flex flex-1 min-w-0 items-center gap-3 rounded-md transition-colors hover:text-foreground"
+              activeClassName="font-medium"
+              title="Minha conta"
+            >
+              <Avatar className="h-8 w-8">
+                <AvatarImage src="" />
+                <AvatarFallback className="bg-primary/10 text-primary text-xs font-medium">
+                  PA
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">
+                  {session?.user.name || session?.user.tenantSlug || "Administrador"}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {session?.user.email ?? "admin@igreja.com"}
+                </p>
+              </div>
+            </NavLink>
             <button
               className="text-muted-foreground hover:text-foreground transition-colors"
               type="button"

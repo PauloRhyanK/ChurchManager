@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { LoginPage } from "@/features/auth/pages/LoginPage";
 import { ForgotPasswordPage } from "@/features/auth/pages/ForgotPasswordPage";
 import ResetPasswordPage from "@/features/auth/pages/ResetPasswordPage";
+import AccountPage from "@/features/auth/pages/AccountPage";
 import EventDetailRoutePage from "@/features/events/pages/EventDetailRoutePage";
 import EventFormPage from "@/features/events/pages/EventFormPage";
 import EventsListPage from "@/features/events/pages/EventsListPage";
@@ -51,6 +52,7 @@ export function AppRoutes() {
           <Route path="/igreja" element={<ChurchPage />} />
         </Route>
         <Route path="/configuracoes" element={<Settings />} />
+        <Route path="/minha-conta" element={<AccountPage />} />
 
         <Route element={<PermissionRoute module="CHECKIN" />}>
           <Route path="/checkin" element={<CheckinPage />} />

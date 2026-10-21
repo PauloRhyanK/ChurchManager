@@ -30,3 +30,16 @@ test('a versão em texto puro fica sem escapar', () => {
   assert.match(msg.text!, /Olá, Maria & João,/);
   assert.doesNotMatch(msg.text!, /&amp;/);
 });
+
+test('variante de administrador muda o assunto e o texto', () => {
+  const msg = build({ requestedByAdmin: true, expiresInMinutes: 24 * 60 });
+
+  assert.match(msg.subject, /Redefinição de acesso/);
+  assert.match(msg.text!, /administrador da sua igreja/);
+  assert.match(msg.text!, /24 horas/);
+});
+
+test('formata a validade em minutos ou horas', () => {
+  assert.match(build({ expiresInMinutes: 30 }).text!, /30 minutos/);
+  assert.match(build({ expiresInMinutes: 60 }).text!, /1 hora /);
+});

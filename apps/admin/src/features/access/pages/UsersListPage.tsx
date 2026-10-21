@@ -1,5 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, Trash2, UserPlus, Users, X } from "lucide-react";
+import {
+  Check,
+  KeyRound,
+  Loader2,
+  Send,
+  Trash2,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -42,9 +51,15 @@ import {
   fetchPendingUsers,
   fetchTenantUsers,
   rejectUser,
+  resendInvite,
+  sendPasswordReset,
   updateTenantUser,
   type TenantUserDto,
 } from "../api/tenant-users-api";
+import {
+  AccessLinkDialog,
+  type AccessLinkDialogData,
+} from "../components/AccessLinkDialog";
 import { UserStatusBadge } from "../components/UserStatusBadge";
 import { usePermissions } from "../hooks/use-permissions";
 
@@ -55,6 +70,9 @@ export default function UsersListPage() {
   const canEdit = can("USERS", "EDIT");
   const currentUserId = getStoredSession()?.user.id ?? null;
   const [editing, setEditing] = useState<TenantUserDto | null>(null);
+  const [accessLink, setAccessLink] = useState<AccessLinkDialogData | null>(
+    null,
+  );
 
   const usersQuery = useQuery({
     queryKey: ["tenant-users"],
@@ -110,6 +128,23 @@ export default function UsersListPage() {
     mutationFn: deleteTenantUser,
     onSuccess: () => {
       toast.success("Utilizador excluído");
+      invalidate();
+    },
+    onError: (err) => toast.error(getApiErrorMessage(err)),
+  });
+
+  const passwordResetMutation = useMutation({
+    mutationFn: (user: TenantUserDto) => sendPasswordReset(user.id),
+    onSuccess: (result, user) => {
+      setAccessLink({ ...result, kind: "password-reset", email: user.email });
+    },
+    onError: (err) => toast.error(getApiErrorMessage(err)),
+  });
+
+  const resendInviteMutation = useMutation({
+    mutationFn: (user: TenantUserDto) => resendInvite(user.id),
+    onSuccess: (result, user) => {
+      setAccessLink({ ...result, kind: "invite", email: user.email });
       invalidate();
     },
     onError: (err) => toast.error(getApiErrorMessage(err)),
@@ -253,6 +288,27 @@ export default function UsersListPage() {
                                       Suspender
                                     </Button>
                                   ) : null}
+                                  {user.status === "ACTIVE" &&
+                                    user.id !== currentUserId && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="gap-1"
+                                        disabled={passwordResetMutation.isPending}
+                                        onClick={() => {
+                                          if (
+                                            window.confirm(
+                                              `Gerar um link de redefinição de senha para ${user.email}? A senha atual continua válida até ser trocada.`,
+                                            )
+                                          ) {
+                                            passwordResetMutation.mutate(user);
+                                          }
+                                        }}
+                                      >
+                                        <KeyRound className="h-4 w-4" />
+                                        Resetar acesso
+                                      </Button>
+                                    )}
                                   {user.id !== currentUserId && (
                                     <Button
                                       variant="ghost"
@@ -344,6 +400,26 @@ export default function UsersListPage() {
                                     Aprovar
                                   </Button>
                                 )}
+                                {user.status === "INVITED" && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="gap-1"
+                                    disabled={resendInviteMutation.isPending}
+                                    onClick={() => {
+                                      if (
+                                        window.confirm(
+                                          `Reenviar o convite para ${user.email}? O link anterior deixa de funcionar.`,
+                                        )
+                                      ) {
+                                        resendInviteMutation.mutate(user);
+                                      }
+                                    }}
+                                  >
+                                    <Send className="h-4 w-4" />
+                                    Reenviar convite
+                                  </Button>
+                                )}
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -387,6 +463,8 @@ export default function UsersListPage() {
           invalidate();
         }}
       />
+
+      <AccessLinkDialog data={accessLink} onClose={() => setAccessLink(null)} />
     </DashboardLayout>
   );
 }

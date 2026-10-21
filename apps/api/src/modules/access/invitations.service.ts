@@ -111,6 +111,70 @@ export class InvitationsService {
     };
   }
 
+  /**
+   * Gera um novo link para um convite ainda não aceite (o anterior deixa de
+   * valer), mantendo os grupos definidos no convite original.
+   */
+  async resendInvite(tenantId: string, userId: string) {
+    const user = await this.prisma.adminUser.findFirst({
+      where: { id: userId, tenantId },
+      select: { id: true, name: true, status: true },
+    });
+    if (!user) {
+      throw new NotFoundException('Utilizador não encontrado');
+    }
+    if (user.status !== AdminUserStatus.INVITED) {
+      throw new BadRequestException('Este utilizador não tem convite pendente.');
+    }
+    const pending = await this.prisma.adminUserInvitation.findFirst({
+      where: { tenantId, userId, completedAt: null },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    if (!pending) {
+      throw new BadRequestException(
+        'Convite não encontrado. Cancele e convide novamente.',
+      );
+    }
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true },
+    });
+    if (!tenant) {
+      throw new NotFoundException('Igreja não encontrada.');
+    }
+
+    const days = this.expiryDays();
+    const invitation = await this.prisma.adminUserInvitation.update({
+      where: { id: pending.id },
+      data: {
+        token: generateAccessToken(),
+        expiresAt: new Date(Date.now() + days * 24 * 60 * 60 * 1000),
+      },
+    });
+    const url = this.buildInviteUrl(invitation.token);
+
+    let emailSent = true;
+    try {
+      await this.mailer.send(
+        buildInvitationEmail({
+          to: invitation.email,
+          name: user.name,
+          churchName: tenant.name,
+          url,
+          expiresInDays: days,
+        }),
+      );
+    } catch (error) {
+      emailSent = false;
+      this.logger.error(
+        `Falha ao reenviar e-mail de convite para ${invitation.email}: ${error}`,
+      );
+    }
+
+    return { url, expiresAt: invitation.expiresAt, emailSent };
+  }
+
   async getByToken(token: string) {
     const invitation = await this.prisma.adminUserInvitation.findUnique({
       where: { token },

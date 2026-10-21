@@ -24,6 +24,7 @@ const routeLabels: Record<string, string> = {
   inscricoes: "Inscrições",
   novo: "Novo",
   editar: "Editar",
+  "minha-conta": "Minha conta",
 };
 
 function buildBreadcrumbs(pathname: string) {

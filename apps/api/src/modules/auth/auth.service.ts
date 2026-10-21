@@ -1,4 +1,9 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { AdminUserRole, AdminUserStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -9,6 +14,7 @@ import {
   mergePermissionEntries,
   type PermissionMap,
 } from '../access/permissions';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { LoginDto } from './dto/login.dto';
 
 @Injectable()
@@ -52,6 +58,42 @@ export class AuthService {
         permissions,
       },
     };
+  }
+
+  /**
+   * Troca a senha do utilizador autenticado. Erros de validação usam 400 (e
+   * não 401) para o painel não interpretar como sessão expirada.
+   */
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.prisma.adminUser.findUnique({
+      where: { id: userId },
+      select: { id: true, passwordHash: true },
+    });
+    if (!user || !user.passwordHash) {
+      throw new NotFoundException('Utilizador não encontrado');
+    }
+    const ok = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    if (!ok) {
+      throw new BadRequestException('Senha atual incorreta.');
+    }
+    if (dto.currentPassword === dto.newPassword) {
+      throw new BadRequestException('A nova senha deve ser diferente da atual.');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.adminUser.update({
+        where: { id: user.id },
+        data: { passwordHash },
+      });
+      // Links de recuperação pendentes deixam de fazer sentido.
+      await tx.adminPasswordReset.updateMany({
+        where: { userId: user.id, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+    });
+
+    return { ok: true };
   }
 
   private assertLoginAllowed(status: AdminUserStatus): void {

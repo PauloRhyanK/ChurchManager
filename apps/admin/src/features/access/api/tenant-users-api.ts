@@ -26,6 +26,12 @@ export interface InviteUserResult {
   expiresAt: string;
 }
 
+export interface AccessLinkResult {
+  url: string;
+  expiresAt: string;
+  emailSent: boolean;
+}
+
 export interface UpdateUserInput {
   name?: string | null;
   groupIds?: string[];
@@ -79,6 +85,20 @@ export async function rejectUser(id: string) {
 export async function deleteTenantUser(id: string) {
   const { data } = await api.delete<{ ok: boolean }>(
     `/admin/tenants/me/users/${id}`,
+  );
+  return data;
+}
+
+export async function sendPasswordReset(id: string) {
+  const { data } = await api.post<AccessLinkResult>(
+    `/admin/tenants/me/users/${id}/password-reset`,
+  );
+  return data;
+}
+
+export async function resendInvite(id: string) {
+  const { data } = await api.post<AccessLinkResult>(
+    `/admin/tenants/me/users/${id}/resend-invite`,
   );
   return data;
 }

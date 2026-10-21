@@ -16,6 +16,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { PermissionLevel, PermissionModule } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthUser } from '../auth/auth-user';
+import { PasswordResetService } from '../auth/password-reset.service';
 import { InviteUserDto, UpdateUserDto } from './dto/tenant-user.dto';
 import { InvitationsService } from './invitations.service';
 import { PermissionsGuard } from './permissions.guard';
@@ -29,6 +30,7 @@ export class TenantsMeUsersController {
   constructor(
     private readonly users: TenantUsersService,
     private readonly invitations: InvitationsService,
+    private readonly passwordReset: PasswordResetService,
   ) {}
 
   @Get()
@@ -67,6 +69,26 @@ export class TenantsMeUsersController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.users.approve(user.tenantId, id);
+  }
+
+  @Post(':id/password-reset')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission(PermissionModule.USERS, PermissionLevel.EDIT)
+  async passwordResetLink(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.passwordReset.issueForUser(user.tenantId, id, user.userId);
+  }
+
+  @Post(':id/resend-invite')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission(PermissionModule.USERS, PermissionLevel.EDIT)
+  async resendInvite(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.invitations.resendInvite(user.tenantId, id);
   }
 
   @Delete(':id')

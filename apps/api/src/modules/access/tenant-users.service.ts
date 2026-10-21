@@ -6,6 +6,7 @@ import {
 import { AdminUserStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PermissionGroupsService } from './permission-groups.service';
+import { isSuperRole } from './permissions';
 
 const userSelect = {
   id: true,
@@ -73,6 +74,12 @@ export class TenantUsersService {
     if (!existing) {
       throw new NotFoundException('Utilizador não encontrado');
     }
+    // Administradores ficam fora da gestão de equipe, mesmo para outro
+    // TENANT_ADMIN (igual à UI): impede que um membro com USERS:EDIT
+    // suspenda ou rebaixe o administrador da igreja.
+    if (isSuperRole(existing.role)) {
+      throw new BadRequestException('Não é possível alterar um administrador.');
+    }
 
     const groupIds =
       data.groupIds === undefined
@@ -116,7 +123,8 @@ export class TenantUsersService {
   /**
    * Remove um utilizador do tenant (qualquer estado: ativo, suspenso, pendente
    * ou convidado). Limpa convites associados; os pedidos de recuperação de
-   * senha caem por cascata. Não permite remover a própria conta.
+   * senha caem por cascata. Não permite remover a própria conta nem
+   * administradores (TENANT_ADMIN/PLATFORM_ADMIN).
    */
   async remove(tenantId: string, id: string, requesterId: string) {
     if (id === requesterId) {
@@ -124,10 +132,13 @@ export class TenantUsersService {
     }
     const existing = await this.prisma.adminUser.findFirst({
       where: { id, tenantId },
-      select: { id: true },
+      select: { id: true, role: true },
     });
     if (!existing) {
       throw new NotFoundException('Utilizador não encontrado');
+    }
+    if (isSuperRole(existing.role)) {
+      throw new BadRequestException('Não é possível remover um administrador.');
     }
     await this.prisma.$transaction(async (tx) => {
       await tx.adminUserInvitation.deleteMany({
