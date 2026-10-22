@@ -89,7 +89,10 @@ export class TenantsMeCheckinController {
     @Param('eventId', ParseUUIDPipe) eventId: string,
     @Body() dto: CreateEventRegistrationDto,
   ) {
-    return this.registrations.createForEvent(user.tenantId, eventId, dto);
+    // Painel: sem as regras do site (evento passado/rascunho, janela, preço e estoque).
+    return this.registrations.createForEvent(user.tenantId, eventId, dto, {
+      enforcePublicRules: false,
+    });
   }
 
   @Post('events/:eventId/issue-free-tickets')

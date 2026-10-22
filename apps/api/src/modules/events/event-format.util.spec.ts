@@ -6,6 +6,7 @@ import {
   formatTimeOnly,
   parseDateOnly,
   parseTimeOnly,
+  safeTimeZone,
   startOfTodayInTimeZone,
 } from './event-format.util';
 
@@ -55,4 +56,14 @@ test('startOfTodayInTimeZone: meia-noite BRT vira o dia 23', () => {
 test('startOfTodayInTimeZone usa America/Sao_Paulo por padrão', () => {
   const today = startOfTodayInTimeZone(undefined, new Date('2026-10-23T00:30:00Z'));
   assert.equal(formatDateOnly(today), '2026-10-22');
+});
+
+test('safeTimeZone mantém um fuso IANA válido', () => {
+  assert.equal(safeTimeZone('America/Manaus'), 'America/Manaus');
+  assert.equal(safeTimeZone('UTC'), 'UTC');
+});
+
+test('safeTimeZone troca fuso inválido ou vazio pelo padrão', () => {
+  assert.equal(safeTimeZone('Marte/Olympus'), DEFAULT_EVENT_TIMEZONE);
+  assert.equal(safeTimeZone(''), DEFAULT_EVENT_TIMEZONE);
 });

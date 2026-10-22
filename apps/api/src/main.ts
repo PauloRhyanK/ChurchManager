@@ -9,6 +9,12 @@ dns.setDefaultResultOrder('ipv4first');
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // Atrás de Cloudflare + nginx, `req.ip` seria o IP do proxy e o rate limit
+  // contaria todos os visitantes juntos. TRUST_PROXY_HOPS = nº de proxies à frente.
+  const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS ?? 0);
+  if (Number.isInteger(trustProxyHops) && trustProxyHops > 0) {
+    app.getHttpAdapter().getInstance().set('trust proxy', trustProxyHops);
+  }
   // CORS: `DynamicCorsMiddleware` — admin/auth via `ADMIN_CORS_ORIGIN`; rotas públicas por origens na BD.
   app.setGlobalPrefix('api');
   app.useGlobalPipes(

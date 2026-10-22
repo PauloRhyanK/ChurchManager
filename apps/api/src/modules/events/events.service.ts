@@ -137,12 +137,13 @@ export class EventsService {
           videoUrl: dto.videoUrl ?? null,
           coverImageUrl: dto.coverImageUrl ?? dto.imageUrl ?? null,
           date: parseDateOnly(dto.date),
-          timeStart: parseTimeOnly(dto.timeStart),
-          timeEnd: parseTimeOnly(dto.timeEnd),
+          timeStart: dto.timeStart ? parseTimeOnly(dto.timeStart) : null,
+          timeEnd: dto.timeEnd ? parseTimeOnly(dto.timeEnd) : null,
           location: dto.location ?? null,
           imageUrl: dto.imageUrl ?? dto.coverImageUrl ?? null,
           tag: dto.tags?.[0] ?? null,
-          published: dto.published ?? true,
+          // Sem `published` explícito o evento nasce rascunho (fora do site).
+          published: dto.published ?? false,
         },
         select: { id: true },
       });
@@ -194,11 +195,17 @@ export class EventsService {
               }
             : {}),
           ...(dto.date !== undefined ? { date: parseDateOnly(dto.date) } : {}),
+          // `null` limpa o horário; campo ausente não altera.
           ...(dto.timeStart !== undefined
-            ? { timeStart: parseTimeOnly(dto.timeStart) }
+            ? {
+                timeStart:
+                  dto.timeStart === null ? null : parseTimeOnly(dto.timeStart),
+              }
             : {}),
           ...(dto.timeEnd !== undefined
-            ? { timeEnd: parseTimeOnly(dto.timeEnd) }
+            ? {
+                timeEnd: dto.timeEnd === null ? null : parseTimeOnly(dto.timeEnd),
+              }
             : {}),
           ...(dto.location !== undefined ? { location: dto.location } : {}),
           ...(dto.tags !== undefined ? { tag: dto.tags[0] ?? null } : {}),

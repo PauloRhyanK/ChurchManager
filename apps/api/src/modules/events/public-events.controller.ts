@@ -11,7 +11,9 @@ import {
   Post,
   Query,
   StreamableFile,
+  UseGuards,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { TenantsService } from '../tenants/tenants.service';
 import { CreateEventRegistrationDto } from './dto/create-event-registration.dto';
 import { CreateEventCheckoutDto } from './dto/create-event-checkout.dto';
@@ -22,8 +24,11 @@ import { EventTicketTypesService } from './event-ticket-types.service';
 import { EventCheckoutService } from './event-checkout.service';
 import { EventOrdersService } from './event-orders.service';
 import { renderTicketQrPng } from './ticket-qr';
+import { ParticipantSecretGuard } from './participant-secret.guard';
 
+/** Rate limit: só o throttler `public` (30/min por IP); o checkout também fica sob `links`. */
 @Controller('public/tenants')
+@SkipThrottle({ links: true, platform: true })
 export class PublicEventsController {
   constructor(
     private readonly tenants: TenantsService,
@@ -98,6 +103,7 @@ export class PublicEventsController {
 
   @Post(':slug/events/:eventId/checkout')
   @HttpCode(HttpStatus.CREATED)
+  @SkipThrottle({ links: false })
   async createCheckout(
     @Param('slug') slug: string,
     @Param('eventId', ParseUUIDPipe) eventId: string,
@@ -152,7 +158,9 @@ export class PublicEventsController {
     return this.registrations.createForEvent(tenant.id, eventId, dto);
   }
 
+  /** Exige `x-participant-secret` (só o servidor do site chama). */
   @Get(':slug/events/:eventId/registrations/check')
+  @UseGuards(ParticipantSecretGuard)
   async checkRegistration(
     @Param('slug') slug: string,
     @Param('eventId', ParseUUIDPipe) eventId: string,
@@ -172,7 +180,9 @@ export class PublicEventsController {
     return { registered: existing != null };
   }
 
+  /** Devolve dados pessoais: exige `x-participant-secret` (só o servidor do site chama). */
   @Get(':slug/registrations/mine')
+  @UseGuards(ParticipantSecretGuard)
   async listMyRegistrations(
     @Param('slug') slug: string,
     @Query('email') email?: string,

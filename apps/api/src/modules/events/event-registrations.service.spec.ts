@@ -5,6 +5,7 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { EventRegistrationsService } from './event-registrations.service';
 import { EventTicketTypesService } from './event-ticket-types.service';
 
@@ -47,6 +48,8 @@ type Options = {
   ticket?: Record<string, unknown> | null;
   /** Linhas afetadas pelo UPDATE condicional de estoque (0 = corrida perdida). */
   reserveAffected?: number;
+  /** Erro lançado pelo INSERT da inscrição (ex.: P2002 de e-mail duplicado). */
+  createError?: Error;
 };
 
 function build(options: Options = {}) {
@@ -66,6 +69,7 @@ function build(options: Options = {}) {
     eventRegistration: {
       create: async ({ data }: { data: Record<string, unknown> }) => {
         log.push('cria-inscricao');
+        if (options.createError) throw options.createError;
         created.push(data);
         return {
           id: 'reg-1',
@@ -283,4 +287,101 @@ test('createForEvent: sem ingresso não mexe no estoque', async () => {
   assert.equal(created.length, 1);
   assert.equal(stockUpdates.length, 0);
   assert.equal(result.communityLink, null);
+});
+
+test('createForEvent: evento com timezone inválido usa America/Sao_Paulo', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-23T00:30:00Z') });
+  const { service, created } = build({
+    event: eventRow({
+      date: new Date(Date.UTC(2026, 9, 22)),
+      timezone: 'Fuso/Invalido',
+    }),
+  });
+  await service.createForEvent(TENANT, EVENT, body);
+  assert.equal(created.length, 1);
+});
+
+test('createForEvent: e-mail duplicado com ingresso responde 409', async () => {
+  const duplicate = new Prisma.PrismaClientKnownRequestError(
+    'Unique constraint failed on the fields: (`event_id`,`email`)',
+    { code: 'P2002', clientVersion: 'test' },
+  );
+  const { service, log } = build({ createError: duplicate });
+  await assert.rejects(
+    () => service.createForEvent(TENANT, EVENT, bodyWithTicket),
+    rejectsWith(ConflictException, 'Você já está inscrito neste evento'),
+  );
+  // O INSERT falha dentro da transação da reserva: a vaga volta no rollback.
+  assert.deepEqual(log, ['inicio-transacao', 'reserva-estoque', 'cria-inscricao']);
+});
+
+test('createForEvent (admin): aceita evento com inscrições encerradas', async () => {
+  const { service, created, eventQueries } = build({
+    event: { id: EVENT },
+  });
+  // Evento passado e rascunho: o painel ainda pode inscrever.
+  const result = await service.createForEvent(TENANT, EVENT, body, {
+    enforcePublicRules: false,
+  });
+  assert.equal(created.length, 1);
+  assert.equal(result.eventId, EVENT);
+  assert.deepEqual((eventQueries[0] as { where: unknown }).where, {
+    id: EVENT,
+    tenantId: TENANT,
+  });
+});
+
+test('createForEvent (admin): ignora janela, preço e estoque do ingresso', async () => {
+  const { service, created, stockUpdates } = build({
+    event: { id: EVENT },
+    ticket: ticketRow({
+      salesClosesAt: new Date(Date.UTC(2000, 0, 1)),
+      priceCents: 5000,
+      quantityTotal: 10,
+      quantitySold: 10,
+    }),
+  });
+  const result = await service.createForEvent(TENANT, EVENT, bodyWithTicket, {
+    enforcePublicRules: false,
+  });
+  assert.equal(created.length, 1);
+  assert.equal(stockUpdates.length, 0);
+  assert.equal(result.communityLink, 'https://chat.whatsapp.com/abc');
+});
+
+test('createForEvent (admin): evento de outro tenant continua 404', async () => {
+  const { service, created } = build({ event: null });
+  await assert.rejects(
+    () =>
+      service.createForEvent(TENANT, EVENT, body, { enforcePublicRules: false }),
+    rejectsWith(NotFoundException, 'Evento não encontrado'),
+  );
+  assert.equal(created.length, 0);
+});
+
+test('createForEvent (admin): ingresso inexistente ou inativo continua 404', async () => {
+  for (const ticket of [null, ticketRow({ active: false })]) {
+    const { service, created } = build({ event: { id: EVENT }, ticket });
+    await assert.rejects(
+      () =>
+        service.createForEvent(TENANT, EVENT, bodyWithTicket, {
+          enforcePublicRules: false,
+        }),
+      rejectsWith(NotFoundException, 'Tipo de ingresso não encontrado'),
+    );
+    assert.equal(created.length, 0);
+  }
+});
+
+test('createForEvent (admin): e-mail duplicado continua 409', async () => {
+  const duplicate = new Prisma.PrismaClientKnownRequestError('Unique', {
+    code: 'P2002',
+    clientVersion: 'test',
+  });
+  const { service } = build({ event: { id: EVENT }, createError: duplicate });
+  await assert.rejects(
+    () =>
+      service.createForEvent(TENANT, EVENT, body, { enforcePublicRules: false }),
+    rejectsWith(ConflictException, 'Você já está inscrito neste evento'),
+  );
 });

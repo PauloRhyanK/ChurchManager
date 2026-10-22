@@ -137,6 +137,22 @@ export function formatEventDateTimePtBr(
 export const DEFAULT_EVENT_TIMEZONE = 'America/Sao_Paulo';
 
 /**
+ * Fuso utilizável pelo `Intl`: um valor inválido (com que o `Intl` lança
+ * `RangeError`) vira `DEFAULT_EVENT_TIMEZONE`, em vez de derrubar o pedido.
+ */
+export function safeTimeZone(timeZone: string): string {
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone });
+    return timeZone;
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return DEFAULT_EVENT_TIMEZONE;
+    }
+    throw error;
+  }
+}
+
+/**
  * "Hoje" no fuso indicado, como valor date-only (meia-noite UTC do dia civil
  * local), comparável com `Event.date` (@db.Date) — ver `parseDateOnly`.
  */

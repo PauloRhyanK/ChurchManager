@@ -7,6 +7,7 @@ Referência para o **frontend do site** (Next.js ou outro). Todas as rotas abaix
 | Prefixo global | `/api` |
 | Base | `{API_ORIGIN}/api` (ex.: `https://api.igreja.exemplo/api`) |
 | Tenant | `:slug` na URL — sem JWT |
+| Rotas de participante | `registrations/check` e `registrations/mine` exigem o header `x-participant-secret` (só do servidor do site — ver [§9](#9-inscrição-gratuita) e [§10](#10-inscrições-do-participante)) |
 | Content-Type | `application/json` em `POST` com corpo |
 | CORS | O **origin** do site tem de estar registado em `tenant_public_web_origins` (painel admin → Configurações) |
 
@@ -259,7 +260,9 @@ Eventos **publicados** do tenant.
 |-------|------|-----------|
 | `upcomingOnly` | `true` \| `1` | Se presente, só eventos com `date >= hoje`, com "hoje" no fuso `America/Sao_Paulo` (o evento do dia continua listado até a meia-noite de Brasília) |
 
-Ordenação: `date` ascendente e, no mesmo dia, `timeStart` ascendente.
+Ordenação: `date` ascendente e, no mesmo dia, `timeStart` ascendente; eventos sem `timeStart` vêm depois dos que têm horário no mesmo dia.
+
+Eventos criados no painel sem `published` nascem **rascunho** (`published: false`) e só aparecem nas rotas públicas depois de publicados.
 
 **Resposta `200`**
 
@@ -272,7 +275,7 @@ Ordenação: `date` ascendente e, no mesmo dia, `timeStart` ascendente.
 
 ### `GET /api/public/tenants/:slug/events/published`
 
-Mesmo formato. Lista **todos** os publicados (inclui passados), ordenados por `date` e depois `timeStart` (ascendentes). Útil para secção “destaques” na home.
+Mesmo formato. Lista **todos** os publicados (inclui passados), ordenados por `date` e depois `timeStart` (ascendentes; sem horário por último no dia). Útil para secção “destaques” na home.
 
 ### Erros
 
@@ -288,7 +291,7 @@ Mesmo formato. Lista **todos** os publicados (inclui passados), ordenados por `d
 
 `:eventId` — UUID.
 
-Só devolve eventos **publicados**. Rascunhos respondem `404`.
+Só devolve eventos **publicados**. Rascunhos respondem `404` (eventos criados sem `published` nascem rascunho).
 
 **Resposta `200`:** um `PublicEventDto` (objecto plano, não `{ item: ... }`).
 
@@ -581,6 +584,8 @@ Para eventos sem venda de ingressos (formulário “Quero participar”).
 
 ### `GET /api/public/tenants/:slug/events/:eventId/registrations/check`
 
+**Header obrigatório:** `x-participant-secret: <segredo>` — o mesmo valor de `PUBLIC_PARTICIPANT_API_SECRET` na API (`CHURCHMANAGER_PARTICIPANT_SECRET` no site). Chame **só do servidor** do site (route handler / server action); o segredo nunca vai para o browser.
+
 | Query | Descrição |
 |-------|-----------|
 | `email` | E-mail a verificar |
@@ -594,16 +599,33 @@ Para eventos sem venda de ingressos (formulário “Quero participar”).
 
 Se omitir `email` e `userId`, devolve `{ "registered": false }`.
 
+**Erros**
+
+| HTTP | Quando |
+|------|--------|
+| `401` | Header `x-participant-secret` ausente ou diferente do configurado, ou API em produção sem `PUBLIC_PARTICIPANT_API_SECRET` (`Acesso não autorizado`) |
+
 ---
 
 ## 10. Inscrições do participante
 
 ### `GET /api/public/tenants/:slug/registrations/mine`
 
+Devolve dados pessoais (nome, e-mail, telefone, mensagem).
+
+**Header obrigatório:** `x-participant-secret: <segredo>` — mesma regra de [`registrations/check`](#get-apipublictenantsslugeventseventidregistrationscheck): só do servidor do site.
+
 | Query | Obrigatório |
 |-------|-------------|
 | `email` | Sim — omitir responde `400` |
 | `userId` | Não — quando presente, alarga a pesquisa (`email` **ou** `userId`) |
+
+**Erros**
+
+| HTTP | Quando |
+|------|--------|
+| `400` | `email` ausente (`Informe o e-mail do participante`) |
+| `401` | Header `x-participant-secret` ausente ou diferente do configurado, ou API em produção sem `PUBLIC_PARTICIPANT_API_SECRET` (`Acesso não autorizado`) |
 
 **Resposta `200`**
 
@@ -647,7 +669,7 @@ Ordenação: `sortOrder` ascendente, depois dia da semana (Domingo → Sábado) 
     {
       "id": "uuid",
       "title": "Culto dominical",
-      "dayOfWeek": "sunday",
+      "dayOfWeek": "Domingo",
       "timeStart": "10:00:00",
       "location": "Templo principal",
       "description": null,
@@ -676,9 +698,10 @@ Formato típico Nest (validação):
 | HTTP | Situação comum em eventos |
 |------|---------------------------|
 | `400` | Body inválido, regras de negócio (stock, CPF, quantidade, campos obrigatórios, forma de pagamento) |
+| `401` | `registrations/check` ou `registrations/mine` sem o header `x-participant-secret` válido |
 | `404` | Tenant, evento, pedido ou bilhete não encontrado |
 | `409` | Stock insuficiente no checkout, ingresso esgotado na inscrição, e-mail já inscrito, ou `idempotencyKey` inutilizável |
-| `429` | Rate limit global (retry com backoff) |
+| `429` | Rate limit: 30 pedidos/min por IP em cada rota pública (throttler `public`); o checkout também tem 20/min por IP (throttler `links`). Retry com backoff (header `Retry-After-public` / `Retry-After-links`) |
 | `500` | Asaas não configurado no tenant |
 
 ---

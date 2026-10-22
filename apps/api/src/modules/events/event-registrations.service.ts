@@ -4,17 +4,27 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { EventTicketType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateEventRegistrationDto } from './dto/create-event-registration.dto';
 import {
-  DEFAULT_EVENT_TIMEZONE,
+  safeTimeZone,
   startOfTodayInTimeZone,
   toRegistrationDto,
 } from './event-format.util';
 import { collectFieldValues } from './event-field-validation.util';
 import { isTicketTypeInSalesWindow, isTicketTypeSoldOut } from './event-stock.util';
 import { EventTicketTypesService } from './event-ticket-types.service';
+
+export type CreateRegistrationOptions = {
+  /**
+   * `true` (padrão, site público): evento publicado e não passado; ingresso em
+   * janela de venda, gratuito e com vaga, reservada na mesma transação.
+   * `false` (painel): só exige evento e ingresso ativo do tenant; o e-mail
+   * duplicado continua respondendo 409.
+   */
+  enforcePublicRules?: boolean;
+};
 
 @Injectable()
 export class EventRegistrationsService {
@@ -49,14 +59,19 @@ export class EventRegistrationsService {
     tenantId: string,
     eventId: string,
     dto: CreateEventRegistrationDto,
+    { enforcePublicRules = true }: CreateRegistrationOptions = {},
   ) {
-    await this.getRegistrableEvent(tenantId, eventId);
+    if (enforcePublicRules) {
+      await this.getRegistrableEvent(tenantId, eventId);
+    } else {
+      await this.assertEventBelongsToTenant(tenantId, eventId);
+    }
 
     const email = dto.email.trim().toLowerCase();
 
-    // Ingresso opcional: só gratuito, ativo, em janela e com vagas; valida
-    // login obrigatório, campos e link de comunidade.
-    let ticketTypeId: string | null = null;
+    // Ingresso opcional: tem de existir e estar ativo; no site, também gratuito,
+    // em janela e com vagas. Valida login obrigatório, campos e link de comunidade.
+    let reserveTicketTypeId: string | null = null;
     let communityLink: string | null = null;
     let fieldValuesToPersist: Array<{ fieldId: string; value: string }> = [];
     if (dto.ticketTypeId) {
@@ -67,25 +82,15 @@ export class EventRegistrationsService {
       if (!ticket || !ticket.active) {
         throw new NotFoundException('Tipo de ingresso não encontrado');
       }
-      if (!isTicketTypeInSalesWindow(ticket)) {
-        throw new BadRequestException(
-          'Este ingresso não está disponível para inscrição',
-        );
-      }
-      if (ticket.priceCents + ticket.feeCents > 0) {
-        throw new BadRequestException(
-          'Este ingresso é pago. Use o checkout para comprar.',
-        );
-      }
-      if (isTicketTypeSoldOut(ticket)) {
-        throw new ConflictException('Ingressos esgotados');
+      if (enforcePublicRules) {
+        this.assertTicketOpenForPublicRegistration(ticket);
+        reserveTicketTypeId = ticket.id;
       }
       if (!ticket.allowGuestRegistration && !dto.userId) {
         throw new BadRequestException(
           'É necessário iniciar sessão para se inscrever neste ingresso',
         );
       }
-      ticketTypeId = ticket.id;
       communityLink = ticket.communityLink;
       fieldValuesToPersist = collectFieldValues(
         ticket.fieldConfigs.map((fc) => ({
@@ -103,11 +108,11 @@ export class EventRegistrationsService {
       const row = await this.prisma.$transaction(async (tx) => {
         // Mesma reserva atômica do checkout: a inscrição e a vaga entram (ou
         // não) juntas, e quem perde a corrida pela última vaga recebe 409.
-        if (ticketTypeId) {
+        if (reserveTicketTypeId) {
           const reserved = await this.ticketTypes.reserveStock(
             tx,
             tenantId,
-            ticketTypeId,
+            reserveTicketTypeId,
             1,
           );
           if (!reserved) {
@@ -201,13 +206,40 @@ export class EventRegistrationsService {
     if (!event || !event.published) {
       throw new NotFoundException('Evento não encontrado');
     }
-    const today = startOfTodayInTimeZone(event.timezone ?? DEFAULT_EVENT_TIMEZONE);
+    const today = startOfTodayInTimeZone(safeTimeZone(event.timezone));
     if (event.date < today) {
       throw new BadRequestException(
         'As inscrições para este evento foram encerradas',
       );
     }
     return event;
+  }
+
+  /** Regras do site para inscrição com ingresso: em janela, gratuito e com vaga. */
+  private assertTicketOpenForPublicRegistration(
+    ticket: Pick<
+      EventTicketType,
+      | 'salesOpensAt'
+      | 'salesClosesAt'
+      | 'priceCents'
+      | 'feeCents'
+      | 'quantityTotal'
+      | 'quantitySold'
+    >,
+  ) {
+    if (!isTicketTypeInSalesWindow(ticket)) {
+      throw new BadRequestException(
+        'Este ingresso não está disponível para inscrição',
+      );
+    }
+    if (ticket.priceCents + ticket.feeCents > 0) {
+      throw new BadRequestException(
+        'Este ingresso é pago. Use o checkout para comprar.',
+      );
+    }
+    if (isTicketTypeSoldOut(ticket)) {
+      throw new ConflictException('Ingressos esgotados');
+    }
   }
 
   private async assertEventBelongsToTenant(tenantId: string, eventId: string) {
