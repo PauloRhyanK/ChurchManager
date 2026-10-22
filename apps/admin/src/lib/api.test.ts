@@ -21,6 +21,23 @@ describe("getApiErrorMessage", () => {
     expect(getApiErrorMessage(httpError(413))).toBe("Arquivo grande demais.");
   });
 
+  it("401 com motivo do servidor (login) mostra o motivo, não 'sessão expirada'", () => {
+    for (const message of [
+      "Credenciais inválidas",
+      "Acesso suspenso. Contate um administrador.",
+      "Seu cadastro aguarda aprovação de um administrador.",
+    ]) {
+      const err = httpError(401, { statusCode: 401, message, error: "Unauthorized" });
+      expect(getApiErrorMessage(err)).toBe(message);
+    }
+  });
+
+  it("401 genérico (token expirado ou inválido) → sessão expirada", () => {
+    const expired = "Sessão expirada. Entre novamente.";
+    expect(getApiErrorMessage(httpError(401, { statusCode: 401, message: "Unauthorized" }))).toBe(expired);
+    expect(getApiErrorMessage(httpError(401))).toBe(expired);
+  });
+
   it("403 e 404", () => {
     expect(getApiErrorMessage(httpError(403))).toBe("Você não tem permissão para realizar esta ação.");
     expect(getApiErrorMessage(httpError(404))).toBe("Item não encontrado. Atualize a página e tente novamente.");

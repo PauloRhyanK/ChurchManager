@@ -5,7 +5,9 @@ import {
   IsNotEmpty,
   IsString,
   IsUrl,
+  ValidateBy,
   ValidateIf,
+  isURL,
 } from 'class-validator';
 
 /**
@@ -39,10 +41,30 @@ export function StrictBoolean() {
   );
 }
 
+const HTTP_URL_OPTIONS = { protocols: ['http', 'https'], require_protocol: true, require_tld: false };
+
 /** URL absoluta http/https (usar junto de IsOptional; '' já vira null). */
 export function IsHttpUrl() {
-  return IsUrl(
-    { protocols: ['http', 'https'], require_protocol: true, require_tld: false },
-    { message: '$property deve ser uma URL http ou https válida' },
+  return IsUrl(HTTP_URL_OPTIONS, { message: '$property deve ser uma URL http ou https válida' });
+}
+
+/** Caminho servido pelo próprio site ('/x.jpg'); '//' e '\' apontariam para outro host. */
+const SITE_PATH_RE = /^\/(?![/\\])[^\s\\]*$/;
+
+/**
+ * Imagem: URL http/https (R2) ou caminho do próprio site, como os dados
+ * migrados do conteúdo legado (ex.: '/prRobsonJ.jpg'). Mesma regra de
+ * `site-content.validation.ts`, sem aceitar '//host'.
+ */
+export function IsImageRef() {
+  return ValidateBy(
+    {
+      name: 'isImageRef',
+      validator: {
+        validate: (value: unknown) =>
+          typeof value === 'string' && (SITE_PATH_RE.test(value) || isURL(value, HTTP_URL_OPTIONS)),
+        defaultMessage: () => '$property deve ser uma URL http(s) ou um caminho iniciado por /',
+      },
+    },
   );
 }

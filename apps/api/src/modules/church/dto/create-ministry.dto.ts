@@ -6,7 +6,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { RequiredText, StrictBoolean, IsHttpUrl } from './field-decorators';
+import { RequiredText, StrictBoolean, IsImageRef } from './field-decorators';
 
 export class CreateMinistryDto {
   @RequiredText()
@@ -32,7 +32,7 @@ export class CreateMinistryDto {
 
   @IsOptional()
   @IsString()
-  @IsHttpUrl()
+  @IsImageRef()
   @MaxLength(512)
   @Transform(({ value }) => {
     const s = String(value ?? '').trim();

@@ -115,7 +115,11 @@ export function getApiErrorMessage(err: unknown): string {
       const texts = [...new Set(validationMessages(err).map((m) => translateValidation(m).text))];
       return texts.length ? texts.join(" ") : GENERIC_VALIDATION;
     }
-    if (status === 401) return "Sessão expirada. Entre novamente.";
+    if (status === 401) {
+      // Login traz o motivo em pt-BR (credenciais, suspenso…); token expirado vem só "Unauthorized".
+      const reason = validationMessages(err)[0];
+      return reason && reason !== "Unauthorized" ? reason : "Sessão expirada. Entre novamente.";
+    }
     if (status === 403) return "Você não tem permissão para realizar esta ação.";
     if (status === 404) return "Item não encontrado. Atualize a página e tente novamente.";
     if (status === 413) return "Arquivo grande demais.";

@@ -6,7 +6,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { RequiredText, StrictBoolean, IsHttpUrl } from './field-decorators';
+import { RequiredText, StrictBoolean, IsHttpUrl, IsImageRef } from './field-decorators';
 
 export class UpdateBranchDto {
   @RequiredText({ partial: true })
@@ -32,7 +32,7 @@ export class UpdateBranchDto {
 
   @IsOptional()
   @IsString()
-  @IsHttpUrl()
+  @IsImageRef()
   @MaxLength(512)
   @Transform(({ value }) => {
     const s = String(value ?? '').trim();
