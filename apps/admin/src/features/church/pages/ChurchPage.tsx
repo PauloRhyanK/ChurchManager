@@ -812,7 +812,7 @@ export default function ChurchPage() {
                 onChange={(url) => branchEditor.setValue((prev) => ({ ...prev, image: url ?? "" }))}
                 uploadPath={CHURCH_IMAGE_UPLOAD_PATH}
                 prompt="Arraste ou clique para enviar foto"
-                hint="Use imagens horizontais para melhor visualização."
+                hint="Foto da fachada, de preferência horizontal. JPEG, PNG, WebP ou GIF, até 5 MB."
                 successMessage="Imagem enviada."
               />
               <Input
@@ -902,6 +902,7 @@ export default function ChurchPage() {
                 onChange={(url) => pastorEditor.setValue((prev) => ({ ...prev, image: url ?? "" }))}
                 uploadPath={CHURCH_IMAGE_UPLOAD_PATH}
                 prompt="Arraste ou clique para enviar foto"
+                hint="Foto do pastor, de preferência de rosto. JPEG, PNG, WebP ou GIF, até 5 MB."
                 successMessage="Foto enviada."
               />
               <Input
@@ -1029,6 +1030,7 @@ export default function ChurchPage() {
                 onChange={(url) => ministryEditor.setValue((prev) => ({ ...prev, image: url ?? "" }))}
                 uploadPath={CHURCH_IMAGE_UPLOAD_PATH}
                 prompt="Arraste ou clique para enviar foto"
+                hint="Imagem de capa do ministério. JPEG, PNG, WebP ou GIF, até 5 MB."
                 successMessage="Imagem enviada."
               />
               <Input
