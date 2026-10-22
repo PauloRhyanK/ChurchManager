@@ -1,6 +1,5 @@
 import { Transform } from 'class-transformer';
 import {
-  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -9,15 +8,14 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { RequiredText, StrictBoolean } from '../../church/dto/field-decorators';
 import { SCHEDULE_DAYS } from './create-schedule.dto';
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/;
 
 export class UpdateScheduleDto {
-  @IsOptional()
-  @IsString()
+  @RequiredText({ partial: true })
   @MaxLength(255)
-  @Transform(({ value }) => String(value ?? '').trim())
   title?: string;
 
   @IsOptional()
@@ -47,7 +45,7 @@ export class UpdateScheduleDto {
   description?: string | null;
 
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   active?: boolean;
 
   @IsOptional()

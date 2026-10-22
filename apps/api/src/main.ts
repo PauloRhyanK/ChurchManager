@@ -2,6 +2,7 @@ import dns from 'node:dns';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { VALIDATION_PIPE_OPTIONS } from './validation-options';
 
 // VPS/Docker sem IPv6 de saída: Node tentava AAAA primeiro → fetch failed para Vercel.
 dns.setDefaultResultOrder('ipv4first');
@@ -11,12 +12,7 @@ async function bootstrap() {
   // CORS: `DynamicCorsMiddleware` — admin/auth via `ADMIN_CORS_ORIGIN`; rotas públicas por origens na BD.
   app.setGlobalPrefix('api');
   app.useGlobalPipes(
-    new ValidationPipe({
-      whitelist: true,
-      forbidNonWhitelisted: true,
-      transform: true,
-      transformOptions: { enableImplicitConversion: true },
-    }),
+    new ValidationPipe(VALIDATION_PIPE_OPTIONS),
   );
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
