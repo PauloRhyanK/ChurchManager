@@ -77,11 +77,15 @@ import {
   deleteSchedule,
   fetchChurchConfig,
   updateChurchConfig,
+  toBranchBody,
+  toPastorBody,
+  toMinistryBody,
+  toScheduleBody,
   type BranchDto,
   type PastorDto,
   type MinistryDto,
   type ScheduleDto,
-  type ChurchConfigDto,
+  type ChurchConfigBody,
 } from "../api/church-api";
 
 // Ícones padrão permitidos no frontend
@@ -124,7 +128,7 @@ export default function ChurchPage() {
 
   const branchMutation = useMutation({
     mutationFn: (data: Partial<BranchDto>) =>
-      data.id ? updateBranch(data.id, data) : createBranch(data),
+      data.id ? updateBranch(data.id, toBranchBody(data)) : createBranch(toBranchBody(data)),
     onSuccess: () => {
       toast.success(editingBranch?.id ? "Filial atualizada." : "Filial criada.");
       setBranchModalOpen(false);
@@ -149,7 +153,7 @@ export default function ChurchPage() {
 
   const pastorMutation = useMutation({
     mutationFn: (data: Partial<PastorDto>) =>
-      data.id ? updatePastor(data.id, data) : createPastor(data),
+      data.id ? updatePastor(data.id, toPastorBody(data)) : createPastor(toPastorBody(data)),
     onSuccess: () => {
       toast.success(editingPastor?.id ? "Pastor atualizado." : "Pastor adicionado.");
       setPastorModalOpen(false);
@@ -174,7 +178,7 @@ export default function ChurchPage() {
 
   const ministryMutation = useMutation({
     mutationFn: (data: Partial<MinistryDto>) =>
-      data.id ? updateMinistry(data.id, data) : createMinistry(data),
+      data.id ? updateMinistry(data.id, toMinistryBody(data)) : createMinistry(toMinistryBody(data)),
     onSuccess: () => {
       toast.success(editingMinistry?.id ? "Ministério atualizado." : "Ministério criado.");
       setMinistryModalOpen(false);
@@ -199,7 +203,7 @@ export default function ChurchPage() {
 
   const scheduleMutation = useMutation({
     mutationFn: (data: Partial<ScheduleDto>) =>
-      data.id ? updateSchedule(data.id, data) : createSchedule(data),
+      data.id ? updateSchedule(data.id, toScheduleBody(data)) : createSchedule(toScheduleBody(data)),
     onSuccess: () => {
       toast.success(editingSchedule?.id ? "Agenda atualizada." : "Agenda criada.");
       setScheduleModalOpen(false);
@@ -712,7 +716,7 @@ export default function ChurchPage() {
                     onSubmit={(e) => {
                       e.preventDefault();
                       const formData = new FormData(e.currentTarget);
-                      const payload: Partial<ChurchConfigDto> = {
+                      const payload: ChurchConfigBody = {
                         phone: formData.get("phone") as string || null,
                         email: formData.get("email") as string || null,
                         address: formData.get("address") as string || null,

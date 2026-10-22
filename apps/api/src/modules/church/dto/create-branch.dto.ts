@@ -1,17 +1,16 @@
 import { Transform } from 'class-transformer';
 import {
-  IsBoolean,
   IsInt,
   IsOptional,
   IsString,
   MaxLength,
   Min,
 } from 'class-validator';
+import { RequiredText, StrictBoolean, IsHttpUrl } from './field-decorators';
 
 export class CreateBranchDto {
-  @IsString()
+  @RequiredText()
   @MaxLength(255)
-  @Transform(({ value }) => String(value ?? '').trim())
   name!: string;
 
   @IsOptional()
@@ -33,6 +32,7 @@ export class CreateBranchDto {
 
   @IsOptional()
   @IsString()
+  @IsHttpUrl()
   @MaxLength(512)
   @Transform(({ value }) => {
     const s = String(value ?? '').trim();
@@ -42,6 +42,7 @@ export class CreateBranchDto {
 
   @IsOptional()
   @IsString()
+  @IsHttpUrl()
   @MaxLength(2048)
   @Transform(({ value }) => {
     const s = String(value ?? '').trim();
@@ -50,11 +51,11 @@ export class CreateBranchDto {
   mapsUrl?: string | null;
 
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   isHeadquarters?: boolean;
 
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   active?: boolean;
 
   @IsOptional()
