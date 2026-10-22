@@ -57,6 +57,17 @@ test('dois destinos → duas chamadas com header e sem segredo na URL', async ()
   ]);
 });
 
+test('não segue redirecionamento (segredo não vai para outro host)', async () => {
+  const svc = build({
+    SITE_REVALIDATION_SECRET: SECRET,
+    SITE_REVALIDATION_TARGETS: TARGETS,
+  });
+  svc.notifyContentChanged('t1');
+  await settle();
+  assert.ok(calls.length > 0);
+  for (const c of calls) assert.equal(c.init.redirect, 'manual');
+});
+
 test('tenant sem destino não chama fetch', async () => {
   const svc = build(
     { SITE_REVALIDATION_SECRET: SECRET, SITE_REVALIDATION_TARGETS: TARGETS },
