@@ -47,3 +47,22 @@ test('mergePermissionEntries não rebaixa EDIT para VIEW', () => {
   ]);
   assert.equal(merged[PermissionModule.EVENTS], PermissionLevel.EDIT);
 });
+
+test('catálogo do backend cobre todos os módulos do enum do Prisma (incluindo CHURCH)', () => {
+  assert.deepEqual(
+    [...PERMISSION_MODULES].sort(),
+    Object.values(PermissionModule).sort(),
+  );
+});
+
+test('super-admin recebe CHURCH:EDIT', () => {
+  assert.equal(allEditPermissions()[PermissionModule.CHURCH], PermissionLevel.EDIT);
+});
+
+test('grupos existentes (sem CHURCH) continuam válidos ao mesclar', () => {
+  const merged = mergePermissionEntries([
+    { module: PermissionModule.EVENTS, level: PermissionLevel.EDIT },
+  ]);
+  assert.equal(merged[PermissionModule.CHURCH], undefined);
+  assert.equal(merged[PermissionModule.EVENTS], PermissionLevel.EDIT);
+});

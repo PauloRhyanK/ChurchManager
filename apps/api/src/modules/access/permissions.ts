@@ -11,6 +11,7 @@ export const PERMISSION_MODULES: PermissionModule[] = [
   PermissionModule.SITE,
   PermissionModule.SETTINGS,
   PermissionModule.USERS,
+  PermissionModule.CHURCH,
 ];
 
 /** Mapa de permissões efectivas de um utilizador (módulo → nível concedido). */
