@@ -159,7 +159,7 @@ export default function EventSettingsPage() {
           <CardHeader>
             <CardTitle className="text-base">Etiquetas</CardTitle>
             <CardDescription>
-              Use etiquetas para agrupar e filtrar eventos no site.
+              Use etiquetas para organizar os eventos. A primeira etiqueta aparece nos cartões do site.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -188,6 +188,8 @@ export default function EventSettingsPage() {
 
             {tagsQuery.isLoading ? (
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            ) : tagsQuery.error ? (
+              <p className="text-sm text-destructive">{getApiErrorMessage(tagsQuery.error)}</p>
             ) : tags.length === 0 ? (
               <p className="text-sm text-muted-foreground">Nenhuma etiqueta criada.</p>
             ) : (
@@ -302,6 +304,10 @@ export default function EventSettingsPage() {
 
             {fieldsQuery.isLoading ? (
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            ) : fieldsQuery.error ? (
+              <p className="text-sm text-destructive">{getApiErrorMessage(fieldsQuery.error)}</p>
+            ) : fields.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhum campo de inscrição cadastrado.</p>
             ) : (
               <Table>
                 <TableHeader>

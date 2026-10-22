@@ -43,56 +43,56 @@ export default function RegistrationsPage() {
           </p>
         </div>
 
-        {registrationsQuery.error && (
+        {registrationsQuery.error ? (
           <p className="text-sm text-destructive">{getApiErrorMessage(registrationsQuery.error)}</p>
-        )}
-
-        <Card className="border-0 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-base">Cadastros</CardTitle>
-            <CardDescription>{items.length} inscrição(ões) no total</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {registrationsQuery.isLoading ? (
-              <div className="flex items-center gap-2 py-12 text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin" />
-                A carregar…
-              </div>
-            ) : items.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhuma inscrição registada.</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Evento</TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>E-mail</TableHead>
-                    <TableHead>Telefone</TableHead>
-                    <TableHead>Data</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>
-                        <div className="font-medium">{row.event?.title ?? "—"}</div>
-                        {row.event?.date && (
-                          <div className="text-xs text-muted-foreground">
-                            {formatEventDate(row.event.date)}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>{row.name}</TableCell>
-                      <TableCell>{row.email}</TableCell>
-                      <TableCell>{row.phone ?? "—"}</TableCell>
-                      <TableCell>{formatDateTime(row.createdAt)}</TableCell>
+        ) : (
+          <Card className="border-0 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base">Cadastros</CardTitle>
+              <CardDescription>{items.length} inscrição(ões) no total</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {registrationsQuery.isLoading ? (
+                <div className="flex items-center gap-2 py-12 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  A carregar…
+                </div>
+              ) : items.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhuma inscrição registada.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Evento</TableHead>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>E-mail</TableHead>
+                      <TableHead>Telefone</TableHead>
+                      <TableHead>Data</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {items.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell>
+                          <div className="font-medium">{row.event?.title ?? "—"}</div>
+                          {row.event?.date && (
+                            <div className="text-xs text-muted-foreground">
+                              {formatEventDate(row.event.date)}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>{row.name}</TableCell>
+                        <TableCell>{row.email}</TableCell>
+                        <TableCell>{row.phone ?? "—"}</TableCell>
+                        <TableCell>{formatDateTime(row.createdAt)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </DashboardLayout>
   );

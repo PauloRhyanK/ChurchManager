@@ -94,8 +94,9 @@ export type CreateEventBody = {
   videoUrl?: string | null;
   coverImageUrl?: string | null;
   date: string;
-  timeStart?: string;
-  timeEnd?: string;
+  /** `null` grava sem horário; no PUT limpa o horário guardado. */
+  timeStart?: string | null;
+  timeEnd?: string | null;
   location?: string | null;
   imageUrl?: string | null;
   tags?: string[];

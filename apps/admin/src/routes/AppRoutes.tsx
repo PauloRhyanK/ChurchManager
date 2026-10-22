@@ -39,12 +39,16 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<Index />} />
         <Route path="/financeiro" element={<Financial />} />
-        <Route path="/eventos" element={<EventsListPage />} />
-        <Route path="/eventos/novo" element={<EventFormPage />} />
-        <Route path="/eventos/configuracoes" element={<EventSettingsPage />} />
-        <Route path="/eventos/inscricoes" element={<RegistrationsPage />} />
-        <Route path="/eventos/:id" element={<EventDetailRoutePage />} />
-        <Route path="/eventos/:id/editar" element={<EventFormPage />} />
+        <Route element={<PermissionRoute module="EVENTS" />}>
+          <Route path="/eventos" element={<EventsListPage />} />
+          <Route path="/eventos/configuracoes" element={<EventSettingsPage />} />
+          <Route path="/eventos/inscricoes" element={<RegistrationsPage />} />
+          <Route path="/eventos/:id" element={<EventDetailRoutePage />} />
+          <Route element={<PermissionRoute module="EVENTS" level="EDIT" />}>
+            <Route path="/eventos/novo" element={<EventFormPage />} />
+            <Route path="/eventos/:id/editar" element={<EventFormPage />} />
+          </Route>
+        </Route>
         <Route element={<PermissionRoute module="SITE" />}>
           <Route path="/site" element={<SitePage />} />
         </Route>

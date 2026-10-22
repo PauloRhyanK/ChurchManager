@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -17,12 +17,13 @@ import {
   createEvent,
   fetchEvent,
   updateEvent,
+  type EventDto,
 } from "@/features/events/api/tenant-events-api";
 import { EventTagsInput } from "@/features/events/components/EventTagsInput";
 import { EventLocationInput } from "@/features/events/components/EventLocationInput";
 import { ImageUploader } from "@/components/ImageUploader";
 import {
-  eventFormSchema,
+  buildEventFormSchema,
   eventFormToApiBody,
   type EventFormValues,
 } from "@/features/events/schemas/event-form-schema";
@@ -41,8 +42,11 @@ export default function EventFormPage() {
     enabled: isEdit,
   });
 
+  // Na edição a data passada é aceite: corrigir ou despublicar um evento que já aconteceu.
+  const schema = useMemo(() => buildEventFormSchema({ allowPastDate: isEdit }), [isEdit]);
+
   const form = useForm<EventFormValues>({
-    resolver: zodResolver(eventFormSchema),
+    resolver: zodResolver(schema),
     defaultValues: {
       title: "",
       shortDescription: "",
@@ -63,9 +67,14 @@ export default function EventFormPage() {
 
   const format = form.watch("format");
 
+  // O formulário só é preenchido na primeira carga do evento: um refetch
+  // (ex.: depois de trocar a capa) não pode apagar o que já foi digitado.
+  const initializedEventId = useRef<string | null>(null);
+
   useEffect(() => {
-    if (eventQuery.data) {
-      const e = eventQuery.data;
+    const e = eventQuery.data;
+    if (e && initializedEventId.current !== e.id) {
+      initializedEventId.current = e.id;
       form.reset({
         title: e.title,
         shortDescription: e.shortDescription ?? "",
@@ -93,6 +102,7 @@ export default function EventFormPage() {
     },
     onSuccess: (data) => {
       toast.success(isEdit ? "Evento actualizado." : "Evento criado.");
+      queryClient.setQueryData(["event", data.id], data);
       void queryClient.invalidateQueries({ queryKey: ["events"] });
       void queryClient.invalidateQueries({ queryKey: ["events-dashboard"] });
       navigate(isEdit ? `/eventos/${data.id}` : `/eventos/${data.id}`);
@@ -105,7 +115,10 @@ export default function EventFormPage() {
     onSuccess: (data) => {
       toast.success("Capa do evento actualizada.");
       form.setValue("coverImageUrl", data.coverImageUrl ?? "");
-      void queryClient.invalidateQueries({ queryKey: ["event", id] });
+      // Actualiza só a capa em cache: refazer o GET do evento não é preciso.
+      queryClient.setQueryData<EventDto>(["event", id], (old) =>
+        old ? { ...old, coverImageUrl: data.coverImageUrl } : old,
+      );
       void queryClient.invalidateQueries({ queryKey: ["events"] });
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
@@ -119,7 +132,7 @@ export default function EventFormPage() {
             {isEdit ? "Editar evento" : "Novo evento"}
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Campos alinhados à API admin — datas em YYYY-MM-DD, horários em HH:MM.
+            Eventos publicados aparecem no site. Rascunhos ficam visíveis só no painel.
           </p>
         </div>
 
@@ -158,7 +171,7 @@ export default function EventFormPage() {
                   <Textarea
                     id="shortDescription"
                     rows={2}
-                    placeholder="Resumo exibido nos cartões do site"
+                    placeholder="Resumo exibido nos cartões e no topo da página do evento"
                     {...form.register("shortDescription")}
                   />
                 </div>
@@ -174,7 +187,7 @@ export default function EventFormPage() {
                     <Input
                       id="date"
                       type="date"
-                      min={todayDateInputMin()}
+                      min={isEdit ? undefined : todayDateInputMin()}
                       {...form.register("date")}
                     />
                     {form.formState.errors.date && (

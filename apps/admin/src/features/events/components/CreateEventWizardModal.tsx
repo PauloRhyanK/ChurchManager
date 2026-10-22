@@ -111,7 +111,7 @@ export function CreateEventWizardModal({ open, onOpenChange }: Props) {
             <Textarea
               id="ev-short"
               rows={2}
-              placeholder="Resumo exibido nos cartões do site"
+              placeholder="Resumo exibido nos cartões e no topo da página do evento"
               {...form.register("shortDescription")}
             />
           </div>

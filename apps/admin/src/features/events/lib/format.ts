@@ -1,7 +1,8 @@
+/** Data do evento (YYYY-MM-DD, sem fuso) por extenso; formatada em UTC para não recuar um dia. */
 export function formatEventDate(date: string) {
   try {
     const [y, m, d] = date.split("-").map(Number);
-    return new Intl.DateTimeFormat("pt-BR", { dateStyle: "long" }).format(
+    return new Intl.DateTimeFormat("pt-BR", { dateStyle: "long", timeZone: "UTC" }).format(
       new Date(Date.UTC(y, m - 1, d)),
     );
   } catch {

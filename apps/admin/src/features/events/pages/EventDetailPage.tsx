@@ -33,6 +33,7 @@ import {
   formatTime,
 } from "@/features/events/lib/format";
 import { EventReportSection } from "@/features/events/components/EventReportSection";
+import { usePermissions } from "@/features/access/hooks/use-permissions";
 import { getApiErrorMessage } from "@/lib/api";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { BarChart3, Ticket, Users } from "lucide-react";
@@ -42,6 +43,11 @@ export function EventDetailPage() {
   const [searchParams] = useSearchParams();
   const initialTab = searchParams.get("tab") === "site" ? "site" : "ingressos";
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  const canEdit = can("EVENTS", "EDIT");
+  // A API exige também EDIT em ingressos (tipos) e em financeiro (links de pagamento).
+  const canEditTickets = canEdit && can("EVENT_TICKETS", "EDIT");
+  const canCreatePaymentLinks = canEdit && can("FINANCIAL", "EDIT");
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const [paymentLinkTicket, setPaymentLinkTicket] = useState<EventTicketTypeDto | null>(null);
   const [editingTicket, setEditingTicket] = useState<EventTicketTypeDto | null>(null);
@@ -146,12 +152,14 @@ export function EventDetailPage() {
             {event.location ? ` · ${event.location}` : ""}
           </p>
         </div>
-        <Button asChild variant="outline" className="gap-2 shrink-0">
-          <Link to={`/eventos/${id}/editar`}>
-            <Pencil className="h-4 w-4" />
-            Editar
-          </Link>
-        </Button>
+        {canEdit && (
+          <Button asChild variant="outline" className="gap-2 shrink-0">
+            <Link to={`/eventos/${id}/editar`}>
+              <Pencil className="h-4 w-4" />
+              Editar
+            </Link>
+          </Button>
+        )}
       </div>
 
       <Tabs defaultValue={initialTab}>
@@ -159,18 +167,20 @@ export function EventDetailPage() {
           <TabsTrigger value="ingressos">Tipos de ingresso</TabsTrigger>
           <TabsTrigger value="site">Detalhes do site</TabsTrigger>
           <TabsTrigger value="inscricoes">
-            Inscrições ({registrations.length})
+            Inscrições{registrationsQuery.data ? ` (${registrations.length})` : ""}
           </TabsTrigger>
           <TabsTrigger value="relatorio">Relatório</TabsTrigger>
         </TabsList>
 
         <TabsContent value="ingressos" className="mt-4 space-y-4">
-          <div className="flex justify-end">
-            <Button className="gap-2" onClick={openCreateTicket}>
-              <Plus className="h-4 w-4" />
-              Novo tipo
-            </Button>
-          </div>
+          {canEditTickets && (
+            <div className="flex justify-end">
+              <Button className="gap-2" onClick={openCreateTicket}>
+                <Plus className="h-4 w-4" />
+                Novo tipo
+              </Button>
+            </div>
+          )}
 
           <Card className="border-0 shadow-sm">
             <CardHeader>
@@ -182,6 +192,10 @@ export function EventDetailPage() {
             <CardContent>
               {ticketTypesQuery.isLoading ? (
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              ) : ticketTypesQuery.error ? (
+                <p className="text-sm text-destructive">
+                  {getApiErrorMessage(ticketTypesQuery.error)}
+                </p>
               ) : ticketTypes.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Nenhum tipo de ingresso configurado.</p>
               ) : (
@@ -217,43 +231,50 @@ export function EventDetailPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Link de pagamento"
-                              onClick={() => setPaymentLinkTicket(ticket)}
-                            >
-                              <Link2 className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Duplicar"
-                              disabled={duplicateTicketMutation.isPending}
-                              onClick={() => duplicateTicketMutation.mutate(ticket.id)}
-                            >
-                              <Copy className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openEditTicket(ticket)}
-                            >
-                              Editar
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="text-destructive"
-                              disabled={deleteTicketMutation.isPending}
-                              onClick={() => {
-                                if (window.confirm(`Remover «${ticket.name}»?`)) {
-                                  deleteTicketMutation.mutate(ticket.id);
-                                }
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            {canCreatePaymentLinks && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title="Link de pagamento"
+                                onClick={() => setPaymentLinkTicket(ticket)}
+                              >
+                                <Link2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {canEditTickets && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title="Duplicar"
+                                  disabled={duplicateTicketMutation.isPending}
+                                  onClick={() => duplicateTicketMutation.mutate(ticket.id)}
+                                >
+                                  <Copy className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => openEditTicket(ticket)}
+                                >
+                                  Editar
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="text-destructive"
+                                  aria-label="Remover tipo de ingresso"
+                                  disabled={deleteTicketMutation.isPending}
+                                  onClick={() => {
+                                    if (window.confirm(`Remover «${ticket.name}»?`)) {
+                                      deleteTicketMutation.mutate(ticket.id);
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -266,7 +287,7 @@ export function EventDetailPage() {
         </TabsContent>
 
         <TabsContent value="site" className="mt-4">
-          <EventSiteDetailsTab event={event} />
+          <EventSiteDetailsTab key={event.id} event={event} canEdit={canEdit} />
         </TabsContent>
 
         <TabsContent value="inscricoes" className="mt-4">
@@ -280,6 +301,10 @@ export function EventDetailPage() {
             <CardContent>
               {registrationsQuery.isLoading ? (
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              ) : registrationsQuery.error ? (
+                <p className="text-sm text-destructive">
+                  {getApiErrorMessage(registrationsQuery.error)}
+                </p>
               ) : registrations.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Nenhuma inscrição neste evento.</p>
               ) : (
@@ -311,6 +336,8 @@ export function EventDetailPage() {
         <TabsContent value="relatorio" className="mt-4 space-y-4">
           {reportQuery.isLoading ? (
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          ) : reportQuery.error ? (
+            <p className="text-sm text-destructive">{getApiErrorMessage(reportQuery.error)}</p>
           ) : report ? (
             <>
               <div className="grid gap-4 sm:grid-cols-3">
