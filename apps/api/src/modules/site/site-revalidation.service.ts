@@ -91,6 +91,7 @@ export class SiteRevalidationService {
       const res = await fetch(`${origin}${REVALIDATE_PATH}`, {
         method: 'GET',
         headers: { 'x-revalidation-secret': secret },
+        redirect: 'manual',
         signal: AbortSignal.timeout(REVALIDATE_TIMEOUT_MS),
       });
       if (!res.ok) {
