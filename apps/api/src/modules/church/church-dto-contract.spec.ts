@@ -183,6 +183,38 @@ for (const [name, Dto, field] of URL_FIELDS) {
   });
 }
 
+const IMAGE_DTOS: Array<[string, Type<unknown>]> = [
+  ['CreateBranchDto', CreateBranchDto],
+  ['UpdateBranchDto', UpdateBranchDto],
+  ['CreatePastorDto', CreatePastorDto],
+  ['UpdatePastorDto', UpdatePastorDto],
+  ['CreateMinistryDto', CreateMinistryDto],
+  ['UpdateMinistryDto', UpdateMinistryDto],
+];
+
+for (const [name, Dto] of IMAGE_DTOS) {
+  test(`${name}.image: aceita caminho do próprio site (dado legado)`, async () => {
+    for (const ok of ['/prRobsonJ.jpg', '/img/sede-2024.webp']) {
+      assert.equal(await messages(Dto, { name: 'x', image: ok }), null, ok);
+    }
+    // '/\host' vira '//host' no navegador; espaço não é caminho válido.
+    for (const bad of ['//a.com/x.png', '/\\a.com/x.png', '/a b.jpg']) {
+      const msgs = await messages(Dto, { name: 'x', image: bad });
+      assert.ok(msgs, `${bad} deveria ser recusada`);
+      assert.ok(msgs.some((m) => m.startsWith('image deve ')), msgs.join(' | '));
+    }
+  });
+}
+
+test('editar pastor migrado sem trocar a imagem relativa não responde 400', async () => {
+  const body = { name: 'Pr. Robson Jose Maria', image: '/prRobsonJ.jpg', active: true, sortOrder: 3 };
+  assert.equal(await messages(UpdatePastorDto, body), null);
+});
+
+test('mapsUrl continua exigindo http/https (caminho relativo recusado)', async () => {
+  assert.ok(await messages(UpdateBranchDto, { mapsUrl: '/mapa' }));
+});
+
 test('URL vazia vira null', async () => {
   assert.equal((await parse(UpdateBranchDto, { mapsUrl: '  ' })).mapsUrl, null);
 });
