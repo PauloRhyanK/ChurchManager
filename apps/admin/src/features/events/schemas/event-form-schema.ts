@@ -82,7 +82,7 @@ export const eventBasicSchema = eventFormBaseSchema
         message: "Informe o link de transmissão",
       });
     }
-    refineEventDateAndTime(values, ctx);
+    refineEventDateAndTime(values as { date: string; timeStart?: string; timeEnd?: string }, ctx);
   });
 
 export type EventBasicValues = z.infer<typeof eventBasicSchema>;
