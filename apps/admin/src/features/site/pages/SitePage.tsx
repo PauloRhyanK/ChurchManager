@@ -85,13 +85,16 @@ export default function SitePage() {
           <Info className="h-4 w-4" />
           <AlertTitle>Conteúdo fora desta página</AlertTitle>
           <AlertDescription>
-            A secção <strong>Eventos</strong> na home vem do módulo{" "}
+            Os <strong>Eventos</strong> são gerenciados no módulo{" "}
             <Link to="/eventos" className="underline font-medium">
               Eventos
+            </Link>
+            . Os horários de culto ficam em{" "}
+            <Link to="/igreja" className="underline font-medium">
+              Igreja
             </Link>{" "}
-            (publicados, com data futura). A <strong>Programação</strong> vem da
-            API de horários — ainda não há ecrã no painel para editá-la; contacte
-            o suporte técnico se precisar de alterações.
+            → Agenda Semanal; filiais, pastores, ministérios, ofertório e
+            contatos também são gerenciados em Igreja.
           </AlertDescription>
         </Alert>
 

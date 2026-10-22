@@ -1236,8 +1236,7 @@ export default function ChurchPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir {deleteTarget?.what}?</AlertDialogTitle>
             <AlertDialogDescription>
-              "{deleteTarget?.name}" será removido e deixará de aparecer no site. Esta ação não
-              pode ser desfeita.
+              "{deleteTarget?.name}" será removido. Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
