@@ -16,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { createPlatformTenant, fetchPlatformTenants } from "@/features/platform/api";
+import { createPlatformTenant, fetchPlatformTenants, type CreatePlatformTenantBody } from "@/features/platform/api";
 import {
   createPlatformTenantSchema,
   type CreatePlatformTenantFormValues,
@@ -88,7 +88,7 @@ export default function PlatformChurches() {
           <CardContent>
             <form
               className="grid gap-4 sm:grid-cols-2"
-              onSubmit={form.handleSubmit((values) => createMutation.mutate(values))}
+              onSubmit={form.handleSubmit((values) => createMutation.mutate(values as CreatePlatformTenantBody))}
               noValidate
             >
               <div className="space-y-2 sm:col-span-2">
