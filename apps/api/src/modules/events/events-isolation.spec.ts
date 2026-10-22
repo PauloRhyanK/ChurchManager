@@ -115,7 +115,7 @@ test('isolation: SchedulesService.listForTenant filtra por tenantId', async () =
       },
     },
   };
-  const service = new SchedulesService(prisma as never);
+  const service = new SchedulesService(prisma as never, { notifyContentChanged: () => {} } as never);
   await service.listForTenant(TENANT_A, true);
   assert.deepEqual(capture.where, { tenantId: TENANT_A, active: true });
 });
