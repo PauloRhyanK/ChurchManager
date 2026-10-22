@@ -257,7 +257,9 @@ Eventos **publicados** do tenant.
 
 | Query | Tipo | Descrição |
 |-------|------|-----------|
-| `upcomingOnly` | `true` \| `1` | Se presente, só eventos com `date >= hoje` (UTC) |
+| `upcomingOnly` | `true` \| `1` | Se presente, só eventos com `date >= hoje`, com "hoje" no fuso `America/Sao_Paulo` (o evento do dia continua listado até a meia-noite de Brasília) |
+
+Ordenação: `date` ascendente e, no mesmo dia, `timeStart` ascendente.
 
 **Resposta `200`**
 
@@ -270,7 +272,7 @@ Eventos **publicados** do tenant.
 
 ### `GET /api/public/tenants/:slug/events/published`
 
-Mesmo formato. Lista **todos** os publicados (inclui passados), ordenados por `date` ascendente. Útil para secção “destaques” na home.
+Mesmo formato. Lista **todos** os publicados (inclui passados), ordenados por `date` e depois `timeStart` (ascendentes). Útil para secção “destaques” na home.
 
 ### Erros
 
@@ -309,6 +311,8 @@ Só devolve eventos **publicados**. Rascunhos respondem `404`.
 ### `GET /api/public/tenants/:slug/events/:eventId/tickets`
 
 Lista tipos **activos**, com `visibility: "PUBLIC"` e **em janela de venda** (`salesOpensAt` / `salesClosesAt`).
+
+Ingressos **esgotados** dentro da janela continuam na lista, com `isSoldOut: true` e `quantityRemaining: 0`: o site deve mostrá-los como esgotados e não abrir o checkout nem a inscrição. Fora da janela de venda o ingresso não aparece.
 
 > Ingressos `PRIVATE` **não** aparecem aqui — só via [secção 5.1](#51-ingresso-por-id-inclui-privados) (link directo).
 
@@ -554,14 +558,24 @@ Para eventos sem venda de ingressos (formulário “Quero participar”).
 }
 ```
 
+**Regras**
+
+- O evento tem de estar **publicado** (rascunho responde `404`, como inexistente) e não pode ser **passado**: `date` a partir de hoje no fuso do evento (`timezone`, por padrão `America/Sao_Paulo`).
+- Com `ticketTypeId`, o ingresso tem de estar **ativo**, **em janela de venda** e ser **gratuito** (`priceCents + feeCents = 0`; ingresso pago usa o [checkout](#6-checkout-pagamento)).
+- Com `ticketTypeId`, a inscrição consome uma vaga do ingresso (`quantitySold + 1`) na mesma transação; sem vaga responde `409`.
+
 **Erros**
 
 | HTTP | Quando |
 |------|--------|
+| `400` | Evento passado (`As inscrições para este evento foram encerradas`) |
+| `400` | Ingresso fora da janela de venda (`Este ingresso não está disponível para inscrição`) |
+| `400` | Ingresso pago (`Este ingresso é pago. Use o checkout para comprar.`) |
 | `400` | `ticketTypeId` com `allowGuestRegistration: false` e sem `userId` (`É necessário iniciar sessão para se inscrever neste ingresso`) |
 | `400` | Campo obrigatório em falta em `fieldValues` (`Campo obrigatório: <label>`) |
+| `409` | Ingresso esgotado (`Ingressos esgotados`), inclusive quando a última vaga foi ocupada por outra inscrição ao mesmo tempo |
 | `409` | E-mail já inscrito neste evento |
-| `404` | Evento inexistente, ou `ticketTypeId` inexistente neste evento |
+| `404` | Evento inexistente ou não publicado (`Evento não encontrado`), ou `ticketTypeId` inexistente neste evento ou inativo (`Tipo de ingresso não encontrado`) |
 
 `ticketTypeId` é opcional, mas é o que activa a validação de campos personalizados e o que devolve `communityLink` na resposta. Sem ele, `communityLink` vem `null` e `fieldValues` é ignorado.
 
@@ -623,6 +637,8 @@ Se omitir `email` e `userId`, devolve `{ "registered": false }`.
 
 Cultos / horários recorrentes (módulo editorial, não confundir com eventos pontuais).
 
+Ordenação: `sortOrder` ascendente, depois dia da semana (Domingo → Sábado) e `timeStart`.
+
 **Resposta `200`**
 
 ```json
@@ -661,7 +677,7 @@ Formato típico Nest (validação):
 |------|---------------------------|
 | `400` | Body inválido, regras de negócio (stock, CPF, quantidade, campos obrigatórios, forma de pagamento) |
 | `404` | Tenant, evento, pedido ou bilhete não encontrado |
-| `409` | Stock insuficiente no checkout, e-mail já inscrito, ou `idempotencyKey` inutilizável |
+| `409` | Stock insuficiente no checkout, ingresso esgotado na inscrição, e-mail já inscrito, ou `idempotencyKey` inutilizável |
 | `429` | Rate limit global (retry com backoff) |
 | `500` | Asaas não configurado no tenant |
 

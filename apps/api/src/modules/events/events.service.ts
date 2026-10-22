@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { SiteRevalidationService } from '../site/site-revalidation.service';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { EventTagsService } from './event-tags.service';
@@ -9,7 +10,7 @@ import {
   EventTagDto,
   parseDateOnly,
   parseTimeOnly,
-  startOfTodayUtc,
+  startOfTodayInTimeZone,
   toEventDto,
 } from './event-format.util';
 
@@ -56,6 +57,7 @@ export class EventsService {
     private readonly prisma: PrismaService,
     private readonly tags: EventTagsService,
     private readonly storage: StorageService,
+    private readonly siteRevalidation: SiteRevalidationService,
   ) {}
 
   async listForTenant(tenantId: string, options: ListEventsOptions = {}) {
@@ -64,11 +66,11 @@ export class EventsService {
       where.published = true;
     }
     if (options.upcomingOnly) {
-      where.date = { gte: startOfTodayUtc() };
+      where.date = { gte: startOfTodayInTimeZone() };
     }
     const rows = await this.prisma.event.findMany({
       where,
-      orderBy: { date: 'asc' },
+      orderBy: [{ date: 'asc' }, { timeStart: 'asc' }],
       ...eventWithTags,
     });
     return rows.map((row) => toEventDto(row, mapTags(row)));
@@ -149,6 +151,7 @@ export class EventsService {
       }
       return created.id;
     });
+    this.siteRevalidation.notifyContentChanged(tenantId);
     return this.getForTenant(tenantId, id);
   }
 
@@ -206,6 +209,7 @@ export class EventsService {
         await this.tags.setEventTags(tx, tenantId, id, dto.tags);
       }
     });
+    this.siteRevalidation.notifyContentChanged(tenantId);
 
     if (nextCoverImageUrl !== undefined) {
       const urlsToDelete = previousCoverUrls.filter(
@@ -228,6 +232,7 @@ export class EventsService {
       throw new NotFoundException('Evento não encontrado');
     }
     await this.prisma.event.delete({ where: { id } });
+    this.siteRevalidation.notifyContentChanged(tenantId);
     return { ok: true };
   }
 }

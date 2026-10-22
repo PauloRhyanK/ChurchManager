@@ -133,6 +133,28 @@ export function formatEventDateTimePtBr(
   return `${day}, ${h}:${min}`;
 }
 
+/** Fuso dos eventos quando não há outro (igual ao default de `Event.timezone`). */
+export const DEFAULT_EVENT_TIMEZONE = 'America/Sao_Paulo';
+
+/**
+ * "Hoje" no fuso indicado, como valor date-only (meia-noite UTC do dia civil
+ * local), comparável com `Event.date` (@db.Date) — ver `parseDateOnly`.
+ */
+export function startOfTodayInTimeZone(
+  timeZone = DEFAULT_EVENT_TIMEZONE,
+  now = new Date(),
+): Date {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const part = (type: 'year' | 'month' | 'day') =>
+    Number(parts.find((p) => p.type === type)?.value);
+  return new Date(Date.UTC(part('year'), part('month') - 1, part('day')));
+}
+
 /** Início do dia UTC para filtro date >= hoje. */
 export function startOfTodayUtc(): Date {
   const now = new Date();
