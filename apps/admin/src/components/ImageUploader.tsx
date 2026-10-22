@@ -1,9 +1,36 @@
 import { useState, useRef, DragEvent, ChangeEvent } from "react";
 import { ImagePlus, Loader2, Trash2, UploadCloud } from "lucide-react";
+import { isAxiosError } from "axios";
 import { toast } from "sonner";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
+
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+export const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+/** Mesma regra da API: tipo aceito e até 5 MB. Devolve a mensagem de erro, ou null se válido. */
+export function validateImageFile(file: { type: string; size: number }): string | null {
+  if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+    return "Formato não aceito. Envie uma imagem JPEG, PNG, WebP ou GIF.";
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    return "A imagem excede o limite de 5 MB.";
+  }
+  return null;
+}
+
+/** As mensagens de upload da API são em pt-BR e seguras; as demais seguem o padrão. */
+function uploadErrorMessage(err: unknown): string {
+  if (isAxiosError(err)) {
+    const status = err.response?.status;
+    const message = (err.response?.data as { message?: unknown } | undefined)?.message;
+    if (typeof message === "string" && (status === 400 || status === 413 || status === 500 || status === 503)) {
+      return message;
+    }
+  }
+  return getApiErrorMessage(err);
+}
 
 interface ImageUploaderProps {
   value: string | null | undefined;
@@ -13,8 +40,8 @@ interface ImageUploaderProps {
   uploadPath?: string;
   /** Texto principal da zona de largada. */
   prompt?: string;
-  /** Texto de apoio por baixo do prompt. */
-  hint?: string;
+  /** Dica por contexto (proporção, uso). Obrigatória: cada tela diz o que serve para ela. */
+  hint: string;
   successMessage?: string;
 }
 
@@ -23,17 +50,18 @@ export function ImageUploader({
   onChange,
   disabled,
   uploadPath = "/admin/tenants/me/events/upload-cover",
-  prompt = "Arraste ou clique para carregar a capa do evento",
-  hint = "Proporção recomendada de 16:9 (ex: 1920x1080)",
-  successMessage = "Imagem de capa carregada com sucesso.",
+  prompt = "Arraste ou clique para enviar a capa do evento",
+  hint,
+  successMessage = "Imagem enviada.",
 }: ImageUploaderProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleUpload = async (file: File) => {
-    if (!file.type.startsWith("image/")) {
-      toast.error("O ficheiro selecionado não é uma imagem.");
+    const invalid = validateImageFile(file);
+    if (invalid) {
+      toast.error(invalid);
       return;
     }
 
@@ -52,9 +80,10 @@ export function ImageUploader({
       onChange(response.data.url);
       toast.success(successMessage);
     } catch (err) {
-      toast.error(getApiErrorMessage(err));
+      toast.error(uploadErrorMessage(err));
     } finally {
       setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -147,7 +176,7 @@ export function ImageUploader({
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
-            accept="image/*"
+            accept={ACCEPTED_IMAGE_TYPES.join(",")}
             className="hidden"
             disabled={disabled || isUploading}
           />
@@ -156,7 +185,7 @@ export function ImageUploader({
             <div className="flex flex-col items-center gap-2">
               <Loader2 className="h-10 w-10 animate-spin text-primary" />
               <p className="text-sm font-medium text-muted-foreground animate-pulse">
-                A enviar imagem...
+                Enviando imagem...
               </p>
             </div>
           ) : (

@@ -1,7 +1,39 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  PayloadTooLargeException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
-import { extname } from 'path';
+
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+export const IMAGE_TOO_LARGE_MESSAGE = 'A imagem excede o limite de 5 MB.';
+
+export interface DetectedImageType {
+  mime: string;
+  extension: string;
+}
+
+/** Detecta JPEG, PNG, WebP e GIF pela assinatura dos primeiros bytes. */
+export function detectImageType(buf: Buffer): DetectedImageType | null {
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) {
+    return { mime: 'image/jpeg', extension: '.jpg' };
+  }
+  if (buf.length >= 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return { mime: 'image/png', extension: '.png' };
+  }
+  if (buf.length >= 6) {
+    const head = buf.subarray(0, 6).toString('latin1');
+    if (head === 'GIF87a' || head === 'GIF89a') return { mime: 'image/gif', extension: '.gif' };
+  }
+  if (buf.length >= 12 && buf.subarray(0, 4).toString('latin1') === 'RIFF' && buf.subarray(8, 12).toString('latin1') === 'WEBP') {
+    return { mime: 'image/webp', extension: '.webp' };
+  }
+  return null;
+}
 
 @Injectable()
 export class StorageService {
@@ -12,6 +44,9 @@ export class StorageService {
     // Inicializamos o cliente S3 apontando para o Cloudflare R2
     this.s3Client = new S3Client({
       region: 'auto', // O R2 exige que a região seja sempre 'auto'
+      // SDKs recentes enviam checksums por padrão, que o R2 pode recusar.
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
       endpoint: process.env.R2_ENDPOINT,
       credentials: {
         accessKeyId: process.env.R2_ACCESS_KEY_ID as string,
@@ -21,50 +56,68 @@ export class StorageService {
   }
 
   /**
-   * Faz o upload de um ficheiro para o Cloudflare R2 e devolve o URL público.
-   * @param fileBuffer O buffer do ficheiro (vindo do Multer/Request)
-   * @param originalName O nome original do ficheiro (ex: 'foto.jpg')
-   * @param folder Uma pasta opcional para organizar (ex: 'tenants/logos')
-   * @returns O URL público completo do ficheiro
+   * Valida e envia uma imagem para o R2 e devolve o URL público.
+   * O tipo vem dos bytes iniciais (nunca do nome nem do mimetype do cliente) e
+   * define tanto o ContentType quanto a extensão da chave.
+   * Detalhes internos (bucket, endpoint, variáveis) só vão para o log.
    */
-  async uploadFile(fileBuffer: Buffer, originalName: string, folder: string = 'general'): Promise<string> {
-    try {
-      // 1. Gerar um nome de ficheiro único para evitar colisões (ex: pasta/uuid-nome.jpg)
-      const extension = extname(originalName).toLowerCase();
-      const uniqueFileName = `${folder}/${randomUUID()}${extension}`;
-
-      // 2. Determinar o Content-Type correto
-      const mimeType = this.getMimeType(extension);
-
-      // 3. Preparar o comando de Upload
-      const command = new PutObjectCommand({
-        Bucket: process.env.R2_BUCKET_NAME,
-        Key: uniqueFileName,
-        Body: fileBuffer,
-        ContentType: mimeType,
-      });
-
-      // 4. Enviar para a Nuvem
-      await this.s3Client.send(command);
-
-      this.logger.log(`Ficheiro uploaded com sucesso: ${uniqueFileName}`);
-
-      // 5. Construir e devolver o URL público
-      const publicBaseUrl = process.env.R2_PUBLIC_URL;
-      if (!publicBaseUrl) {
-        throw new Error('R2_PUBLIC_URL não está configurada.');
-      }
-
-      // Remove a barra final do URL base se existir, para evitar "//"
-      const cleanBaseUrl = publicBaseUrl.endsWith('/') ? publicBaseUrl.slice(0, -1) : publicBaseUrl;
-
-      return `${cleanBaseUrl}/${uniqueFileName}`;
-
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Falha no upload para o R2: ${msg}`);
-      throw new InternalServerErrorException(`Não foi possível fazer o upload da imagem: ${msg}`);
+  async uploadImage(fileBuffer: Buffer | undefined, folder: string): Promise<string> {
+    if (!fileBuffer || fileBuffer.length === 0) {
+      throw new BadRequestException('Arquivo não enviado.');
     }
+    if (fileBuffer.length > MAX_IMAGE_BYTES) {
+      throw new PayloadTooLargeException(IMAGE_TOO_LARGE_MESSAGE);
+    }
+    const type = detectImageType(fileBuffer);
+    if (!type) {
+      throw new BadRequestException('Formato não aceito. Envie uma imagem JPEG, PNG, WebP ou GIF.');
+    }
+
+    const config = this.readConfig();
+    const key = `${folder}/${randomUUID()}${type.extension}`;
+
+    try {
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: config.bucket,
+          Key: key,
+          Body: fileBuffer,
+          ContentType: type.mime,
+        }),
+      );
+    } catch (error) {
+      const e = error as { name?: string; code?: string; $metadata?: { httpStatusCode?: number; requestId?: string } };
+      this.logger.error(
+        `Falha no upload para o R2: ${JSON.stringify({
+          code: e?.name ?? e?.code ?? 'desconhecido',
+          httpStatus: e?.$metadata?.httpStatusCode,
+          requestId: e?.$metadata?.requestId,
+        })}`,
+      );
+      throw new InternalServerErrorException('Não foi possível enviar a imagem. Tente novamente em instantes.');
+    }
+
+    this.logger.log(`Imagem enviada: ${key}`);
+    return `${config.publicBaseUrl}/${key}`;
+  }
+
+  /** Confere a configuração do R2 antes de qualquer envio. */
+  private readConfig(): { bucket: string; publicBaseUrl: string } {
+    const missing = [
+      'R2_ENDPOINT',
+      'R2_BUCKET_NAME',
+      'R2_ACCESS_KEY_ID',
+      'R2_SECRET_ACCESS_KEY',
+      'R2_PUBLIC_URL',
+    ].filter((name) => !process.env[name]?.trim());
+    if (missing.length > 0) {
+      this.logger.error(`Armazenamento de imagens sem configuração. Variáveis ausentes: ${missing.join(', ')}`);
+      throw new ServiceUnavailableException('Armazenamento de imagens indisponível.');
+    }
+    return {
+      bucket: process.env.R2_BUCKET_NAME as string,
+      publicBaseUrl: (process.env.R2_PUBLIC_URL as string).trim().replace(/\/+$/, ''),
+    };
   }
 
   /**
@@ -99,21 +152,5 @@ export class StorageService {
     } catch (error) {
       this.logger.warn(`Falha ao remover ficheiro do R2 (${key}): ${error}`);
     }
-  }
-
-  /**
-   * Helper simples para mapear a extensão para o MimeType correto.
-   * Necessário para o browser saber como renderizar a imagem.
-   */
-  private getMimeType(extension: string): string {
-    const mimeTypes: Record<string, string> = {
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.png': 'image/png',
-      '.webp': 'image/webp',
-      '.svg': 'image/svg+xml',
-      '.pdf': 'application/pdf',
-    };
-    return mimeTypes[extension] || 'application/octet-stream';
   }
 }

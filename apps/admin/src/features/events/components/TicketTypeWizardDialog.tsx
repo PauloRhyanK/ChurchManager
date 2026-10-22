@@ -257,7 +257,7 @@ export function TicketTypeWizardDialog({
         allowGuestRegistration: values.allowGuestRegistration,
         communityLink: values.communityLink?.trim() || null,
         allowedBillingTypes: isFreeTicketPrice(values.priceInput)
-          ? ["UNDEFINED"]
+          ? ["UNDEFINED" as const]
           : values.allowedBillingTypes,
         maxInstallments: values.maxInstallments?.trim()
           ? Number(values.maxInstallments)

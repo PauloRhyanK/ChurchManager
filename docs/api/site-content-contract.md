@@ -1,28 +1,30 @@
 # Contrato público — Conteúdo do site (`site-content`)
 
 Conteúdo institucional editável no painel (**Gestão do Site**, `/site`) e consumido pelo site público.
-Substitui o que hoje está hardcoded em `src/constants.tsx` e nos componentes de secção do repositório do site.
 
 > **Estado:** implementado na API (`SiteModule`). O site público consome este endpoint.
 
 ---
 
-## Alinhamento com o site (2026)
+## Fonte de cada dado
 
-O site **não renderiza** todos os campos do JSON. O painel **Gestão do Site** foi alinhado ao que aparece no site:
+O endpoint monta a resposta a partir de três origens. Editar o dado na origem errada não tem efeito.
 
-| Campo / secção | No site | No painel |
-|----------------|---------|-----------|
-| `churches.items[].address` | **Crítico** — mapa embed + texto em `/igrejas` | Obrigatório para itens visíveis (`active !== false`) |
-| `churches.items[].pastor` | Não exibido | Removido do formulário; pode existir em dados antigos até nova gravação |
-| `churches.items[].mapsUrl` | Só botão «Como chegar» externo | Opcional |
-| `pastors.items[]` | Só `name` + `image` em `/time-pastoral` | Formulário só com nome, foto e visibilidade |
-| `pastors.items[].role`, `.location`, `.church` | Não exibidos | Removidos do formulário |
-| `visit` | Secção removida da home atual | Continua editável (dados na API) |
-| **Eventos na home** | `GET .../events?upcomingOnly=true` | Módulo **Eventos** do painel, não esta API |
-| **Programação na home** | `GET .../schedules` | Sem ecrã no painel (só API) |
+| Dado publicado | Fonte oficial | Onde se edita no painel |
+|---|---|---|
+| `contact.phone`, `.email`, `.address`, `.youtubeUrl`, `.instagramUrl`, `.facebookUrl` | `ChurchConfig` | Igreja → Ofertório, Redes Sociais e Contatos |
+| `giving.pixKey`, `.bankName`, `.bankCode`, `.agency`, `.account`, `.holderName`, `.holderDocument` | `ChurchConfig` | idem |
+| `churches.items[]` (inclui `mapsUrl` da sede) | tabela de filiais (`ChurchBranch`) | Igreja → Filiais |
+| `pastors.items[]` | tabela `Pastor` | Igreja → Pastores |
+| `ministries.items[]` | tabela `Ministry` | Igreja → Ministérios |
+| Horários de culto | recurso `schedules` (`GET /api/public/tenants/:slug/schedules`), **fora** deste endpoint | Igreja → Agenda Semanal |
+| Demais campos (`mission.*`, `celulas.*`, `visit.*`, `youtube.*`, cabeçalhos de `churches`/`pastors`/`giving`, `contact.tagline`/`copyright`) | tabela `site_content` (JSON por chave) mesclada sobre os defaults do registry | Gestão do Site (`/site`) |
 
----
+Regras de precedência:
+
+- Quando o tenant **já tem** registro de `ChurchConfig`, `contact.*` e `giving.*` vêm só dele. Campo limpo (`null`) sai como `""`; **nunca** é substituído por valor antigo do JSON legado de `site_content`.
+- Só enquanto o tenant não tem `ChurchConfig` é que o valor do JSON legado/defaults é usado.
+- `visit.hours` e `visit.address` são texto livre da seção Visite-nos; não são fonte oficial de horários nem de endereço.
 
 ## Endpoint
 
@@ -48,37 +50,37 @@ Sem autenticação. Devolve **todas** as secções num único pedido.
 }
 ```
 
-### Três garantias que simplificam o consumo
+### Garantias do formato
 
-1. **As 9 chaves existem sempre.** Uma secção nunca editada devolve o conteúdo inicial (o texto que está hoje no site). Não é preciso verificar `undefined` ao nível da secção.
-2. **Todos os campos de uma secção existem sempre.** O valor gravado é mesclado por cima dos defaults, portanto um campo acrescentado à API depois da última edição aparece preenchido, não em falta.
-3. **As listas já vêm filtradas.** Itens com `active: false` são removidos nesta rota (só aparecem no painel). O campo `active` continua no payload.
+1. **As 9 chaves existem sempre.** Uma secção de texto nunca editada devolve os defaults do registry. Não é preciso verificar `undefined` ao nível da secção.
+2. **Todos os campos de uma secção existem sempre.** O valor gravado é mesclado por cima dos defaults, portanto um campo acrescentado à API depois da última edição aparece preenchido, não em falta. Campos de `ChurchConfig`, filiais, pastores e ministérios não têm default: sem dado saem `""`; as listas saem `[]`.
+3. **Listas de tabelas só trazem itens ativos.** Filiais, pastores e ministérios com `active = false` não aparecem nesta rota (só no painel). Em listas do JSON de `site_content` (ex.: `celulas.benefits`), itens com `active: false` também são removidos. O campo `active` das listas de tabela continua no payload (sempre `true`).
+4. **Ordenação.** Filiais: sede (`isHeadquarters`) primeiro, depois `sortOrder` crescente, depois `name`. Pastores e ministérios: `sortOrder` crescente, depois `name`. O próprio `sortOrder` não é publicado.
+5. **Nada interno vaza.** Nenhum objeto da resposta contém `id`, `tenantId`, `createdAt`, `updatedAt` nem `sortOrder` (coberto por teste).
 
-**O que não é garantido:** strings podem vir **vazias** (`""`). É o caso de `giving.account` e `giving.holderDocument`, que estão por preencher de propósito (ver [Pendências](#pendências)). Trate `""` como "não mostrar esta linha", não como erro.
+Todos os campos acima são `string` (ou `boolean` em `isHeadquarters`/`active`). Strings podem vir **vazias**.
+
+**Strings vazias:** é o caso de `giving.account` e `giving.holderDocument`, que estão por preencher de propósito (ver [Pendências](#pendências)). Trate `""` como "não mostrar esta linha", não como erro.
 
 ---
 
 ## Campos por secção
 
 ### `mission` — Missão / Sobre
-Substitui `MissionSection.tsx`.
-
 | Campo | Tipo | Conteúdo inicial |
 |-------|------|------------------|
 | `badge` | string | `Nossa Missão` |
 | `titlePart1` | string | `O mesmo povo.` |
-| `titleHighlight` | string | `A mesma fé.` — renderizada a verde/itálico |
+| `titleHighlight` | string | `A mesma fé.` |
 | `titlePart2` | string | `Um nome novo.` |
 | `paragraph1` | string | parágrafo de abertura |
 | `paragraph2` | string | parágrafo de compromisso |
 | `quote` | string | `Paraíso é a casa de Deus...` |
 | `signature` | string | `Igreja Paraíso — Casa de Deus. Minha família.` |
 
-> O título é servido em 3 partes porque a parte do meio tem estilo próprio. O `<strong>`/`<em>` que hoje existe dentro dos parágrafos **não** é representado — o texto vem plano. Se a ênfase inline importar, aplique-a no componente ou peça um campo dedicado.
+> O título é servido em 3 partes. Os parágrafos são texto plano (sem marcação inline).
 
 ### `celulas` — Células
-Substitui `CelulasSection.tsx`.
-
 | Campo | Tipo | Notas |
 |-------|------|-------|
 | `badge`, `titlePart1`, `titleHighlight`, `titlePart2` | string | mesmo padrão de `mission` |
@@ -90,7 +92,7 @@ Substitui `CelulasSection.tsx`.
 | `ctaUrl` | string | `/membros` |
 
 ### `visit` — Venha nos visitar
-Conteúdo institucional de endereço/horários. **A home atual do site já não inclui este bloco**; a chave continua na API para compatibilidade.
+Texto livre de endereço e horários. Não é fonte oficial de horários (ver [Fonte de cada dado](#fonte-de-cada-dado)).
 
 | Campo | Tipo | Notas |
 |-------|------|-------|
@@ -101,8 +103,6 @@ Conteúdo institucional de endereço/horários. **A home atual do site já não 
 | `mapsUrl` | string | link "Como chegar" |
 
 ### `churches` — Igrejas & Missões
-Home (bloco missões) e página **Nossas Igrejas** (`/igrejas`).
-
 Cabeçalho: `badge`, `titlePart1`, `titleHighlight`, `intro`.
 
 `items[]`:
@@ -110,37 +110,32 @@ Cabeçalho: `badge`, `titlePart1`, `titleHighlight`, `intro`.
 | Campo | Tipo | Notas |
 |-------|------|-------|
 | `name` | string | obrigatório |
-| `location` | string | cidade; fallback se `address` vazio no site |
-| `address` | string | **obrigatório no painel** para itens visíveis — endereço geocodável para mapa embed |
-| `pastor` | string | legado — **não exibido no site**; pode vir em JSON antigo |
-| `image` | string | URL absoluto ou caminho relativo (`/pastor.jpg`) |
-| `mapsUrl` | string | botão externo «Como chegar»; mapa embed usa `address` |
-| `isHeadquarters` | boolean | **use isto para identificar a sede**, não a posição no array |
-| `active` | boolean | sempre `true` nesta rota pública |
+| `location` | string | cidade |
+| `address` | string | endereço completo |
+| `image` | string | URL absoluto ou caminho relativo; `""` se não houver |
+| `mapsUrl` | string | link do Google Maps; `""` se não houver |
+| `isHeadquarters` | boolean | identifica a sede (não a posição no array) |
+| `active` | boolean | sempre `true` nesta rota |
+
+Não existe campo `pastor` em filiais.
 
 ### `pastors` — Time Pastoral
-Página `/time-pastoral` — grid **só nome e foto**.
-
 Cabeçalho: `badge`, `titlePart1`, `titleHighlight`, `intro`.
 
 `items[]`: `name` (obrigatório), `image`, `active`.
 
-Campos legados (`role`, `location`, `church`) podem existir em gravações antigas mas **não são editados no painel** nem renderizados no site.
+Pastores não têm outros campos (`role`, `location`, `church` não existem).
 
 ### `ministries` — Ministérios
-Substitui `MINISTRIES`. Só `items[]`: `name` (obrigatório), `description`, `icon`, `image`, `active`.
+Só `items[]`: `name` (obrigatório), `description`, `icon`, `image`, `active`. `icon` é **texto livre** (até 64 caracteres, `""` se vazio); não é validado contra a lista de ícones.
 
 ### `giving` — Ofertório
-Substitui os dados hardcoded em `OfertorioSection.tsx`.
-
-`badge`, `titlePart1`, `titleHighlight`, `titlePart2`, `intro`, `pixKey`, `bankName`, `bankCode`, `agency`, `account`, `holderName`, `holderDocument`.
+`badge`, `titlePart1`, `titleHighlight`, `titlePart2`, `intro` (JSON), depois `pixKey`, `bankName`, `bankCode`, `agency`, `account`, `holderName`, `holderDocument` (`ChurchConfig`).
 
 ⚠️ `account` e `holderDocument` vêm **vazios**. Ver [Pendências](#pendências).
 
 ### `contact` — Contato & Rodapé
-Substitui os dados de `Footer.tsx` e `SOCIAL_LINKS`.
-
-`phone`, `email`, `address`, `tagline`, `copyright`, `youtubeUrl`, `instagramUrl`, `facebookUrl`.
+Ordem das chaves: `tagline`, `copyright` (JSON), depois `phone`, `email`, `address`, `youtubeUrl`, `instagramUrl`, `facebookUrl` (`ChurchConfig`).
 
 ### `youtube` — Transmissões
 `channelHandle` (sem `@`), `sectionTitle`.
@@ -151,14 +146,14 @@ Substitui os dados de `Footer.tsx` e `SOCIAL_LINKS`.
 
 ## Valores válidos de `icon`
 
-Campos `icon` (em `celulas.benefits` e `ministries.items`) são um **enum fechado**, validado na escrita — a API rejeita qualquer outro valor com `400`. Correspondem a nomes de `lucide-react`:
+Em `celulas.benefits[].icon` o valor é um **enum fechado**, validado na escrita — a API rejeita qualquer outro com `400`. Correspondem a nomes de `lucide-react`:
 
 ```
 Heart · Users · BookOpen · MapPin · Music · Church · Calendar
 Star · Sparkles · HandHeart · Baby · Flame · Globe · Phone · Mail
 ```
 
-Faça o lookup com um mapa explícito, não `import * as lucide` (arrasta o pacote inteiro para o bundle). Há um exemplo em `apps/admin/src/features/site/components/site-icons.tsx`.
+`ministries.items[].icon` **não** segue este enum: é texto livre (ver `ministries`). Faça o lookup com um mapa explícito e trate nome desconhecido sem quebrar.
 
 ---
 
@@ -217,41 +212,27 @@ Como as secções são todas servidas juntas, **busque uma vez no layout ou na p
 
 ### Cache e revalidação
 
-O site usa cache ISR/tag `site-content` (ex.: `revalidate: 300` ou tag dedicada).
-
-**ChurchManager (painel):** após `PUT` ou `DELETE` numa secção, se `SITE_REVALIDATION_SECRET` estiver definido na API **e** existir pelo menos uma origem em `tenant_public_web_origins`, a API faz:
+O consumidor decide o próprio cache (o site usa a tag `site-content`). A API apenas **avisa** após cada gravação do painel em: seções do site (PUT/DELETE), Igreja (`church-config`), filiais, pastores, ministérios e agenda semanal. Se `SITE_REVALIDATION_SECRET` e `SITE_REVALIDATION_TARGETS` estiverem definidos, para cada destino do tenant, em paralelo e com timeout de 5 s:
 
 ```http
-GET {primeira_origem}/api/revalidate-site-content?secret={SITE_REVALIDATION_SECRET}
+GET {destino}/api/revalidate-site-content
+x-revalidation-secret: {SITE_REVALIDATION_SECRET}
 ```
 
-Fire-and-forget — falhas só entram em log; o save no painel não falha. Em dev local, omita o secret ou não registe origem.
+```env
+SITE_REVALIDATION_TARGETS={"paraiso":["https://site-producao","https://site-homologacao"]}
+```
 
-**Preview/QA do site:** conteúdo pode correr com `no-store`; o webhook pode não ser necessário.
+- Chave = slug do tenant; os destinos são configuração da plataforma, **não** as origens CORS do tenant. Tenant sem entrada → não revalida.
+- Só `https` (`http` apenas para localhost fora de produção). JSON inválido → erro no log e revalidação desativada; a API sobe normalmente.
+- O segredo vai só no header, nunca na URL nem no log.
+- Não bloqueante: falhas só entram no log; a gravação no painel nunca falha por causa da revalidação.
 
 ### CORS
 
 Não é preciso fazer nada **se buscar do servidor** (server components / route handlers), que é o padrão já usado para eventos — pedidos server-side não passam por CORS.
 
 Se algum componente `"use client"` chamar o endpoint diretamente do browser, aí a origem do site tem de constar em `TenantPublicWebOrigin` para aquele tenant, senão o browser bloqueia. A rota `/public/tenants/:slug/*` já está coberta pelo middleware de CORS dinâmico — o que falta nesse caso é só registar a origem.
-
----
-
-## Ordem de migração sugerida
-
-Secção a secção, validando em QA entre cada uma. Comece pelas de texto puro (risco baixo) e deixe as financeiras para o fim.
-
-| # | Secção | Ficheiro no site | Risco |
-|---|--------|------------------|-------|
-| 1 | `mission` | `MissionSection.tsx` | baixo |
-| 2 | `celulas` | `CelulasSection.tsx` | baixo |
-| 3 | `visit` | `(site)/page.tsx` (`#onde`) | baixo |
-| 4 | `contact` | `Footer.tsx`, `SOCIAL_LINKS` | baixo |
-| 5 | `churches` | `Missions.tsx`, `nossas-igrejas/page.tsx` | médio — listas |
-| 6 | `pastors` | `time-pastoral/page.tsx` | médio — listas |
-| 7 | `ministries` | `Ministries.tsx` | **não renderizado hoje** — confirmar se entra |
-| 8 | `youtube` | `LatestStream.tsx` | ver pendência do handle |
-| 9 | `giving` | `OfertorioSection.tsx` | **bloqueado** — ver pendências |
 
 ---
 

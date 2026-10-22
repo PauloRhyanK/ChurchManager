@@ -207,9 +207,9 @@ export function SiteFieldInput({
           onChange={(url) => onChange(url ?? "")}
           disabled={disabled}
           uploadPath={SITE_IMAGE_UPLOAD_PATH}
-          prompt="Arraste ou clique para carregar a imagem"
-          hint="Também pode colar um URL no campo abaixo."
-          successMessage="Imagem carregada."
+          prompt="Arraste ou clique para enviar a imagem"
+          hint="JPEG, PNG, WebP ou GIF, até 5 MB. Também pode colar um URL no campo abaixo."
+          successMessage="Imagem enviada."
         />
         <Input
           id={fieldId}

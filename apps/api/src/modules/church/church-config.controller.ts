@@ -7,10 +7,9 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFile,
-  BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { ImageUploadInterceptor } from '../storage/image-upload.interceptor';
 import { SkipThrottle } from '@nestjs/throttler';
 import { PermissionLevel, PermissionModule } from '@prisma/client';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -44,20 +43,13 @@ export class ChurchConfigController {
 
   @Post('upload-image')
   @RequirePermission(PermissionModule.CHURCH, PermissionLevel.EDIT)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(ImageUploadInterceptor)
   async uploadImage(
     @CurrentUser() user: AuthUser,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    if (!file) {
-      throw new BadRequestException('Ficheiro não enviado.');
-    }
-    if (!file.mimetype.startsWith('image/')) {
-      throw new BadRequestException('O ficheiro deve ser uma imagem.');
-    }
-    const url = await this.storage.uploadFile(
-      file.buffer,
-      file.originalname,
+    const url = await this.storage.uploadImage(
+      file?.buffer,
       `tenants/${user.tenantId}/church`,
     );
     return { url };

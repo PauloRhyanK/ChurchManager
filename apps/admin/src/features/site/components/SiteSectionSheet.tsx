@@ -50,10 +50,13 @@ export function SiteSectionSheet({
   const [draft, setDraft] = useState<SiteSectionValue>({});
   const [confirmReset, setConfirmReset] = useState(false);
 
-  // Recarrega o rascunho sempre que abre outra secção.
+  // Reinicializa o rascunho só ao abrir outra secção. Um refetch da mesma
+  // secção (novo objeto, mesma chave) não pode descartar o que está sendo digitado.
+  const sectionKey = section?.key ?? null;
   useEffect(() => {
     setDraft(section ? { ...section.value } : {});
-  }, [section]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionKey]);
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["site-sections"] });

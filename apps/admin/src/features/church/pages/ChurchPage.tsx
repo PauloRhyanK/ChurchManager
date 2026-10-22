@@ -9,13 +9,9 @@ import {
   Trash2,
   Pencil,
   MapPin,
-  Heart,
-  Globe,
-  Phone,
-  Mail,
   Loader2,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Badge } from "@/components/ui/badge";
@@ -35,14 +31,17 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import { DialogFooter } from "@/components/ui/dialog";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,7 +56,13 @@ import {
 import { ImageUploader } from "@/components/ImageUploader";
 const CHURCH_IMAGE_UPLOAD_PATH = "/admin/tenants/me/church-config/upload-image";
 import { getSiteIcon } from "@/features/site/components/site-icons";
+import { usePermissions } from "@/features/access/hooks/use-permissions";
 import { getApiErrorMessage } from "@/lib/api";
+import { ConfigForm } from "../components/ConfigForm";
+import { DiscardChangesDialog } from "../components/DiscardChangesDialog";
+import { EditorDialog } from "../components/EditorDialog";
+import { QueryState } from "../components/QueryState";
+import { useEditorDialog } from "../hooks/use-editor-dialog";
 import {
   fetchBranches,
   createBranch,
@@ -76,12 +81,14 @@ import {
   updateSchedule,
   deleteSchedule,
   fetchChurchConfig,
-  updateChurchConfig,
+  toBranchBody,
+  toPastorBody,
+  toMinistryBody,
+  toScheduleBody,
   type BranchDto,
   type PastorDto,
   type MinistryDto,
   type ScheduleDto,
-  type ChurchConfigDto,
 } from "../api/church-api";
 
 // Ícones padrão permitidos no frontend
@@ -115,19 +122,20 @@ const SCHEDULE_DAYS = [
 
 export default function ChurchPage() {
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  const canEdit = can("CHURCH", "EDIT");
   const [activeTab, setActiveTab] = useState("branches");
 
   // Query / Mutations para Filiais
   const branchesQuery = useQuery({ queryKey: ["branches"], queryFn: fetchBranches });
-  const [branchModalOpen, setBranchModalOpen] = useState(false);
-  const [editingBranch, setEditingBranch] = useState<Partial<BranchDto> | null>(null);
+  const branchEditor = useEditorDialog<Partial<BranchDto>>();
 
   const branchMutation = useMutation({
     mutationFn: (data: Partial<BranchDto>) =>
-      data.id ? updateBranch(data.id, data) : createBranch(data),
+      data.id ? updateBranch(data.id, toBranchBody(data)) : createBranch(toBranchBody(data)),
     onSuccess: () => {
-      toast.success(editingBranch?.id ? "Filial atualizada." : "Filial criada.");
-      setBranchModalOpen(false);
+      toast.success(branchEditor.value?.id ? "Filial atualizada." : "Filial criada.");
+      branchEditor.close();
       void queryClient.invalidateQueries({ queryKey: ["branches"] });
     },
     onError: (err) => toast.error(getApiErrorMessage(err)),
@@ -144,15 +152,14 @@ export default function ChurchPage() {
 
   // Query / Mutations para Pastores
   const pastorsQuery = useQuery({ queryKey: ["pastors"], queryFn: fetchPastors });
-  const [pastorModalOpen, setPastorModalOpen] = useState(false);
-  const [editingPastor, setEditingPastor] = useState<Partial<PastorDto> | null>(null);
+  const pastorEditor = useEditorDialog<Partial<PastorDto>>();
 
   const pastorMutation = useMutation({
     mutationFn: (data: Partial<PastorDto>) =>
-      data.id ? updatePastor(data.id, data) : createPastor(data),
+      data.id ? updatePastor(data.id, toPastorBody(data)) : createPastor(toPastorBody(data)),
     onSuccess: () => {
-      toast.success(editingPastor?.id ? "Pastor atualizado." : "Pastor adicionado.");
-      setPastorModalOpen(false);
+      toast.success(pastorEditor.value?.id ? "Pastor atualizado." : "Pastor adicionado.");
+      pastorEditor.close();
       void queryClient.invalidateQueries({ queryKey: ["pastors"] });
     },
     onError: (err) => toast.error(getApiErrorMessage(err)),
@@ -169,15 +176,14 @@ export default function ChurchPage() {
 
   // Query / Mutations para Ministérios
   const ministriesQuery = useQuery({ queryKey: ["ministries"], queryFn: fetchMinistries });
-  const [ministryModalOpen, setMinistryModalOpen] = useState(false);
-  const [editingMinistry, setEditingMinistry] = useState<Partial<MinistryDto> | null>(null);
+  const ministryEditor = useEditorDialog<Partial<MinistryDto>>();
 
   const ministryMutation = useMutation({
     mutationFn: (data: Partial<MinistryDto>) =>
-      data.id ? updateMinistry(data.id, data) : createMinistry(data),
+      data.id ? updateMinistry(data.id, toMinistryBody(data)) : createMinistry(toMinistryBody(data)),
     onSuccess: () => {
-      toast.success(editingMinistry?.id ? "Ministério atualizado." : "Ministério criado.");
-      setMinistryModalOpen(false);
+      toast.success(ministryEditor.value?.id ? "Ministério atualizado." : "Ministério criado.");
+      ministryEditor.close();
       void queryClient.invalidateQueries({ queryKey: ["ministries"] });
     },
     onError: (err) => toast.error(getApiErrorMessage(err)),
@@ -194,15 +200,14 @@ export default function ChurchPage() {
 
   // Query / Mutations para Agenda Semanal
   const schedulesQuery = useQuery({ queryKey: ["schedules"], queryFn: fetchSchedules });
-  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
-  const [editingSchedule, setEditingSchedule] = useState<Partial<ScheduleDto> | null>(null);
+  const scheduleEditor = useEditorDialog<Partial<ScheduleDto>>();
 
   const scheduleMutation = useMutation({
     mutationFn: (data: Partial<ScheduleDto>) =>
-      data.id ? updateSchedule(data.id, data) : createSchedule(data),
+      data.id ? updateSchedule(data.id, toScheduleBody(data)) : createSchedule(toScheduleBody(data)),
     onSuccess: () => {
-      toast.success(editingSchedule?.id ? "Agenda atualizada." : "Agenda criada.");
-      setScheduleModalOpen(false);
+      toast.success(scheduleEditor.value?.id ? "Agenda atualizada." : "Agenda criada.");
+      scheduleEditor.close();
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
     },
     onError: (err) => toast.error(getApiErrorMessage(err)),
@@ -220,14 +225,38 @@ export default function ChurchPage() {
   // Query / Mutations para Configurações do Tenant (Ofertório e Redes Sociais)
   const configQuery = useQuery({ queryKey: ["church-config"], queryFn: fetchChurchConfig });
 
-  const configMutation = useMutation({
-    mutationFn: updateChurchConfig,
-    onSuccess: () => {
-      toast.success("Configurações atualizadas.");
-      void queryClient.invalidateQueries({ queryKey: ["church-config"] });
-    },
-    onError: (err) => toast.error(getApiErrorMessage(err)),
-  });
+  // True enquanto o formulário de configuração tiver alterações não salvas.
+  const [configDirty, setConfigDirty] = useState(false);
+  const [pendingTab, setPendingTab] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    what: string;
+    name: string;
+    run: () => void;
+  } | null>(null);
+
+  const anyDirty =
+    configDirty ||
+    branchEditor.dirty ||
+    pastorEditor.dirty ||
+    ministryEditor.dirty ||
+    scheduleEditor.dirty;
+  useEffect(() => {
+    if (!anyDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [anyDirty]);
+
+  const handleTabChange = (next: string) => {
+    if (activeTab === "configs" && configDirty && next !== "configs") {
+      setPendingTab(next);
+      return;
+    }
+    setActiveTab(next);
+  };
 
   return (
     <DashboardLayout>
@@ -239,7 +268,7 @@ export default function ChurchPage() {
           </p>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
           <TabsList className="flex flex-wrap w-full md:w-auto h-auto bg-muted p-1 gap-1">
             <TabsTrigger value="branches" className="gap-2 py-2">
               <Building2 className="h-4 w-4" /> Filiais
@@ -268,10 +297,11 @@ export default function ChurchPage() {
                     Nossas filiais espalhadas por diferentes regiões e a sede.
                   </CardDescription>
                 </div>
+                {canEdit && (
                 <Button
                   size="sm"
                   onClick={() => {
-                    setEditingBranch({
+                    branchEditor.openWith({
                       name: "",
                       location: "",
                       address: "",
@@ -281,23 +311,21 @@ export default function ChurchPage() {
                       active: true,
                       sortOrder: 0,
                     });
-                    setBranchModalOpen(true);
                   }}
                   className="gap-2"
                 >
                   <Plus className="h-4 w-4" /> Adicionar filial
                 </Button>
+                )}
               </CardHeader>
               <CardContent>
-                {branchesQuery.isLoading ? (
-                  <div className="flex justify-center py-8 text-muted-foreground">
-                    <Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando filiais...
-                  </div>
-                ) : (branchesQuery.data ?? []).length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-xl">
-                    Nenhuma filial cadastrada ainda.
-                  </div>
-                ) : (
+                <QueryState
+                  query={branchesQuery}
+                  loadingText="Carregando filiais..."
+                  emptyText="Nenhuma filial cadastrada ainda."
+                  isEmpty={(items) => items.length === 0}
+                >
+                  {(items) => (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -310,7 +338,7 @@ export default function ChurchPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {(branchesQuery.data ?? []).map((branch) => (
+                      {items.map((branch) => (
                         <TableRow key={branch.id}>
                           <TableCell className="font-semibold">{branch.name}</TableCell>
                           <TableCell>{branch.location || "—"}</TableCell>
@@ -332,14 +360,14 @@ export default function ChurchPage() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
+                            {canEdit && (
+<div className="flex justify-end gap-2">
                               <Button
                                 size="icon"
                                 variant="ghost"
                                 className="h-8 w-8"
                                 onClick={() => {
-                                  setEditingBranch(branch);
-                                  setBranchModalOpen(true);
+                                  branchEditor.openWith(branch);
                                 }}
                               >
                                 <Pencil className="h-4 w-4" />
@@ -349,20 +377,20 @@ export default function ChurchPage() {
                                 variant="ghost"
                                 className="h-8 w-8 text-destructive"
                                 onClick={() => {
-                                  if (window.confirm(`Excluir a filial "${branch.name}"?`)) {
-                                    deleteBranchMutation.mutate(branch.id);
-                                  }
+                                  setDeleteTarget({ what: "a filial", name: branch.name, run: () => deleteBranchMutation.mutate(branch.id) });
                                 }}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
+)}
                           </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
-                )}
+                  )}
+                </QueryState>
               </CardContent>
             </Card>
           </TabsContent>
@@ -377,32 +405,31 @@ export default function ChurchPage() {
                     Gerencie o time pastoral e lideranças da igreja local.
                   </CardDescription>
                 </div>
+                {canEdit && (
                 <Button
                   size="sm"
                   onClick={() => {
-                    setEditingPastor({
+                    pastorEditor.openWith({
                       name: "",
                       image: "",
                       active: true,
                       sortOrder: 0,
                     });
-                    setPastorModalOpen(true);
                   }}
                   className="gap-2"
                 >
                   <Plus className="h-4 w-4" /> Adicionar pastor
                 </Button>
+                )}
               </CardHeader>
               <CardContent>
-                {pastorsQuery.isLoading ? (
-                  <div className="flex justify-center py-8 text-muted-foreground">
-                    <Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando pastores...
-                  </div>
-                ) : (pastorsQuery.data ?? []).length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-xl">
-                    Nenhum pastor cadastrado ainda.
-                  </div>
-                ) : (
+                <QueryState
+                  query={pastorsQuery}
+                  loadingText="Carregando pastores..."
+                  emptyText="Nenhum pastor cadastrado ainda."
+                  isEmpty={(items) => items.length === 0}
+                >
+                  {(items) => (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -414,7 +441,7 @@ export default function ChurchPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {(pastorsQuery.data ?? []).map((pastor) => (
+                      {items.map((pastor) => (
                         <TableRow key={pastor.id}>
                           <TableCell>
                             {pastor.image ? (
@@ -439,14 +466,14 @@ export default function ChurchPage() {
                             {pastor.sortOrder}
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
+                            {canEdit && (
+<div className="flex justify-end gap-2">
                               <Button
                                 size="icon"
                                 variant="ghost"
                                 className="h-8 w-8"
                                 onClick={() => {
-                                  setEditingPastor(pastor);
-                                  setPastorModalOpen(true);
+                                  pastorEditor.openWith(pastor);
                                 }}
                               >
                                 <Pencil className="h-4 w-4" />
@@ -456,20 +483,20 @@ export default function ChurchPage() {
                                 variant="ghost"
                                 className="h-8 w-8 text-destructive"
                                 onClick={() => {
-                                  if (window.confirm(`Excluir o pastor "${pastor.name}"?`)) {
-                                    deletePastorMutation.mutate(pastor.id);
-                                  }
+                                  setDeleteTarget({ what: "o pastor", name: pastor.name, run: () => deletePastorMutation.mutate(pastor.id) });
                                 }}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
+)}
                           </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
-                )}
+                  )}
+                </QueryState>
               </CardContent>
             </Card>
           </TabsContent>
@@ -484,10 +511,11 @@ export default function ChurchPage() {
                     Gerencie os grupos de trabalho, missões internas e departamentos.
                   </CardDescription>
                 </div>
+                {canEdit && (
                 <Button
                   size="sm"
                   onClick={() => {
-                    setEditingMinistry({
+                    ministryEditor.openWith({
                       name: "",
                       description: "",
                       icon: "Heart",
@@ -495,23 +523,21 @@ export default function ChurchPage() {
                       active: true,
                       sortOrder: 0,
                     });
-                    setMinistryModalOpen(true);
                   }}
                   className="gap-2"
                 >
                   <Plus className="h-4 w-4" /> Adicionar ministério
                 </Button>
+                )}
               </CardHeader>
               <CardContent>
-                {ministriesQuery.isLoading ? (
-                  <div className="flex justify-center py-8 text-muted-foreground">
-                    <Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando ministérios...
-                  </div>
-                ) : (ministriesQuery.data ?? []).length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-xl">
-                    Nenhum ministério cadastrado ainda.
-                  </div>
-                ) : (
+                <QueryState
+                  query={ministriesQuery}
+                  loadingText="Carregando ministérios..."
+                  emptyText="Nenhum ministério cadastrado ainda."
+                  isEmpty={(items) => items.length === 0}
+                >
+                  {(items) => (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -523,7 +549,7 @@ export default function ChurchPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {(ministriesQuery.data ?? []).map((ministry) => {
+                      {items.map((ministry) => {
                         const Icon = getSiteIcon(ministry.icon || "Sparkles");
                         return (
                           <TableRow key={ministry.id}>
@@ -542,14 +568,14 @@ export default function ChurchPage() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-right">
-                              <div className="flex justify-end gap-2">
+                              {canEdit && (
+<div className="flex justify-end gap-2">
                                 <Button
                                   size="icon"
                                   variant="ghost"
                                   className="h-8 w-8"
                                   onClick={() => {
-                                    setEditingMinistry(ministry);
-                                    setMinistryModalOpen(true);
+                                    ministryEditor.openWith(ministry);
                                   }}
                                 >
                                   <Pencil className="h-4 w-4" />
@@ -559,21 +585,21 @@ export default function ChurchPage() {
                                   variant="ghost"
                                   className="h-8 w-8 text-destructive"
                                   onClick={() => {
-                                    if (window.confirm(`Excluir o ministério "${ministry.name}"?`)) {
-                                      deleteMinistryMutation.mutate(ministry.id);
-                                    }
+                                    setDeleteTarget({ what: "o ministério", name: ministry.name, run: () => deleteMinistryMutation.mutate(ministry.id) });
                                   }}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
+)}
                             </TableCell>
                           </TableRow>
                         );
                       })}
                     </TableBody>
                   </Table>
-                )}
+                  )}
+                </QueryState>
               </CardContent>
             </Card>
           </TabsContent>
@@ -588,10 +614,11 @@ export default function ChurchPage() {
                     Horários de cultos, reuniões e eventos recorrentes que aparecem na programação.
                   </CardDescription>
                 </div>
+                {canEdit && (
                 <Button
                   size="sm"
                   onClick={() => {
-                    setEditingSchedule({
+                    scheduleEditor.openWith({
                       title: "",
                       dayOfWeek: "Domingo",
                       timeStart: "19:00",
@@ -600,23 +627,21 @@ export default function ChurchPage() {
                       active: true,
                       sortOrder: 0,
                     });
-                    setScheduleModalOpen(true);
                   }}
                   className="gap-2"
                 >
                   <Plus className="h-4 w-4" /> Adicionar horário
                 </Button>
+                )}
               </CardHeader>
               <CardContent>
-                {schedulesQuery.isLoading ? (
-                  <div className="flex justify-center py-8 text-muted-foreground">
-                    <Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando agenda...
-                  </div>
-                ) : (schedulesQuery.data ?? []).length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-xl">
-                    Nenhum horário cadastrado na programação semanal.
-                  </div>
-                ) : (
+                <QueryState
+                  query={schedulesQuery}
+                  loadingText="Carregando agenda..."
+                  emptyText="Nenhum horário cadastrado na programação semanal."
+                  isEmpty={(items) => items.length === 0}
+                >
+                  {(items) => (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -629,7 +654,7 @@ export default function ChurchPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {(schedulesQuery.data ?? []).map((schedule) => {
+                      {items.map((schedule) => {
                         const rawTime = schedule.timeStart || "";
                         // HH:MM:SS ou HH:MM
                         const formattedTime = rawTime.split(":").slice(0, 2).join("h");
@@ -647,7 +672,8 @@ export default function ChurchPage() {
                               </Badge>
                             </TableCell>
                             <TableCell className="text-right">
-                              <div className="flex justify-end gap-2">
+                              {canEdit && (
+<div className="flex justify-end gap-2">
                                 <Button
                                   size="icon"
                                   variant="ghost"
@@ -660,11 +686,10 @@ export default function ChurchPage() {
                                     } else {
                                       cleanTime = cleanTime.substring(0, 5);
                                     }
-                                    setEditingSchedule({
+                                    scheduleEditor.openWith({
                                       ...schedule,
                                       timeStart: cleanTime,
                                     });
-                                    setScheduleModalOpen(true);
                                   }}
                                 >
                                   <Pencil className="h-4 w-4" />
@@ -674,21 +699,21 @@ export default function ChurchPage() {
                                   variant="ghost"
                                   className="h-8 w-8 text-destructive"
                                   onClick={() => {
-                                    if (window.confirm(`Excluir o horário "${schedule.title}"?`)) {
-                                      deleteScheduleMutation.mutate(schedule.id);
-                                    }
+                                    setDeleteTarget({ what: "o horário", name: schedule.title, run: () => deleteScheduleMutation.mutate(schedule.id) });
                                   }}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
+)}
                             </TableCell>
                           </TableRow>
                         );
                       })}
                     </TableBody>
                   </Table>
-                )}
+                  )}
+                </QueryState>
               </CardContent>
             </Card>
           </TabsContent>
@@ -703,190 +728,15 @@ export default function ChurchPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {configQuery.isLoading ? (
-                  <div className="flex justify-center py-8 text-muted-foreground">
-                    <Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando configurações...
-                  </div>
-                ) : (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      const formData = new FormData(e.currentTarget);
-                      const payload: Partial<ChurchConfigDto> = {
-                        phone: formData.get("phone") as string || null,
-                        email: formData.get("email") as string || null,
-                        address: formData.get("address") as string || null,
-                        pixKey: formData.get("pixKey") as string || null,
-                        bankName: formData.get("bankName") as string || null,
-                        bankCode: formData.get("bankCode") as string || null,
-                        agency: formData.get("agency") as string || null,
-                        account: formData.get("account") as string || null,
-                        holderName: formData.get("holderName") as string || null,
-                        holderDocument: formData.get("holderDocument") as string || null,
-                        youtubeUrl: formData.get("youtubeUrl") as string || null,
-                        instagramUrl: formData.get("instagramUrl") as string || null,
-                        facebookUrl: formData.get("facebookUrl") as string || null,
-                      };
-                      configMutation.mutate(payload);
-                    }}
-                    className="space-y-6"
-                  >
-                    <div className="grid gap-6 md:grid-cols-2">
-                      {/* Seção: Contato */}
-                      <div className="space-y-4 rounded-lg border p-4 bg-muted/10">
-                        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                          <Phone className="h-4 w-4" /> Informações de Contato
-                        </h3>
-                        <div className="space-y-2">
-                          <Label htmlFor="phone">Telefone</Label>
-                          <Input
-                            id="phone"
-                            name="phone"
-                            defaultValue={configQuery.data?.phone ?? ""}
-                            placeholder="(27) 99875-7008"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="email">E-mail</Label>
-                          <Input
-                            id="email"
-                            name="email"
-                            defaultValue={configQuery.data?.email ?? ""}
-                            placeholder="contato@igreja.com.br"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="address">Endereço Sede</Label>
-                          <Textarea
-                            id="address"
-                            name="address"
-                            defaultValue={configQuery.data?.address ?? ""}
-                            placeholder="Rua Helmut Gums, 438 - Virada, Santa Maria de Jetibá - ES"
-                            rows={3}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Seção: Redes Sociais */}
-                      <div className="space-y-4 rounded-lg border p-4 bg-muted/10">
-                        <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                          <Globe className="h-4 w-4" /> Redes Sociais
-                        </h3>
-                        <div className="space-y-2">
-                          <Label htmlFor="youtubeUrl">Canal do YouTube (URL)</Label>
-                          <Input
-                            id="youtubeUrl"
-                            name="youtubeUrl"
-                            type="url"
-                            defaultValue={configQuery.data?.youtubeUrl ?? ""}
-                            placeholder="https://www.youtube.com/@paraisoigreja"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="instagramUrl">Perfil do Instagram (URL)</Label>
-                          <Input
-                            id="instagramUrl"
-                            name="instagramUrl"
-                            type="url"
-                            defaultValue={configQuery.data?.instagramUrl ?? ""}
-                            placeholder="https://www.instagram.com/paraisoigreja/"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="facebookUrl">Página do Facebook (URL)</Label>
-                          <Input
-                            id="facebookUrl"
-                            name="facebookUrl"
-                            type="url"
-                            defaultValue={configQuery.data?.facebookUrl ?? ""}
-                            placeholder="https://www.facebook.com/paraisoigreja/"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Seção: Dados Bancários / Ofertório */}
-                    <div className="space-y-4 rounded-lg border p-4 bg-muted/10">
-                      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                        <Heart className="h-4 w-4" /> Dados de Dízimos & Ofertas
-                      </h3>
-                      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-                        <div className="space-y-2 sm:col-span-2">
-                          <Label htmlFor="pixKey">Chave PIX</Label>
-                          <Input
-                            id="pixKey"
-                            name="pixKey"
-                            defaultValue={configQuery.data?.pixKey ?? ""}
-                            placeholder="projeto@visaodofuturo.com.br"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="bankName">Nome do Banco</Label>
-                          <Input
-                            id="bankName"
-                            name="bankName"
-                            defaultValue={configQuery.data?.bankName ?? ""}
-                            placeholder="Sicoob"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="bankCode">Cód. Banco</Label>
-                          <Input
-                            id="bankCode"
-                            name="bankCode"
-                            defaultValue={configQuery.data?.bankCode ?? ""}
-                            placeholder="756"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="agency">Agência</Label>
-                          <Input
-                            id="agency"
-                            name="agency"
-                            defaultValue={configQuery.data?.agency ?? ""}
-                            placeholder="3007"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="account">Conta Corrente</Label>
-                          <Input
-                            id="account"
-                            name="account"
-                            defaultValue={configQuery.data?.account ?? ""}
-                            placeholder="12345-6"
-                          />
-                        </div>
-                        <div className="space-y-2 sm:col-span-2">
-                          <Label htmlFor="holderName">Nome do Favorecido (Razão Social)</Label>
-                          <Input
-                            id="holderName"
-                            name="holderName"
-                            defaultValue={configQuery.data?.holderName ?? ""}
-                            placeholder="Igreja Paraíso"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="holderDocument">CNPJ do Favorecido</Label>
-                          <Input
-                            id="holderDocument"
-                            name="holderDocument"
-                            defaultValue={configQuery.data?.holderDocument ?? ""}
-                            placeholder="00.000.000/0001-00"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end">
-                      <Button type="submit" disabled={configMutation.isPending}>
-                        {configMutation.isPending && (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        )}
-                        Salvar Alterações
-                      </Button>
-                    </div>
-                  </form>
-                )}
+                <QueryState query={configQuery} loadingText="Carregando configurações...">
+                  {(config) => (
+                    <ConfigForm
+                      config={config}
+                      canEdit={canEdit}
+                      onDirtyChange={setConfigDirty}
+                    />
+                  )}
+                </QueryState>
               </CardContent>
             </Card>
           </TabsContent>
@@ -894,17 +744,21 @@ export default function ChurchPage() {
       </div>
 
       {/* MODAL / DIALOG FILIAL */}
-      <Dialog open={branchModalOpen} onOpenChange={setBranchModalOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editingBranch?.id ? "Editar Filial" : "Criar Filial"}</DialogTitle>
-            <DialogDescription>Preencha os dados de localização e imagem da filial.</DialogDescription>
-          </DialogHeader>
+      <EditorDialog
+        open={branchEditor.open}
+        dirty={branchEditor.dirty}
+        pending={branchMutation.isPending}
+        onClose={branchEditor.close}
+        className="max-w-lg"
+        title={branchEditor.value?.id ? "Editar Filial" : "Criar Filial"}
+        description="Preencha os dados de localização e imagem da filial."
+      >
+        {(requestClose) => (
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (editingBranch) {
-                branchMutation.mutate(editingBranch);
+              if (branchEditor.value) {
+                branchMutation.mutate(branchEditor.value);
               }
             }}
             className="space-y-4"
@@ -913,9 +767,10 @@ export default function ChurchPage() {
               <Label htmlFor="b-name">Nome da Filial *</Label>
               <Input
                 id="b-name"
+                maxLength={255}
                 required
-                value={editingBranch?.name ?? ""}
-                onChange={(e) => setEditingBranch((prev) => ({ ...prev, name: e.target.value }))}
+                value={branchEditor.value?.name ?? ""}
+                onChange={(e) => branchEditor.setValue((prev) => ({ ...prev, name: e.target.value }))}
                 placeholder="Igreja Paraíso — Centro"
               />
             </div>
@@ -923,8 +778,9 @@ export default function ChurchPage() {
               <Label htmlFor="b-location">Cidade / Estado</Label>
               <Input
                 id="b-location"
-                value={editingBranch?.location ?? ""}
-                onChange={(e) => setEditingBranch((prev) => ({ ...prev, location: e.target.value }))}
+                maxLength={255}
+                value={branchEditor.value?.location ?? ""}
+                onChange={(e) => branchEditor.setValue((prev) => ({ ...prev, location: e.target.value }))}
                 placeholder="Santa Maria de Jetibá - ES"
               />
             </div>
@@ -932,8 +788,8 @@ export default function ChurchPage() {
               <Label htmlFor="b-address">Endereço Completo</Label>
               <Textarea
                 id="b-address"
-                value={editingBranch?.address ?? ""}
-                onChange={(e) => setEditingBranch((prev) => ({ ...prev, address: e.target.value }))}
+                value={branchEditor.value?.address ?? ""}
+                onChange={(e) => branchEditor.setValue((prev) => ({ ...prev, address: e.target.value }))}
                 placeholder="Rua Helmut Gums, 438 - Centro"
                 rows={2}
               />
@@ -942,25 +798,26 @@ export default function ChurchPage() {
               <Label htmlFor="b-maps">Link do Google Maps</Label>
               <Input
                 id="b-maps"
+                maxLength={2048}
                 type="url"
-                value={editingBranch?.mapsUrl ?? ""}
-                onChange={(e) => setEditingBranch((prev) => ({ ...prev, mapsUrl: e.target.value }))}
+                value={branchEditor.value?.mapsUrl ?? ""}
+                onChange={(e) => branchEditor.setValue((prev) => ({ ...prev, mapsUrl: e.target.value }))}
                 placeholder="https://maps.app.goo.gl/..."
               />
             </div>
             <div className="space-y-2">
               <Label>Imagem da Fachada / Templo</Label>
               <ImageUploader
-                value={editingBranch?.image ?? ""}
-                onChange={(url) => setEditingBranch((prev) => ({ ...prev, image: url ?? "" }))}
+                value={branchEditor.value?.image ?? ""}
+                onChange={(url) => branchEditor.setValue((prev) => ({ ...prev, image: url ?? "" }))}
                 uploadPath={CHURCH_IMAGE_UPLOAD_PATH}
                 prompt="Arraste ou clique para enviar foto"
-                hint="Use imagens horizontais para melhor visualização."
+                hint="Foto da fachada, de preferência horizontal. JPEG, PNG, WebP ou GIF, até 5 MB."
                 successMessage="Imagem enviada."
               />
               <Input
-                value={editingBranch?.image ?? ""}
-                onChange={(e) => setEditingBranch((prev) => ({ ...prev, image: e.target.value }))}
+                value={branchEditor.value?.image ?? ""}
+                onChange={(e) => branchEditor.setValue((prev) => ({ ...prev, image: e.target.value }))}
                 placeholder="URL da imagem"
                 className="mt-1"
               />
@@ -969,9 +826,9 @@ export default function ChurchPage() {
               <div className="flex items-center gap-2">
                 <Switch
                   id="b-hq"
-                  checked={editingBranch?.isHeadquarters ?? false}
+                  checked={branchEditor.value?.isHeadquarters ?? false}
                   onCheckedChange={(checked) =>
-                    setEditingBranch((prev) => ({ ...prev, isHeadquarters: checked }))
+                    branchEditor.setValue((prev) => ({ ...prev, isHeadquarters: checked }))
                   }
                 />
                 <Label htmlFor="b-hq">É a Sede Principal</Label>
@@ -979,16 +836,21 @@ export default function ChurchPage() {
               <div className="flex items-center gap-2">
                 <Switch
                   id="b-active"
-                  checked={editingBranch?.active ?? true}
+                  checked={branchEditor.value?.active ?? true}
                   onCheckedChange={(checked) =>
-                    setEditingBranch((prev) => ({ ...prev, active: checked }))
+                    branchEditor.setValue((prev) => ({ ...prev, active: checked }))
                   }
                 />
                 <Label htmlFor="b-active">Visível no Site</Label>
               </div>
             </div>
             <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={() => setBranchModalOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={branchMutation.isPending}
+                onClick={requestClose}
+              >
                 Cancelar
               </Button>
               <Button type="submit" disabled={branchMutation.isPending}>
@@ -999,21 +861,25 @@ export default function ChurchPage() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        )}
+      </EditorDialog>
 
       {/* MODAL / DIALOG PASTOR */}
-      <Dialog open={pastorModalOpen} onOpenChange={setPastorModalOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editingPastor?.id ? "Editar Pastor" : "Adicionar Pastor"}</DialogTitle>
-            <DialogDescription>Adicione as informações de nome e foto do pastor.</DialogDescription>
-          </DialogHeader>
+      <EditorDialog
+        open={pastorEditor.open}
+        dirty={pastorEditor.dirty}
+        pending={pastorMutation.isPending}
+        onClose={pastorEditor.close}
+        className="max-w-md"
+        title={pastorEditor.value?.id ? "Editar Pastor" : "Adicionar Pastor"}
+        description="Adicione as informações de nome e foto do pastor."
+      >
+        {(requestClose) => (
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (editingPastor) {
-                pastorMutation.mutate(editingPastor);
+              if (pastorEditor.value) {
+                pastorMutation.mutate(pastorEditor.value);
               }
             }}
             className="space-y-4"
@@ -1022,24 +888,26 @@ export default function ChurchPage() {
               <Label htmlFor="p-name">Nome Completo *</Label>
               <Input
                 id="p-name"
+                maxLength={255}
                 required
-                value={editingPastor?.name ?? ""}
-                onChange={(e) => setEditingPastor((prev) => ({ ...prev, name: e.target.value }))}
+                value={pastorEditor.value?.name ?? ""}
+                onChange={(e) => pastorEditor.setValue((prev) => ({ ...prev, name: e.target.value }))}
                 placeholder="Pr. João da Silva"
               />
             </div>
             <div className="space-y-2">
               <Label>Foto do Pastor</Label>
               <ImageUploader
-                value={editingPastor?.image ?? ""}
-                onChange={(url) => setEditingPastor((prev) => ({ ...prev, image: url ?? "" }))}
+                value={pastorEditor.value?.image ?? ""}
+                onChange={(url) => pastorEditor.setValue((prev) => ({ ...prev, image: url ?? "" }))}
                 uploadPath={CHURCH_IMAGE_UPLOAD_PATH}
                 prompt="Arraste ou clique para enviar foto"
+                hint="Foto do pastor, de preferência de rosto. JPEG, PNG, WebP ou GIF, até 5 MB."
                 successMessage="Foto enviada."
               />
               <Input
-                value={editingPastor?.image ?? ""}
-                onChange={(e) => setEditingPastor((prev) => ({ ...prev, image: e.target.value }))}
+                value={pastorEditor.value?.image ?? ""}
+                onChange={(e) => pastorEditor.setValue((prev) => ({ ...prev, image: e.target.value }))}
                 placeholder="URL da imagem"
                 className="mt-1"
               />
@@ -1048,9 +916,9 @@ export default function ChurchPage() {
               <div className="flex items-center gap-2">
                 <Switch
                   id="p-active"
-                  checked={editingPastor?.active ?? true}
+                  checked={pastorEditor.value?.active ?? true}
                   onCheckedChange={(checked) =>
-                    setEditingPastor((prev) => ({ ...prev, active: checked }))
+                    pastorEditor.setValue((prev) => ({ ...prev, active: checked }))
                   }
                 />
                 <Label htmlFor="p-active">Visível no Site</Label>
@@ -1061,15 +929,20 @@ export default function ChurchPage() {
                   id="p-order"
                   type="number"
                   min="0"
-                  value={editingPastor?.sortOrder ?? 0}
+                  value={pastorEditor.value?.sortOrder ?? 0}
                   onChange={(e) =>
-                    setEditingPastor((prev) => ({ ...prev, sortOrder: parseInt(e.target.value) || 0 }))
+                    pastorEditor.setValue((prev) => ({ ...prev, sortOrder: parseInt(e.target.value) || 0 }))
                   }
                 />
               </div>
             </div>
             <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={() => setPastorModalOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pastorMutation.isPending}
+                onClick={requestClose}
+              >
                 Cancelar
               </Button>
               <Button type="submit" disabled={pastorMutation.isPending}>
@@ -1080,23 +953,25 @@ export default function ChurchPage() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        )}
+      </EditorDialog>
 
       {/* MODAL / DIALOG MINISTÉRIO */}
-      <Dialog open={ministryModalOpen} onOpenChange={setMinistryModalOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {editingMinistry?.id ? "Editar Ministério" : "Adicionar Ministério"}
-            </DialogTitle>
-            <DialogDescription>Configure as informações básicas do ministério.</DialogDescription>
-          </DialogHeader>
+      <EditorDialog
+        open={ministryEditor.open}
+        dirty={ministryEditor.dirty}
+        pending={ministryMutation.isPending}
+        onClose={ministryEditor.close}
+        className="max-w-md"
+        title={ministryEditor.value?.id ? "Editar Ministério" : "Adicionar Ministério"}
+        description="Configure as informações básicas do ministério."
+      >
+        {(requestClose) => (
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (editingMinistry) {
-                ministryMutation.mutate(editingMinistry);
+              if (ministryEditor.value) {
+                ministryMutation.mutate(ministryEditor.value);
               }
             }}
             className="space-y-4"
@@ -1105,9 +980,10 @@ export default function ChurchPage() {
               <Label htmlFor="m-name">Nome do Ministério *</Label>
               <Input
                 id="m-name"
+                maxLength={255}
                 required
-                value={editingMinistry?.name ?? ""}
-                onChange={(e) => setEditingMinistry((prev) => ({ ...prev, name: e.target.value }))}
+                value={ministryEditor.value?.name ?? ""}
+                onChange={(e) => ministryEditor.setValue((prev) => ({ ...prev, name: e.target.value }))}
                 placeholder="Ministério Infantil / Jovens"
               />
             </div>
@@ -1115,9 +991,9 @@ export default function ChurchPage() {
               <Label htmlFor="m-desc">Descrição / Apresentação</Label>
               <Textarea
                 id="m-desc"
-                value={editingMinistry?.description ?? ""}
+                value={ministryEditor.value?.description ?? ""}
                 onChange={(e) =>
-                  setEditingMinistry((prev) => ({ ...prev, description: e.target.value }))
+                  ministryEditor.setValue((prev) => ({ ...prev, description: e.target.value }))
                 }
                 placeholder="Uma breve descrição sobre a atuação deste ministério..."
                 rows={3}
@@ -1126,8 +1002,8 @@ export default function ChurchPage() {
             <div className="space-y-2">
               <Label htmlFor="m-icon">Ícone Lucide</Label>
               <Select
-                value={editingMinistry?.icon ?? "Sparkles"}
-                onValueChange={(val) => setEditingMinistry((prev) => ({ ...prev, icon: val }))}
+                value={ministryEditor.value?.icon ?? "Sparkles"}
+                onValueChange={(val) => ministryEditor.setValue((prev) => ({ ...prev, icon: val }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Escolher ícone" />
@@ -1150,16 +1026,17 @@ export default function ChurchPage() {
             <div className="space-y-2">
               <Label>Imagem de Capa (Opcional)</Label>
               <ImageUploader
-                value={editingMinistry?.image ?? ""}
-                onChange={(url) => setEditingMinistry((prev) => ({ ...prev, image: url ?? "" }))}
+                value={ministryEditor.value?.image ?? ""}
+                onChange={(url) => ministryEditor.setValue((prev) => ({ ...prev, image: url ?? "" }))}
                 uploadPath={CHURCH_IMAGE_UPLOAD_PATH}
                 prompt="Arraste ou clique para enviar foto"
+                hint="Imagem de capa do ministério. JPEG, PNG, WebP ou GIF, até 5 MB."
                 successMessage="Imagem enviada."
               />
               <Input
-                value={editingMinistry?.image ?? ""}
+                value={ministryEditor.value?.image ?? ""}
                 onChange={(e) =>
-                  setEditingMinistry((prev) => ({ ...prev, image: e.target.value }))
+                  ministryEditor.setValue((prev) => ({ ...prev, image: e.target.value }))
                 }
                 placeholder="URL da imagem"
                 className="mt-1"
@@ -1169,9 +1046,9 @@ export default function ChurchPage() {
               <div className="flex items-center gap-2">
                 <Switch
                   id="m-active"
-                  checked={editingMinistry?.active ?? true}
+                  checked={ministryEditor.value?.active ?? true}
                   onCheckedChange={(checked) =>
-                    setEditingMinistry((prev) => ({ ...prev, active: checked }))
+                    ministryEditor.setValue((prev) => ({ ...prev, active: checked }))
                   }
                 />
                 <Label htmlFor="m-active">Visível no Site</Label>
@@ -1182,15 +1059,20 @@ export default function ChurchPage() {
                   id="m-order"
                   type="number"
                   min="0"
-                  value={editingMinistry?.sortOrder ?? 0}
+                  value={ministryEditor.value?.sortOrder ?? 0}
                   onChange={(e) =>
-                    setEditingMinistry((prev) => ({ ...prev, sortOrder: parseInt(e.target.value) || 0 }))
+                    ministryEditor.setValue((prev) => ({ ...prev, sortOrder: parseInt(e.target.value) || 0 }))
                   }
                 />
               </div>
             </div>
             <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={() => setMinistryModalOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={ministryMutation.isPending}
+                onClick={requestClose}
+              >
                 Cancelar
               </Button>
               <Button type="submit" disabled={ministryMutation.isPending}>
@@ -1201,25 +1083,25 @@ export default function ChurchPage() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        )}
+      </EditorDialog>
 
       {/* MODAL / DIALOG AGENDA SEMANAL */}
-      <Dialog open={scheduleModalOpen} onOpenChange={setScheduleModalOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {editingSchedule?.id ? "Editar Programação" : "Nova Programação"}
-            </DialogTitle>
-            <DialogDescription>
-              Defina o dia da semana, horário e local da programação recorrente.
-            </DialogDescription>
-          </DialogHeader>
+      <EditorDialog
+        open={scheduleEditor.open}
+        dirty={scheduleEditor.dirty}
+        pending={scheduleMutation.isPending}
+        onClose={scheduleEditor.close}
+        className="max-w-md"
+        title={scheduleEditor.value?.id ? "Editar Programação" : "Nova Programação"}
+        description="Defina o dia da semana, horário e local da programação recorrente."
+      >
+        {(requestClose) => (
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              if (editingSchedule) {
-                scheduleMutation.mutate(editingSchedule);
+              if (scheduleEditor.value) {
+                scheduleMutation.mutate(scheduleEditor.value);
               }
             }}
             className="space-y-4"
@@ -1228,9 +1110,10 @@ export default function ChurchPage() {
               <Label htmlFor="s-title">Título da Programação *</Label>
               <Input
                 id="s-title"
+                maxLength={255}
                 required
-                value={editingSchedule?.title ?? ""}
-                onChange={(e) => setEditingSchedule((prev) => ({ ...prev, title: e.target.value }))}
+                value={scheduleEditor.value?.title ?? ""}
+                onChange={(e) => scheduleEditor.setValue((prev) => ({ ...prev, title: e.target.value }))}
                 placeholder="Culto de Celebração / Doutrina"
               />
             </div>
@@ -1238,9 +1121,9 @@ export default function ChurchPage() {
               <div className="space-y-2">
                 <Label htmlFor="s-day">Dia da Semana *</Label>
                 <Select
-                  value={editingSchedule?.dayOfWeek ?? "Domingo"}
+                  value={scheduleEditor.value?.dayOfWeek ?? "Domingo"}
                   onValueChange={(val) =>
-                    setEditingSchedule((prev) => ({ ...prev, dayOfWeek: val }))
+                    scheduleEditor.setValue((prev) => ({ ...prev, dayOfWeek: val }))
                   }
                 >
                   <SelectTrigger id="s-day">
@@ -1261,9 +1144,9 @@ export default function ChurchPage() {
                   id="s-time"
                   required
                   pattern="^([01]\d|2[0-3]):[0-5]\d$"
-                  value={editingSchedule?.timeStart ?? "19:00"}
+                  value={scheduleEditor.value?.timeStart ?? "19:00"}
                   onChange={(e) =>
-                    setEditingSchedule((prev) => ({ ...prev, timeStart: e.target.value }))
+                    scheduleEditor.setValue((prev) => ({ ...prev, timeStart: e.target.value }))
                   }
                   placeholder="19:00"
                 />
@@ -1273,8 +1156,9 @@ export default function ChurchPage() {
               <Label htmlFor="s-location">Local</Label>
               <Input
                 id="s-location"
-                value={editingSchedule?.location ?? ""}
-                onChange={(e) => setEditingSchedule((prev) => ({ ...prev, location: e.target.value }))}
+                maxLength={255}
+                value={scheduleEditor.value?.location ?? ""}
+                onChange={(e) => scheduleEditor.setValue((prev) => ({ ...prev, location: e.target.value }))}
                 placeholder="Templo Sede (ou link do YouTube)"
               />
             </div>
@@ -1282,9 +1166,10 @@ export default function ChurchPage() {
               <Label htmlFor="s-desc">Observação / Descrição Curta</Label>
               <Input
                 id="s-desc"
-                value={editingSchedule?.description ?? ""}
+                maxLength={5000}
+                value={scheduleEditor.value?.description ?? ""}
                 onChange={(e) =>
-                  setEditingSchedule((prev) => ({ ...prev, description: e.target.value }))
+                  scheduleEditor.setValue((prev) => ({ ...prev, description: e.target.value }))
                 }
                 placeholder="Ex: Transmissão online inclusa"
               />
@@ -1293,9 +1178,9 @@ export default function ChurchPage() {
               <div className="flex items-center gap-2">
                 <Switch
                   id="s-active"
-                  checked={editingSchedule?.active ?? true}
+                  checked={scheduleEditor.value?.active ?? true}
                   onCheckedChange={(checked) =>
-                    setEditingSchedule((prev) => ({ ...prev, active: checked }))
+                    scheduleEditor.setValue((prev) => ({ ...prev, active: checked }))
                   }
                 />
                 <Label htmlFor="s-active">Visível no Site</Label>
@@ -1306,15 +1191,20 @@ export default function ChurchPage() {
                   id="s-order"
                   type="number"
                   min="0"
-                  value={editingSchedule?.sortOrder ?? 0}
+                  value={scheduleEditor.value?.sortOrder ?? 0}
                   onChange={(e) =>
-                    setEditingSchedule((prev) => ({ ...prev, sortOrder: parseInt(e.target.value) || 0 }))
+                    scheduleEditor.setValue((prev) => ({ ...prev, sortOrder: parseInt(e.target.value) || 0 }))
                   }
                 />
               </div>
             </div>
             <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={() => setScheduleModalOpen(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={scheduleMutation.isPending}
+                onClick={requestClose}
+              >
                 Cancelar
               </Button>
               <Button type="submit" disabled={scheduleMutation.isPending}>
@@ -1325,8 +1215,41 @@ export default function ChurchPage() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        )}
+      </EditorDialog>
+
+      <DiscardChangesDialog
+        open={pendingTab !== null}
+        onOpenChange={(open) => !open && setPendingTab(null)}
+        onDiscard={() => {
+          setConfigDirty(false);
+          if (pendingTab) setActiveTab(pendingTab);
+          setPendingTab(null);
+        }}
+      />
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {deleteTarget?.what}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{deleteTarget?.name}" será removido. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteTarget?.run()}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }

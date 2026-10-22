@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsHttpUrl } from './field-decorators';
 
 export class UpdateChurchConfigDto {
   // Ofertório
@@ -69,6 +70,7 @@ export class UpdateChurchConfigDto {
   // Redes Sociais
   @IsOptional()
   @IsString()
+  @IsHttpUrl()
   @MaxLength(512)
   @Transform(({ value }) => {
     const s = String(value ?? '').trim();
@@ -78,6 +80,7 @@ export class UpdateChurchConfigDto {
 
   @IsOptional()
   @IsString()
+  @IsHttpUrl()
   @MaxLength(512)
   @Transform(({ value }) => {
     const s = String(value ?? '').trim();
@@ -87,6 +90,7 @@ export class UpdateChurchConfigDto {
 
   @IsOptional()
   @IsString()
+  @IsHttpUrl()
   @MaxLength(512)
   @Transform(({ value }) => {
     const s = String(value ?? '').trim();

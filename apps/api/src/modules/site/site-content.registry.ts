@@ -74,7 +74,7 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
   {
     key: 'mission',
     title: 'Missão / Sobre',
-    description: 'Secção "Nossa Missão" da home — títulos, parágrafos e citação.',
+    description: 'Missão da igreja — títulos, parágrafos e citação.',
     icon: 'Church',
     fields: [
       { name: 'badge', label: 'Etiqueta', type: 'text', maxLength: 60 },
@@ -84,7 +84,7 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
         label: 'Título — parte destacada',
         type: 'text',
         maxLength: 120,
-        help: 'Renderizada a verde e em itálico no site.',
+        help: 'Trecho central do título.',
       },
       { name: 'titlePart2', label: 'Título — 3.ª parte', type: 'text', maxLength: 120 },
       { name: 'paragraph1', label: '1.º parágrafo', type: 'textarea', maxLength: LONG_TEXT_MAX },
@@ -110,7 +110,7 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
   {
     key: 'celulas',
     title: 'Células',
-    description: 'Secção "Grupos de Vida" — textos, versículo e benefícios.',
+    description: 'Grupos de Vida (células) — textos, versículo e benefícios.',
     icon: 'Users',
     fields: [
       { name: 'badge', label: 'Etiqueta', type: 'text', maxLength: 60 },
@@ -182,7 +182,7 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
     key: 'visit',
     title: 'Venha nos visitar',
     description:
-      'Bloco de endereço e horários da sede. A home atual do site já não inclui esta secção; o conteúdo permanece disponível na API.',
+      'Endereço e horários da sede, em texto livre.',
     icon: 'MapPin',
     fields: [
       { name: 'titlePart1', label: 'Título — 1.ª linha', type: 'text', maxLength: 120 },
@@ -191,7 +191,6 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
         name: 'backgroundImage',
         label: 'Imagem de fundo',
         type: 'image',
-        help: 'Fica a preto e branco até o visitante passar o rato por cima.',
       },
       { name: 'addressTitle', label: 'Título do cartão de endereço', type: 'text', maxLength: 80 },
       {
@@ -199,7 +198,7 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
         label: 'Endereço',
         type: 'textarea',
         maxLength: TEXT_MAX,
-        help: 'Uma linha por linha mostrada no site.',
+        help: 'Uma linha de texto por linha do endereço.',
       },
       { name: 'hoursTitle', label: 'Título do cartão de horários', type: 'text', maxLength: 80 },
       {
@@ -207,7 +206,7 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
         label: 'Horários',
         type: 'textarea',
         maxLength: TEXT_MAX,
-        help: 'Confirme que batem com a Programação — hoje há divergências entre as duas.',
+        help: 'Texto livre. Os horários oficiais de culto ficam em Igreja → Agenda Semanal.',
       },
       { name: 'mapsUrl', label: 'Link "Como chegar"', type: 'url' },
     ],
@@ -230,7 +229,7 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
     key: 'churches',
     title: 'Igrejas & Missões',
     description:
-      'Home e página Nossas Igrejas. O endereço completo de cada filial alimenta o mapa embutido e o texto — preencha com rua, nº, bairro e cidade.',
+      'Textos de apresentação das filiais. As filiais em si são cadastradas em Igreja → Filiais.',
     icon: 'Globe',
     fields: [
       { name: 'badge', label: 'Etiqueta', type: 'text', maxLength: 60 },
@@ -250,7 +249,7 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
   {
     key: 'pastors',
     title: 'Time Pastoral',
-    description: 'Página /time-pastoral — o site mostra apenas nome e foto de cada pastor.',
+    description: 'Textos de apresentação do time pastoral. Os pastores são cadastrados em Igreja → Pastores.',
     icon: 'HandHeart',
     fields: [
       { name: 'badge', label: 'Etiqueta', type: 'text', maxLength: 60 },
@@ -269,7 +268,7 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
   {
     key: 'giving',
     title: 'Ofertório',
-    description: 'Chave PIX e dados bancários mostrados na secção de dízimos.',
+    description: 'Textos de apresentação do ofertório. PIX e dados bancários ficam em Igreja → Ofertório, Redes Sociais e Contatos.',
     icon: 'HandHeart',
     fields: [
       { name: 'badge', label: 'Etiqueta', type: 'text', maxLength: 60 },
@@ -291,7 +290,7 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
   {
     key: 'contact',
     title: 'Contato & Rodapé',
-    description: 'Telefone, endereço, redes sociais e copyright do rodapé.',
+    description: 'Slogan e copyright. Telefone, endereço e redes sociais ficam em Igreja → Ofertório, Redes Sociais e Contatos.',
     icon: 'Phone',
     fields: [
       { name: 'tagline', label: 'Tagline', type: 'text', maxLength: 200 },
@@ -306,7 +305,7 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
   {
     key: 'youtube',
     title: 'Transmissões',
-    description: 'Canal de onde a secção "Última Transmissão" puxa os vídeos.',
+    description: 'Canal de transmissões da igreja.',
     icon: 'Globe',
     fields: [
       {
@@ -314,7 +313,7 @@ export const SITE_SECTIONS: SiteSectionSpec[] = [
         label: 'Handle do canal',
         type: 'text',
         maxLength: 80,
-        help: 'Sem o @. O site liga para @paraisoigreja mas busca vídeos de ibrejetibaoficial — confirme qual é o correto.',
+        help: 'Sem o @.',
       },
       { name: 'sectionTitle', label: 'Título da secção', type: 'text', maxLength: 120 },
     ],

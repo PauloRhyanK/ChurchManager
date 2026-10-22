@@ -1,18 +1,16 @@
 import { Transform } from 'class-transformer';
 import {
-  IsBoolean,
   IsInt,
   IsOptional,
   IsString,
   MaxLength,
   Min,
 } from 'class-validator';
+import { RequiredText, StrictBoolean, IsImageRef } from './field-decorators';
 
 export class UpdateMinistryDto {
-  @IsOptional()
-  @IsString()
+  @RequiredText({ partial: true })
   @MaxLength(255)
-  @Transform(({ value }) => String(value ?? '').trim())
   name?: string;
 
   @IsOptional()
@@ -34,6 +32,7 @@ export class UpdateMinistryDto {
 
   @IsOptional()
   @IsString()
+  @IsImageRef()
   @MaxLength(512)
   @Transform(({ value }) => {
     const s = String(value ?? '').trim();
@@ -42,7 +41,7 @@ export class UpdateMinistryDto {
   image?: string | null;
 
   @IsOptional()
-  @IsBoolean()
+  @StrictBoolean()
   active?: boolean;
 
   @IsOptional()

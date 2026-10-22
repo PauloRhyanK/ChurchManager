@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
@@ -21,6 +21,8 @@ export interface SiteSectionDto {
 
 @Injectable()
 export class SiteContentService implements OnModuleInit {
+  private readonly logger = new Logger(SiteContentService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly siteRevalidation: SiteRevalidationService,
@@ -133,32 +135,39 @@ export class SiteContentService implements OnModuleInit {
       items: ministryItems,
     };
 
-    // Merge giving configurations
-    const defaultGiving = sections.find((s) => s.key === 'giving')?.value ?? {};
+    // Fonte oficial: ChurchConfig. Com a linha criada, campo limpo (null) sai
+    // vazio; o JSON legado só vale enquanto o tenant ainda não tem ChurchConfig.
+    const pick = (
+      section: string,
+      field: string,
+      fromConfig: string | null | undefined,
+    ): string => {
+      if (config) return fromConfig ?? '';
+      return (out[section]?.[field] as string | undefined) ?? '';
+    };
+
     if (out.giving) {
       out.giving = {
         ...out.giving,
-        pixKey: config?.pixKey ?? (defaultGiving.pixKey as string) ?? '',
-        bankName: config?.bankName ?? (defaultGiving.bankName as string) ?? '',
-        bankCode: config?.bankCode ?? (defaultGiving.bankCode as string) ?? '',
-        agency: config?.agency ?? (defaultGiving.agency as string) ?? '',
-        account: config?.account ?? (defaultGiving.account as string) ?? '',
-        holderName: config?.holderName ?? (defaultGiving.holderName as string) ?? '',
-        holderDocument: config?.holderDocument ?? (defaultGiving.holderDocument as string) ?? '',
+        pixKey: pick('giving', 'pixKey', config?.pixKey),
+        bankName: pick('giving', 'bankName', config?.bankName),
+        bankCode: pick('giving', 'bankCode', config?.bankCode),
+        agency: pick('giving', 'agency', config?.agency),
+        account: pick('giving', 'account', config?.account),
+        holderName: pick('giving', 'holderName', config?.holderName),
+        holderDocument: pick('giving', 'holderDocument', config?.holderDocument),
       };
     }
 
-    // Merge contact configurations
-    const defaultContact = sections.find((s) => s.key === 'contact')?.value ?? {};
     if (out.contact) {
       out.contact = {
         ...out.contact,
-        phone: config?.phone ?? (defaultContact.phone as string) ?? '',
-        email: config?.email ?? (defaultContact.email as string) ?? '',
-        address: config?.address ?? (defaultContact.address as string) ?? '',
-        youtubeUrl: config?.youtubeUrl ?? (defaultContact.youtubeUrl as string) ?? '',
-        instagramUrl: config?.instagramUrl ?? (defaultContact.instagramUrl as string) ?? '',
-        facebookUrl: config?.facebookUrl ?? (defaultContact.facebookUrl as string) ?? '',
+        phone: pick('contact', 'phone', config?.phone),
+        email: pick('contact', 'email', config?.email),
+        address: pick('contact', 'address', config?.address),
+        youtubeUrl: pick('contact', 'youtubeUrl', config?.youtubeUrl),
+        instagramUrl: pick('contact', 'instagramUrl', config?.instagramUrl),
+        facebookUrl: pick('contact', 'facebookUrl', config?.facebookUrl),
       };
     }
 
@@ -232,163 +241,128 @@ export class SiteContentService implements OnModuleInit {
     };
   }
 
+  /**
+   * Migração legada (listas e config que antes viviam em `site_content`).
+   * Estritamente aditiva: só insere nas tabelas do tenant quando estão vazias
+   * e nunca altera nem apaga `site_content`. Idempotente — pode rodar a cada
+   * boot. Uma transação por tenant; falha num tenant não impede os demais.
+   */
   async onModuleInit() {
+    let tenants: { id: string }[];
     try {
-      await this.migrateLegacyData();
+      tenants = await this.prisma.tenant.findMany({ select: { id: true } });
     } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error('Falha na migração automática de dados legado do Site:', err);
+      this.logger.error('Migração legada do Site não executou', err as Error);
+      return;
+    }
+
+    for (const { id: tenantId } of tenants) {
+      try {
+        const migrated = await this.prisma.$transaction((tx) =>
+          this.migrateTenantLegacyData(tx, tenantId),
+        );
+        if (migrated.length > 0) {
+          this.logger.log(`Migração legada [${tenantId}]: ${migrated.join(', ')}`);
+        }
+      } catch (err) {
+        this.logger.error(
+          `Migração legada [${tenantId}] revertida`,
+          err as Error,
+        );
+      }
     }
   }
 
-  private async migrateLegacyData() {
-    const tenants = await this.prisma.tenant.findMany({
-      select: { id: true },
-    });
+  /** Devolve o que foi migrado neste tenant (vazio = nada a fazer). */
+  private async migrateTenantLegacyData(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+  ): Promise<string[]> {
+    const rows = await tx.siteContent.findMany({ where: { tenantId } });
+    const legacy = (key: string): Record<string, any> | null => {
+      const value = rows.find((r) => r.key === key)?.value;
+      return value && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Record<string, any>)
+        : null;
+    };
+    const items = (key: string): any[] => {
+      const list = legacy(key)?.items;
+      return Array.isArray(list) ? list : [];
+    };
+    const migrated: string[] = [];
 
-    for (const tenant of tenants) {
-      const tenantId = tenant.id;
-
-      // 1. Obter registros de SiteContent deste tenant
-      const siteContents = await this.prisma.siteContent.findMany({
-        where: { tenantId },
+    const branches = items('churches');
+    if (branches.length > 0 && (await tx.churchBranch.count({ where: { tenantId } })) === 0) {
+      await tx.churchBranch.createMany({
+        data: branches.map((item, index) => ({
+          tenantId,
+          name: item.name ?? 'Filial',
+          location: item.location ?? null,
+          address: item.address ?? null,
+          image: item.image ?? null,
+          mapsUrl: item.mapsUrl ?? null,
+          isHeadquarters: item.isHeadquarters ?? false,
+          active: item.active ?? true,
+          sortOrder: index,
+        })),
       });
-
-      const churchesContent = siteContents.find((c) => c.key === 'churches');
-      const pastorsContent = siteContents.find((c) => c.key === 'pastors');
-      const ministriesContent = siteContents.find((c) => c.key === 'ministries');
-      const givingContent = siteContents.find((c) => c.key === 'giving');
-      const contactContent = siteContents.find((c) => c.key === 'contact');
-
-      // --- Migrar Igrejas (churches) ---
-      if (churchesContent && typeof churchesContent.value === 'object' && churchesContent.value !== null) {
-        const value = churchesContent.value as Record<string, any>;
-        if (Array.isArray(value.items) && value.items.length > 0) {
-          const count = await this.prisma.churchBranch.count({ where: { tenantId } });
-          if (count === 0) {
-            await this.prisma.churchBranch.createMany({
-              data: value.items.map((item: any, index: number) => ({
-                tenantId,
-                name: item.name ?? 'Filial',
-                location: item.location ?? null,
-                address: item.address ?? null,
-                image: item.image ?? null,
-                mapsUrl: item.mapsUrl ?? null,
-                isHeadquarters: item.isHeadquarters ?? false,
-                active: item.active ?? true,
-                sortOrder: index,
-              })),
-            });
-          }
-          // Limpar do JSON
-          const { items, ...cleanedValue } = value;
-          await this.prisma.siteContent.update({
-            where: { id: churchesContent.id },
-            data: { value: cleanedValue as any },
-          });
-        }
-      }
-
-      // --- Migrar Pastores (pastors) ---
-      if (pastorsContent && typeof pastorsContent.value === 'object' && pastorsContent.value !== null) {
-        const value = pastorsContent.value as Record<string, any>;
-        if (Array.isArray(value.items) && value.items.length > 0) {
-          const count = await this.prisma.pastor.count({ where: { tenantId } });
-          if (count === 0) {
-            await this.prisma.pastor.createMany({
-              data: value.items.map((item: any, index: number) => ({
-                tenantId,
-                name: item.name ?? 'Pastor',
-                image: item.image ?? null,
-                active: item.active ?? true,
-                sortOrder: index,
-              })),
-            });
-          }
-          // Limpar do JSON
-          const { items, ...cleanedValue } = value;
-          await this.prisma.siteContent.update({
-            where: { id: pastorsContent.id },
-            data: { value: cleanedValue as any },
-          });
-        }
-      }
-
-      // --- Migrar Ministérios (ministries) ---
-      if (ministriesContent && typeof ministriesContent.value === 'object' && ministriesContent.value !== null) {
-        const value = ministriesContent.value as Record<string, any>;
-        if (Array.isArray(value.items) && value.items.length > 0) {
-          const count = await this.prisma.ministry.count({ where: { tenantId } });
-          if (count === 0) {
-            await this.prisma.ministry.createMany({
-              data: value.items.map((item: any, index: number) => ({
-                tenantId,
-                name: item.name ?? 'Ministério',
-                description: item.description ?? null,
-                icon: item.icon ?? null,
-                image: item.image ?? null,
-                active: item.active ?? true,
-                sortOrder: index,
-              })),
-            });
-          }
-          // Delete total do SiteContent de ministries já que só tinha items
-          await this.prisma.siteContent.delete({
-            where: { id: ministriesContent.id },
-          });
-        }
-      }
-
-      // --- Migrar Configurações Gerais, Redes Sociais e Ofertório (giving e contact) ---
-      const hasGiving = givingContent && typeof givingContent.value === 'object' && givingContent.value !== null;
-      const hasContact = contactContent && typeof contactContent.value === 'object' && contactContent.value !== null;
-
-      if (hasGiving || hasContact) {
-        const configCount = await this.prisma.churchConfig.count({ where: { tenantId } });
-        if (configCount === 0) {
-          const givingValue = hasGiving ? (givingContent.value as Record<string, any>) : {};
-          const contactValue = hasContact ? (contactContent.value as Record<string, any>) : {};
-
-          await this.prisma.churchConfig.create({
-            data: {
-              tenantId,
-              pixKey: givingValue.pixKey ?? null,
-              bankName: givingValue.bankName ?? null,
-              bankCode: givingValue.bankCode ?? null,
-              agency: givingValue.agency ?? null,
-              account: givingValue.account ?? null,
-              holderName: givingValue.holderName ?? null,
-              holderDocument: givingValue.holderDocument ?? null,
-              phone: contactValue.phone ?? null,
-              email: contactValue.email ?? null,
-              address: contactValue.address ?? null,
-              youtubeUrl: contactValue.youtubeUrl ?? null,
-              instagramUrl: contactValue.instagramUrl ?? null,
-              facebookUrl: contactValue.facebookUrl ?? null,
-            },
-          });
-        }
-
-        // Limpar campos bancários do JSON de giving
-        if (hasGiving) {
-          const val = givingContent.value as Record<string, any>;
-          const { pixKey, bankName, bankCode, agency, account, holderName, holderDocument, ...cleanedGiving } = val;
-          await this.prisma.siteContent.update({
-            where: { id: givingContent.id },
-            data: { value: cleanedGiving as any },
-          });
-        }
-
-        // Limpar contatos e redes sociais do JSON de contact
-        if (hasContact) {
-          const val = contactContent.value as Record<string, any>;
-          const { phone, email, address, youtubeUrl, instagramUrl, facebookUrl, ...cleanedContact } = val;
-          await this.prisma.siteContent.update({
-            where: { id: contactContent.id },
-            data: { value: cleanedContact as any },
-          });
-        }
-      }
+      migrated.push(`${branches.length} filiais`);
     }
+
+    const pastors = items('pastors');
+    if (pastors.length > 0 && (await tx.pastor.count({ where: { tenantId } })) === 0) {
+      await tx.pastor.createMany({
+        data: pastors.map((item, index) => ({
+          tenantId,
+          name: item.name ?? 'Pastor',
+          image: item.image ?? null,
+          active: item.active ?? true,
+          sortOrder: index,
+        })),
+      });
+      migrated.push(`${pastors.length} pastores`);
+    }
+
+    const ministries = items('ministries');
+    if (ministries.length > 0 && (await tx.ministry.count({ where: { tenantId } })) === 0) {
+      await tx.ministry.createMany({
+        data: ministries.map((item, index) => ({
+          tenantId,
+          name: item.name ?? 'Ministério',
+          description: item.description ?? null,
+          icon: item.icon ?? null,
+          image: item.image ?? null,
+          active: item.active ?? true,
+          sortOrder: index,
+        })),
+      });
+      migrated.push(`${ministries.length} ministérios`);
+    }
+
+    const giving = legacy('giving');
+    const contact = legacy('contact');
+    if ((giving || contact) && (await tx.churchConfig.count({ where: { tenantId } })) === 0) {
+      await tx.churchConfig.create({
+        data: {
+          tenantId,
+          pixKey: giving?.pixKey ?? null,
+          bankName: giving?.bankName ?? null,
+          bankCode: giving?.bankCode ?? null,
+          agency: giving?.agency ?? null,
+          account: giving?.account ?? null,
+          holderName: giving?.holderName ?? null,
+          holderDocument: giving?.holderDocument ?? null,
+          phone: contact?.phone ?? null,
+          email: contact?.email ?? null,
+          address: contact?.address ?? null,
+          youtubeUrl: contact?.youtubeUrl ?? null,
+          instagramUrl: contact?.instagramUrl ?? null,
+          facebookUrl: contact?.facebookUrl ?? null,
+        },
+      });
+      migrated.push('configuração da igreja');
+    }
+
+    return migrated;
   }
 }
