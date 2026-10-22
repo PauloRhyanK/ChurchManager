@@ -2,11 +2,15 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
 import { UpdateScheduleDto } from './dto/update-schedule.dto';
+import { SiteRevalidationService } from '../site/site-revalidation.service';
 import { parseTimeOnly, toScheduleDto } from './event-format.util';
 
 @Injectable()
 export class SchedulesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly siteRevalidation: SiteRevalidationService,
+  ) {}
 
   async listForTenant(tenantId: string, activeOnly = false) {
     const rows = await this.prisma.schedule.findMany({
@@ -32,6 +36,7 @@ export class SchedulesService {
         sortOrder: dto.sortOrder ?? 0,
       },
     });
+    this.siteRevalidation.notifyContentChanged(tenantId);
     return toScheduleDto(row);
   }
 
@@ -59,6 +64,7 @@ export class SchedulesService {
         ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
       },
     });
+    this.siteRevalidation.notifyContentChanged(tenantId);
     return toScheduleDto(row);
   }
 
@@ -71,6 +77,7 @@ export class SchedulesService {
       throw new NotFoundException('Programação não encontrada');
     }
     await this.prisma.schedule.delete({ where: { id } });
+    this.siteRevalidation.notifyContentChanged(tenantId);
     return { ok: true };
   }
 }

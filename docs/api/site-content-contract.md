@@ -219,13 +219,21 @@ Como as secções são todas servidas juntas, **busque uma vez no layout ou na p
 
 O site usa cache ISR/tag `site-content` (ex.: `revalidate: 300` ou tag dedicada).
 
-**ChurchManager (painel):** após `PUT` ou `DELETE` numa secção, se `SITE_REVALIDATION_SECRET` estiver definido na API **e** existir pelo menos uma origem em `tenant_public_web_origins`, a API faz:
+**ChurchManager (painel):** após guardar conteúdo (secções do site, igreja, filiais, pastores, ministérios e agenda semanal), se `SITE_REVALIDATION_SECRET` estiver definido, a API avisa **todos** os destinos do tenant em `SITE_REVALIDATION_TARGETS` (configuração da plataforma, não as origens CORS do tenant), em paralelo, com timeout de 5 s:
 
 ```http
-GET {primeira_origem}/api/revalidate-site-content?secret={SITE_REVALIDATION_SECRET}
+GET {destino}/api/revalidate-site-content
+x-revalidation-secret: {SITE_REVALIDATION_SECRET}
 ```
 
-Fire-and-forget — falhas só entram em log; o save no painel não falha. Em dev local, omita o secret ou não registe origem.
+```env
+SITE_REVALIDATION_TARGETS={"paraiso":["https://site-producao","https://site-homologacao"]}
+```
+
+- Chave = slug do tenant. Tenant sem entrada → não revalida (o site atualiza pelo TTL, no máximo 300 s).
+- Só `https` (`http` apenas para localhost quando `NODE_ENV` ≠ `production`). JSON inválido → erro no log e revalidação desativada; a API sobe normalmente.
+- O segredo vai só no header, nunca na URL nem no log.
+- Fire-and-forget: falhas só entram em log; a operação no painel nunca falha por causa da revalidação.
 
 **Preview/QA do site:** conteúdo pode correr com `no-store`; o webhook pode não ser necessário.
 

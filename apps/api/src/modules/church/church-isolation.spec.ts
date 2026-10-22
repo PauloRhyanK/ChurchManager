@@ -36,7 +36,7 @@ function build(writes: string[]) {
     branches: new BranchesService(prisma as never, noopRevalidation as never),
     pastors: new PastorsService(prisma as never, noopRevalidation as never),
     ministries: new MinistriesService(prisma as never, noopRevalidation as never),
-    schedules: new SchedulesService(prisma as never),
+    schedules: new SchedulesService(prisma as never, noopRevalidation as never),
   };
 }
 
