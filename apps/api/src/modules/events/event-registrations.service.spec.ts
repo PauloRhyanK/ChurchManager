@@ -315,11 +315,28 @@ test('createForEvent: e-mail duplicado com ingresso responde 409', async () => {
   assert.deepEqual(log, ['inicio-transacao', 'reserva-estoque', 'cria-inscricao']);
 });
 
-test('createForEvent (admin): aceita evento com inscrições encerradas', async () => {
-  const { service, created, eventQueries } = build({
-    event: { id: EVENT },
+/** Rascunho e com data passada: o site recusaria, o painel aceita. */
+const closedEvent = eventRow({
+  published: false,
+  date: new Date(Date.UTC(2000, 0, 1)),
+});
+
+test('createForEvent: ingresso só para quem tem conta exige userId no site', async () => {
+  const { service, created } = build({
+    ticket: ticketRow({ allowGuestRegistration: false }),
   });
-  // Evento passado e rascunho: o painel ainda pode inscrever.
+  await assert.rejects(
+    () => service.createForEvent(TENANT, EVENT, bodyWithTicket),
+    rejectsWith(
+      BadRequestException,
+      'É necessário iniciar sessão para se inscrever neste ingresso',
+    ),
+  );
+  assert.equal(created.length, 0);
+});
+
+test('createForEvent (admin): aceita evento com inscrições encerradas', async () => {
+  const { service, created, eventQueries } = build({ event: closedEvent });
   const result = await service.createForEvent(TENANT, EVENT, body, {
     enforcePublicRules: false,
   });
@@ -331,22 +348,71 @@ test('createForEvent (admin): aceita evento com inscrições encerradas', async 
   });
 });
 
-test('createForEvent (admin): ignora janela, preço e estoque do ingresso', async () => {
-  const { service, created, stockUpdates } = build({
-    event: { id: EVENT },
+test('createForEvent (admin): ignora janela e preço, mas reserva a vaga na transação', async () => {
+  const { service, created, log, stockUpdates } = build({
+    event: closedEvent,
     ticket: ticketRow({
       salesClosesAt: new Date(Date.UTC(2000, 0, 1)),
       priceCents: 5000,
       quantityTotal: 10,
-      quantitySold: 10,
+      quantitySold: 9,
     }),
   });
   const result = await service.createForEvent(TENANT, EVENT, bodyWithTicket, {
     enforcePublicRules: false,
   });
   assert.equal(created.length, 1);
-  assert.equal(stockUpdates.length, 0);
+  assert.deepEqual(log, [
+    'inicio-transacao',
+    'reserva-estoque',
+    'cria-inscricao',
+    'fim-transacao',
+  ]);
+  assert.deepEqual(stockUpdates[0].values, [1, TICKET, TENANT, 1]);
   assert.equal(result.communityLink, 'https://chat.whatsapp.com/abc');
+});
+
+test('createForEvent (admin): ingresso esgotado responde 409 (como a emissão no local)', async () => {
+  const { service, created, stockUpdates } = build({
+    event: closedEvent,
+    ticket: ticketRow({ quantityTotal: 10, quantitySold: 10 }),
+  });
+  await assert.rejects(
+    () =>
+      service.createForEvent(TENANT, EVENT, bodyWithTicket, {
+        enforcePublicRules: false,
+      }),
+    rejectsWith(ConflictException, 'Ingressos esgotados'),
+  );
+  assert.equal(created.length, 0);
+  assert.equal(stockUpdates.length, 0);
+});
+
+test('createForEvent (admin): corrida perdida pela última vaga responde 409', async () => {
+  const { service, created } = build({
+    event: closedEvent,
+    ticket: ticketRow({ quantityTotal: 10, quantitySold: 9 }),
+    reserveAffected: 0,
+  });
+  await assert.rejects(
+    () =>
+      service.createForEvent(TENANT, EVENT, bodyWithTicket, {
+        enforcePublicRules: false,
+      }),
+    rejectsWith(ConflictException, 'Ingressos esgotados'),
+  );
+  assert.equal(created.length, 0);
+});
+
+test('createForEvent (admin): ingresso só para quem tem conta aceita inscrição sem userId', async () => {
+  const { service, created } = build({
+    event: closedEvent,
+    ticket: ticketRow({ allowGuestRegistration: false }),
+  });
+  await service.createForEvent(TENANT, EVENT, bodyWithTicket, {
+    enforcePublicRules: false,
+  });
+  assert.equal(created.length, 1);
 });
 
 test('createForEvent (admin): evento de outro tenant continua 404', async () => {
@@ -361,7 +427,7 @@ test('createForEvent (admin): evento de outro tenant continua 404', async () => 
 
 test('createForEvent (admin): ingresso inexistente ou inativo continua 404', async () => {
   for (const ticket of [null, ticketRow({ active: false })]) {
-    const { service, created } = build({ event: { id: EVENT }, ticket });
+    const { service, created } = build({ event: closedEvent, ticket });
     await assert.rejects(
       () =>
         service.createForEvent(TENANT, EVENT, bodyWithTicket, {
@@ -378,7 +444,7 @@ test('createForEvent (admin): e-mail duplicado continua 409', async () => {
     code: 'P2002',
     clientVersion: 'test',
   });
-  const { service } = build({ event: { id: EVENT }, createError: duplicate });
+  const { service } = build({ event: closedEvent, createError: duplicate });
   await assert.rejects(
     () =>
       service.createForEvent(TENANT, EVENT, body, { enforcePublicRules: false }),

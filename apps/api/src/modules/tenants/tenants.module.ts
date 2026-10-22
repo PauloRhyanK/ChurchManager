@@ -3,10 +3,8 @@ import { TenantsService } from './tenants.service';
 import { TenantCredentialsService } from './tenant-credentials.service';
 import { TenantPublicWebOriginService } from './tenant-public-web-origin.service';
 import { PlatformTenantsController } from './platform-tenants.controller';
-import {
-  TenantsMeController,
-  TenantsMePublicSiteController,
-} from './tenants-me.controller';
+import { TenantsMeController } from './tenants-me.controller';
+import { TenantsMePublicSiteController } from './tenants-me-public-site.controller';
 import { CryptoService } from '../../common/crypto.service';
 import { AsaasClient } from '../financial/asaas/asaas.client';
 import { AuthModule } from '../auth/auth.module';

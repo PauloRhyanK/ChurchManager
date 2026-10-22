@@ -26,7 +26,8 @@
         "eventId": "coloque-o-uuid-do-evento-aqui",
         "ticketId": "coloque-o-uuid-do-ingresso-aqui",
         "orderId": "coloque-o-uuid-do-pedido-aqui",
-        "ticketIssuedId": "coloque-o-uuid-do-ingresso-emitido-aqui"
+        "ticketIssuedId": "coloque-o-uuid-do-ingresso-emitido-aqui",
+        "participant_secret": "valor-de-PUBLIC_PARTICIPANT_API_SECRET"
       },
       "dataPropertyOrder": {
         "&": [
@@ -35,7 +36,8 @@
           "eventId",
           "ticketId",
           "orderId",
-          "ticketIssuedId"
+          "ticketIssuedId",
+          "participant_secret"
         ]
       },
       "color": "#7d69f2",
@@ -245,7 +247,13 @@
           "id": "param_chk_user"
         }
       ],
-      "headers": [],
+      "headers": [
+        {
+          "name": "x-participant-secret",
+          "value": "{{ _.participant_secret }}",
+          "id": "header_participant_secret_check"
+        }
+      ],
       "authentication": {},
       "metaSortKey": 1000,
       "isPrivate": false,
@@ -275,7 +283,13 @@
           "id": "param_mine_user"
         }
       ],
-      "headers": [],
+      "headers": [
+        {
+          "name": "x-participant-secret",
+          "value": "{{ _.participant_secret }}",
+          "id": "header_participant_secret_mine"
+        }
+      ],
       "authentication": {},
       "metaSortKey": 1100,
       "isPrivate": false,

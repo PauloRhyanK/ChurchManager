@@ -89,7 +89,8 @@ export class TenantsMeCheckinController {
     @Param('eventId', ParseUUIDPipe) eventId: string,
     @Body() dto: CreateEventRegistrationDto,
   ) {
-    // Painel: sem as regras do site (evento passado/rascunho, janela, preço e estoque).
+    // Painel: sem as regras do site (evento passado/rascunho, janela, preço e
+    // login obrigatório); a vaga é reservada como na emissão no local.
     return this.registrations.createForEvent(user.tenantId, eventId, dto, {
       enforcePublicRules: false,
     });

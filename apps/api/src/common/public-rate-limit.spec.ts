@@ -54,7 +54,7 @@ async function allowedPerMinute(
     }),
   } as unknown as Parameters<ThrottlerGuard['canActivate']>[0];
 
-  for (let i = 0; i < 100; i += 1) {
+  for (let i = 0; i < 1_000; i += 1) {
     try {
       await guard.canActivate(context);
     } catch (err) {
@@ -72,9 +72,16 @@ test('rotas públicas de eventos: 30/min por IP (só o throttler public)', async
     await allowedPerMinute(PublicEventsController, 'createRegistration'),
     30,
   );
+});
+
+test('rotas com x-participant-secret: 300/min (o site chama do servidor, um IP para todos)', async () => {
+  assert.equal(
+    await allowedPerMinute(PublicEventsController, 'checkRegistration'),
+    300,
+  );
   assert.equal(
     await allowedPerMinute(PublicEventsController, 'listMyRegistrations'),
-    30,
+    300,
   );
 });
 

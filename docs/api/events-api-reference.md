@@ -584,7 +584,7 @@ Para eventos sem venda de ingressos (formulário “Quero participar”).
 
 ### `GET /api/public/tenants/:slug/events/:eventId/registrations/check`
 
-**Header obrigatório:** `x-participant-secret: <segredo>` — o mesmo valor de `PUBLIC_PARTICIPANT_API_SECRET` na API (`CHURCHMANAGER_PARTICIPANT_SECRET` no site). Chame **só do servidor** do site (route handler / server action); o segredo nunca vai para o browser.
+**Header obrigatório:** `x-participant-secret: <segredo>` — o mesmo valor de `PUBLIC_PARTICIPANT_API_SECRET` na API (`CHURCHMANAGER_PARTICIPANT_SECRET` no site). Chame **só do servidor** do site (route handler / server action); o segredo nunca vai para o browser. Como todos os visitantes chegam com o IP do servidor do site, esta rota e `registrations/mine` têm limite de 300 pedidos/min por IP (em vez de 30).
 
 | Query | Descrição |
 |-------|-----------|
@@ -701,7 +701,7 @@ Formato típico Nest (validação):
 | `401` | `registrations/check` ou `registrations/mine` sem o header `x-participant-secret` válido |
 | `404` | Tenant, evento, pedido ou bilhete não encontrado |
 | `409` | Stock insuficiente no checkout, ingresso esgotado na inscrição, e-mail já inscrito, ou `idempotencyKey` inutilizável |
-| `429` | Rate limit: 30 pedidos/min por IP em cada rota pública (throttler `public`); o checkout também tem 20/min por IP (throttler `links`). Retry com backoff (header `Retry-After-public` / `Retry-After-links`) |
+| `429` | Rate limit: 30 pedidos/min por IP em cada rota pública (throttler `public`); o checkout também tem 20/min por IP (throttler `links`); `registrations/check` e `registrations/mine` (servidor a servidor) têm 300/min. Retry com backoff (header `Retry-After-public` / `Retry-After-links`) |
 | `500` | Asaas não configurado no tenant |
 
 ---

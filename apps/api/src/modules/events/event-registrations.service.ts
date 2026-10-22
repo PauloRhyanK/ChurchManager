@@ -19,9 +19,10 @@ import { EventTicketTypesService } from './event-ticket-types.service';
 export type CreateRegistrationOptions = {
   /**
    * `true` (padrão, site público): evento publicado e não passado; ingresso em
-   * janela de venda, gratuito e com vaga, reservada na mesma transação.
-   * `false` (painel): só exige evento e ingresso ativo do tenant; o e-mail
-   * duplicado continua respondendo 409.
+   * janela de venda, gratuito e, se exigir conta, com `userId`.
+   * `false` (check-in no painel): pula essas regras (a equipa inscreve no
+   * local). Nos dois modos: evento e ingresso ativo do tenant, vaga reservada
+   * na mesma transação (409 se esgotado) e 409 para e-mail duplicado.
    */
   enforcePublicRules?: boolean;
 };
@@ -69,9 +70,10 @@ export class EventRegistrationsService {
 
     const email = dto.email.trim().toLowerCase();
 
-    // Ingresso opcional: tem de existir e estar ativo; no site, também gratuito,
-    // em janela e com vagas. Valida login obrigatório, campos e link de comunidade.
-    let reserveTicketTypeId: string | null = null;
+    // Ingresso opcional: tem de existir, estar ativo e ter vaga; no site, também
+    // em janela, gratuito e com login quando exigido. Valida campos e devolve o
+    // link de comunidade.
+    let ticketTypeId: string | null = null;
     let communityLink: string | null = null;
     let fieldValuesToPersist: Array<{ fieldId: string; value: string }> = [];
     if (dto.ticketTypeId) {
@@ -83,14 +85,12 @@ export class EventRegistrationsService {
         throw new NotFoundException('Tipo de ingresso não encontrado');
       }
       if (enforcePublicRules) {
-        this.assertTicketOpenForPublicRegistration(ticket);
-        reserveTicketTypeId = ticket.id;
+        this.assertTicketOpenForPublicRegistration(ticket, dto.userId);
       }
-      if (!ticket.allowGuestRegistration && !dto.userId) {
-        throw new BadRequestException(
-          'É necessário iniciar sessão para se inscrever neste ingresso',
-        );
+      if (isTicketTypeSoldOut(ticket)) {
+        throw new ConflictException('Ingressos esgotados');
       }
+      ticketTypeId = ticket.id;
       communityLink = ticket.communityLink;
       fieldValuesToPersist = collectFieldValues(
         ticket.fieldConfigs.map((fc) => ({
@@ -108,11 +108,11 @@ export class EventRegistrationsService {
       const row = await this.prisma.$transaction(async (tx) => {
         // Mesma reserva atômica do checkout: a inscrição e a vaga entram (ou
         // não) juntas, e quem perde a corrida pela última vaga recebe 409.
-        if (reserveTicketTypeId) {
+        if (ticketTypeId) {
           const reserved = await this.ticketTypes.reserveStock(
             tx,
             tenantId,
-            reserveTicketTypeId,
+            ticketTypeId,
             1,
           );
           if (!reserved) {
@@ -215,7 +215,10 @@ export class EventRegistrationsService {
     return event;
   }
 
-  /** Regras do site para inscrição com ingresso: em janela, gratuito e com vaga. */
+  /**
+   * Regras só do site para inscrição com ingresso: em janela de venda,
+   * gratuito e, se o ingresso exigir conta, com `userId`.
+   */
   private assertTicketOpenForPublicRegistration(
     ticket: Pick<
       EventTicketType,
@@ -223,9 +226,9 @@ export class EventRegistrationsService {
       | 'salesClosesAt'
       | 'priceCents'
       | 'feeCents'
-      | 'quantityTotal'
-      | 'quantitySold'
+      | 'allowGuestRegistration'
     >,
+    userId: string | null | undefined,
   ) {
     if (!isTicketTypeInSalesWindow(ticket)) {
       throw new BadRequestException(
@@ -237,8 +240,10 @@ export class EventRegistrationsService {
         'Este ingresso é pago. Use o checkout para comprar.',
       );
     }
-    if (isTicketTypeSoldOut(ticket)) {
-      throw new ConflictException('Ingressos esgotados');
+    if (!ticket.allowGuestRegistration && !userId) {
+      throw new BadRequestException(
+        'É necessário iniciar sessão para se inscrever neste ingresso',
+      );
     }
   }
 

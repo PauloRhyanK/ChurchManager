@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Reflector } from '@nestjs/core';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
+import { AuthGuard } from '@nestjs/passport';
 import type { AuthUser } from '../auth/auth-user';
-import { PermissionsGuard } from '../access/permissions.guard';
 import { REQUIRE_PERMISSION_KEY } from '../access/require-permission.decorator';
 import { SiteRevalidationService } from '../site/site-revalidation.service';
-import { TenantsMePublicSiteController } from './tenants-me.controller';
+import { TenantsMePublicSiteController } from './tenants-me-public-site.controller';
 
 const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const user = { tenantId: TENANT, tenantSlug: 'paraiso' } as AuthUser;
@@ -89,8 +89,8 @@ test('public-site: protegido só pelo JWT, sem permissão de módulo', () => {
     handler,
     TenantsMePublicSiteController,
   ]);
-  assert.equal(guards.length, 1);
-  assert.notEqual(guards[0], PermissionsGuard);
+  // AuthGuard é memoizado por estratégia: AuthGuard('jwt') devolve a mesma classe.
+  assert.deepEqual(guards, [AuthGuard('jwt')]);
   assert.equal(
     reflector.getAllAndOverride(REQUIRE_PERMISSION_KEY, [
       handler,
