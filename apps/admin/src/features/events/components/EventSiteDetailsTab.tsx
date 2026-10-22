@@ -79,6 +79,7 @@ export function EventSiteDetailsTab({ event }: Props) {
           <Label>Imagem de capa (16:9)</Label>
           <ImageUploader
             value={coverImageUrl}
+            hint="Imagem da capa do evento, proporção 16:9 (ex.: 1920x1080). JPEG, PNG, WebP ou GIF, até 5 MB."
             disabled={coverMutation.isPending}
             onChange={(url) => {
               const next = url ?? "";
