@@ -170,9 +170,3 @@ export function startOfTodayInTimeZone(
     Number(parts.find((p) => p.type === type)?.value);
   return new Date(Date.UTC(part('year'), part('month') - 1, part('day')));
 }
-
-/** Início do dia UTC para filtro date >= hoje. */
-export function startOfTodayUtc(): Date {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-}

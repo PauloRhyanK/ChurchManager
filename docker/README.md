@@ -262,6 +262,8 @@ Usa [`.env.qa.example`](../.env.qa.example) como base. Pontos críticos:
 | `API_IMAGE` | Opcional; se definido, puxa imagem do GHCR em vez de build local |
 | `ADMIN_IMAGE` | Opcional; imagem do admin no GHCR. Evita compilar o Vite na VPS (principal causa de OOM) |
 | `ADMIN_BUILD_MEMORY` | Só se construíres o admin na VPS: limite de heap do Node no build (MB, ex.: 1024) |
+| `PUBLIC_PARTICIPANT_API_SECRET` | Segredo compartilhado com o site público (`CHURCHMANAGER_PARTICIPANT_SECRET` no site), enviado no header `x-participant-secret`; protege as rotas com dados de participantes. Deploy: primeiro o site, depois a API |
+| `TRUST_PROXY_HOPS` | Nº de proxies à frente da API (`2` = Cloudflare + nginx; rate limit por IP do visitante). `0` = sem proxy |
 
 Guia completo Cloudflare + NPM + R2: [docs/qa-cloudflare-npm-r2.md](../docs/qa-cloudflare-npm-r2.md).
 
@@ -272,6 +274,9 @@ Guia completo Cloudflare + NPM + R2: [docs/qa-cloudflare-npm-r2.md](../docs/qa-c
 - **`ADMIN_CORS_ORIGIN`:** só o painel admin / login (ver [architecture.md](../docs/architecture.md) § multitenancy / CORS).
 - **Migrações:** `migrate deploy` corre no entrypoint; com várias réplicas, considera um job de deploy dedicado para evitar corridas.
 - **Imagem:** tag semântica (`registry/.../api:1.2.3`), não só `latest`.
+- **`PUBLIC_PARTICIPANT_API_SECRET`:** segredo compartilhado com o site público (`CHURCHMANAGER_PARTICIPANT_SECRET` no site), enviado só do servidor do site no header `x-participant-secret`. Protege as rotas com dados de participantes (`/registrations/mine` e `/events/:id/registrations/check`). Obrigatório em produção (sem ele: 401); vazio fora de produção deixa as rotas abertas.
+- **`TRUST_PROXY_HOPS`:** nº de proxies à frente da API (produção: `2` = Cloudflare + nginx; faz o rate limit valer por IP do visitante). `0` = sem proxy (dev local).
+- **Ordem do deploy:** primeiro o site (passa a enviar o header `x-participant-secret`), depois a API.
 
 ### VPS: imagem do GHCR e erro `pull access denied for church-manager-api`
 

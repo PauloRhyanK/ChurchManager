@@ -85,10 +85,16 @@ export class EventRegistrationsService {
         throw new NotFoundException('Tipo de ingresso não encontrado');
       }
       if (enforcePublicRules) {
-        this.assertTicketOpenForPublicRegistration(ticket, dto.userId);
+        this.assertTicketOpenForPublicRegistration(ticket);
       }
+      // Esgotado antes do login: não pedir sessão para um ingresso sem vagas.
       if (isTicketTypeSoldOut(ticket)) {
         throw new ConflictException('Ingressos esgotados');
+      }
+      if (enforcePublicRules && !ticket.allowGuestRegistration && !dto.userId) {
+        throw new BadRequestException(
+          'É necessário iniciar sessão para se inscrever neste ingresso',
+        );
       }
       ticketTypeId = ticket.id;
       communityLink = ticket.communityLink;
@@ -222,13 +228,8 @@ export class EventRegistrationsService {
   private assertTicketOpenForPublicRegistration(
     ticket: Pick<
       EventTicketType,
-      | 'salesOpensAt'
-      | 'salesClosesAt'
-      | 'priceCents'
-      | 'feeCents'
-      | 'allowGuestRegistration'
+      'salesOpensAt' | 'salesClosesAt' | 'priceCents' | 'feeCents'
     >,
-    userId: string | null | undefined,
   ) {
     if (!isTicketTypeInSalesWindow(ticket)) {
       throw new BadRequestException(
@@ -238,11 +239,6 @@ export class EventRegistrationsService {
     if (ticket.priceCents + ticket.feeCents > 0) {
       throw new BadRequestException(
         'Este ingresso é pago. Use o checkout para comprar.',
-      );
-    }
-    if (!ticket.allowGuestRegistration && !userId) {
-      throw new BadRequestException(
-        'É necessário iniciar sessão para se inscrever neste ingresso',
       );
     }
   }

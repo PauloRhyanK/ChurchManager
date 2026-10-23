@@ -335,6 +335,22 @@ test('createForEvent: ingresso só para quem tem conta exige userId no site', as
   assert.equal(created.length, 0);
 });
 
+test('createForEvent: ingresso esgotado só para quem tem conta responde 409 antes de pedir login', async () => {
+  const { service, created, stockUpdates } = build({
+    ticket: ticketRow({
+      allowGuestRegistration: false,
+      quantityTotal: 10,
+      quantitySold: 10,
+    }),
+  });
+  await assert.rejects(
+    () => service.createForEvent(TENANT, EVENT, bodyWithTicket),
+    rejectsWith(ConflictException, 'Ingressos esgotados'),
+  );
+  assert.equal(created.length, 0);
+  assert.equal(stockUpdates.length, 0);
+});
+
 test('createForEvent (admin): aceita evento com inscrições encerradas', async () => {
   const { service, created, eventQueries } = build({ event: closedEvent });
   const result = await service.createForEvent(TENANT, EVENT, body, {

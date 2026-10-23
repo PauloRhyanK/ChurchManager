@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test, { afterEach } from 'node:test';
 import { UnauthorizedException } from '@nestjs/common';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
+import { Reflector } from '@nestjs/core';
 import { ParticipantSecretGuard } from './participant-secret.guard';
+import { PublicEventsController } from './public-events.controller';
 
 const SECRET = 'segredo-compartilhado-com-o-site';
 const ORIGINAL_ENV = {
@@ -87,3 +90,14 @@ test('header certo permite (segredo configurado com espaços nas pontas)', () =>
     true,
   );
 });
+
+for (const name of ['checkRegistration', 'listMyRegistrations'] as const) {
+  test(`PublicEventsController.${name} está protegido pelo ParticipantSecretGuard`, () => {
+    const reflector = new Reflector();
+    const guards = reflector.getAllAndMerge<unknown[]>(GUARDS_METADATA, [
+      PublicEventsController.prototype[name],
+      PublicEventsController,
+    ]);
+    assert.ok(guards.includes(ParticipantSecretGuard));
+  });
+}
