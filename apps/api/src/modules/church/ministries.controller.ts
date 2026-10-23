@@ -21,7 +21,7 @@ import { UpdateMinistryDto } from './dto/update-ministry.dto';
 import { MinistriesService } from './ministries.service';
 
 @Controller('admin/tenants/me/ministries')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.CHURCH, PermissionLevel.VIEW)
 export class MinistriesController {

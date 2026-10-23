@@ -21,7 +21,7 @@ import { UpdatePastorDto } from './dto/update-pastor.dto';
 import { PastorsService } from './pastors.service';
 
 @Controller('admin/tenants/me/pastors')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.CHURCH, PermissionLevel.VIEW)
 export class PastorsController {

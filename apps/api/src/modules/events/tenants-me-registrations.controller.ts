@@ -15,7 +15,7 @@ import { RequirePermission } from '../access/require-permission.decorator';
 import { EventRegistrationsService } from './event-registrations.service';
 
 @Controller('admin/tenants/me')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.EVENT_REGISTRATIONS, PermissionLevel.VIEW)
 export class TenantsMeRegistrationsController {

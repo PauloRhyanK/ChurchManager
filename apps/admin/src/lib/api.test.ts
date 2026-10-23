@@ -43,6 +43,13 @@ describe("getApiErrorMessage", () => {
     expect(getApiErrorMessage(httpError(404))).toBe("Item não encontrado. Atualize a página e tente novamente.");
   });
 
+  it("429 → pede para aguardar, não fala em dados inválidos", () => {
+    const msg = getApiErrorMessage(
+      httpError(429, { statusCode: 429, message: "ThrottlerException: Too Many Requests" }),
+    );
+    expect(msg).toBe("Muitas requisições em pouco tempo. Aguarde um instante e tente novamente.");
+  });
+
   it("5xx → genérica, sem detalhes internos", () => {
     const msg = getApiErrorMessage(httpError(500, { message: "PrismaClientKnownRequestError at line 3" }));
     expect(msg).toBe("Erro interno do servidor. Tente novamente em instantes.");
