@@ -21,7 +21,7 @@ import { UpdateBranchDto } from './dto/update-branch.dto';
 import { BranchesService } from './branches.service';
 
 @Controller('admin/tenants/me/branches')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.CHURCH, PermissionLevel.VIEW)
 export class BranchesController {

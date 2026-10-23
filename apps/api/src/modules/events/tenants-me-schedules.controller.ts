@@ -21,7 +21,7 @@ import { UpdateScheduleDto } from './dto/update-schedule.dto';
 import { SchedulesService } from './schedules.service';
 
 @Controller('admin/tenants/me/schedules')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.CHURCH, PermissionLevel.VIEW)
 export class TenantsMeSchedulesController {

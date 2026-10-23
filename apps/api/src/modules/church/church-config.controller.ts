@@ -21,7 +21,7 @@ import { UpdateChurchConfigDto } from './dto/update-church-config.dto';
 import { ChurchConfigService } from './church-config.service';
 
 @Controller('admin/tenants/me/church-config')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.CHURCH, PermissionLevel.VIEW)
 export class ChurchConfigController {

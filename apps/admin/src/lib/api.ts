@@ -123,6 +123,7 @@ export function getApiErrorMessage(err: unknown): string {
     if (status === 403) return "Você não tem permissão para realizar esta ação.";
     if (status === 404) return "Item não encontrado. Atualize a página e tente novamente.";
     if (status === 413) return "Arquivo grande demais.";
+    if (status === 429) return "Muitas requisições em pouco tempo. Aguarde um instante e tente novamente.";
     if (status && status >= 500) return "Erro interno do servidor. Tente novamente em instantes.";
     const msg = validationMessages(err)[0];
     return msg && translateValidation(msg).text === msg ? msg : GENERIC_VALIDATION;

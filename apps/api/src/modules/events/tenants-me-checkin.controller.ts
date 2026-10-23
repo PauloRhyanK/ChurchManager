@@ -21,7 +21,7 @@ import { CreateEventRegistrationDto } from './dto/create-event-registration.dto'
 import { IssueFreeTicketsDto } from './dto/checkin-issue-free-tickets.dto';
 
 @Controller('admin/tenants/me/checkin')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.CHECKIN, PermissionLevel.VIEW)
 export class TenantsMeCheckinController {

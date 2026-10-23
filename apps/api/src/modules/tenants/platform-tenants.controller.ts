@@ -14,7 +14,7 @@ import { CreatePlatformTenantDto } from './dto/create-platform-tenant.dto';
 import { TenantsService } from './tenants.service';
 
 @Controller('admin/platform/tenants')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PlatformAdminGuard)
 export class PlatformTenantsController {
   constructor(private readonly tenants: TenantsService) {}
@@ -27,6 +27,7 @@ export class PlatformTenantsController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  @SkipThrottle({ platform: false })
   @Throttle({ platform: { limit: 10, ttl: 60_000 } })
   async create(@Body() dto: CreatePlatformTenantDto) {
     const { tenant, admin } =

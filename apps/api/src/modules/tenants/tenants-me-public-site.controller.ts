@@ -14,7 +14,7 @@ import { TenantPublicWebOriginService } from './tenant-public-web-origin.service
  * TenantsMeController, no mesmo prefixo, exige SETTINGS em todas as rotas).
  */
 @Controller('admin/tenants/me')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'))
 export class TenantsMePublicSiteController {
   constructor(

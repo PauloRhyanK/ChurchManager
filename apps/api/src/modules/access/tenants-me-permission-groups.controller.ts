@@ -23,7 +23,7 @@ import { PermissionsGuard } from './permissions.guard';
 import { RequirePermission } from './require-permission.decorator';
 
 @Controller('admin/tenants/me/permission-groups')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 export class TenantsMePermissionGroupsController {
   constructor(private readonly groups: PermissionGroupsService) {}

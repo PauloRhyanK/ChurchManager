@@ -24,7 +24,7 @@ import { SITE_ICONS, SITE_SECTIONS } from './site-content.registry';
 import { SiteContentService } from './site-content.service';
 
 @Controller('admin/tenants/me/site-content')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.SITE, PermissionLevel.VIEW)
 export class TenantsMeSiteContentController {

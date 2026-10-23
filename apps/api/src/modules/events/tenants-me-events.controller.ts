@@ -53,7 +53,7 @@ import { StorageService } from '../storage/storage.service';
 
 @Controller('admin/tenants/me/events')
 
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 

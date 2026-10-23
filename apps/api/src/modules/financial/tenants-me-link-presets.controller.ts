@@ -21,7 +21,7 @@ import { UpdateLinkPresetDto } from './dto/update-link-preset.dto';
 import { PaymentLinkPresetsService } from './payment-link-presets.service';
 
 @Controller('admin/tenants/me/link-presets')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.FINANCIAL, PermissionLevel.VIEW)
 export class TenantsMeLinkPresetsController {

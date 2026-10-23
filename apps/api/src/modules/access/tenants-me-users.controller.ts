@@ -24,7 +24,7 @@ import { RequirePermission } from './require-permission.decorator';
 import { TenantUsersService } from './tenant-users.service';
 
 @Controller('admin/tenants/me/users')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 export class TenantsMeUsersController {
   constructor(

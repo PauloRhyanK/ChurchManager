@@ -21,7 +21,7 @@ import { UpdateEventTicketTypeDto } from './dto/update-event-ticket-type.dto';
 import { EventTicketTypesService } from './event-ticket-types.service';
 
 @Controller('admin/tenants/me/events/:eventId/ticket-types')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.EVENT_TICKETS, PermissionLevel.VIEW)
 export class TenantsMeEventTicketTypesController {

@@ -86,10 +86,19 @@ export class StorageService {
         }),
       );
     } catch (error) {
-      const e = error as { name?: string; code?: string; $metadata?: { httpStatusCode?: number; requestId?: string } };
+      const e = error as {
+        name?: string;
+        code?: string;
+        message?: string;
+        cause?: { code?: string };
+        $metadata?: { httpStatusCode?: number; requestId?: string };
+      };
+      // Só no log do servidor: a mensagem e a causa (ex.: ENOTFOUND) dizem por que o R2 falhou.
       this.logger.error(
         `Falha no upload para o R2: ${JSON.stringify({
           code: e?.name ?? e?.code ?? 'desconhecido',
+          message: redactR2Credentials(e?.message ?? '').slice(0, 300),
+          cause: e?.cause?.code,
           httpStatus: e?.$metadata?.httpStatusCode,
           requestId: e?.$metadata?.requestId,
         })}`,
@@ -153,4 +162,12 @@ export class StorageService {
       this.logger.warn(`Falha ao remover ficheiro do R2 (${key}): ${error}`);
     }
   }
+}
+
+/** Mascara as credenciais do R2 caso o SDK as repita na mensagem de erro. */
+function redactR2Credentials(text: string): string {
+  return ['R2_SECRET_ACCESS_KEY', 'R2_ACCESS_KEY_ID'].reduce((out, name) => {
+    const value = process.env[name]?.trim();
+    return value && value.length >= 6 ? out.split(value).join('[REDACTED]') : out;
+  }, text);
 }

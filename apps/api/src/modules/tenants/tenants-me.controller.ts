@@ -26,7 +26,7 @@ import { TenantPublicWebOriginService } from './tenant-public-web-origin.service
 import { successUrlAllowedByPublicOrigins } from './public-web-origin.util';
 
 @Controller('admin/tenants/me')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.SETTINGS, PermissionLevel.VIEW)
 export class TenantsMeController {

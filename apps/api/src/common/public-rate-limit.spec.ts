@@ -6,6 +6,28 @@ import type { ThrottlerStorage } from '@nestjs/throttler';
 import { PublicEventsController } from '../modules/events/public-events.controller';
 import { PublicFinancialController } from '../modules/financial/public-financial.controller';
 import { PublicSiteContentController } from '../modules/site/public-site-content.controller';
+import { TenantsMeUsersController } from '../modules/access/tenants-me-users.controller';
+import { TenantsMePermissionGroupsController } from '../modules/access/tenants-me-permission-groups.controller';
+import { TenantsMeSignupLinksController } from '../modules/access/tenants-me-signup-links.controller';
+import { TenantsMeCotasController } from '../modules/financial/tenants-me-cotas.controller';
+import { TenantsMeEventsPaymentLinksController } from '../modules/financial/tenants-me-events-payment-links.controller';
+import { TenantsMeLinkPresetsController } from '../modules/financial/tenants-me-link-presets.controller';
+import { BranchesController } from '../modules/church/branches.controller';
+import { ChurchConfigController } from '../modules/church/church-config.controller';
+import { PastorsController } from '../modules/church/pastors.controller';
+import { MinistriesController } from '../modules/church/ministries.controller';
+import { TenantsMeController } from '../modules/tenants/tenants-me.controller';
+import { TenantsMePublicSiteController } from '../modules/tenants/tenants-me-public-site.controller';
+import { PlatformTenantsController } from '../modules/tenants/platform-tenants.controller';
+import { TenantsMeSiteContentController } from '../modules/site/tenants-me-site-content.controller';
+import { TenantsMeCheckinController } from '../modules/events/tenants-me-checkin.controller';
+import { TenantsMeEventTicketTypesController } from '../modules/events/tenants-me-event-ticket-types.controller';
+import { TenantsMeEventFieldsController } from '../modules/events/tenants-me-event-fields.controller';
+import { TenantsMeEventsController } from '../modules/events/tenants-me-events.controller';
+import { TenantsMeEventsDashboardController } from '../modules/events/tenants-me-events-dashboard.controller';
+import { TenantsMeSchedulesController } from '../modules/events/tenants-me-schedules.controller';
+import { TenantsMeRegistrationsController } from '../modules/events/tenants-me-registrations.controller';
+import { TenantsMeEventTagsController } from '../modules/events/tenants-me-event-tags.controller';
 
 /** Mesmos throttlers de `ThrottlerModule.forRoot` em app.module.ts. */
 const THROTTLERS = [
@@ -102,4 +124,54 @@ test('financeiro público: 30/min por IP, link de pagamento mantém 5/min', asyn
     await allowedPerMinute(PublicFinancialController, 'createPublicPaymentLink'),
     5,
   );
+});
+
+/** Controllers autenticados do painel (JWT): sem `links` nem `platform`. */
+const ADMIN_CONTROLLERS: Array<new (...args: never[]) => object> = [
+  TenantsMeUsersController,
+  TenantsMePermissionGroupsController,
+  TenantsMeSignupLinksController,
+  TenantsMeCotasController,
+  TenantsMeEventsPaymentLinksController,
+  TenantsMeLinkPresetsController,
+  BranchesController,
+  ChurchConfigController,
+  PastorsController,
+  MinistriesController,
+  TenantsMeController,
+  TenantsMePublicSiteController,
+  PlatformTenantsController,
+  TenantsMeSiteContentController,
+  TenantsMeCheckinController,
+  TenantsMeEventTicketTypesController,
+  TenantsMeEventFieldsController,
+  TenantsMeEventsController,
+  TenantsMeEventsDashboardController,
+  TenantsMeSchedulesController,
+  TenantsMeRegistrationsController,
+  TenantsMeEventTagsController,
+];
+
+/** Rotas do painel que mantêm um limite próprio, declarado no handler. */
+const ADMIN_EXPLICIT_LIMITS: Record<string, number> = {
+  'PlatformTenantsController.create': 10,
+};
+
+test('rotas do painel: 30/min por rota (o throttler platform só vale para criar igreja)', async () => {
+  for (const controller of ADMIN_CONTROLLERS) {
+    const handlers = Object.getOwnPropertyNames(controller.prototype).filter(
+      (name) =>
+        name !== 'constructor' &&
+        typeof (controller.prototype as Record<string, unknown>)[name] === 'function',
+    );
+    assert.ok(handlers.length > 0, `${controller.name} sem handlers`);
+    for (const handler of handlers) {
+      const key = `${controller.name}.${handler}`;
+      assert.equal(
+        await allowedPerMinute(controller, handler),
+        ADMIN_EXPLICIT_LIMITS[key] ?? 30,
+        key,
+      );
+    }
+  }
 });

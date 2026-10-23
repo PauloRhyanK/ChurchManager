@@ -23,7 +23,7 @@ import { RequirePermission } from './require-permission.decorator';
 import { SignupLinksService } from './signup-links.service';
 
 @Controller('admin/tenants/me/signup-links')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 export class TenantsMeSignupLinksController {
   constructor(private readonly links: SignupLinksService) {}
