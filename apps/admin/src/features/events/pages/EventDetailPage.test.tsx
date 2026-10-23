@@ -294,9 +294,9 @@ describe("EventDetailPage — cabeçalho", () => {
     expect(screen.queryByText(/Ver no site/)).not.toBeInTheDocument();
   });
 
-  it("switch 'Publicado' despublica o evento e avisa", async () => {
+  it("switch 'Publicar no site' despublica o evento e avisa", async () => {
     renderPage();
-    const toggle = await screen.findByRole("switch", { name: "Publicado" });
+    const toggle = await screen.findByRole("switch", { name: "Publicar no site" });
     expect(toggle).toBeChecked();
 
     fireEvent.click(toggle);
@@ -306,17 +306,17 @@ describe("EventDetailPage — cabeçalho", () => {
     );
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Evento despublicado."));
     await waitFor(() =>
-      expect(screen.getByRole("switch", { name: "Publicado" })).not.toBeChecked(),
+      expect(screen.getByRole("switch", { name: "Publicar no site" })).not.toBeChecked(),
     );
     expect(
       await screen.findByText("Este evento é um rascunho e não aparece no site."),
     ).toBeInTheDocument();
   });
 
-  it("switch 'Publicado' publica um rascunho e avisa", async () => {
+  it("switch 'Publicar no site' publica um rascunho e avisa", async () => {
     serverEvent = { ...event, published: false };
     renderPage();
-    const toggle = await screen.findByRole("switch", { name: "Publicado" });
+    const toggle = await screen.findByRole("switch", { name: "Publicar no site" });
     expect(toggle).not.toBeChecked();
 
     fireEvent.click(toggle);
@@ -328,7 +328,7 @@ describe("EventDetailPage — cabeçalho", () => {
     expect(await screen.findByRole("link", { name: /Ver no site/ })).toBeInTheDocument();
   });
 
-  it("sem permissão de edição não mostra o switch 'Publicado'", async () => {
+  it("sem permissão de edição não mostra o switch 'Publicar no site'", async () => {
     perms.edit = false;
     renderPage();
     expect(await screen.findByRole("heading", { name: event.title })).toBeInTheDocument();

@@ -193,7 +193,7 @@ export function EventDetailPage() {
                   onCheckedChange={(checked) => publishMutation.mutate(checked)}
                 />
                 <Label htmlFor="event-published" className="font-normal">
-                  Publicado
+                  Publicar no site
                 </Label>
               </div>
             )}
@@ -383,7 +383,7 @@ export function EventDetailPage() {
         </TabsContent>
 
         <TabsContent value="site" className="mt-4">
-          {eventQuery.isFetchedAfterMount ? (
+          {eventQuery.isFetchedAfterMount && !eventQuery.isError ? (
             <EventSiteDetailsTab key={event.id} event={event} canEdit={canEdit} />
           ) : (
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
