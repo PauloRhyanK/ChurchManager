@@ -128,3 +128,24 @@ export function assertPublicPaymentSuccessUrlAllowed(
     );
   }
 }
+
+const LOCAL_HOSTNAME_RE = /^(localhost|127\.0\.0\.1|\[::1\])$/i;
+
+/**
+ * Primeira origem `https://` que não seja local (localhost / 127.0.0.1 / ::1),
+ * na ordem recebida; `null` se não houver.
+ */
+export function firstPublicHttpsOrigin(origins: readonly string[]): string | null {
+  for (const raw of origins) {
+    let url: URL;
+    try {
+      url = new URL(raw);
+    } catch {
+      continue;
+    }
+    if (url.protocol === 'https:' && !LOCAL_HOSTNAME_RE.test(url.hostname)) {
+      return url.origin;
+    }
+  }
+  return null;
+}

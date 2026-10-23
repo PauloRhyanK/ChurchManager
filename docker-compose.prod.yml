@@ -31,6 +31,13 @@ services:
     networks:
       - default
       - proxy-network
+    # Contorno de rede: a VPS não tem rota até 216.198.79.1 (IP atual do DNS de
+    # igrejaparaiso.com.br na Vercel), e a revalidação do site dava timeout.
+    # 76.76.21.21 também é da Vercel e serve o site; o TLS continua validado pelo domínio.
+    # Remover quando o provedor da VPS corrigir a rota para 216.198.79.0/24
+    # (teste: `curl -m 10 https://igrejaparaiso.com.br` a partir do host).
+    extra_hosts:
+      - "igrejaparaiso.com.br:76.76.21.21"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 20s

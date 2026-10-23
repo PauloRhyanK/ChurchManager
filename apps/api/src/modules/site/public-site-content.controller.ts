@@ -1,8 +1,11 @@
 import { Controller, Get, Param } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { TenantsService } from '../tenants/tenants.service';
 import { SiteContentService } from './site-content.service';
 
+/** Rate limit: só o throttler `public` (30/min por IP). */
 @Controller('public/tenants')
+@SkipThrottle({ links: true, platform: true })
 export class PublicSiteContentController {
   constructor(
     private readonly tenants: TenantsService,

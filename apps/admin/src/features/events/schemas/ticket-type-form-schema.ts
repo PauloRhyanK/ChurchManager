@@ -28,6 +28,14 @@ export function isFreeTicketPrice(priceInput: string): boolean {
   return cents === 0;
 }
 
+const perOrderLimit = (fallback: number) =>
+  z.coerce
+    .number()
+    .int("Use um número inteiro")
+    .min(1, "Use um valor entre 1 e 100")
+    .max(100, "Use um valor entre 1 e 100")
+    .default(fallback);
+
 /** Object schema only — `.merge()` requires ZodObject, not ZodEffects. */
 export const ticketTypeStep2ObjectSchema = z.object({
   allowedBillingTypes: z.array(z.enum(BILLING_TYPES)),
@@ -35,22 +43,9 @@ export const ticketTypeStep2ObjectSchema = z.object({
   priceInput: z.string().min(1, "Preço obrigatório"),
   feeInput: z.string().optional().or(z.literal("")),
   quantityTotal: z.string().optional().or(z.literal("")),
-  minPerOrder: z.coerce.number().int().min(1).max(100).default(1),
-  maxPerOrder: z.coerce.number().int().min(1).max(100).default(10),
+  minPerOrder: perOrderLimit(1),
+  maxPerOrder: perOrderLimit(10),
 });
-
-export const ticketTypeStep2Schema = ticketTypeStep2ObjectSchema.superRefine(
-  (values, ctx) => {
-    const free = isFreeTicketPrice(values.priceInput);
-    if (!free && values.allowedBillingTypes.length < 1) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["allowedBillingTypes"],
-        message: "Selecione ao menos um tipo de pagamento",
-      });
-    }
-  },
-);
 
 export const ticketFieldConfigSchema = z.object({
   fieldId: z.string(),
@@ -77,6 +72,14 @@ export const ticketTypeFormSchema = ticketTypeStep1Schema
         message: "Selecione ao menos um tipo de pagamento",
       });
     }
+    // Taxa só é usada (e mostrada) em ingresso pago.
+    if (!free && values.feeInput?.trim() && parseMoneyToCents(values.feeInput) == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["feeInput"],
+        message: "Taxa inválida",
+      });
+    }
     if (
       values.salesOpensAt?.trim() &&
       values.salesClosesAt?.trim() &&
@@ -86,6 +89,13 @@ export const ticketTypeFormSchema = ticketTypeStep1Schema
         code: z.ZodIssueCode.custom,
         path: ["salesClosesAt"],
         message: "O fim das vendas deve ser posterior ao início",
+      });
+    }
+    if (values.minPerOrder > values.maxPerOrder) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["minPerOrder"],
+        message: "O mínimo por pedido não pode ser maior que o máximo",
       });
     }
   });

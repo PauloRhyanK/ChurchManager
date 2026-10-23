@@ -69,13 +69,18 @@ export class UpdateEventDto {
   @Matches(DATE_RE, { message: 'date deve ser YYYY-MM-DD' })
   date?: string;
 
+  /**
+   * `null` grava sem horário (no PUT, limpa o horário salvo); campo ausente
+   * no PUT não altera. `@IsOptional` deixa passar `null`/`undefined`.
+   */
   @IsOptional()
   @Matches(TIME_RE, { message: 'timeStart deve ser HH:MM ou HH:MM:SS' })
-  timeStart?: string;
+  timeStart?: string | null;
 
+  /** Mesma regra de `timeStart`: `null` limpa, ausente não altera. */
   @IsOptional()
   @Matches(TIME_RE, { message: 'timeEnd deve ser HH:MM ou HH:MM:SS' })
-  timeEnd?: string;
+  timeEnd?: string | null;
 
   @IsOptional()
   @IsString()

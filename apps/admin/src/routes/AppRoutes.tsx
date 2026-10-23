@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { LoginPage } from "@/features/auth/pages/LoginPage";
 import { ForgotPasswordPage } from "@/features/auth/pages/ForgotPasswordPage";
 import ResetPasswordPage from "@/features/auth/pages/ResetPasswordPage";
@@ -27,6 +27,12 @@ import { PlatformAdminRoute } from "./PlatformAdminRoute";
 import { PermissionRoute } from "./PermissionRoute";
 import { ProtectedRoute } from "./ProtectedRoute";
 
+/** Remonta o formulário quando o id muda (ex.: de /eventos/novo para /eventos/:id/editar). */
+function EventFormRoutePage() {
+  const { id } = useParams<{ id: string }>();
+  return <EventFormPage key={id ?? "new"} />;
+}
+
 export function AppRoutes() {
   return (
     <Routes>
@@ -39,12 +45,19 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<Index />} />
         <Route path="/financeiro" element={<Financial />} />
-        <Route path="/eventos" element={<EventsListPage />} />
-        <Route path="/eventos/novo" element={<EventFormPage />} />
-        <Route path="/eventos/configuracoes" element={<EventSettingsPage />} />
-        <Route path="/eventos/inscricoes" element={<RegistrationsPage />} />
-        <Route path="/eventos/:id" element={<EventDetailRoutePage />} />
-        <Route path="/eventos/:id/editar" element={<EventFormPage />} />
+        <Route element={<PermissionRoute module="EVENTS" />}>
+          <Route path="/eventos" element={<EventsListPage />} />
+          <Route path="/eventos/configuracoes" element={<EventSettingsPage />} />
+          {/* A API das inscrições exige o módulo EVENT_REGISTRATIONS. */}
+          <Route element={<PermissionRoute module="EVENT_REGISTRATIONS" />}>
+            <Route path="/eventos/inscricoes" element={<RegistrationsPage />} />
+          </Route>
+          <Route path="/eventos/:id" element={<EventDetailRoutePage />} />
+          <Route element={<PermissionRoute module="EVENTS" level="EDIT" />}>
+            <Route path="/eventos/novo" element={<EventFormRoutePage />} />
+            <Route path="/eventos/:id/editar" element={<EventFormRoutePage />} />
+          </Route>
+        </Route>
         <Route element={<PermissionRoute module="SITE" />}>
           <Route path="/site" element={<SitePage />} />
         </Route>

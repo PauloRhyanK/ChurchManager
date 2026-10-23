@@ -21,6 +21,12 @@ Monorepo com **API Nest.js** + **painel admin** (React/Vite) e Postgres. O site 
 3. Mensagem **`Cannot GET /api/admin/...`** (no browser ou na resposta) → o **código da API que está a correr é antigo** (ainda sem essa rota). **Não** é falta de `migrate`. Reconstrói e reinicia a API: em `apps/api` para o processo e volta a `npm run start:dev`; com Docker na raiz: `docker compose build api --no-cache` e `docker compose up -d api`.
 4. **401** → volta ao login.
 
+### Deploy: variáveis da API
+
+- `PUBLIC_PARTICIPANT_API_SECRET` — segredo compartilhado com o site público (`CHURCHMANAGER_PARTICIPANT_SECRET` no site), enviado só do servidor do site no header `x-participant-secret`. Protege as rotas com dados de participantes (`/registrations/mine` e `/events/:id/registrations/check`). Obrigatório em produção (sem ele: 401); vazio fora de produção deixa as rotas abertas.
+- `TRUST_PROXY_HOPS` — nº de proxies à frente da API (produção: `2` = Cloudflare + nginx; faz o rate limit valer por IP do visitante). `0` = sem proxy (dev local).
+- **Ordem do deploy:** primeiro o site (passa a enviar o header `x-participant-secret`), depois a API.
+
 ---
 
 **Documentação extra** (abre só quando precisares): [arquitectura](docs/architecture.md) · [financeiro e webhooks Asaas](docs/financial-schema-and-webhooks.md) · [ngrok para webhooks em local](docs/webhooks-local-dev-ngrok.md) · [ADRs](docs/adr/).

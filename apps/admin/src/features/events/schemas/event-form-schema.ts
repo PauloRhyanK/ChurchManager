@@ -17,10 +17,11 @@ const urlOptional = (max: number) =>
     .refine((v) => !v || v === "" || /^https?:\/\/.+/i.test(v), "URL inválida");
 
 function refineEventDateAndTime(
-  values: { date: string; timeStart?: string; timeEnd?: string },
+  values: { date?: string; timeStart?: string; timeEnd?: string },
   ctx: z.RefinementCtx,
+  { allowPastDate }: { allowPastDate: boolean },
 ) {
-  if (values.date && !isEventDateNotPast(values.date)) {
+  if (!allowPastDate && values.date && !isEventDateNotPast(values.date)) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ["date"],
@@ -36,6 +37,19 @@ function refineEventDateAndTime(
       code: z.ZodIssueCode.custom,
       path: ["timeEnd"],
       message: "O horário de fim deve ser posterior ao de início",
+    });
+  }
+}
+
+function refineOnlineUrl(
+  values: { format?: "IN_PERSON" | "ONLINE"; onlineUrl?: string | null },
+  ctx: z.RefinementCtx,
+) {
+  if (values.format === "ONLINE" && !values.onlineUrl) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["onlineUrl"],
+      message: "Informe o link de transmissão",
     });
   }
 }
@@ -57,9 +71,36 @@ const eventFormBaseSchema = z.object({
   published: z.boolean(),
 });
 
-export const eventFormSchema = eventFormBaseSchema.superRefine(refineEventDateAndTime);
+/**
+ * Formulário completo do evento. Na edição a data passada é permitida, para
+ * corrigir ou despublicar um evento que já aconteceu; na criação não.
+ */
+export function buildEventFormSchema({ allowPastDate }: { allowPastDate: boolean }) {
+  return eventFormBaseSchema.superRefine((values, ctx) => {
+    refineOnlineUrl(values, ctx);
+    refineEventDateAndTime(values, ctx, { allowPastDate });
+  });
+}
 
-export type EventFormValues = z.infer<typeof eventFormSchema>;
+export type EventFormValues = z.infer<ReturnType<typeof buildEventFormSchema>>;
+
+/** Valores iniciais da criação: o evento nasce rascunho e só vai ao site quando publicado. */
+export const EVENT_FORM_DEFAULT_VALUES: EventFormValues = {
+  title: "",
+  shortDescription: "",
+  description: "",
+  detailsHtml: "",
+  date: "",
+  timeStart: "",
+  timeEnd: "",
+  format: "IN_PERSON",
+  location: "",
+  onlineUrl: "",
+  coverImageUrl: "",
+  videoUrl: "",
+  tags: [],
+  published: false,
+};
 
 /** Step 1 do wizard de criação — apenas informações básicas. */
 export const eventBasicSchema = eventFormBaseSchema
@@ -75,14 +116,8 @@ export const eventBasicSchema = eventFormBaseSchema
     tags: true,
   })
   .superRefine((values, ctx) => {
-    if (values.format === "ONLINE" && !values.onlineUrl) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["onlineUrl"],
-        message: "Informe o link de transmissão",
-      });
-    }
-    refineEventDateAndTime(values as { date: string; timeStart?: string; timeEnd?: string }, ctx);
+    refineOnlineUrl(values, ctx);
+    refineEventDateAndTime(values, ctx, { allowPastDate: false });
   });
 
 export type EventBasicValues = z.infer<typeof eventBasicSchema>;
@@ -94,8 +129,9 @@ export function eventFormToApiBody(values: EventFormValues) {
     description: values.description?.trim() || null,
     detailsHtml: values.detailsHtml?.trim() || null,
     date: values.date,
-    timeStart: values.timeStart?.trim() || undefined,
-    timeEnd: values.timeEnd?.trim() || undefined,
+    // `null` (e não ausente) para o PUT limpar um horário já gravado.
+    timeStart: values.timeStart?.trim() || null,
+    timeEnd: values.timeEnd?.trim() || null,
     format: values.format,
     location: values.format === "IN_PERSON" ? values.location?.trim() || null : null,
     onlineUrl: values.format === "ONLINE" ? values.onlineUrl?.trim() || null : null,

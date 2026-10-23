@@ -120,6 +120,18 @@ function buildFieldConfigs(
   });
 }
 
+/** Ingresso pago exige CPF: o campo fica activo e obrigatório. */
+function applyPaidTicketFieldRules(
+  configs: TicketFieldConfigValue[],
+  priceInput: string,
+): TicketFieldConfigValue[] {
+  const priceCents = parseMoneyToCents(priceInput);
+  if (priceCents == null || priceCents <= 0) return configs;
+  return configs.map((c) =>
+    c.type === "CPF" ? { ...c, enabled: true, required: true } : c,
+  );
+}
+
 function getTodayDatetimeLocal(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -180,7 +192,7 @@ function baseValues(source: EventTicketTypeDto | null, eventDate?: string): Tick
 
 const STEP_FIELDS: Record<number, (keyof TicketTypeFormValues)[]> = {
   1: ["name", "description", "communityLink", "salesOpensAt", "salesClosesAt"],
-  2: ["allowedBillingTypes", "priceInput", "minPerOrder", "maxPerOrder"],
+  2: ["allowedBillingTypes", "priceInput", "feeInput", "minPerOrder", "maxPerOrder"],
   3: ["fieldConfigs"],
 };
 
@@ -198,6 +210,9 @@ export function TicketTypeWizardDialog({
   const queryClient = useQueryClient();
   const [step, setStep] = useState(1);
   const [hasInitialized, setHasInitialized] = useState(false);
+  // Só com as definições de campos carregadas é que fieldConfigs reflecte o
+  // ingresso; sem isso, guardar enviaria uma lista vazia e apagaria os campos.
+  const [fieldConfigsLoaded, setFieldConfigsLoaded] = useState(false);
 
   const fieldsQuery = useQuery({
     queryKey: ["event-field-definitions"],
@@ -213,6 +228,7 @@ export function TicketTypeWizardDialog({
   useEffect(() => {
     if (!open) {
       setHasInitialized(false);
+      setFieldConfigsLoaded(false);
       return;
     }
 
@@ -223,21 +239,35 @@ export function TicketTypeWizardDialog({
       );
       if (fieldsQuery.data) {
         initial.fieldConfigs = buildFieldConfigs(fieldsQuery.data, source);
+        setFieldConfigsLoaded(true);
       }
       form.reset(initial);
       setStep(1);
       setHasInitialized(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, hasInitialized, fieldsQuery.isLoading, fieldsQuery.data, ticketType, duplicateFrom, source, eventDate, form]);
+
+  // Definições que chegam depois de uma falha (ex.: "Tentar novamente").
+  useEffect(() => {
+    if (!open || !hasInitialized || fieldConfigsLoaded || !fieldsQuery.data) return;
+    form.setValue(
+      "fieldConfigs",
+      applyPaidTicketFieldRules(
+        buildFieldConfigs(fieldsQuery.data, source),
+        form.getValues("priceInput"),
+      ),
+    );
+    setFieldConfigsLoaded(true);
+  }, [open, hasInitialized, fieldConfigsLoaded, fieldsQuery.data, source, form]);
 
   const saveMutation = useMutation({
     mutationFn: async (values: TicketTypeFormValues) => {
       const priceCents = parseMoneyToCents(values.priceInput);
       if (priceCents == null) throw new Error("Preço inválido");
-      const feeCents = values.feeInput?.trim()
-        ? parseMoneyToCents(values.feeInput) ?? 0
-        : 0;
+      const free = isFreeTicketPrice(values.priceInput);
+      const feeCents =
+        !free && values.feeInput?.trim() ? parseMoneyToCents(values.feeInput) ?? 0 : 0;
+      const acceptsCard = !free && values.allowedBillingTypes.includes("CREDIT_CARD");
       const qty = values.quantityTotal?.trim();
       const body = {
         name: values.name.trim(),
@@ -256,12 +286,12 @@ export function TicketTypeWizardDialog({
         visibility: values.visibility,
         allowGuestRegistration: values.allowGuestRegistration,
         communityLink: values.communityLink?.trim() || null,
-        allowedBillingTypes: isFreeTicketPrice(values.priceInput)
-          ? ["UNDEFINED" as const]
-          : values.allowedBillingTypes,
-        maxInstallments: values.maxInstallments?.trim()
-          ? Number(values.maxInstallments)
-          : null,
+        allowedBillingTypes: free ? ["UNDEFINED" as const] : values.allowedBillingTypes,
+        // Parcelas só valem para cartão; sem cartão, limpa o valor guardado.
+        maxInstallments:
+          acceptsCard && values.maxInstallments?.trim()
+            ? Number(values.maxInstallments)
+            : null,
         active: values.active,
         fieldConfigs: values.fieldConfigs.map((fc, index) => ({
           fieldId: fc.fieldId,
@@ -288,17 +318,13 @@ export function TicketTypeWizardDialog({
     if (!valid) return;
 
     if (step === 2) {
-      const priceCents = parseMoneyToCents(form.getValues("priceInput"));
-      const paid = priceCents != null && priceCents > 0;
-      if (paid) {
-        const configs = form.getValues("fieldConfigs");
-        form.setValue(
-          "fieldConfigs",
-          configs.map((c) =>
-            c.type === "CPF" ? { ...c, enabled: true, required: true } : c,
-          ),
-        );
-      }
+      form.setValue(
+        "fieldConfigs",
+        applyPaidTicketFieldRules(
+          form.getValues("fieldConfigs"),
+          form.getValues("priceInput"),
+        ),
+      );
     }
 
     setStep((s) => Math.min(3, s + 1));
@@ -319,7 +345,9 @@ export function TicketTypeWizardDialog({
 
         <form
           className="space-y-4"
-          onSubmit={form.handleSubmit((values) => saveMutation.mutate(values))}
+          onSubmit={form.handleSubmit((values) => {
+            if (fieldConfigsLoaded) saveMutation.mutate(values);
+          })}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") {
               e.preventDefault();
@@ -329,9 +357,29 @@ export function TicketTypeWizardDialog({
         >
           {step === 1 && <Step1 form={form} />}
           {step === 2 && <Step2 form={form} />}
-          {step === 3 && fieldsQuery.data && (
-            <Step3 form={form} defs={fieldsQuery.data} />
-          )}
+          {step === 3 &&
+            (fieldConfigsLoaded && fieldsQuery.data ? (
+              <Step3 form={form} defs={fieldsQuery.data} />
+            ) : fieldsQuery.isError ? (
+              <div className="space-y-2">
+                <p className="text-sm text-destructive">
+                  Não foi possível carregar os campos de inscrição.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {getApiErrorMessage(fieldsQuery.error)}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void fieldsQuery.refetch()}
+                >
+                  Tentar novamente
+                </Button>
+              </div>
+            ) : (
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            ))}
 
           <DialogFooter className="gap-2 sm:justify-between">
             <div>
@@ -358,7 +406,11 @@ export function TicketTypeWizardDialog({
                   Seguinte
                 </Button>
               ) : (
-                <Button key="submit-btn" type="submit" disabled={saveMutation.isPending}>
+                <Button
+                  key="submit-btn"
+                  type="submit"
+                  disabled={saveMutation.isPending || !fieldConfigsLoaded}
+                >
                   {saveMutation.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
@@ -553,13 +605,23 @@ function Step2({ form }: StepProps) {
       )}
 
       <div className="space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <Label htmlFor="tt-price">Preço (R$)</Label>
+        <div className="flex justify-end">
           <Button type="button" variant="outline" size="sm" onClick={setFreeTicket}>
             Ingresso gratuito
           </Button>
         </div>
-        <Input id="tt-price" placeholder="0,00" {...form.register("priceInput")} />
+        <div className={isFree ? undefined : "grid grid-cols-2 gap-3"}>
+          <div className="space-y-2">
+            <Label htmlFor="tt-price">Preço (R$)</Label>
+            <Input id="tt-price" placeholder="0,00" {...form.register("priceInput")} />
+          </div>
+          {!isFree && (
+            <div className="space-y-2">
+              <Label htmlFor="tt-fee">Taxa (R$)</Label>
+              <Input id="tt-fee" placeholder="0,00" {...form.register("feeInput")} />
+            </div>
+          )}
+        </div>
         {isFree && (
           <p className="text-xs text-muted-foreground">
             Ingresso gratuito — sem cobrança no checkout.
@@ -568,6 +630,11 @@ function Step2({ form }: StepProps) {
         {form.formState.errors.priceInput && (
           <p className="text-sm text-red-600">
             {form.formState.errors.priceInput.message}
+          </p>
+        )}
+        {!isFree && form.formState.errors.feeInput && (
+          <p className="text-sm text-red-600">
+            {form.formState.errors.feeInput.message}
           </p>
         )}
       </div>
@@ -592,6 +659,12 @@ function Step2({ form }: StepProps) {
           <Input id="tt-max" type="number" min={1} {...form.register("maxPerOrder")} />
         </div>
       </div>
+      {(form.formState.errors.minPerOrder || form.formState.errors.maxPerOrder) && (
+        <p className="text-sm text-red-600">
+          {form.formState.errors.minPerOrder?.message ??
+            form.formState.errors.maxPerOrder?.message}
+        </p>
+      )}
     </div>
   );
 }

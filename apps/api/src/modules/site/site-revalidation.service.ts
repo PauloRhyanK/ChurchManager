@@ -27,6 +27,14 @@ export class SiteRevalidationService {
     this.loadTargets();
   }
 
+  /**
+   * Origens do site configuradas para o tenant em SITE_REVALIDATION_TARGETS
+   * (as que recebem a revalidação); lista vazia se não houver.
+   */
+  originsForTenantSlug(slug: string): readonly string[] {
+    return this.targets?.get(slug) ?? [];
+  }
+
   notifyContentChanged(tenantId: string): void {
     void this.run(tenantId).catch((error) => {
       this.logger.warn(`Revalidação site-content erro: ${formatFetchError(error)}`);
@@ -68,8 +76,8 @@ export class SiteRevalidationService {
         where: { id: tenantId },
         select: { slug: true },
       });
-      const origins = tenant ? this.targets.get(tenant.slug) : undefined;
-      if (!tenant || !origins?.length) {
+      const origins = tenant ? this.originsForTenantSlug(tenant.slug) : [];
+      if (!tenant || !origins.length) {
         this.logger.log(
           `Revalidação site-content: tenant ${tenant?.slug ?? tenantId} sem destino configurado`,
         );

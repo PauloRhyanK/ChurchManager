@@ -1,7 +1,8 @@
+/** Data do evento (YYYY-MM-DD, sem fuso) por extenso; formatada em UTC para não recuar um dia. */
 export function formatEventDate(date: string) {
   try {
     const [y, m, d] = date.split("-").map(Number);
-    return new Intl.DateTimeFormat("pt-BR", { dateStyle: "long" }).format(
+    return new Intl.DateTimeFormat("pt-BR", { dateStyle: "long", timeZone: "UTC" }).format(
       new Date(Date.UTC(y, m - 1, d)),
     );
   } catch {
@@ -24,6 +25,16 @@ export function formatDateTime(iso: string | null) {
 export function formatTime(value: string | null) {
   if (!value) return "—";
   return value.slice(0, 5);
+}
+
+/** Horário do evento: "13:00 – 17:00", só o início, "até 17:00" ou "" sem horário. */
+export function formatTimeRange(timeStart: string | null, timeEnd: string | null) {
+  const start = timeStart ? formatTime(timeStart) : "";
+  const end = timeEnd ? formatTime(timeEnd) : "";
+  if (start && end) return `${start} – ${end}`;
+  if (start) return start;
+  if (end) return `até ${end}`;
+  return "";
 }
 
 const moneyBr = new Intl.NumberFormat("pt-BR", {

@@ -4,13 +4,13 @@ import { AuthModule } from '../auth/auth.module';
 import { TenantsModule } from '../tenants/tenants.module';
 import { PublicSiteContentController } from './public-site-content.controller';
 import { SiteContentService } from './site-content.service';
-import { SiteRevalidationService } from './site-revalidation.service';
+import { SiteRevalidationModule } from './site-revalidation.module';
 import { TenantsMeSiteContentController } from './tenants-me-site-content.controller';
 
 @Module({
-  imports: [TenantsModule, AuthModule, AccessModule],
+  imports: [TenantsModule, AuthModule, AccessModule, SiteRevalidationModule],
   controllers: [TenantsMeSiteContentController, PublicSiteContentController],
-  providers: [SiteContentService, SiteRevalidationService],
-  exports: [SiteContentService, SiteRevalidationService],
+  providers: [SiteContentService],
+  exports: [SiteContentService, SiteRevalidationModule],
 })
 export class SiteModule {}

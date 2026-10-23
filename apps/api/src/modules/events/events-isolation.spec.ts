@@ -10,6 +10,8 @@ const tagsStub = {} as EventTagsService;
 const storageStub = {
   deleteFileByPublicUrl: async () => {},
 };
+const revalidationStub = { notifyContentChanged: () => {} };
+const ticketTypesStub = { reserveStock: async () => true };
 
 const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TENANT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -64,6 +66,7 @@ test('isolation: EventsService.listForTenant filtra por tenantId', async () => {
     createEventsPrismaMock(capture) as never,
     tagsStub,
     storageStub as never,
+    revalidationStub as never,
   );
   await service.listForTenant(TENANT_A, { publishedOnly: true });
   assert.deepEqual(capture.where, {
@@ -72,12 +75,50 @@ test('isolation: EventsService.listForTenant filtra por tenantId', async () => {
   });
 });
 
+test('EventsService.listForTenant upcomingOnly usa "hoje" no fuso America/Sao_Paulo', async (t) => {
+  // 21:30 em Brasília do dia 22 = 00:30 UTC do dia 23.
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-23T00:30:00Z') });
+  const capture: { where?: { date?: { gte?: Date } } } = {};
+  const service = new EventsService(
+    createEventsPrismaMock(capture) as never,
+    tagsStub,
+    storageStub as never,
+    revalidationStub as never,
+  );
+  await service.listForTenant(TENANT_A, { publishedOnly: true, upcomingOnly: true });
+  assert.equal(
+    capture.where?.date?.gte?.toISOString(),
+    '2026-10-22T00:00:00.000Z',
+  );
+});
+
+test('EventsService.listForTenant ordena por data e depois horário de início', async () => {
+  let orderBy: unknown;
+  const prisma = {
+    event: {
+      findMany: async (args: { orderBy: unknown }) => {
+        orderBy = args.orderBy;
+        return [];
+      },
+    },
+  };
+  const service = new EventsService(
+    prisma as never,
+    tagsStub,
+    storageStub as never,
+    revalidationStub as never,
+  );
+  await service.listForTenant(TENANT_A, { publishedOnly: true });
+  assert.deepEqual(orderBy, [{ date: 'asc' }, { timeStart: 'asc' }]);
+});
+
 test('isolation: EventsService.getForTenant devolve 404 se evento é de outro tenant', async () => {
   const capture: { where?: unknown } = {};
   const service = new EventsService(
     createEventsPrismaMock(capture) as never,
     tagsStub,
     storageStub as never,
+    revalidationStub as never,
   );
   await assert.rejects(
     () => service.getForTenant(TENANT_B, EVENT_A),
@@ -97,7 +138,10 @@ test('isolation: EventRegistrationsService.listForEvent exige evento do tenant',
     },
     eventRegistration: { findMany: async () => [] },
   };
-  const service = new EventRegistrationsService(prisma as never);
+  const service = new EventRegistrationsService(
+    prisma as never,
+    ticketTypesStub as never,
+  );
   await assert.rejects(
     () => service.listForEvent(TENANT_B, EVENT_A),
     (err: unknown) => err instanceof NotFoundException,
@@ -124,8 +168,14 @@ test('isolation: EventRegistrationsService.createForEvent grava tenantId do dest
   let createData: unknown;
   const prisma = {
     event: {
-      findFirst: async () => ({ id: EVENT_A }),
+      findFirst: async () => ({
+        id: EVENT_A,
+        published: true,
+        date: new Date(Date.UTC(2999, 0, 1)),
+        timezone: 'America/Sao_Paulo',
+      }),
     },
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma),
     eventRegistration: {
       create: async ({ data }: { data: unknown }) => {
         createData = data;
@@ -143,7 +193,10 @@ test('isolation: EventRegistrationsService.createForEvent grava tenantId do dest
       },
     },
   };
-  const service = new EventRegistrationsService(prisma as never);
+  const service = new EventRegistrationsService(
+    prisma as never,
+    ticketTypesStub as never,
+  );
   await service.createForEvent(TENANT_A, EVENT_A, {
     name: 'Test',
     email: 'A@B.com',
@@ -198,7 +251,12 @@ test('isolation: EventsService.updateForTenant clears coverImageUrl and imageUrl
     },
     $transaction: async (fn: any) => fn(prisma),
   };
-  const service = new EventsService(prisma as never, tagsStub, storageStub as never);
+  const service = new EventsService(
+    prisma as never,
+    tagsStub,
+    storageStub as never,
+    revalidationStub as never,
+  );
   await service.updateForTenant(TENANT_A, EVENT_A, { coverImageUrl: null });
   assert.deepEqual(updateData, {
     coverImageUrl: null,

@@ -14,7 +14,7 @@ import { CreatePaymentIntentDto } from './dto/create-payment-intent.dto';
 import { CreatePublicPaymentLinkDto } from './dto/create-public-payment-link.dto';
 
 @Controller('public/tenants')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 export class PublicFinancialController {
   constructor(
     private readonly tenants: TenantsService,
