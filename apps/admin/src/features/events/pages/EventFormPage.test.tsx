@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { AxiosError } from "axios";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -62,8 +63,10 @@ const pastEvent: EventDto = {
   updatedAt: "2020-11-01T00:00:00.000Z",
 };
 
-function renderAt(path: string) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderAt(
+  path: string,
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter future={ROUTER_FUTURE} initialEntries={[path]}>
@@ -128,6 +131,35 @@ describe("EventFormPage", () => {
       timeEnd: null,
     });
     expect(await screen.findByText("Página do evento")).toBeInTheDocument();
+  });
+
+  it("na edição preenche com o evento actualizado do servidor, não com a cache antiga", async () => {
+    // Como no painel: a cache ainda "fresca" não seria pedida de novo ao montar.
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
+    });
+    client.setQueryData(["event", "e1"], { ...pastEvent, title: "Título antigo em cache" });
+    serverEvent = { ...pastEvent, title: "Título actualizado" };
+
+    renderAt("/eventos/e1/editar", client);
+
+    const title = await screen.findByLabelText("Título");
+    await waitFor(() => expect(title).toHaveValue("Título actualizado"));
+    expect(api.fetchEvent).toHaveBeenCalledWith("e1");
+  });
+
+  it("se o GET falhar ao abrir, mostra o erro e não preenche com a cache antiga", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
+    });
+    client.setQueryData(["event", "e1"], { ...pastEvent, title: "Título antigo em cache" });
+    api.fetchEvent.mockRejectedValue(new AxiosError("Network Error", "ERR_NETWORK"));
+
+    renderAt("/eventos/e1/editar", client);
+
+    expect(await screen.findByText(/Não foi possível conectar ao servidor/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Título")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Guardar alterações" })).not.toBeInTheDocument();
   });
 
   it("na criação o evento nasce rascunho", async () => {

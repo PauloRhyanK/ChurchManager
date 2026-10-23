@@ -57,15 +57,20 @@ export function EventDetailPage() {
   // A API exige também EDIT em ingressos (tipos) e em financeiro (links de pagamento).
   const canEditTickets = canEdit && can("EVENT_TICKETS", "EDIT");
   const canCreatePaymentLinks = canEdit && can("FINANCIAL", "EDIT");
+  // As inscrições têm módulo próprio na API.
+  const canViewRegistrations = can("EVENT_REGISTRATIONS", "VIEW");
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const [paymentLinkTicket, setPaymentLinkTicket] = useState<EventTicketTypeDto | null>(null);
   const [editingTicket, setEditingTicket] = useState<EventTicketTypeDto | null>(null);
   const [duplicateTicket, setDuplicateTicket] = useState<EventTicketTypeDto | null>(null);
 
+  // Sempre pedido de novo ao abrir: a aba "Detalhes do site" é preenchida uma
+  // única vez e não pode nascer de uma cache desactualizada.
   const eventQuery = useQuery({
     queryKey: ["event", id],
     queryFn: () => fetchEvent(id),
     enabled: Boolean(id),
+    refetchOnMount: "always",
   });
 
   const ticketTypesQuery = useQuery({
@@ -77,7 +82,7 @@ export function EventDetailPage() {
   const registrationsQuery = useQuery({
     queryKey: ["event-registrations", id],
     queryFn: () => fetchEventRegistrations(id),
-    enabled: Boolean(id),
+    enabled: Boolean(id) && canViewRegistrations,
   });
 
   const reportQuery = useQuery({
@@ -254,9 +259,11 @@ export function EventDetailPage() {
         <TabsList>
           <TabsTrigger value="ingressos">Tipos de ingresso</TabsTrigger>
           <TabsTrigger value="site">Detalhes do site</TabsTrigger>
-          <TabsTrigger value="inscricoes">
-            Inscrições{registrationsQuery.data ? ` (${registrations.length})` : ""}
-          </TabsTrigger>
+          {canViewRegistrations && (
+            <TabsTrigger value="inscricoes">
+              Inscrições{registrationsQuery.data ? ` (${registrations.length})` : ""}
+            </TabsTrigger>
+          )}
           <TabsTrigger value="relatorio">Relatório</TabsTrigger>
         </TabsList>
 
@@ -277,14 +284,15 @@ export function EventDetailPage() {
                 Stock e vendas são geridos pela API — o painel apenas configura e gera links.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              {ticketTypesQuery.isLoading ? (
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              ) : ticketTypesQuery.error ? (
+            <CardContent className="space-y-4">
+              {ticketTypesQuery.error && (
                 <p className="text-sm text-destructive">
                   {getApiErrorMessage(ticketTypesQuery.error)}
                 </p>
-              ) : ticketTypes.length === 0 ? (
+              )}
+              {ticketTypesQuery.isLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              ) : !ticketTypesQuery.data ? null : ticketTypes.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Nenhum tipo de ingresso configurado.</p>
               ) : (
                 <Table>
@@ -375,57 +383,65 @@ export function EventDetailPage() {
         </TabsContent>
 
         <TabsContent value="site" className="mt-4">
-          <EventSiteDetailsTab key={event.id} event={event} canEdit={canEdit} />
+          {eventQuery.isFetchedAfterMount ? (
+            <EventSiteDetailsTab key={event.id} event={event} canEdit={canEdit} />
+          ) : (
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          )}
         </TabsContent>
 
-        <TabsContent value="inscricoes" className="mt-4">
-          <Card className="border-0 shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-base">Inscrições gratuitas</CardTitle>
-              <CardDescription>
-                Registos via formulário público — distintos de pedidos pagos com ingresso.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {registrationsQuery.isLoading ? (
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              ) : registrationsQuery.error ? (
-                <p className="text-sm text-destructive">
-                  {getApiErrorMessage(registrationsQuery.error)}
-                </p>
-              ) : registrations.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhuma inscrição neste evento.</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>E-mail</TableHead>
-                      <TableHead>Telefone</TableHead>
-                      <TableHead>Data</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {registrations.map((row) => (
-                      <TableRow key={row.id}>
-                        <TableCell className="font-medium">{row.name}</TableCell>
-                        <TableCell>{row.email}</TableCell>
-                        <TableCell>{row.phone ?? "—"}</TableCell>
-                        <TableCell>{formatDateTime(row.createdAt)}</TableCell>
+        {canViewRegistrations && (
+          <TabsContent value="inscricoes" className="mt-4">
+            <Card className="border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-base">Inscrições gratuitas</CardTitle>
+                <CardDescription>
+                  Registos via formulário público — distintos de pedidos pagos com ingresso.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {registrationsQuery.error && (
+                  <p className="text-sm text-destructive">
+                    {getApiErrorMessage(registrationsQuery.error)}
+                  </p>
+                )}
+                {registrationsQuery.isLoading ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                ) : !registrationsQuery.data ? null : registrations.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhuma inscrição neste evento.</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>E-mail</TableHead>
+                        <TableHead>Telefone</TableHead>
+                        <TableHead>Data</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                    </TableHeader>
+                    <TableBody>
+                      {registrations.map((row) => (
+                        <TableRow key={row.id}>
+                          <TableCell className="font-medium">{row.name}</TableCell>
+                          <TableCell>{row.email}</TableCell>
+                          <TableCell>{row.phone ?? "—"}</TableCell>
+                          <TableCell>{formatDateTime(row.createdAt)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         <TabsContent value="relatorio" className="mt-4 space-y-4">
+          {reportQuery.error && (
+            <p className="text-sm text-destructive">{getApiErrorMessage(reportQuery.error)}</p>
+          )}
           {reportQuery.isLoading ? (
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          ) : reportQuery.error ? (
-            <p className="text-sm text-destructive">{getApiErrorMessage(reportQuery.error)}</p>
           ) : report ? (
             <>
               <div className="grid gap-4 sm:grid-cols-3">

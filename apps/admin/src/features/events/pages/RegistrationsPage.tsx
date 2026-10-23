@@ -43,9 +43,12 @@ export default function RegistrationsPage() {
           </p>
         </div>
 
-        {registrationsQuery.error ? (
+        {registrationsQuery.error && (
           <p className="text-sm text-destructive">{getApiErrorMessage(registrationsQuery.error)}</p>
-        ) : (
+        )}
+
+        {/* Com erro mas inscrições já em cache, a tabela continua visível sob o aviso. */}
+        {(!registrationsQuery.error || registrationsQuery.data) && (
           <Card className="border-0 shadow-sm">
             <CardHeader>
               <CardTitle className="text-base">Cadastros</CardTitle>

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { AxiosError } from "axios";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
@@ -9,7 +9,7 @@ import EventsListPage from "./EventsListPage";
 const ROUTER_FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true };
 
 const api = vi.hoisted(() => ({ fetchEvents: vi.fn(), deleteEvent: vi.fn() }));
-const perms = vi.hoisted(() => ({ edit: true }));
+const perms = vi.hoisted(() => ({ edit: true, registrations: true }));
 
 vi.mock("@/features/events/api/tenant-events-api", async (orig) => ({
   ...(await orig<typeof import("@/features/events/api/tenant-events-api")>()),
@@ -22,7 +22,12 @@ vi.mock("@/features/events/components/CreateEventWizardModal", () => ({
   CreateEventWizardModal: () => null,
 }));
 vi.mock("@/features/access/hooks/use-permissions", () => ({
-  usePermissions: () => ({ can: (_m: string, level: string) => perms.edit || level === "VIEW" }),
+  usePermissions: () => ({
+    can: (module: string, level: string) =>
+      module === "EVENT_REGISTRATIONS" && !perms.registrations
+        ? false
+        : perms.edit || level === "VIEW",
+  }),
 }));
 
 const event = {
@@ -35,18 +40,20 @@ const event = {
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <MemoryRouter future={ROUTER_FUTURE}>
         <EventsListPage />
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return { ...view, client };
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
   perms.edit = true;
+  perms.registrations = true;
   api.fetchEvents.mockResolvedValue([event]);
 });
 
@@ -57,6 +64,19 @@ describe("EventsListPage", () => {
     expect(await screen.findByText(/Não foi possível conectar ao servidor/)).toBeInTheDocument();
     expect(screen.queryByText("Nenhum evento criado ainda.")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Criar primeiro evento" })).not.toBeInTheDocument();
+  });
+
+  it("erro ao actualizar mostra o erro sem esconder os eventos já carregados", async () => {
+    const { client } = renderPage();
+    expect(await screen.findByText("Retiro de jovens")).toBeInTheDocument();
+
+    api.fetchEvents.mockRejectedValue(new AxiosError("Network Error", "ERR_NETWORK"));
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ["events"] });
+    });
+
+    expect(await screen.findByText(/Não foi possível conectar ao servidor/)).toBeInTheDocument();
+    expect(screen.getByText("Retiro de jovens")).toBeInTheDocument();
   });
 
   it("lista vazia com sucesso convida a criar o primeiro evento", async () => {
@@ -79,6 +99,22 @@ describe("EventsListPage", () => {
     expect(await screen.findByText("Retiro de jovens")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Novo evento/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remover evento" })).toBeInTheDocument();
+  });
+
+  it("sem VIEW em inscrições esconde o atalho 'Inscrições'", async () => {
+    perms.registrations = false;
+    renderPage();
+    expect(await screen.findByText("Retiro de jovens")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Inscrições" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Configurações" })).toBeInTheDocument();
+  });
+
+  it("com VIEW em inscrições mostra o atalho 'Inscrições'", async () => {
+    renderPage();
+    expect(await screen.findByRole("link", { name: "Inscrições" })).toHaveAttribute(
+      "href",
+      "/eventos/inscricoes",
+    );
   });
 
   it("evento com data passada mostra 'Encerrado'; futuro não", async () => {

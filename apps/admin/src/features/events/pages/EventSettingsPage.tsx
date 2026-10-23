@@ -44,6 +44,7 @@ import {
   type EventFieldDefinitionDto,
 } from "@/features/events/api/tenant-event-fields-api";
 import type { EventTagDto } from "@/features/events/api/tenant-event-tags-api";
+import { usePermissions } from "@/features/access/hooks/use-permissions";
 import { getApiErrorMessage } from "@/lib/api";
 import {
   AlertDialog,
@@ -68,6 +69,9 @@ const FIELD_TYPE_LABELS: Record<EventFieldType, string> = {
 
 export default function EventSettingsPage() {
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  // Criar e remover etiquetas e campos exige EDIT em eventos na API.
+  const canEdit = can("EVENTS", "EDIT");
   const [tagName, setTagName] = useState("");
   const [fieldLabel, setFieldLabel] = useState("");
   const [fieldType, setFieldType] = useState<EventFieldType>("TEXT");
@@ -163,28 +167,30 @@ export default function EventSettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <form
-              className="flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (tagName.trim()) createTagMutation.mutate();
-              }}
-            >
-              <Input
-                value={tagName}
-                onChange={(e) => setTagName(e.target.value)}
-                placeholder="Nova etiqueta (ex.: retiro)"
-                className="max-w-xs"
-              />
-              <Button type="submit" disabled={!tagName.trim() || createTagMutation.isPending} className="gap-2">
-                {createTagMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="h-4 w-4" />
-                )}
-                Adicionar
-              </Button>
-            </form>
+            {canEdit && (
+              <form
+                className="flex gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (tagName.trim()) createTagMutation.mutate();
+                }}
+              >
+                <Input
+                  value={tagName}
+                  onChange={(e) => setTagName(e.target.value)}
+                  placeholder="Nova etiqueta (ex.: retiro)"
+                  className="max-w-xs"
+                />
+                <Button type="submit" disabled={!tagName.trim() || createTagMutation.isPending} className="gap-2">
+                  {createTagMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                  Adicionar
+                </Button>
+              </form>
+            )}
 
             {tagsQuery.isLoading ? (
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -210,17 +216,20 @@ export default function EventSettingsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive"
-                            disabled={deleteTagMutation.isPending}
-                            onClick={() => {
-                              setTagToDelete(tag);
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {canEdit && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-destructive"
+                              aria-label="Remover etiqueta"
+                              disabled={deleteTagMutation.isPending}
+                              onClick={() => {
+                                setTagToDelete(tag);
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -239,68 +248,70 @@ export default function EventSettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <form
-              className="flex flex-wrap gap-2 items-end"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (fieldLabel.trim()) createFieldMutation.mutate();
-              }}
-            >
-              <div className="space-y-1">
-                <Label htmlFor="field-label" className="text-xs">Rótulo</Label>
-                <Input
-                  id="field-label"
-                  value={fieldLabel}
-                  onChange={(e) => setFieldLabel(e.target.value)}
-                  placeholder="Rótulo (ex.: Empresa)"
-                  className="w-60"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Tipo</Label>
-                <Select value={fieldType} onValueChange={(v) => setFieldType(v as EventFieldType)}>
-                  <SelectTrigger className="w-44">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(["TEXT", "EMAIL", "PHONE", "CPF", "TEXTAREA", "SELECT", "CHECKBOX"] as EventFieldType[]).map(
-                      (t) => (
-                        <SelectItem key={t} value={t}>
-                          {FIELD_TYPE_LABELS[t]}
-                        </SelectItem>
-                      ),
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              {fieldTypeHasOptions(fieldType) && (
-                <div className="space-y-1 w-full sm:w-80 animate-in fade-in duration-200">
-                  <Label htmlFor="field-options" className="text-xs">Opções do campo</Label>
+            {canEdit && (
+              <form
+                className="flex flex-wrap gap-2 items-end"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (fieldLabel.trim()) createFieldMutation.mutate();
+                }}
+              >
+                <div className="space-y-1">
+                  <Label htmlFor="field-label" className="text-xs">Rótulo</Label>
                   <Input
-                    id="field-options"
-                    value={fieldOptionsText}
-                    onChange={(e) => setFieldOptionsText(e.target.value)}
-                    placeholder="Opções separadas por vírgula (ex.: P, M, G)"
+                    id="field-label"
+                    value={fieldLabel}
+                    onChange={(e) => setFieldLabel(e.target.value)}
+                    placeholder="Rótulo (ex.: Empresa)"
+                    className="w-60"
                   />
                 </div>
-              )}
-              <Button
-                type="submit"
-                disabled={
-                  !fieldLabel.trim() ||
-                  (fieldTypeHasOptions(fieldType) && !fieldOptionsText.trim()) ||
-                  createFieldMutation.isPending
-                }
-                className="gap-2"
-              >
-                {createFieldMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="h-4 w-4" />
+                <div className="space-y-1">
+                  <Label className="text-xs">Tipo</Label>
+                  <Select value={fieldType} onValueChange={(v) => setFieldType(v as EventFieldType)}>
+                    <SelectTrigger className="w-44">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(["TEXT", "EMAIL", "PHONE", "CPF", "TEXTAREA", "SELECT", "CHECKBOX"] as EventFieldType[]).map(
+                        (t) => (
+                          <SelectItem key={t} value={t}>
+                            {FIELD_TYPE_LABELS[t]}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {fieldTypeHasOptions(fieldType) && (
+                  <div className="space-y-1 w-full sm:w-80 animate-in fade-in duration-200">
+                    <Label htmlFor="field-options" className="text-xs">Opções do campo</Label>
+                    <Input
+                      id="field-options"
+                      value={fieldOptionsText}
+                      onChange={(e) => setFieldOptionsText(e.target.value)}
+                      placeholder="Opções separadas por vírgula (ex.: P, M, G)"
+                    />
+                  </div>
                 )}
-                Adicionar
-              </Button>
-            </form>
+                <Button
+                  type="submit"
+                  disabled={
+                    !fieldLabel.trim() ||
+                    (fieldTypeHasOptions(fieldType) && !fieldOptionsText.trim()) ||
+                    createFieldMutation.isPending
+                  }
+                  className="gap-2"
+                >
+                  {createFieldMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                  Adicionar
+                </Button>
+              </form>
+            )}
 
             {fieldsQuery.isLoading ? (
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -337,11 +348,12 @@ export default function EventSettingsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end">
-                          {!field.isSystem && (
+                          {canEdit && !field.isSystem && (
                             <Button
                               variant="ghost"
                               size="icon"
                               className="text-destructive"
+                              aria-label="Remover campo"
                               disabled={deleteFieldMutation.isPending}
                               onClick={() => {
                                 setFieldToDelete(field);

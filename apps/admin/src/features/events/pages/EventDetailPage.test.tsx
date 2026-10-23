@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { AxiosError } from "axios";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,7 +21,11 @@ const ticketsApi = vi.hoisted(() => ({
   duplicateEventTicketType: vi.fn(),
 }));
 const registrationsApi = vi.hoisted(() => ({ fetchEventRegistrations: vi.fn() }));
-const perms = vi.hoisted(() => ({ edit: true }));
+// `edit` vale para todos os módulos; `modules` sobrepõe o nível de um módulo (null = sem acesso).
+const perms = vi.hoisted(() => ({
+  edit: true,
+  modules: {} as Record<string, "VIEW" | "EDIT" | null>,
+}));
 
 vi.mock("@/features/events/api/tenant-events-api", async (orig) => ({
   ...(await orig<typeof import("@/features/events/api/tenant-events-api")>()),
@@ -36,11 +40,24 @@ vi.mock("@/features/events/api/tenant-event-registrations-api", async (orig) => 
   ...registrationsApi,
 }));
 vi.mock("@/features/access/hooks/use-permissions", () => ({
-  usePermissions: () => ({ can: (_m: string, level: string) => perms.edit || level === "VIEW" }),
+  usePermissions: () => ({
+    can: (module: string, level: string) => {
+      const granted =
+        module in perms.modules ? perms.modules[module] : perms.edit ? "EDIT" : "VIEW";
+      return granted === "EDIT" || (granted === "VIEW" && level === "VIEW");
+    },
+  }),
 }));
-vi.mock("@/features/events/components/EventSiteDetailsTab", () => ({
-  EventSiteDetailsTab: () => null,
-}));
+vi.mock("@/features/events/components/EventSiteDetailsTab", async () => {
+  const { useState } = await import("react");
+  return {
+    // Como o componente real: o estado nasce das props da primeira renderização.
+    EventSiteDetailsTab: ({ event }: { event: { title: string } }) => {
+      const [initialTitle] = useState(event.title);
+      return <p>Detalhes do site de {initialTitle}</p>;
+    },
+  };
+});
 vi.mock("@/features/events/components/TicketTypeWizardDialog", () => ({
   TicketTypeWizardDialog: () => null,
 }));
@@ -92,11 +109,13 @@ const clickTab = (name: RegExp) => {
   fireEvent.click(tab);
 };
 
-function renderPage() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderPage({
+  path = "/eventos/e1",
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+}: { path?: string; client?: QueryClient } = {}) {
   const view = render(
     <QueryClientProvider client={client}>
-      <MemoryRouter future={ROUTER_FUTURE} initialEntries={["/eventos/e1"]}>
+      <MemoryRouter future={ROUTER_FUTURE} initialEntries={[path]}>
         <Routes>
           <Route path="/eventos/:id" element={<EventDetailPage />} />
         </Routes>
@@ -109,6 +128,7 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks();
   perms.edit = true;
+  perms.modules = {};
   serverEvent = { ...event };
   eventsApi.fetchEvent.mockImplementation(async () => ({ ...serverEvent }));
   eventsApi.updateEvent.mockImplementation(async (_id: string, body: Partial<EventDto>) => {
@@ -162,6 +182,64 @@ describe("EventDetailPage", () => {
     expect(screen.getByRole("button", { name: "Editar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remover tipo de ingresso" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Link de pagamento" })).toBeInTheDocument();
+  });
+});
+
+describe("EventDetailPage — permissões e dados em cache", () => {
+  it("com EDIT em eventos mas sem EDIT em ingressos esconde só os botões dos ingressos", async () => {
+    perms.modules = { EVENT_TICKETS: "VIEW" };
+    renderPage();
+    expect(await screen.findByText("Inteira")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Editar/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Novo tipo/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Duplicar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Editar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remover tipo de ingresso" })).not.toBeInTheDocument();
+  });
+
+  it("sem VIEW em inscrições não mostra a aba nem pede as inscrições", async () => {
+    perms.modules = { EVENT_REGISTRATIONS: null };
+    renderPage();
+    expect(await screen.findByText("Inteira")).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Inscrições/ })).not.toBeInTheDocument();
+    expect(registrationsApi.fetchEventRegistrations).not.toHaveBeenCalled();
+  });
+
+  it("com VIEW em inscrições mostra a aba e pede as inscrições", async () => {
+    perms.modules = { EVENT_REGISTRATIONS: "VIEW" };
+    renderPage();
+    expect(await screen.findByRole("tab", { name: /Inscrições/ })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(registrationsApi.fetchEventRegistrations).toHaveBeenCalledWith("e1"),
+    );
+  });
+
+  it("erro ao actualizar os ingressos mostra o erro sem esconder os já carregados", async () => {
+    const { client } = renderPage();
+    expect(await screen.findByText("Inteira")).toBeInTheDocument();
+
+    ticketsApi.fetchEventTicketTypes.mockRejectedValue(
+      new AxiosError("Network Error", "ERR_NETWORK"),
+    );
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ["event-ticket-types", "e1"] });
+    });
+
+    expect(await screen.findByText(NETWORK_ERROR)).toBeInTheDocument();
+    expect(screen.getByText("Inteira")).toBeInTheDocument();
+  });
+
+  it("aba 'Detalhes do site' nasce do evento actualizado, não da cache antiga", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: 30_000 } },
+    });
+    client.setQueryData(["event", "e1"], { ...event, title: "Título antigo em cache" });
+    serverEvent = { ...event, title: "Título actualizado" };
+
+    renderPage({ path: "/eventos/e1?tab=site", client });
+
+    expect(await screen.findByText("Detalhes do site de Título actualizado")).toBeInTheDocument();
+    expect(screen.queryByText(/Título antigo em cache/)).not.toBeInTheDocument();
   });
 });
 

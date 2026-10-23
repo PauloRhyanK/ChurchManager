@@ -58,6 +58,7 @@ export function EventSiteDetailsTab({ event, canEdit }: Props) {
       }),
     onSuccess: (data) => {
       toast.success("Detalhes do site actualizados.");
+      queryClient.setQueryData<EventDto>(["event", event.id], data);
       void queryClient.invalidateQueries({ queryKey: ["event", event.id] });
       void queryClient.invalidateQueries({ queryKey: ["events"] });
       setCoverImageUrl(data.coverImageUrl ?? "");

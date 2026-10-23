@@ -47,19 +47,6 @@ export const ticketTypeStep2ObjectSchema = z.object({
   maxPerOrder: perOrderLimit(10),
 });
 
-export const ticketTypeStep2Schema = ticketTypeStep2ObjectSchema.superRefine(
-  (values, ctx) => {
-    const free = isFreeTicketPrice(values.priceInput);
-    if (!free && values.allowedBillingTypes.length < 1) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["allowedBillingTypes"],
-        message: "Selecione ao menos um tipo de pagamento",
-      });
-    }
-  },
-);
-
 export const ticketFieldConfigSchema = z.object({
   fieldId: z.string(),
   label: z.string(),

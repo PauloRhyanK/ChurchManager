@@ -26,6 +26,7 @@ export default function EventsListPage() {
   const queryClient = useQueryClient();
   const { can } = usePermissions();
   const canEdit = can("EVENTS", "EDIT");
+  const canViewRegistrations = can("EVENT_REGISTRATIONS", "VIEW");
   const [createOpen, setCreateOpen] = useState(false);
   const eventsQuery = useQuery({
     queryKey: ["events"],
@@ -61,9 +62,11 @@ export default function EventsListPage() {
             <Button asChild variant="outline">
               <Link to="/eventos/configuracoes">Configurações</Link>
             </Button>
-            <Button asChild variant="outline">
-              <Link to="/eventos/inscricoes">Inscrições</Link>
-            </Button>
+            {canViewRegistrations && (
+              <Button asChild variant="outline">
+                <Link to="/eventos/inscricoes">Inscrições</Link>
+              </Button>
+            )}
             {canEdit && (
               <Button className="gap-2" onClick={() => setCreateOpen(true)}>
                 <Plus className="h-4 w-4" />
@@ -73,11 +76,14 @@ export default function EventsListPage() {
           </div>
         </div>
 
-        {eventsQuery.error ? (
+        {eventsQuery.error && (
           <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
             {getApiErrorMessage(eventsQuery.error)}
           </p>
-        ) : (
+        )}
+
+        {/* Com erro mas eventos já em cache, a lista continua visível sob o aviso. */}
+        {(!eventsQuery.error || eventsQuery.data) && (
           <Card className="border-0 shadow-sm">
             <CardHeader>
               <CardTitle className="text-base">Todos os eventos</CardTitle>

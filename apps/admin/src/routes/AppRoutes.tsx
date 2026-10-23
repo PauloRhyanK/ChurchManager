@@ -42,7 +42,10 @@ export function AppRoutes() {
         <Route element={<PermissionRoute module="EVENTS" />}>
           <Route path="/eventos" element={<EventsListPage />} />
           <Route path="/eventos/configuracoes" element={<EventSettingsPage />} />
-          <Route path="/eventos/inscricoes" element={<RegistrationsPage />} />
+          {/* A API das inscrições exige o módulo EVENT_REGISTRATIONS. */}
+          <Route element={<PermissionRoute module="EVENT_REGISTRATIONS" />}>
+            <Route path="/eventos/inscricoes" element={<RegistrationsPage />} />
+          </Route>
           <Route path="/eventos/:id" element={<EventDetailRoutePage />} />
           <Route element={<PermissionRoute module="EVENTS" level="EDIT" />}>
             <Route path="/eventos/novo" element={<EventFormPage />} />

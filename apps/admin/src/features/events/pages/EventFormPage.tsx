@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -37,10 +37,13 @@ export default function EventFormPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  // Sempre pedido de novo ao abrir: o formulário é preenchido uma única vez e
+  // não pode nascer de uma cache desactualizada.
   const eventQuery = useQuery({
     queryKey: ["event", id],
     queryFn: () => fetchEvent(id!),
     enabled: isEdit,
+    refetchOnMount: "always",
   });
 
   // Na edição a data passada é aceite: corrigir ou despublicar um evento que já aconteceu.
@@ -53,14 +56,18 @@ export default function EventFormPage() {
 
   const format = form.watch("format");
 
-  // O formulário só é preenchido na primeira carga do evento: um refetch
-  // (ex.: depois de trocar a capa) não pode apagar o que já foi digitado.
-  const initializedEventId = useRef<string | null>(null);
+  // O formulário é preenchido uma única vez por evento, com o GET desta visita
+  // concluído com sucesso (com erro, a cache pode estar desactualizada). Um
+  // refetch (ex.: depois de trocar a capa) não pode apagar o que já foi digitado.
+  const [initializedEventId, setInitializedEventId] = useState<string | null>(null);
+  const isFormReady = !isEdit || initializedEventId === id;
+
+  const isEventFresh = eventQuery.isFetchedAfterMount && !eventQuery.isError;
 
   useEffect(() => {
     const e = eventQuery.data;
-    if (e && initializedEventId.current !== e.id) {
-      initializedEventId.current = e.id;
+    if (e && isEventFresh && initializedEventId !== e.id) {
+      setInitializedEventId(e.id);
       form.reset({
         title: e.title,
         shortDescription: e.shortDescription ?? "",
@@ -78,7 +85,7 @@ export default function EventFormPage() {
         published: e.published,
       });
     }
-  }, [eventQuery.data, form]);
+  }, [eventQuery.data, isEventFresh, initializedEventId, form]);
 
   const saveMutation = useMutation({
     mutationFn: async (values: EventFormValues) => {
@@ -122,7 +129,7 @@ export default function EventFormPage() {
           </p>
         </div>
 
-        {eventQuery.isLoading && isEdit && (
+        {!isFormReady && !eventQuery.isError && (
           <div className="flex items-center gap-2 text-muted-foreground py-8">
             <Loader2 className="h-5 w-5 animate-spin" />
             A carregar evento…
@@ -133,7 +140,7 @@ export default function EventFormPage() {
           <p className="text-sm text-destructive">{getApiErrorMessage(eventQuery.error)}</p>
         )}
 
-        {(!isEdit || eventQuery.data) && (
+        {isFormReady && (
           <Card className="border-0 shadow-sm">
             <CardHeader>
               <CardTitle className="text-base">Informações do evento</CardTitle>

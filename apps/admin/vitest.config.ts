@@ -8,6 +8,9 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
+    // Fuso fixo (UTC-3) para os testes de datas reproduzirem o recuo de dia em
+    // qualquer máquina ou CI, inclusive as que correm em UTC.
+    env: { TZ: "America/Sao_Paulo" },
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
   },
   resolve: {
