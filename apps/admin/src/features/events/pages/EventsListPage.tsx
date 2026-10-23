@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { deleteEvent, fetchEvents } from "@/features/events/api/tenant-events-api";
 import { formatEventDate } from "@/features/events/lib/format";
+import { isEventDateNotPast } from "@/features/events/lib/event-form-validation";
 import { usePermissions } from "@/features/access/hooks/use-permissions";
 import { getApiErrorMessage } from "@/lib/api";
 
@@ -125,9 +126,14 @@ export default function EventsListPage() {
                           {event.location ?? "—"}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={event.published ? "default" : "secondary"}>
-                            {event.published ? "Publicado" : "Rascunho"}
-                          </Badge>
+                          <div className="flex flex-wrap gap-1">
+                            <Badge variant={event.published ? "default" : "secondary"}>
+                              {event.published ? "Publicado" : "Rascunho"}
+                            </Badge>
+                            {!isEventDateNotPast(event.date) && (
+                              <Badge variant="outline">Encerrado</Badge>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-1">

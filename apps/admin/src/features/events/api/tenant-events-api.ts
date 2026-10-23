@@ -135,6 +135,14 @@ export async function deleteEvent(id: string) {
   return data;
 }
 
+/** Endereço público do site da igreja (para "Ver no site"), ou `null` se não houver. */
+export async function fetchPublicSiteUrl() {
+  const { data } = await api.get<{ publicSiteUrl: string | null }>(
+    "/admin/tenants/me/public-site",
+  );
+  return data;
+}
+
 export async function fetchEventsDashboardSummary() {
   const { data } = await api.get<EventsDashboardSummaryDto>(
     "/admin/tenants/me/events-dashboard",

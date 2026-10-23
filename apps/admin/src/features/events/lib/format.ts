@@ -27,6 +27,16 @@ export function formatTime(value: string | null) {
   return value.slice(0, 5);
 }
 
+/** Horário do evento: "13:00 – 17:00", só o início, "até 17:00" ou "" sem horário. */
+export function formatTimeRange(timeStart: string | null, timeEnd: string | null) {
+  const start = timeStart ? formatTime(timeStart) : "";
+  const end = timeEnd ? formatTime(timeEnd) : "";
+  if (start && end) return `${start} – ${end}`;
+  if (start) return start;
+  if (end) return `até ${end}`;
+  return "";
+}
+
 const moneyBr = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",

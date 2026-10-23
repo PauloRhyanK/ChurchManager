@@ -84,6 +84,24 @@ export function buildEventFormSchema({ allowPastDate }: { allowPastDate: boolean
 
 export type EventFormValues = z.infer<ReturnType<typeof buildEventFormSchema>>;
 
+/** Valores iniciais da criação: o evento nasce rascunho e só vai ao site quando publicado. */
+export const EVENT_FORM_DEFAULT_VALUES: EventFormValues = {
+  title: "",
+  shortDescription: "",
+  description: "",
+  detailsHtml: "",
+  date: "",
+  timeStart: "",
+  timeEnd: "",
+  format: "IN_PERSON",
+  location: "",
+  onlineUrl: "",
+  coverImageUrl: "",
+  videoUrl: "",
+  tags: [],
+  published: false,
+};
+
 /** Step 1 do wizard de criação — apenas informações básicas. */
 export const eventBasicSchema = eventFormBaseSchema
   .pick({

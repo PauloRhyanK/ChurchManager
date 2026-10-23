@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { AxiosError } from "axios";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
@@ -28,7 +28,7 @@ vi.mock("@/features/access/hooks/use-permissions", () => ({
 const event = {
   id: "e1",
   title: "Retiro de jovens",
-  date: "2026-11-20",
+  date: "2999-11-20",
   location: "Sítio Esperança",
   published: false,
 };
@@ -79,5 +79,17 @@ describe("EventsListPage", () => {
     expect(await screen.findByText("Retiro de jovens")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Novo evento/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remover evento" })).toBeInTheDocument();
+  });
+
+  it("evento com data passada mostra 'Encerrado'; futuro não", async () => {
+    api.fetchEvents.mockResolvedValue([
+      event,
+      { ...event, id: "e2", title: "Culto de Natal", date: "2020-12-24", published: true },
+    ]);
+    renderPage();
+    const pastRow = (await screen.findByText("Culto de Natal")).closest("tr")!;
+    const futureRow = screen.getByText("Retiro de jovens").closest("tr")!;
+    expect(within(pastRow).getByText("Encerrado")).toBeInTheDocument();
+    expect(within(futureRow).queryByText("Encerrado")).not.toBeInTheDocument();
   });
 });

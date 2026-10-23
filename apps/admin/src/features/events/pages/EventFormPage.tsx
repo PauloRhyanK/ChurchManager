@@ -24,6 +24,7 @@ import { EventLocationInput } from "@/features/events/components/EventLocationIn
 import { ImageUploader } from "@/components/ImageUploader";
 import {
   buildEventFormSchema,
+  EVENT_FORM_DEFAULT_VALUES,
   eventFormToApiBody,
   type EventFormValues,
 } from "@/features/events/schemas/event-form-schema";
@@ -47,22 +48,7 @@ export default function EventFormPage() {
 
   const form = useForm<EventFormValues>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      title: "",
-      shortDescription: "",
-      description: "",
-      detailsHtml: "",
-      date: "",
-      timeStart: "",
-      timeEnd: "",
-      format: "IN_PERSON",
-      location: "",
-      onlineUrl: "",
-      coverImageUrl: "",
-      videoUrl: "",
-      tags: [],
-      published: true,
-    },
+    defaultValues: EVENT_FORM_DEFAULT_VALUES,
   });
 
   const format = form.watch("format");

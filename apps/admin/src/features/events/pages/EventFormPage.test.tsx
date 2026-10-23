@@ -130,6 +130,23 @@ describe("EventFormPage", () => {
     expect(await screen.findByText("Página do evento")).toBeInTheDocument();
   });
 
+  it("na criação o evento nasce rascunho", async () => {
+    api.createEvent.mockImplementation(async (body: Partial<EventDto>) => ({
+      ...pastEvent,
+      ...body,
+      id: "novo",
+    }));
+    renderAt("/eventos/novo");
+    expect(await screen.findByRole("switch")).not.toBeChecked();
+
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Retiro" } });
+    fireEvent.change(screen.getByLabelText("Data"), { target: { value: "2999-12-31" } });
+    fireEvent.click(screen.getByRole("button", { name: "Criar evento" }));
+
+    await waitFor(() => expect(api.createEvent).toHaveBeenCalledTimes(1));
+    expect(api.createEvent.mock.calls[0][0]).toMatchObject({ published: false });
+  });
+
   it("na criação a data continua limitada a hoje em diante", async () => {
     renderAt("/eventos/novo");
     expect(await screen.findByLabelText("Data")).toHaveAttribute("min");

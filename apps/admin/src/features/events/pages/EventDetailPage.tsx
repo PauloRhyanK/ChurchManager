@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Link2, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Copy, ExternalLink, Link2, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -19,7 +21,13 @@ import { EventPaymentLinkDialog } from "@/features/events/components/EventPaymen
 import { EventSiteDetailsTab } from "@/features/events/components/EventSiteDetailsTab";
 import { TicketTypeWizardDialog } from "@/features/events/components/TicketTypeWizardDialog";
 import { fetchEventRegistrations } from "@/features/events/api/tenant-event-registrations-api";
-import { fetchEvent, fetchEventReport } from "@/features/events/api/tenant-events-api";
+import {
+  fetchEvent,
+  fetchEventReport,
+  fetchPublicSiteUrl,
+  updateEvent,
+  type EventDto,
+} from "@/features/events/api/tenant-events-api";
 import {
   deleteEventTicketType,
   duplicateEventTicketType,
@@ -30,8 +38,9 @@ import {
   formatDateTime,
   formatEventDate,
   formatMoneyCents,
-  formatTime,
+  formatTimeRange,
 } from "@/features/events/lib/format";
+import { isEventDateNotPast } from "@/features/events/lib/event-form-validation";
 import { EventReportSection } from "@/features/events/components/EventReportSection";
 import { usePermissions } from "@/features/access/hooks/use-permissions";
 import { getApiErrorMessage } from "@/lib/api";
@@ -77,6 +86,25 @@ export function EventDetailPage() {
     enabled: Boolean(id),
   });
 
+  // O endereço do site quase nunca muda: não vale refazer o pedido a cada evento aberto.
+  const publicSiteQuery = useQuery({
+    queryKey: ["tenant-public-site"],
+    queryFn: fetchPublicSiteUrl,
+    staleTime: 30 * 60_000,
+  });
+
+  const publishMutation = useMutation({
+    mutationFn: (published: boolean) => updateEvent(id, { published }),
+    onSuccess: (data) => {
+      toast.success(data.published ? "Evento publicado no site." : "Evento despublicado.");
+      queryClient.setQueryData<EventDto>(["event", id], data);
+      void queryClient.invalidateQueries({ queryKey: ["event", id] });
+      void queryClient.invalidateQueries({ queryKey: ["events"] });
+      void queryClient.invalidateQueries({ queryKey: ["events-dashboard"] });
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
+
   const deleteTicketMutation = useMutation({
     mutationFn: (ticketTypeId: string) => deleteEventTicketType(id, ticketTypeId),
     onSuccess: () => {
@@ -101,6 +129,7 @@ export function EventDetailPage() {
   const ticketTypes = ticketTypesQuery.data ?? [];
   const registrations = registrationsQuery.data ?? [];
   const report = reportQuery.data;
+  const publicSiteUrl = publicSiteQuery.data?.publicSiteUrl?.replace(/\/+$/, "") || null;
 
   function openCreateTicket() {
     setEditingTicket(null);
@@ -136,30 +165,89 @@ export function EventDetailPage() {
     );
   }
 
+  const timeRange = formatTimeRange(event.timeStart, event.timeEnd);
+  const onlineUrl = event.format === "ONLINE" ? event.onlineUrl : null;
+  const publicEventUrl = publicSiteUrl ? `${publicSiteUrl}/evento/${event.id}` : null;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+        <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold tracking-tight">{event.title}</h1>
             <Badge variant={event.published ? "default" : "secondary"}>
               {event.published ? "Publicado" : "Rascunho"}
             </Badge>
+            {!isEventDateNotPast(event.date) && <Badge variant="outline">Encerrado</Badge>}
+            {canEdit && (
+              <div className="flex items-center gap-2 sm:ml-2">
+                <Switch
+                  id="event-published"
+                  checked={event.published}
+                  disabled={publishMutation.isPending}
+                  onCheckedChange={(checked) => publishMutation.mutate(checked)}
+                />
+                <Label htmlFor="event-published" className="font-normal">
+                  Publicado
+                </Label>
+              </div>
+            )}
           </div>
-          <p className="text-muted-foreground text-sm mt-1">
+          {!event.published && (
+            <p className="text-sm text-muted-foreground mt-1">
+              Este evento é um rascunho e não aparece no site.
+            </p>
+          )}
+          <p className="text-muted-foreground text-sm mt-1 break-words">
             {formatEventDate(event.date)}
-            {event.timeStart ? ` · ${formatTime(event.timeStart)}` : ""}
+            {timeRange ? ` · ${timeRange}` : ""}
             {event.location ? ` · ${event.location}` : ""}
+            {onlineUrl && (
+              <>
+                {" · Transmissão: "}
+                {/^https?:\/\//i.test(onlineUrl) ? (
+                  <a
+                    href={onlineUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline break-all"
+                  >
+                    {onlineUrl}
+                  </a>
+                ) : (
+                  onlineUrl
+                )}
+              </>
+            )}
           </p>
         </div>
-        {canEdit && (
-          <Button asChild variant="outline" className="gap-2 shrink-0">
-            <Link to={`/eventos/${id}/editar`}>
-              <Pencil className="h-4 w-4" />
-              Editar
-            </Link>
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2 shrink-0">
+          {publicEventUrl &&
+            (event.published ? (
+              <Button asChild variant="outline" className="gap-2">
+                <a href={publicEventUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4" />
+                  Ver no site
+                </a>
+              </Button>
+            ) : (
+              // Botão desabilitado não recebe o rato: o título fica no invólucro.
+              <span title="Publique o evento para vê-lo no site">
+                <Button variant="outline" className="gap-2" disabled>
+                  <ExternalLink className="h-4 w-4" />
+                  Ver no site
+                </Button>
+              </span>
+            ))}
+          {canEdit && (
+            <Button asChild variant="outline" className="gap-2">
+              <Link to={`/eventos/${id}/editar`}>
+                <Pencil className="h-4 w-4" />
+                Editar
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
 
       <Tabs defaultValue={initialTab}>
