@@ -450,6 +450,8 @@ model ProjectionSettings {
   tenantId          String   @unique @map("tenant_id") @db.Uuid
   hiddenEventIds    String[] @map("hidden_event_ids")
   hiddenScheduleIds String[] @map("hidden_schedule_ids")
+  /// Tópicos fixos (avisos sem data, ex.: células), na ordem da tela. Ver `ProjectionTopic`.
+  topics            Json     @default("[]")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 

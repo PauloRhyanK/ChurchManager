@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   DEFAULT_EVENT_TIMEZONE,
@@ -9,11 +11,15 @@ import { UpdateProjectionSettingsDto } from './dto/update-projection-settings.dt
 import {
   PROJECTION_DAYS,
   buildProjectionAgenda,
+  readTopics,
   type ProjectionAgendaItem,
+  type ProjectionTopic,
 } from './projection-agenda';
 
 export interface ProjectionAgendaDto {
   items: ProjectionAgendaItem[];
+  /** Todos os tópicos fixos, ativos ou não, na ordem da tela. */
+  topics: ProjectionTopic[];
   days: number;
   /** null enquanto nada foi ocultado (configuração nunca salva). */
   updatedAt: string | null;
@@ -44,6 +50,7 @@ export class ProjectionService {
         hiddenEventIds: settings?.hiddenEventIds ?? [],
         hiddenScheduleIds: settings?.hiddenScheduleIds ?? [],
       }),
+      topics: readTopics(settings?.topics),
       days: PROJECTION_DAYS,
       updatedAt: settings?.updatedAt.toISOString() ?? null,
     };
@@ -51,11 +58,14 @@ export class ProjectionService {
 
   /** O que vai para o telão: só os visíveis, sem o campo `hidden`. */
   async getPublicAgenda(tenantId: string, now = new Date()) {
-    const { items } = await this.getAgendaForTenant(tenantId, now);
+    const { items, topics } = await this.getAgendaForTenant(tenantId, now);
     return {
       items: items
         .filter((item) => !item.hidden)
         .map(({ hidden: _hidden, ...item }) => item),
+      topics: topics
+        .filter((topic) => topic.active)
+        .map(({ active: _active, ...topic }) => topic),
     };
   }
 
@@ -90,10 +100,26 @@ export class ProjectionService {
         select: { id: true },
       }),
     ]);
-    const data = {
+    const data: {
+      hiddenEventIds: string[];
+      hiddenScheduleIds: string[];
+      topics?: Prisma.InputJsonValue;
+    } = {
       hiddenEventIds: events.map((row) => row.id),
       hiddenScheduleIds: schedules.map((row) => row.id),
     };
+    // Sem `topics` no corpo (painel antigo), os tópicos guardados ficam como estão.
+    if (dto.topics) {
+      const clean = (value: string) => value.replace(/\s+/g, ' ').trim();
+      const topics: ProjectionTopic[] = dto.topics.map((topic) => ({
+        id: topic.id ?? randomUUID(),
+        title: clean(topic.title),
+        text: clean(topic.text),
+        callToAction: topic.callToAction ? clean(topic.callToAction) || null : null,
+        active: topic.active,
+      }));
+      data.topics = topics as unknown as Prisma.InputJsonValue;
+    }
     await this.prisma.projectionSettings.upsert({
       where: { tenantId },
       create: { tenantId, ...data },

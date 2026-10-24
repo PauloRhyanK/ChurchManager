@@ -22,6 +22,14 @@ Sem autenticação. Resposta:
       "location": "Templo",
       "note": "Ceia do Senhor"
     }
+  ],
+  "topics": [
+    {
+      "id": "<uuid>",
+      "title": "Células",
+      "text": "Encontre uma célula perto de você",
+      "callToAction": "Procure a recepção"
+    }
   ]
 }
 ```
@@ -34,3 +42,9 @@ Sem autenticação. Resposta:
 - Ocultos que não estão na agenda no momento (horário desativado, evento despublicado) continuam ocultos ao salvar.
 
 Painel: `GET /admin/tenants/me/projection/agenda` (`SITE:VIEW`, mesma lista com `hidden`) e `PUT /admin/tenants/me/projection/settings` (`SITE:EDIT`) com `{ "hiddenEventIds": [...], "hiddenScheduleIds": [...] }`. Ocultar um horário vale para todas as semanas. Salvar dispara a revalidação do site.
+
+## Tópicos fixos
+
+Avisos sem data (células, batismo, ministérios), mostrados numa tela própria do telão ("participe") depois da agenda. No público saem só os ativos, na ordem definida no painel; `callToAction` pode ser `null`. API anterior a esta versão não envia `topics`: trate como lista vazia.
+
+No painel, `GET /admin/tenants/me/projection/agenda` devolve `topics` com `active`, e o `PUT /settings` aceita `topics` (opcional; ausente = mantém): até 20 itens `{ id?, title (≤40), text (≤55), callToAction (≤80, opcional), active }` (limites do que cabe na tela). Tópico sem `id` ganha um no servidor.
