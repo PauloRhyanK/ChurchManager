@@ -94,6 +94,7 @@ model Tenant {
   eventTickets       EventTicket[]
   schedules          Schedule[]
   siteContent        SiteContent[]
+  siteLayout         SiteLayout?
   branches           ChurchBranch[]
   pastors            Pastor[]
   ministries         Ministry[]
@@ -425,6 +426,20 @@ model SiteContent {
   @@unique([tenantId, key])
   @@index([tenantId])
   @@map("site_content")
+}
+
+/// Ordem dos blocos da página inicial do site, uma linha por tenant. Sem linha,
+/// vale a ordem padrão de `SITE_HOME_BLOCKS` em `modules/site/site-content.registry.ts`.
+model SiteLayout {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @unique @map("tenant_id") @db.Uuid
+  homeOrder String[] @map("home_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("site_layout")
 }
 
 enum FinancialLinkModule {

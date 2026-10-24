@@ -52,3 +52,11 @@ test('site-content: SITE:EDIT pode escrever', () => {
     assert.equal(check(m, editor), true, m);
   }
 });
+
+test('site-layout: SITE:VIEW lê a ordem, mas recebe 403 ao salvar; SITE:EDIT salva', () => {
+  const viewer = member(PermissionLevel.VIEW);
+  assert.equal(check('getLayout', viewer), true);
+  assert.throws(() => check('updateLayout', viewer), ForbiddenException);
+  assert.equal(check('updateLayout', member(PermissionLevel.EDIT)), true);
+  assert.throws(() => check('getLayout', member()), ForbiddenException);
+});
