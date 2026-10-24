@@ -83,6 +83,7 @@ import {
   fetchSchedules,
   createSchedule,
   updateSchedule,
+  setScheduleActive,
   deleteSchedule,
   fetchChurchConfig,
   toBranchBody,
@@ -260,6 +261,30 @@ export default function ChurchPage() {
       void queryClient.invalidateQueries({ queryKey: ["schedules"] });
     },
     onError: (err) => toast.error(getApiErrorMessage(err)),
+  });
+
+  // Toggle da tabela: aplica na hora e desfaz se a API recusar.
+  const scheduleActiveMutation = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) => setScheduleActive(id, active),
+    onMutate: async ({ id, active }) => {
+      await queryClient.cancelQueries({ queryKey: ["schedules"] });
+      const previous = queryClient.getQueryData<ScheduleDto[]>(["schedules"]);
+      queryClient.setQueryData<ScheduleDto[]>(["schedules"], (items) =>
+        items?.map((s) => (s.id === id ? { ...s, active } : s)),
+      );
+      return { previous };
+    },
+    onSuccess: (_data, { active }) => {
+      toast.success(active ? "Horário visível no site e no telão." : "Horário oculto do site e do telão.");
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(["schedules"], context.previous);
+      toast.error(getApiErrorMessage(err));
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: ["schedules"] });
+      void queryClient.invalidateQueries({ queryKey: ["projection-agenda"] });
+    },
   });
 
   const deleteScheduleMutation = useMutation({
@@ -731,11 +756,11 @@ export default function ChurchPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="w-[80px]">Ativo</TableHead>
                         <TableHead>Dia</TableHead>
                         <TableHead>Horário</TableHead>
                         <TableHead>Título</TableHead>
                         <TableHead>Local</TableHead>
-                        <TableHead>Visível</TableHead>
                         <TableHead className="w-[100px] text-right" />
                       </TableRow>
                     </TableHeader>
@@ -745,17 +770,23 @@ export default function ChurchPage() {
                         // HH:MM:SS ou HH:MM
                         const formattedTime = rawTime.split(":").slice(0, 2).join("h");
                         return (
-                          <TableRow key={schedule.id}>
+                          <TableRow key={schedule.id} className={schedule.active ? undefined : "text-muted-foreground"}>
+                            <TableCell>
+                              <Switch
+                                checked={schedule.active}
+                                disabled={!canEdit}
+                                aria-label={`${schedule.title}: visível no site e no telão`}
+                                title={schedule.active ? "Visível no site e no telão" : "Oculto do site e do telão"}
+                                onCheckedChange={(checked) =>
+                                  scheduleActiveMutation.mutate({ id: schedule.id, active: checked })
+                                }
+                              />
+                            </TableCell>
                             <TableCell className="font-semibold">{schedule.dayOfWeek}</TableCell>
                             <TableCell className="font-mono">{formattedTime}</TableCell>
                             <TableCell>{schedule.title}</TableCell>
                             <TableCell className="text-muted-foreground text-sm">
                               {schedule.location || "Sede"}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={schedule.active ? "outline" : "secondary"}>
-                                {schedule.active ? "Ativo" : "Oculto"}
-                              </Badge>
                             </TableCell>
                             <TableCell className="text-right">
                               {canEdit && (

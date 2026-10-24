@@ -11,6 +11,7 @@ import {
   createMinistry,
   createPastor,
   createSchedule,
+  setScheduleActive,
   toBranchBody,
   toMinistryBody,
   toPastorBody,
@@ -136,6 +137,18 @@ describe.each(CASES)("corpo de escrita: $nome", (c) => {
     expect(put).toHaveBeenCalledWith(`${c.base}/id-1`, body);
     const sent = put.mock.calls[0][1] as Record<string, unknown>;
     for (const f of FORBIDDEN) expect(sent).not.toHaveProperty(f);
+  });
+});
+
+describe("setScheduleActive", () => {
+  beforeEach(() => {
+    put.mockReset();
+    put.mockResolvedValue({ data: {} });
+  });
+
+  it("envia só o campo active", async () => {
+    await setScheduleActive("id-1", false);
+    expect(put).toHaveBeenCalledWith("/admin/tenants/me/schedules/id-1", { active: false });
   });
 });
 
