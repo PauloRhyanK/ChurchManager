@@ -67,4 +67,30 @@ export async function resetSiteSection(key: string) {
   return data;
 }
 
+/** Blocos reordenáveis da página inicial (o topo e o rodapé são fixos). */
+export type SiteHomeBlock =
+  | "mission"
+  | "schedules"
+  | "celulas"
+  | "events"
+  | "churches"
+  | "giving"
+  | "youtube";
+
+export interface SiteLayoutDto {
+  home: SiteHomeBlock[];
+  /** null enquanto a ordem nunca foi salva (o site usa a padrão). */
+  updatedAt: string | null;
+}
+
+export async function fetchSiteLayout() {
+  const { data } = await api.get<SiteLayoutDto>(`${BASE}/layout`);
+  return data;
+}
+
+export async function updateSiteLayout(home: SiteHomeBlock[]) {
+  const { data } = await api.put<SiteLayoutDto>(`${BASE}/layout`, { home: [...home] });
+  return data;
+}
+
 export const SITE_IMAGE_UPLOAD_PATH = `${BASE}/upload-image`;

@@ -4,8 +4,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 import {
   SITE_SECTIONS,
   findSectionSpec,
+  type SiteHomeBlock,
   type SiteSectionSpec,
 } from './site-content.registry';
+import { normalizeHomeOrder, validateHomeOrder } from './site-layout';
 import { validateSectionValue } from './site-content.validation';
 import { SiteRevalidationService } from './site-revalidation.service';
 
@@ -16,6 +18,12 @@ export interface SiteSectionDto {
   icon: string;
   value: Record<string, unknown>;
   /** null enquanto a secção nunca foi editada (está a servir os defaults). */
+  updatedAt: string | null;
+}
+
+export interface SiteLayoutDto {
+  home: SiteHomeBlock[];
+  /** null enquanto a igreja nunca salvou uma ordem (está a servir a padrão). */
   updatedAt: string | null;
 }
 
@@ -199,6 +207,30 @@ export class SiteContentService implements OnModuleInit {
     this.siteRevalidation.notifyContentChanged(tenantId);
 
     return this.toDto(section, row.value, row.updatedAt);
+  }
+
+  async getLayoutForTenant(tenantId: string): Promise<SiteLayoutDto> {
+    const row = await this.prisma.siteLayout.findUnique({ where: { tenantId } });
+    return {
+      home: normalizeHomeOrder(row?.homeOrder),
+      updatedAt: row?.updatedAt.toISOString() ?? null,
+    };
+  }
+
+  async updateLayoutForTenant(
+    tenantId: string,
+    rawHome: unknown,
+  ): Promise<SiteLayoutDto> {
+    const homeOrder = validateHomeOrder(rawHome);
+    const row = await this.prisma.siteLayout.upsert({
+      where: { tenantId },
+      create: { tenantId, homeOrder },
+      update: { homeOrder },
+    });
+
+    this.siteRevalidation.notifyContentChanged(tenantId);
+
+    return { home: normalizeHomeOrder(row.homeOrder), updatedAt: row.updatedAt.toISOString() };
   }
 
   /** Repõe a secção no conteúdo inicial do registry. */

@@ -20,6 +20,7 @@ import { PermissionsGuard } from '../access/permissions.guard';
 import { RequirePermission } from '../access/require-permission.decorator';
 import { StorageService } from '../storage/storage.service';
 import { UpdateSiteContentDto } from './dto/update-site-content.dto';
+import { UpdateSiteLayoutDto } from './dto/update-site-layout.dto';
 import { SITE_ICONS, SITE_SECTIONS } from './site-content.registry';
 import { SiteContentService } from './site-content.service';
 
@@ -67,6 +68,24 @@ export class TenantsMeSiteContentController {
       `tenants/${user.tenantId}/site`,
     );
     return { url };
+  }
+
+  /**
+   * Ordem dos blocos da página inicial. Declarado antes de `:key` para que
+   * "layout" não seja lido como nome de secção.
+   */
+  @Get('layout')
+  async getLayout(@CurrentUser() user: AuthUser) {
+    return this.siteContent.getLayoutForTenant(user.tenantId);
+  }
+
+  @Put('layout')
+  @RequirePermission(PermissionModule.SITE, PermissionLevel.EDIT)
+  async updateLayout(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UpdateSiteLayoutDto,
+  ) {
+    return this.siteContent.updateLayoutForTenant(user.tenantId, dto.home);
   }
 
   @Get()

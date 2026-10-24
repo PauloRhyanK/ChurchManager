@@ -2,7 +2,6 @@ import {
   LayoutDashboard,
   DollarSign,
   CalendarDays,
-  Globe,
   Users,
   Grid3X3,
   Settings,
@@ -41,13 +40,14 @@ const mainNav: {
   title: string;
   url: string;
   icon: typeof LayoutDashboard;
-  module?: PermissionModule;
+  /** Basta ter VIEW em qualquer um. */
+  modules?: PermissionModule[];
 }[] = [
-  { title: "Visão Geral", url: "/", icon: LayoutDashboard, module: "DASHBOARD" },
-  { title: "Financeiro", url: "/financeiro", icon: DollarSign, module: "FINANCIAL" },
-  { title: "Eventos", url: "/eventos", icon: CalendarDays, module: "EVENTS" },
-  { title: "Site", url: "/site", icon: Globe, module: "SITE" },
-  { title: "Igreja", url: "/igreja", icon: Church, module: "CHURCH" },
+  { title: "Visão Geral", url: "/", icon: LayoutDashboard, modules: ["DASHBOARD"] },
+  { title: "Financeiro", url: "/financeiro", icon: DollarSign, modules: ["FINANCIAL"] },
+  { title: "Eventos", url: "/eventos", icon: CalendarDays, modules: ["EVENTS"] },
+  // Igreja inclui a aba Site.
+  { title: "Igreja", url: "/igreja", icon: Church, modules: ["CHURCH", "SITE"] },
 ];
 
 const internoNav: {
@@ -86,7 +86,7 @@ export function AppSidebar() {
   const { can } = usePermissions();
 
   const visibleMainNav = mainNav.filter(
-    (item) => !item.module || can(item.module, "VIEW"),
+    (item) => !item.modules || item.modules.some((m) => can(m, "VIEW")),
   );
   const canSeeInterno = can("CHECKIN", "VIEW");
   const canSeeEquipe = can("USERS", "VIEW");
