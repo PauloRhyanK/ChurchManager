@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -69,6 +69,7 @@ interface ProjectionAgendaSheetProps {
  */
 export function ProjectionAgendaSheet({ open, onOpenChange, onGoToTab }: ProjectionAgendaSheetProps) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { can } = usePermissions();
   const canEdit = can("SITE", "EDIT");
   const [draft, setDraft] = useState<Hidden | null>(null);
@@ -78,6 +79,8 @@ export function ProjectionAgendaSheet({ open, onOpenChange, onGoToTab }: Project
     queryKey: ["projection-agenda"],
     queryFn: fetchProjectionAgenda,
     enabled: open,
+    // A agenda muda com edições em Agenda Semanal e Eventos: cada abertura busca de novo.
+    staleTime: 0,
   });
   const items = agendaQuery.data?.items;
 
@@ -218,13 +221,19 @@ export function ProjectionAgendaSheet({ open, onOpenChange, onGoToTab }: Project
                   </button>
                 )}
                 {can("EVENTS", "VIEW") && (
-                  <Link
-                    to="/eventos"
+                  <button
+                    type="button"
                     className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+                    onClick={() =>
+                      leave(() => {
+                        onOpenChange(false);
+                        navigate("/eventos");
+                      })
+                    }
                   >
                     Abrir Eventos
                     <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-                  </Link>
+                  </button>
                 )}
               </div>
             )}

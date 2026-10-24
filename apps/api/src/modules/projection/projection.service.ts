@@ -64,14 +64,29 @@ export class ProjectionService {
     dto: UpdateProjectionSettingsDto,
     now = new Date(),
   ): Promise<ProjectionAgendaDto> {
-    // Só ids do próprio tenant, sem repetidos: o resto é descartado em silêncio.
+    // O painel só vê o que está na agenda agora. Ocultos fora dela (horário
+    // desativado, evento despublicado ou além da janela) continuam ocultos, para
+    // não voltarem ao telão quando reaparecerem.
+    const [current, stored] = await Promise.all([
+      this.getAgendaForTenant(tenantId, now),
+      this.prisma.projectionSettings.findUnique({ where: { tenantId } }),
+    ]);
+    const onAgenda = new Set(current.items.map((item) => `${item.kind}:${item.sourceId}`));
+    const keep = (kind: 'event' | 'schedule', ids: string[] | undefined) =>
+      (ids ?? []).filter((id) => !onAgenda.has(`${kind}:${id}`));
+    const eventIds = [...new Set([...dto.hiddenEventIds, ...keep('event', stored?.hiddenEventIds)])];
+    const scheduleIds = [
+      ...new Set([...dto.hiddenScheduleIds, ...keep('schedule', stored?.hiddenScheduleIds)]),
+    ];
+
+    // Só ids do próprio tenant que ainda existem: o resto é descartado em silêncio.
     const [events, schedules] = await Promise.all([
       this.prisma.event.findMany({
-        where: { tenantId, id: { in: [...new Set(dto.hiddenEventIds)] } },
+        where: { tenantId, id: { in: eventIds } },
         select: { id: true },
       }),
       this.prisma.schedule.findMany({
-        where: { tenantId, id: { in: [...new Set(dto.hiddenScheduleIds)] } },
+        where: { tenantId, id: { in: scheduleIds } },
         select: { id: true },
       }),
     ]);

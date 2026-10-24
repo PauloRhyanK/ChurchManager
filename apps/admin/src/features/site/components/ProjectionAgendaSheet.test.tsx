@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProjectionAgendaItem } from "@/features/site/api/projection-api";
 import { ProjectionAgendaSheet } from "./ProjectionAgendaSheet";
@@ -52,7 +52,13 @@ function renderSheet() {
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <ProjectionAgendaSheet open onOpenChange={onOpenChange} onGoToTab={onGoToTab} />
+        <Routes>
+          <Route
+            path="/"
+            element={<ProjectionAgendaSheet open onOpenChange={onOpenChange} onGoToTab={onGoToTab} />}
+          />
+          <Route path="/eventos" element={<p>Página de eventos</p>} />
+        </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -141,7 +147,7 @@ describe("ProjectionAgendaSheet", () => {
     await screen.findAllByRole("group");
     fireEvent.click(screen.getByRole("button", { name: "Editar na Agenda Semanal" }));
     expect(onGoToTab).toHaveBeenCalledWith("agenda");
-    expect(screen.getByRole("link", { name: "Abrir Eventos" })).toHaveAttribute("href", "/eventos");
+    expect(screen.getByRole("button", { name: "Abrir Eventos" })).toBeInTheDocument();
   });
 
   it("sem permissões extras e só leitura: sem atalhos, sem Salvar e interruptores travados", async () => {
@@ -149,8 +155,35 @@ describe("ProjectionAgendaSheet", () => {
     renderSheet();
     await screen.findAllByRole("group");
     expect(screen.queryByRole("button", { name: "Editar na Agenda Semanal" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Abrir Eventos" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Abrir Eventos" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Salvar" })).toBeNull();
     expect(toggle(/Festa da Colheita/)).toBeDisabled();
+  });
+
+  it("Abrir Eventos com alteração pendente pede confirmação antes de sair", async () => {
+    renderSheet();
+    await screen.findAllByRole("group");
+    fireEvent.click(toggle(/Festa da Colheita/));
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Eventos" }));
+    expect(await screen.findByText("Descartar alterações?")).toBeInTheDocument();
+    expect(screen.queryByText("Página de eventos")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
+    expect(await screen.findByText("Página de eventos")).toBeInTheDocument();
+  });
+
+  it("reabrir busca a agenda de novo (sem prévia velha)", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } });
+    const ui = (open: boolean) => (
+      <QueryClientProvider client={client}>
+        <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <ProjectionAgendaSheet open={open} onOpenChange={vi.fn()} onGoToTab={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(ui(true));
+    await screen.findAllByRole("group");
+    rerender(ui(false));
+    rerender(ui(true));
+    await waitFor(() => expect(projectionApi.fetchProjectionAgenda).toHaveBeenCalledTimes(2));
   });
 });

@@ -153,14 +153,20 @@ function createService(stored: { hiddenEventIds: string[]; hiddenScheduleIds: st
     schedule: {
       findMany: async (args: { where: Record<string, unknown> }) => {
         capture[`schedule:${JSON.stringify(args.where)}`] = true;
-        if ('id' in args.where) return [{ id: 'sab' }];
+        if ('id' in args.where) {
+          const ids = (args.where.id as { in: string[] }).in;
+          return ids.filter((id) => ['sab', 'pausado'].includes(id)).map((id) => ({ id }));
+        }
         return [schedule('sab', 'Sábado', '19:00')];
       },
     },
     event: {
       findMany: async (args: { where: Record<string, unknown> }) => {
         capture.eventWhere = args.where;
-        if ('id' in args.where) return [{ id: 'e1' }];
+        if ('id' in args.where) {
+          const ids = (args.where.id as { in: string[] }).in;
+          return ids.filter((id) => id === 'e1').map((id) => ({ id }));
+        }
         return [event('e1', '2026-10-24', '20:00')];
       },
     },
@@ -202,6 +208,14 @@ test('service: público remove ocultos e o campo hidden', async () => {
   const { items } = await service.getPublicAgenda(TENANT, NIGHT_IN_SP);
   assert.deepEqual(items.map((i) => i.key), ['schedule:sab:2026-10-24']);
   assert.equal('hidden' in items[0], false);
+});
+
+test('service: salvar mantém ocultos que estão fora da agenda agora (desativado, despublicado)', async () => {
+  const { service, capture } = createService({ hiddenEventIds: ['e1'], hiddenScheduleIds: ['pausado'] });
+  await service.updateSettingsForTenant(TENANT, { hiddenEventIds: [], hiddenScheduleIds: [] }, NIGHT_IN_SP);
+  const upsert = capture.upsert as { update: { hiddenEventIds: string[]; hiddenScheduleIds: string[] } };
+  // e1 está na agenda e foi religado; "pausado" não está na agenda, então continua oculto.
+  assert.deepEqual(upsert.update, { hiddenEventIds: [], hiddenScheduleIds: ['pausado'] });
 });
 
 test('service: salvar descarta ids que não são do tenant, remove repetidos e revalida', async () => {

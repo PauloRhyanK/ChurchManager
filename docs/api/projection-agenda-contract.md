@@ -30,5 +30,7 @@ Sem autenticação. Resposta:
 - `kind: "event"`: evento **publicado** com data de hoje em diante (sem limite de dias). `note` = `shortDescription`; `timeStart`/`timeEnd` podem ser `null`.
 - Ordem: data, horário (sem horário primeiro), evento antes de horário no empate, título.
 - Itens marcados como ocultos no painel não aparecem. `key` é estável por ocorrência.
+- A tela do telão mostra no máximo 12 itens (`maxAvisos` em `public/projecao-agenda/projecao.js` no site). Com muitos horários semanais, eventos distantes saem da tela; ocultar horários no painel libera espaço.
+- Ocultos que não estão na agenda no momento (horário desativado, evento despublicado) continuam ocultos ao salvar.
 
 Painel: `GET /admin/tenants/me/projection/agenda` (`SITE:VIEW`, mesma lista com `hidden`) e `PUT /admin/tenants/me/projection/settings` (`SITE:EDIT`) com `{ "hiddenEventIds": [...], "hiddenScheduleIds": [...] }`. Ocultar um horário vale para todas as semanas. Salvar dispara a revalidação do site.
