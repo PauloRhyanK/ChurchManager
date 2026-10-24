@@ -95,6 +95,7 @@ model Tenant {
   schedules          Schedule[]
   siteContent        SiteContent[]
   siteLayout         SiteLayout?
+  projectionSettings ProjectionSettings?
   branches           ChurchBranch[]
   pastors            Pastor[]
   ministries         Ministry[]
@@ -440,6 +441,21 @@ model SiteLayout {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("site_layout")
+}
+
+/// O que fica de fora da agenda do telão (`/projecao-agenda` no site). Sem linha,
+/// todos os eventos publicados e horários ativos aparecem. Ver `modules/projection`.
+model ProjectionSettings {
+  id                String   @id @default(uuid()) @db.Uuid
+  tenantId          String   @unique @map("tenant_id") @db.Uuid
+  hiddenEventIds    String[] @map("hidden_event_ids")
+  hiddenScheduleIds String[] @map("hidden_schedule_ids")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("projection_settings")
 }
 
 enum FinancialLinkModule {
