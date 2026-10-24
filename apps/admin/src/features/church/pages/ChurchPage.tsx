@@ -12,7 +12,7 @@ import {
   Loader2,
   Globe,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -133,21 +133,31 @@ export default function ChurchPage() {
   const canViewChurch = can("CHURCH", "VIEW");
   const canViewSite = can("SITE", "VIEW");
 
-  // A aba ativa vive na URL (?aba=), para links diretos e para o "voltar" do navegador.
   const allowedTabs: ChurchTab[] = [
     ...(canViewChurch ? CHURCH_TABS : []),
     ...(canViewSite ? (["site"] as const) : []),
   ];
+  const isAllowedTab = (tab: string | null): tab is ChurchTab =>
+    tab !== null && allowedTabs.includes(tab as ChurchTab);
+
+  // A aba ativa é estado da página; a URL (?aba=) só a espelha, para links
+  // diretos. Mudanças da URL vindas de fora passam pelo mesmo aviso de
+  // alterações não salvas que o clique na aba (ver efeito abaixo).
   const [searchParams, setSearchParams] = useSearchParams();
-  const requestedTab = searchParams.get("aba") as ChurchTab | null;
-  const activeTab: ChurchTab =
-    requestedTab && allowedTabs.includes(requestedTab) ? requestedTab : allowedTabs[0];
-  const setActiveTab = (tab: ChurchTab) =>
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.set("aba", tab);
-      return next;
-    });
+  const requestedTab = searchParams.get("aba");
+  const [activeTabState, setActiveTab] = useState<ChurchTab>(() =>
+    isAllowedTab(requestedTab) ? requestedTab : allowedTabs[0],
+  );
+  const activeTab = isAllowedTab(activeTabState) ? activeTabState : allowedTabs[0];
+  const syncUrlTab = (tab: ChurchTab) =>
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("aba", tab);
+        return next;
+      },
+      { replace: true },
+    );
 
   // Query / Mutations para Filiais
   const branchesQuery = useQuery({
@@ -273,6 +283,8 @@ export default function ChurchPage() {
   // True enquanto a aba Site tiver ordem por salvar.
   const [siteDirty, setSiteDirty] = useState(false);
   const [pendingTab, setPendingTab] = useState<ChurchTab | null>(null);
+  // O "Descartar" também fecha o diálogo; só o cancelamento devolve a URL à aba atual.
+  const discardedRef = useRef(false);
   const [deleteTarget, setDeleteTarget] = useState<{
     what: string;
     name: string;
@@ -286,6 +298,21 @@ export default function ChurchPage() {
     pastorEditor.dirty ||
     ministryEditor.dirty ||
     scheduleEditor.dirty;
+  // A URL segue a aba ativa.
+  useEffect(() => {
+    if (searchParams.get("aba") !== activeTab) syncUrlTab(activeTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  // URL mudou por fora (link direto, barra lateral): trata como clique na aba;
+  // sem aba válida, mantém a atual.
+  useEffect(() => {
+    if (requestedTab === activeTab || pendingTab !== null) return;
+    if (isAllowedTab(requestedTab)) handleTabChange(requestedTab);
+    else syncUrlTab(activeTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requestedTab]);
+
   useEffect(() => {
     if (!anyDirty) return;
     const handler = (e: BeforeUnloadEvent) => {
@@ -1284,8 +1311,14 @@ export default function ChurchPage() {
 
       <DiscardChangesDialog
         open={pendingTab !== null}
-        onOpenChange={(open) => !open && setPendingTab(null)}
+        onOpenChange={(open) => {
+          if (open) return;
+          setPendingTab(null);
+          if (!discardedRef.current) syncUrlTab(activeTab);
+          discardedRef.current = false;
+        }}
         onDiscard={() => {
+          discardedRef.current = true;
           setConfigDirty(false);
           setSiteDirty(false);
           if (pendingTab) setActiveTab(pendingTab);

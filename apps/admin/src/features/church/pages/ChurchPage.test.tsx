@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { AxiosError } from "axios";
 import type { ReactNode } from "react";
-import { MemoryRouter, useLocation } from "react-router-dom";
+import { MemoryRouter, useLocation, useNavigate } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ChurchPage from "./ChurchPage";
 
@@ -49,7 +49,15 @@ vi.mock("@/features/site/components/SiteFlowTab", () => ({
 }));
 
 function LocationSearch() {
-  return <output data-testid="search">{useLocation().search}</output>;
+  const navigate = useNavigate();
+  return (
+    <>
+      <output data-testid="search">{useLocation().search}</output>
+      {/* Navegação de fora da página: barra lateral, link direto, voltar. */}
+      <button onClick={() => navigate("/igreja?aba=filiais")}>Link para Filiais</button>
+      <button onClick={() => navigate("/igreja")}>Link para Igreja</button>
+    </>
+  );
 }
 
 const config = {
@@ -257,5 +265,34 @@ describe("ChurchPage", () => {
     renderPage("/igreja?aba=site");
     await user.click(screen.getByRole("button", { name: "Ir para agenda" }));
     expect(screen.getByTestId("search")).toHaveTextContent("?aba=agenda");
+  });
+
+  it("mudança de ?aba= vinda de fora com ordem pendente também pede confirmação", async () => {
+    renderPage("/igreja?aba=site");
+    await user.click(screen.getByRole("button", { name: "Mudar ordem" }));
+    await user.click(screen.getByRole("button", { name: "Link para Filiais" }));
+    expect(await screen.findByText("Descartar alterações?")).toBeInTheDocument();
+    expect(screen.getByText("Fluxo do site")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Continuar editando" }));
+    await waitFor(() => expect(screen.getByTestId("search")).toHaveTextContent("?aba=site"));
+    expect(screen.getByText("Fluxo do site")).toBeInTheDocument();
+  });
+
+  it("link para /igreja sem aba mantém a aba atual", async () => {
+    renderPage("/igreja?aba=agenda");
+    await user.click(screen.getByRole("button", { name: "Link para Igreja" }));
+    await waitFor(() => expect(screen.getByTestId("search")).toHaveTextContent("?aba=agenda"));
+    expect(screen.getByRole("tab", { name: /Agenda Semanal/ })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("descartar depois de navegação de fora vai para a aba pedida", async () => {
+    renderPage("/igreja?aba=site");
+    await user.click(screen.getByRole("button", { name: "Mudar ordem" }));
+    await user.click(screen.getByRole("button", { name: "Link para Filiais" }));
+    await user.click(await screen.findByRole("button", { name: "Descartar" }));
+    await waitFor(() =>
+      expect(screen.getByRole("tab", { name: /Filiais/ })).toHaveAttribute("aria-selected", "true"),
+    );
+    expect(screen.getByTestId("search")).toHaveTextContent("?aba=filiais");
   });
 });

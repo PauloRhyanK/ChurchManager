@@ -5,7 +5,9 @@ import {
   closestCenter,
   useSensor,
   useSensors,
+  type Announcements,
   type DragEndEvent,
+  type UniqueIdentifier,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -34,6 +36,7 @@ import {
   OTHER_PAGES,
   type ChurchTab,
   type FlowBlock,
+  type FlowSource,
 } from "./site-flow-blocks";
 import { SiteFlowRow, SortableFlowRow } from "./SiteFlowRow";
 import { SiteSectionSheet } from "./SiteSectionSheet";
@@ -43,6 +46,29 @@ interface SiteFlowTabProps {
   onDirtyChange: (dirty: boolean) => void;
   onGoToTab: (tab: ChurchTab) => void;
 }
+
+function titleOf(id: UniqueIdentifier): string {
+  return HOME_BLOCKS[id as SiteHomeBlock]?.title ?? String(id);
+}
+
+/** Textos lidos pelo leitor de tela ao arrastar (o padrão do dnd-kit é em inglês). */
+const DRAG_ANNOUNCEMENTS: Announcements = {
+  onDragStart: ({ active }) => `${titleOf(active.id)} selecionada.`,
+  onDragOver: ({ active, over }) =>
+    over
+      ? `${titleOf(active.id)} sobre a posição de ${titleOf(over.id)}.`
+      : `${titleOf(active.id)} fora da lista.`,
+  onDragEnd: ({ active, over }) =>
+    over
+      ? `${titleOf(active.id)} solta na posição de ${titleOf(over.id)}.`
+      : `${titleOf(active.id)} solta.`,
+  onDragCancel: ({ active }) => `Movimento de ${titleOf(active.id)} cancelado.`,
+};
+
+const DRAG_INSTRUCTIONS = {
+  draggable:
+    "Para reordenar, pressione espaço ou Enter para pegar a seção, use as setas para mover e espaço ou Enter de novo para soltar. Esc cancela.",
+};
 
 function sameOrder(a: readonly string[], b: readonly string[]) {
   return a.length === b.length && a.every((id, index) => id === b[index]);
@@ -74,6 +100,15 @@ export function SiteFlowTab({ onDirtyChange, onGoToTab }: SiteFlowTabProps) {
   useEffect(() => {
     onDirtyChange(dirty);
   }, [dirty, onDirtyChange]);
+  // Ao sair da tela o rascunho some junto; a página não pode continuar achando que há ordem pendente.
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
+
+  // Atalhos para a origem só quando a pessoa consegue abrir o destino.
+  const canOpenSource = (source?: FlowSource) => {
+    if (source?.tab) return can("CHURCH", "VIEW");
+    if (source?.href) return can("EVENTS", "VIEW");
+    return false;
+  };
 
   const saveMutation = useMutation({
     mutationFn: updateSiteLayout,
@@ -124,7 +159,7 @@ export function SiteFlowTab({ onDirtyChange, onGoToTab }: SiteFlowTabProps) {
     (block) => block.sectionKey === openKey,
   );
 
-  const rowProps = { canEdit, onEdit: setOpenKey, onGoToTab };
+  const rowProps = { canEdit, canOpenSource, onEdit: setOpenKey, onGoToTab };
 
   return (
     <div className="space-y-8">
@@ -166,7 +201,17 @@ export function SiteFlowTab({ onDirtyChange, onGoToTab }: SiteFlowTabProps) {
           </li>
 
           {canEdit ? (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+              // Fora do <ol>: o dnd-kit insere as regiões de anúncio como <div>.
+              accessibility={{
+                container: document.body,
+                announcements: DRAG_ANNOUNCEMENTS,
+                screenReaderInstructions: DRAG_INSTRUCTIONS,
+              }}
+            >
               <SortableContext items={order} strategy={verticalListSortingStrategy}>
                 {order.map((id, index) => (
                   <SortableFlowRow
@@ -229,7 +274,9 @@ export function SiteFlowTab({ onDirtyChange, onGoToTab }: SiteFlowTabProps) {
         icons={schemaQuery.data?.icons ?? []}
         canEdit={canEdit}
         source={
-          openBlock?.source?.tab ? { ...openBlock.source, tab: openBlock.source.tab } : undefined
+          openBlock?.source?.tab && canOpenSource(openBlock.source)
+            ? { ...openBlock.source, tab: openBlock.source.tab }
+            : undefined
         }
         onGoToSource={(tab) => {
           setOpenKey(null);

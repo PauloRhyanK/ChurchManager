@@ -63,14 +63,14 @@ function renderTab(props: Partial<Parameters<typeof SiteFlowTab>[0]> = {}) {
   const onDirtyChange = vi.fn();
   const onGoToTab = vi.fn();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
+  const view = render(
     <QueryClientProvider client={client}>
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <SiteFlowTab onDirtyChange={onDirtyChange} onGoToTab={onGoToTab} {...props} />
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  return { onDirtyChange, onGoToTab };
+  return { onDirtyChange, onGoToTab, unmount: view.unmount };
 }
 
 async function homeTitles() {
@@ -199,5 +199,31 @@ describe("SiteFlowTab", () => {
     ]);
     expect(within(list).getByText("Usa Pastores")).toBeInTheDocument();
     expect(within(list).getByText("Não aparece no site")).toBeInTheDocument();
+  });
+
+  it("ao sair da tela avisa que não há mais ordem pendente", async () => {
+    const { onDirtyChange, unmount } = renderTab();
+    await homeTitles();
+    fireEvent.click(screen.getByRole("button", { name: "Mover Células para cima" }));
+    await waitFor(() => expect(onDirtyChange).toHaveBeenLastCalledWith(true));
+    unmount();
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("sem acesso a Igreja nem a Eventos não mostra atalhos que não abririam", async () => {
+    perms.modules = { SITE: "EDIT" };
+    renderTab();
+    await homeTitles();
+    expect(screen.queryByRole("button", { name: "Ir para Agenda Semanal" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Abrir Eventos" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Usa Filiais/ })).toBeNull();
+    expect(screen.getByText("Usa Filiais")).toBeInTheDocument();
+  });
+
+  it("anúncios do arrastar ficam em pt-BR, fora da lista", async () => {
+    renderTab();
+    const list = await screen.findByRole("list", { name: "Página inicial" });
+    expect(list.querySelectorAll(":scope > div").length).toBe(0);
+    expect(document.body.textContent).toContain("Para reordenar");
   });
 });

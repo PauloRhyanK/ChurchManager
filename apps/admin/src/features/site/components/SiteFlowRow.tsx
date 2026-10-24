@@ -7,7 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { SiteSectionDto } from "@/features/site/api/tenant-site-content-api";
 import { cn } from "@/lib/utils";
-import { formatUpdatedAt, summarize, type ChurchTab, type FlowBlock } from "./site-flow-blocks";
+import {
+  formatUpdatedAt,
+  summarize,
+  type ChurchTab,
+  type FlowBlock,
+  type FlowSource,
+} from "./site-flow-blocks";
 import { SiteSourcePreview } from "./SiteSourcePreview";
 
 export interface FlowRowMove {
@@ -20,6 +26,8 @@ interface SiteFlowRowProps {
   block: FlowBlock;
   section?: SiteSectionDto;
   canEdit: boolean;
+  /** Se a pessoa consegue abrir a origem (aba ou módulo); sem isso, só o rótulo. */
+  canOpenSource: (source?: FlowSource) => boolean;
   /** Bloco travado (topo/rodapé): mostra cadeado no lugar da alça. */
   locked?: boolean;
   /** Presente quando o bloco é reordenável e a pessoa pode editar. */
@@ -39,6 +47,7 @@ export function SiteFlowRow({
   block,
   section,
   canEdit,
+  canOpenSource,
   locked,
   move,
   handle,
@@ -50,6 +59,7 @@ export function SiteFlowRow({
   const source = block.source;
   const external = !block.sectionKey && source;
   const summary = block.note ?? (section ? summarize(section) : "");
+  const openable = canOpenSource(source);
 
   let pill: ReactNode;
   if (block.badge) {
@@ -60,6 +70,8 @@ export function SiteFlowRow({
     );
   } else if (external) {
     pill = <span className={SOURCE_PILL}>Vem de {source.label}</span>;
+  } else if (source && !openable) {
+    pill = <span className={SOURCE_PILL}>Usa {source.label}</span>;
   } else if (source?.tab) {
     const tab = source.tab;
     pill = (
@@ -94,7 +106,7 @@ export function SiteFlowRow({
         <span className="hidden sm:inline">{canEdit ? "Editar" : "Ver"}</span>
       </Button>
     );
-  } else if (source?.tab) {
+  } else if (source?.tab && openable) {
     const tab = source.tab;
     const label = `Ir para ${source.label}`;
     action = (
@@ -103,7 +115,7 @@ export function SiteFlowRow({
         <ArrowRight className="h-3.5 w-3.5 sm:ml-1.5" aria-hidden="true" />
       </Button>
     );
-  } else if (source?.href) {
+  } else if (source?.href && openable) {
     const label = `Abrir ${source.label}`;
     action = (
       <Button variant="outline" size="sm" asChild>
