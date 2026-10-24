@@ -30,6 +30,9 @@ vi.mock("@/features/events/api/tenant-events-api", async (orig) => ({
   ...(await orig<typeof import("@/features/events/api/tenant-events-api")>()),
   ...eventsApi,
 }));
+vi.mock("./ProjectionAgendaSheet", () => ({
+  ProjectionAgendaSheet: ({ open }: { open: boolean }) => (open ? <p>Painel da agenda do telão</p> : null),
+}));
 vi.mock("@/features/access/hooks/use-permissions", () => ({
   usePermissions: () => ({
     can: (module: string, level: string) => {
@@ -225,5 +228,13 @@ describe("SiteFlowTab", () => {
     const list = await screen.findByRole("list", { name: "Página inicial" });
     expect(list.querySelectorAll(":scope > div").length).toBe(0);
     expect(document.body.textContent).toContain("Para reordenar");
+  });
+
+  it("botão Agenda do telão abre a configuração", async () => {
+    renderTab();
+    await homeTitles();
+    expect(screen.queryByText("Painel da agenda do telão")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Agenda do telão" }));
+    expect(screen.getByText("Painel da agenda do telão")).toBeInTheDocument();
   });
 });

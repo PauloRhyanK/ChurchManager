@@ -697,7 +697,7 @@ export default function ChurchPage() {
                 <div>
                   <CardTitle className="text-lg">Agenda Semanal</CardTitle>
                   <CardDescription>
-                    Horários de cultos, reuniões e eventos recorrentes que aparecem na programação.
+                    Horários de cultos, reuniões e eventos recorrentes. Aparecem no site e no telão (Site → Agenda do telão).
                   </CardDescription>
                 </div>
                 {canEdit && (

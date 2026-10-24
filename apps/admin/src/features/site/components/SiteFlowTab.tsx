@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, MonitorPlay } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,7 @@ import {
   type FlowSource,
 } from "./site-flow-blocks";
 import { SiteFlowRow, SortableFlowRow } from "./SiteFlowRow";
+import { ProjectionAgendaSheet } from "./ProjectionAgendaSheet";
 import { SiteSectionSheet } from "./SiteSectionSheet";
 
 interface SiteFlowTabProps {
@@ -84,6 +85,7 @@ export function SiteFlowTab({ onDirtyChange, onGoToTab }: SiteFlowTabProps) {
   const canEdit = can("SITE", "EDIT");
   const [draft, setDraft] = useState<SiteHomeBlock[] | null>(null);
   const [openKey, setOpenKey] = useState<string | null>(null);
+  const [agendaOpen, setAgendaOpen] = useState(false);
 
   const schemaQuery = useQuery({
     queryKey: ["site-schema"],
@@ -172,27 +174,33 @@ export function SiteFlowTab({ onDirtyChange, onGoToTab }: SiteFlowTabProps) {
               {canEdit && " Arraste pela alça ou use as setas."}
             </p>
           </div>
-          {dirty && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Ordem alterada</span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={saveMutation.isPending}
-                onClick={() => setDraft(null)}
-              >
-                Descartar
-              </Button>
-              <Button
-                size="sm"
-                disabled={saveMutation.isPending}
-                onClick={() => saveMutation.mutate(order)}
-              >
-                {saveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Salvar ordem
-              </Button>
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setAgendaOpen(true)}>
+              <MonitorPlay className="mr-2 h-4 w-4" aria-hidden="true" />
+              Agenda do telão
+            </Button>
+            {dirty && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Ordem alterada</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={saveMutation.isPending}
+                  onClick={() => setDraft(null)}
+                >
+                  Descartar
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={saveMutation.isPending}
+                  onClick={() => saveMutation.mutate(order)}
+                >
+                  {saveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Salvar ordem
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
 
         <ol aria-label="Página inicial" className="relative ml-1.5 space-y-2 border-l-2 pl-4 sm:ml-3 sm:pl-6">
@@ -267,6 +275,12 @@ export function SiteFlowTab({ onDirtyChange, onGoToTab }: SiteFlowTabProps) {
           ))}
         </ul>
       </section>
+
+      <ProjectionAgendaSheet
+        open={agendaOpen}
+        onOpenChange={setAgendaOpen}
+        onGoToTab={onGoToTab}
+      />
 
       <SiteSectionSheet
         section={openSection}

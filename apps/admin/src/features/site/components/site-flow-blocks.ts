@@ -61,7 +61,7 @@ export const HOME_BLOCKS: Record<SiteHomeBlock, FlowBlock> = {
     icon: CalendarDays,
     source: { label: "Agenda Semanal", tab: "agenda" },
     preview: "schedules",
-    note: "Horários de culto ativos",
+    note: "Horários de culto ativos, também no telão",
   },
   celulas: { id: "celulas", title: "Células", icon: Users, sectionKey: "celulas" },
   events: {
