@@ -19,12 +19,12 @@ export class ProjectionTopicDto {
 
   @IsString()
   @IsNotEmpty({ message: 'O tópico precisa de um título' })
-  @MaxLength(60, { message: 'Título do tópico com até 60 caracteres' })
+  @MaxLength(40, { message: 'Título do tópico com até 40 caracteres' })
   title!: string;
 
   @IsString()
   @IsNotEmpty({ message: 'O tópico precisa de uma frase' })
-  @MaxLength(140, { message: 'Frase do tópico com até 140 caracteres' })
+  @MaxLength(55, { message: 'Frase do tópico com até 55 caracteres' })
   text!: string;
 
   @IsOptional()

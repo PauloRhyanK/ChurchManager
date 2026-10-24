@@ -31,7 +31,10 @@ test('DTO: aceita tópicos válidos e continua aceitando corpo sem topics', asyn
 
 test('DTO: rejeita campo extra no tópico, título longo, sem frase e mais de 20 tópicos', async () => {
   assert.notEqual(await errors({ ...base, topics: [{ ...celulas, cor: 'azul' }] }), null);
-  assert.notEqual(await errors({ ...base, topics: [{ ...celulas, title: 'x'.repeat(61) }] }), null);
+  // Limites do que cabe na tela do telão (título e frase em até 2 linhas).
+  assert.notEqual(await errors({ ...base, topics: [{ ...celulas, title: 'x'.repeat(41) }] }), null);
+  assert.notEqual(await errors({ ...base, topics: [{ ...celulas, text: 'x'.repeat(56) }] }), null);
+  assert.equal(await errors({ ...base, topics: [{ ...celulas, title: 'x'.repeat(40), text: 'x'.repeat(55) }] }), null);
   assert.notEqual(await errors({ ...base, topics: [{ ...celulas, text: '' }] }), null);
   assert.notEqual(await errors({ ...base, topics: [{ ...celulas, id: 'nao-uuid' }] }), null);
   assert.notEqual(await errors({ ...base, topics: Array.from({ length: 21 }, () => celulas) }), null);

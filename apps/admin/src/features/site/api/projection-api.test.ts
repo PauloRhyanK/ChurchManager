@@ -17,7 +17,7 @@ describe("agenda do telão", () => {
     expect(get).toHaveBeenCalledWith("/admin/tenants/me/projection/agenda");
   });
 
-  it("salva só as duas listas, sem campos extras", async () => {
+  it("salva só os campos do contrato, sem extras", async () => {
     put.mockResolvedValue({ data: { items: [], days: 7, updatedAt: null } });
     const body = { hiddenEventIds: ["e1"], hiddenScheduleIds: ["s1"], topics: [], extra: 1 } as never;
     await updateProjectionSettings(body);

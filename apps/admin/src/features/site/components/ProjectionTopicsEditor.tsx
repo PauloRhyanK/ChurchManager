@@ -122,7 +122,7 @@ export function ProjectionTopicsEditor({ topics, onChange, disabled }: Projectio
                     <Input
                       id={id("titulo")}
                       value={topic.title}
-                      maxLength={60}
+                      maxLength={40}
                       disabled={disabled}
                       placeholder="Células"
                       onChange={(e) => update(topic.key, { title: e.target.value })}
@@ -148,7 +148,7 @@ export function ProjectionTopicsEditor({ topics, onChange, disabled }: Projectio
                     <Input
                       id={id("frase")}
                       value={topic.text}
-                      maxLength={140}
+                      maxLength={55}
                       disabled={disabled}
                       placeholder="Encontre uma célula perto de você"
                       onChange={(e) => update(topic.key, { text: e.target.value })}
