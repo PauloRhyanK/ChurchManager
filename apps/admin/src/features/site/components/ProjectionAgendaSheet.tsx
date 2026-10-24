@@ -24,6 +24,8 @@ import {
 } from "@/features/site/api/projection-api";
 import { getApiErrorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { isTopicIncomplete, toTopicDraft, type TopicDraft } from "./projection-topics";
+import { ProjectionTopicsEditor } from "./ProjectionTopicsEditor";
 import type { ChurchTab } from "./site-flow-blocks";
 
 interface Hidden {
@@ -41,6 +43,14 @@ function hiddenFrom(items: ProjectionAgendaItem[]): Hidden {
 
 function sameSet(a: Set<string>, b: Set<string>) {
   return a.size === b.size && [...a].every((id) => b.has(id));
+}
+
+/** Só o que vai para a API, na ordem: compara rascunho com o salvo. */
+function topicsPayload(topics: TopicDraft[]) {
+  return topics.map(({ key: _key, ...topic }) => ({
+    ...topic,
+    callToAction: topic.callToAction?.trim() ? topic.callToAction : null,
+  }));
 }
 
 function isHidden(hidden: Hidden, item: ProjectionAgendaItem) {
@@ -73,6 +83,7 @@ export function ProjectionAgendaSheet({ open, onOpenChange, onGoToTab }: Project
   const { can } = usePermissions();
   const canEdit = can("SITE", "EDIT");
   const [draft, setDraft] = useState<Hidden | null>(null);
+  const [topicsDraft, setTopicsDraft] = useState<TopicDraft[] | null>(null);
   const [confirm, setConfirm] = useState<(() => void) | null>(null);
 
   const agendaQuery = useQuery({
@@ -87,21 +98,34 @@ export function ProjectionAgendaSheet({ open, onOpenChange, onGoToTab }: Project
   // O rascunho nasce no primeiro clique, a partir do que está salvo; fechar o descarta.
   // Um refetch com o painel aberto não mexe nele.
   useEffect(() => {
-    if (!open) setDraft(null);
+    if (!open) {
+      setDraft(null);
+      setTopicsDraft(null);
+    }
   }, [open]);
 
   const saved = items ? hiddenFrom(items) : null;
   const current = draft ?? saved;
-  const dirty =
+  const hiddenDirty =
     draft !== null &&
     saved !== null &&
     (!sameSet(draft.events, saved.events) || !sameSet(draft.schedules, saved.schedules));
+
+  const savedTopics = agendaQuery.data?.topics;
+  const topics = topicsDraft ?? (savedTopics ?? []).map(toTopicDraft);
+  const topicsDirty =
+    topicsDraft !== null &&
+    JSON.stringify(topicsPayload(topicsDraft)) !==
+      JSON.stringify(topicsPayload((savedTopics ?? []).map(toTopicDraft)));
+  const topicsIncomplete = topics.some(isTopicIncomplete);
+  const dirty = hiddenDirty || topicsDirty;
 
   const saveMutation = useMutation({
     mutationFn: () =>
       updateProjectionSettings({
         hiddenEventIds: [...current!.events],
         hiddenScheduleIds: [...current!.schedules],
+        topics: topicsPayload(topics),
       }),
     onSuccess: (agenda) => {
       queryClient.setQueryData(["projection-agenda"], agenda);
@@ -203,6 +227,14 @@ export function ProjectionAgendaSheet({ open, onOpenChange, onGoToTab }: Project
               </>
             )}
 
+            {agendaQuery.isSuccess && (
+              <ProjectionTopicsEditor
+                topics={topics}
+                onChange={setTopicsDraft}
+                disabled={!canEdit || saveMutation.isPending}
+              />
+            )}
+
             {(can("CHURCH", "VIEW") || can("EVENTS", "VIEW")) && (
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
                 {can("CHURCH", "VIEW") && (
@@ -246,7 +278,7 @@ export function ProjectionAgendaSheet({ open, onOpenChange, onGoToTab }: Project
             {canEdit && (
               <Button
                 type="button"
-                disabled={!dirty || saveMutation.isPending}
+                disabled={!dirty || topicsIncomplete || saveMutation.isPending}
                 onClick={() => saveMutation.mutate()}
               >
                 {saveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -264,6 +296,7 @@ export function ProjectionAgendaSheet({ open, onOpenChange, onGoToTab }: Project
           const then = confirm;
           setConfirm(null);
           setDraft(null);
+          setTopicsDraft(null);
           then?.();
         }}
       />

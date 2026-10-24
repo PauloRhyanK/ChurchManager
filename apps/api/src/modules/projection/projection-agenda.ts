@@ -19,6 +19,31 @@ export interface ProjectionAgendaItem {
   hidden: boolean;
 }
 
+/** Aviso sem data (ex.: células), mostrado numa tela própria do telão. */
+export interface ProjectionTopic {
+  id: string;
+  title: string;
+  text: string;
+  callToAction: string | null;
+  active: boolean;
+}
+
+function isTopic(value: unknown): value is ProjectionTopic {
+  const v = value as Partial<ProjectionTopic> | null;
+  return (
+    typeof v?.id === 'string' &&
+    typeof v.title === 'string' &&
+    typeof v.text === 'string' &&
+    (v.callToAction === null || typeof v.callToAction === 'string') &&
+    typeof v.active === 'boolean'
+  );
+}
+
+/** Tópicos guardados (JSON) → lista tipada; entradas malformadas são ignoradas. */
+export function readTopics(stored: unknown): ProjectionTopic[] {
+  return Array.isArray(stored) ? stored.filter(isTopic) : [];
+}
+
 export interface ScheduleLike {
   id: string;
   title: string;

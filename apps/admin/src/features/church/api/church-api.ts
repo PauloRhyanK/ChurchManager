@@ -219,6 +219,12 @@ export async function updateSchedule(id: string, payload: ScheduleBody) {
   return data;
 }
 
+/** Liga/desliga o horário no site sem reenviar os demais campos. */
+export async function setScheduleActive(id: string, active: boolean) {
+  const { data } = await api.put<ScheduleDto>(`/admin/tenants/me/schedules/${id}`, { active });
+  return data;
+}
+
 export async function deleteSchedule(id: string) {
   await api.delete(`/admin/tenants/me/schedules/${id}`);
 }
