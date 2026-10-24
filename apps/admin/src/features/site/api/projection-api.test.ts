@@ -19,10 +19,26 @@ describe("agenda do telão", () => {
 
   it("salva só as duas listas, sem campos extras", async () => {
     put.mockResolvedValue({ data: { items: [], days: 7, updatedAt: null } });
-    const body = { hiddenEventIds: ["e1"], hiddenScheduleIds: ["s1"], extra: 1 } as never;
+    const body = { hiddenEventIds: ["e1"], hiddenScheduleIds: ["s1"], topics: [], extra: 1 } as never;
     await updateProjectionSettings(body);
     const [url, sent] = put.mock.calls[0];
     expect(url).toBe("/admin/tenants/me/projection/settings");
-    expect(sent).toEqual({ hiddenEventIds: ["e1"], hiddenScheduleIds: ["s1"] });
+    expect(sent).toEqual({ hiddenEventIds: ["e1"], hiddenScheduleIds: ["s1"], topics: [] });
+  });
+
+  it("tópicos vão campo a campo, sem chaves locais", async () => {
+    put.mockResolvedValue({ data: { items: [], topics: [], days: 7, updatedAt: null } });
+    await updateProjectionSettings({
+      hiddenEventIds: [],
+      hiddenScheduleIds: [],
+      topics: [
+        { key: "tmp-1", title: "Células", text: "Encontre uma", callToAction: null, active: true } as never,
+        { id: "t1", title: "Batismo", text: "Inscreva-se", callToAction: "Fale conosco", active: false },
+      ],
+    });
+    expect(put.mock.calls[0][1].topics).toEqual([
+      { title: "Células", text: "Encontre uma", callToAction: null, active: true },
+      { id: "t1", title: "Batismo", text: "Inscreva-se", callToAction: "Fale conosco", active: false },
+    ]);
   });
 });

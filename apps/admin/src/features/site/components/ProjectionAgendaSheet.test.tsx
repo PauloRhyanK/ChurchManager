@@ -73,7 +73,12 @@ describe("ProjectionAgendaSheet", () => {
     vi.setSystemTime(new Date(2026, 9, 24, 10, 0));
     vi.clearAllMocks();
     perms.modules = { SITE: "EDIT", CHURCH: "VIEW", EVENTS: "VIEW" };
-    projectionApi.fetchProjectionAgenda.mockResolvedValue({ items: ITEMS, days: 7, updatedAt: null });
+    projectionApi.fetchProjectionAgenda.mockResolvedValue({
+      items: ITEMS,
+      topics: [{ id: "t1", title: "Células", text: "Encontre uma célula", callToAction: "Procure a recepção", active: true }],
+      days: 7,
+      updatedAt: null,
+    });
     projectionApi.updateProjectionSettings.mockImplementation(async (body) => ({
       items: ITEMS,
       days: 7,
@@ -124,6 +129,7 @@ describe("ProjectionAgendaSheet", () => {
     expect(projectionApi.updateProjectionSettings.mock.calls[0][0]).toEqual({
       hiddenEventIds: [],
       hiddenScheduleIds: ["sab"],
+      topics: [{ id: "t1", title: "Células", text: "Encontre uma célula", callToAction: "Procure a recepção", active: true }],
     });
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });
@@ -185,5 +191,47 @@ describe("ProjectionAgendaSheet", () => {
     rerender(ui(false));
     rerender(ui(true));
     await waitFor(() => expect(projectionApi.fetchProjectionAgenda).toHaveBeenCalledTimes(2));
+  });
+
+  it("tópicos fixos: mostra os existentes, adiciona, reordena e salva na ordem", async () => {
+    renderSheet();
+    const section = await screen.findByRole("region", { name: "Tópicos fixos" });
+    expect(within(section).getByDisplayValue("Células")).toBeInTheDocument();
+
+    fireEvent.click(within(section).getByRole("button", { name: "Adicionar tópico" }));
+    const titles = within(section).getAllByLabelText("Título");
+    const texts = within(section).getAllByLabelText("Frase");
+    fireEvent.change(titles[1], { target: { value: "Batismo" } });
+    fireEvent.change(texts[1], { target: { value: "Próximo batismo em dezembro" } });
+    fireEvent.click(within(section).getByRole("button", { name: "Mover Batismo para cima" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    await waitFor(() => expect(projectionApi.updateProjectionSettings).toHaveBeenCalledTimes(1));
+    expect(projectionApi.updateProjectionSettings.mock.calls[0][0].topics).toEqual([
+      { title: "Batismo", text: "Próximo batismo em dezembro", callToAction: null, active: true },
+      { id: "t1", title: "Células", text: "Encontre uma célula", callToAction: "Procure a recepção", active: true },
+    ]);
+  });
+
+  it("tópico sem título ou frase não deixa salvar e avisa", async () => {
+    renderSheet();
+    const section = await screen.findByRole("region", { name: "Tópicos fixos" });
+    fireEvent.click(within(section).getByRole("button", { name: "Adicionar tópico" }));
+    expect(screen.getByRole("button", { name: "Salvar" })).toBeDisabled();
+    expect(within(section).getByText("Preencha título e frase.")).toBeInTheDocument();
+  });
+
+  it("desligar e remover tópico contam como alteração", async () => {
+    const { onOpenChange } = renderSheet();
+    const section = await screen.findByRole("region", { name: "Tópicos fixos" });
+    fireEvent.click(within(section).getByRole("switch", { name: "Mostrar Células no telão" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(await screen.findByText("Descartar alterações?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Continuar editando" }));
+    fireEvent.click(within(section).getByRole("button", { name: "Remover Células" }));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    await waitFor(() => expect(projectionApi.updateProjectionSettings).toHaveBeenCalledTimes(1));
+    expect(projectionApi.updateProjectionSettings.mock.calls[0][0].topics).toEqual([]);
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   });
 });
