@@ -81,13 +81,14 @@ export function ProjectionAgendaSheet({ open, onOpenChange, onGoToTab }: Project
   });
   const items = agendaQuery.data?.items;
 
-  // Rascunho nasce dos dados ao abrir; um refetch com o painel aberto não o descarta.
+  // O rascunho nasce no primeiro clique, a partir do que está salvo; fechar o descarta.
+  // Um refetch com o painel aberto não mexe nele.
   useEffect(() => {
     if (!open) setDraft(null);
-    else if (items && draft === null) setDraft(hiddenFrom(items));
-  }, [open, items, draft]);
+  }, [open]);
 
   const saved = items ? hiddenFrom(items) : null;
+  const current = draft ?? saved;
   const dirty =
     draft !== null &&
     saved !== null &&
@@ -96,8 +97,8 @@ export function ProjectionAgendaSheet({ open, onOpenChange, onGoToTab }: Project
   const saveMutation = useMutation({
     mutationFn: () =>
       updateProjectionSettings({
-        hiddenEventIds: [...draft!.events],
-        hiddenScheduleIds: [...draft!.schedules],
+        hiddenEventIds: [...current!.events],
+        hiddenScheduleIds: [...current!.schedules],
       }),
     onSuccess: (agenda) => {
       queryClient.setQueryData(["projection-agenda"], agenda);
@@ -109,8 +110,9 @@ export function ProjectionAgendaSheet({ open, onOpenChange, onGoToTab }: Project
 
   const toggle = (item: ProjectionAgendaItem) =>
     setDraft((prev) => {
-      if (!prev) return prev;
-      const next = { events: new Set(prev.events), schedules: new Set(prev.schedules) };
+      const base = prev ?? saved;
+      if (!base) return prev;
+      const next = { events: new Set(base.events), schedules: new Set(base.schedules) };
       const set = item.kind === "event" ? next.events : next.schedules;
       if (set.has(item.sourceId)) set.delete(item.sourceId);
       else set.add(item.sourceId);
@@ -170,7 +172,7 @@ export function ProjectionAgendaSheet({ open, onOpenChange, onGoToTab }: Project
                       </h3>
                       <ul className="divide-y rounded-lg border">
                         {dayItems.map((item) => {
-                          const shown = draft ? !isHidden(draft, item) : !item.hidden;
+                          const shown = current ? !isHidden(current, item) : !item.hidden;
                           return (
                             <li key={item.key} className="flex items-center gap-3 px-3 py-2.5">
                               <span className="w-14 shrink-0 text-sm tabular-nums text-muted-foreground">
@@ -184,7 +186,7 @@ export function ProjectionAgendaSheet({ open, onOpenChange, onGoToTab }: Project
                               </div>
                               <Switch
                                 checked={shown}
-                                disabled={!canEdit || saveMutation.isPending || !draft}
+                                disabled={!canEdit || saveMutation.isPending}
                                 onCheckedChange={() => toggle(item)}
                                 aria-label={`Mostrar ${item.title} (${label}) no telão`}
                               />
