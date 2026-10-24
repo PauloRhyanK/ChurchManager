@@ -32,7 +32,8 @@ interface SiteFlowRowProps {
   onGoToTab: (tab: ChurchTab) => void;
 }
 
-const SOURCE_PILL = "rounded-full bg-primary/10 px-2 py-0.5 text-xs font-normal text-primary";
+const SOURCE_PILL =
+  "whitespace-nowrap rounded-full bg-primary/10 px-2 py-0.5 text-xs font-normal text-primary";
 
 export function SiteFlowRow({
   block,
@@ -53,7 +54,7 @@ export function SiteFlowRow({
   let pill: ReactNode;
   if (block.badge) {
     pill = (
-      <Badge variant="outline" className="font-normal">
+      <Badge variant="outline" className="whitespace-nowrap font-normal">
         {block.badge}
       </Badge>
     );
@@ -73,7 +74,7 @@ export function SiteFlowRow({
     );
   } else if (section) {
     pill = (
-      <Badge variant="secondary" className="font-normal">
+      <Badge variant="secondary" className="whitespace-nowrap font-normal">
         {formatUpdatedAt(section.updatedAt)}
       </Badge>
     );
@@ -83,10 +84,14 @@ export function SiteFlowRow({
   if (block.sectionKey) {
     const key = block.sectionKey;
     action = (
-      <Button variant="outline" size="sm" onClick={() => onEdit(key)}>
+      <Button
+        variant="outline"
+        size="sm"
+        aria-label={`${canEdit ? "Editar" : "Ver"} ${block.title}`}
+        onClick={() => onEdit(key)}
+      >
         <Pencil className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
         <span className="hidden sm:inline">{canEdit ? "Editar" : "Ver"}</span>
-        <span className="sr-only sm:hidden">{canEdit ? "Editar" : "Ver"}</span>
       </Button>
     );
   } else if (source?.tab) {
@@ -113,14 +118,14 @@ export function SiteFlowRow({
   return (
     <div
       className={cn(
-        "relative flex items-center gap-3 rounded-lg border px-3 py-2.5",
+        "relative flex items-center gap-2 rounded-lg border px-2.5 py-2.5 sm:gap-3 sm:px-3",
         locked ? "bg-muted/40" : "bg-card",
       )}
     >
       {timeline && (
         <span
           aria-hidden="true"
-          className="absolute -left-[31px] top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 border-muted-foreground/40 bg-background"
+          className="absolute -left-[23px] sm:-left-[31px] top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 border-muted-foreground/40 bg-background"
         />
       )}
 
@@ -129,7 +134,7 @@ export function SiteFlowRow({
       ) : (
         handle
       )}
-      <Icon className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+      <Icon className="hidden h-4 w-4 shrink-0 text-primary sm:block" aria-hidden="true" />
 
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">

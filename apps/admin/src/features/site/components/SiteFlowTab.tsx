@@ -160,7 +160,7 @@ export function SiteFlowTab({ onDirtyChange, onGoToTab }: SiteFlowTabProps) {
           )}
         </div>
 
-        <ol aria-label="Página inicial" className="relative ml-3 space-y-2 border-l-2 pl-6">
+        <ol aria-label="Página inicial" className="relative ml-1.5 space-y-2 border-l-2 pl-4 sm:ml-3 sm:pl-6">
           <li data-block={FIXED_TOP.id}>
             <SiteFlowRow block={FIXED_TOP} locked timeline {...rowProps} />
           </li>
