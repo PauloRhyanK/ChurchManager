@@ -135,3 +135,21 @@ test('erro do SDK não vaza bucket, endpoint nem variáveis', withEnv(FULL_ENV, 
     },
   );
 }));
+
+test('falha no R2: o log do servidor traz a mensagem e a causa do erro, sem a chave secreta', withEnv(FULL_ENV, async () => {
+  const { service } = createService(async () => {
+    throw Object.assign(new TypeError('fetch failed (assinatura com secret)'), {
+      cause: { code: 'ENOTFOUND', hostname: 'acct123.r2.cloudflarestorage.com' },
+    });
+  });
+  const logged: string[] = [];
+  (service as unknown as { logger: { error: (m: string) => void } }).logger = {
+    error: (m: string) => logged.push(m),
+  };
+  await assert.rejects(() => service.uploadImage(PNG, FOLDER), InternalServerErrorException);
+  assert.equal(logged.length, 1);
+  assert.match(logged[0], /TypeError/);
+  assert.match(logged[0], /fetch failed/);
+  assert.match(logged[0], /ENOTFOUND/);
+  assert.ok(!logged[0].includes('secret)'), logged[0]);
+}));

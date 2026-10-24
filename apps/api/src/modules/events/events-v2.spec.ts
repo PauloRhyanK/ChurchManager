@@ -53,6 +53,37 @@ test('listPublicForEvent filtra visibility PUBLIC e evento publicado', async () 
   assert.equal(capture.where?.active, true);
 });
 
+test('listPublicForEvent mantém esgotado dentro da janela com isSoldOut: true', async () => {
+  const prisma = {
+    event: { findFirst: async () => ({ id: EVENT_A }) },
+    eventTicketType: {
+      findMany: async () => [
+        ticketRow({ id: 'disponivel', quantityTotal: 10, quantitySold: 3 }),
+        ticketRow({ id: 'esgotado', quantityTotal: 10, quantitySold: 10 }),
+        ticketRow({
+          id: 'encerrado',
+          salesClosesAt: new Date(Date.UTC(2000, 0, 1)),
+        }),
+        ticketRow({
+          id: 'futuro',
+          salesOpensAt: new Date(Date.UTC(2999, 0, 1)),
+        }),
+      ],
+    },
+  };
+  const service = new EventTicketTypesService(prisma as never);
+  const result = await service.listPublicForEvent(TENANT_A, EVENT_A, 'BRL');
+  assert.deepEqual(
+    result.ticketTypes.map((t) => [t.id, t.isSoldOut]),
+    [
+      ['disponivel', false],
+      ['esgotado', true],
+    ],
+  );
+  const esgotado = result.ticketTypes.find((t) => t.id === 'esgotado');
+  assert.equal(esgotado?.quantityRemaining, 0);
+});
+
 test('getPublicById devolve ingresso privado por link directo', async () => {
   const prisma = {
     event: { findFirst: async () => ({ id: EVENT_A }) },

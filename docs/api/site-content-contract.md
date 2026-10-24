@@ -1,6 +1,6 @@
 # Contrato público — Conteúdo do site (`site-content`)
 
-Conteúdo institucional editável no painel (**Gestão do Site**, `/site`) e consumido pelo site público.
+Conteúdo institucional editável no painel (**Igreja → Site**, `/igreja?aba=site`; `/site` redireciona para lá) e consumido pelo site público.
 
 > **Estado:** implementado na API (`SiteModule`). O site público consome este endpoint.
 
@@ -18,7 +18,7 @@ O endpoint monta a resposta a partir de três origens. Editar o dado na origem e
 | `pastors.items[]` | tabela `Pastor` | Igreja → Pastores |
 | `ministries.items[]` | tabela `Ministry` | Igreja → Ministérios |
 | Horários de culto | recurso `schedules` (`GET /api/public/tenants/:slug/schedules`), **fora** deste endpoint | Igreja → Agenda Semanal |
-| Demais campos (`mission.*`, `celulas.*`, `visit.*`, `youtube.*`, cabeçalhos de `churches`/`pastors`/`giving`, `contact.tagline`/`copyright`) | tabela `site_content` (JSON por chave) mesclada sobre os defaults do registry | Gestão do Site (`/site`) |
+| Demais campos (`mission.*`, `celulas.*`, `visit.*`, `youtube.*`, cabeçalhos de `churches`/`pastors`/`giving`, `contact.tagline`/`copyright`) | tabela `site_content` (JSON por chave) mesclada sobre os defaults do registry | Igreja → Site |
 
 Regras de precedência:
 
@@ -46,9 +46,16 @@ Sem autenticação. Devolve **todas** as secções num único pedido.
     "giving":     { "...": "..." },
     "contact":    { "...": "..." },
     "youtube":    { "...": "..." }
+  },
+  "layout": {
+    "home": ["mission", "schedules", "celulas", "events", "churches", "giving", "youtube"]
   }
 }
 ```
+
+`layout.home` é a ordem dos blocos do miolo da página inicial, definida em Igreja → Site. Contém sempre os 7 ids acima, uma vez cada (sem ordem salva, sai a ordem padrão mostrada). `schedules` e `events` não são secções deste endpoint: indicam onde renderizar a Agenda Semanal e os eventos. O topo (hero) e o rodapé (`contact`) são fixos e não entram na lista. O site deve tolerar ids desconhecidos (ignorar) e ids em falta (pôr na posição padrão), para continuar a funcionar se um bloco for acrescentado no futuro.
+
+Para o painel: `GET /admin/tenants/me/site-content/layout` (`SITE:VIEW`) e `PUT` com `{ "home": [...] }` (`SITE:EDIT`; tem de ser uma permutação exata dos 7 ids, senão 400). Salvar dispara a mesma revalidação do conteúdo.
 
 ### Garantias do formato
 

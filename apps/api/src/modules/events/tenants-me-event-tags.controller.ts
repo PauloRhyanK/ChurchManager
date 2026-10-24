@@ -27,7 +27,7 @@ class CreateEventTagDto {
 }
 
 @Controller('admin/tenants/me/event-tags')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.EVENTS, PermissionLevel.VIEW)
 export class TenantsMeEventTagsController {

@@ -7,7 +7,11 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { EventTicketTypesService } from './event-ticket-types.service';
 import { generatePublicCode } from './event-orders.service';
-import { formatDateOnly, formatTimeOnly, startOfTodayUtc } from './event-format.util';
+import {
+  formatDateOnly,
+  formatTimeOnly,
+  startOfTodayInTimeZone,
+} from './event-format.util';
 import { ticketMatch } from './event-ticket-match.util';
 import { IssueFreeTicketsDto } from './dto/checkin-issue-free-tickets.dto';
 
@@ -27,7 +31,7 @@ export class CheckinService {
   async listEvents(tenantId: string, scope: 'today' | 'all' = 'today') {
     let dateFilter = {};
     if (scope === 'today') {
-      const start = startOfTodayUtc();
+      const start = startOfTodayInTimeZone();
       const end = new Date(start);
       end.setUTCDate(end.getUTCDate() + 1);
       dateFilter = { date: { gte: start, lt: end } };

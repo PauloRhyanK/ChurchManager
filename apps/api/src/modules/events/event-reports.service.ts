@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { formatDateOnly, startOfTodayUtc } from './event-format.util';
+import { formatDateOnly, startOfTodayInTimeZone } from './event-format.util';
 
 @Injectable()
 export class EventReportsService {
@@ -8,7 +8,7 @@ export class EventReportsService {
 
   /** Resumo agregado para o dashboard admin (M3). */
   async getTenantDashboardSummary(tenantId: string) {
-    const today = startOfTodayUtc();
+    const today = startOfTodayInTimeZone();
 
     const [
       totalEvents,

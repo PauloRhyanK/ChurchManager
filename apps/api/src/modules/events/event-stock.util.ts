@@ -7,6 +7,24 @@ export function quantityRemaining(type: Pick<EventTicketType, 'quantityTotal' | 
   return Math.max(0, type.quantityTotal - type.quantitySold);
 }
 
+/** Dentro da janela de venda (`salesOpensAt` / `salesClosesAt`), sem olhar estoque. */
+export function isTicketTypeInSalesWindow(
+  type: Pick<EventTicketType, 'salesOpensAt' | 'salesClosesAt'>,
+  now = new Date(),
+): boolean {
+  if (type.salesOpensAt && now < type.salesOpensAt) return false;
+  if (type.salesClosesAt && now > type.salesClosesAt) return false;
+  return true;
+}
+
+/** Sem vagas: há limite (`quantityTotal`) e ele já foi atingido. */
+export function isTicketTypeSoldOut(
+  type: Pick<EventTicketType, 'quantityTotal' | 'quantitySold'>,
+): boolean {
+  return type.quantityTotal !== null && type.quantitySold >= type.quantityTotal;
+}
+
+/** À venda: ativo, dentro da janela e com estoque (regra do checkout). */
 export function isTicketTypeOnSale(
   type: Pick<
     EventTicketType,
@@ -14,12 +32,11 @@ export function isTicketTypeOnSale(
   >,
   now = new Date(),
 ): boolean {
-  if (!type.active) return false;
-  if (type.salesOpensAt && now < type.salesOpensAt) return false;
-  if (type.salesClosesAt && now > type.salesClosesAt) return false;
-  const remaining = quantityRemaining(type);
-  if (remaining !== null && remaining <= 0) return false;
-  return true;
+  return (
+    type.active &&
+    isTicketTypeInSalesWindow(type, now) &&
+    !isTicketTypeSoldOut(type)
+  );
 }
 
 export function validateCheckoutLine(

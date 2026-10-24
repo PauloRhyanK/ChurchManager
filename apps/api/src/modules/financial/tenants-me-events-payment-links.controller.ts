@@ -11,7 +11,7 @@ import { CreateEventTicketLinkDto } from './dto/create-event-ticket-link.dto';
 import { PaymentLinksOrchestratorService } from './payment-links-orchestrator.service';
 
 @Controller('admin/tenants/me/events')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.FINANCIAL, PermissionLevel.EDIT)
 export class TenantsMeEventsPaymentLinksController {

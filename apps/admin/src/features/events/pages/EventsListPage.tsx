@@ -18,10 +18,15 @@ import {
 } from "@/components/ui/table";
 import { deleteEvent, fetchEvents } from "@/features/events/api/tenant-events-api";
 import { formatEventDate } from "@/features/events/lib/format";
+import { isEventDateNotPast } from "@/features/events/lib/event-form-validation";
+import { usePermissions } from "@/features/access/hooks/use-permissions";
 import { getApiErrorMessage } from "@/lib/api";
 
 export default function EventsListPage() {
   const queryClient = useQueryClient();
+  const { can } = usePermissions();
+  const canEdit = can("EVENTS", "EDIT");
+  const canViewRegistrations = can("EVENT_REGISTRATIONS", "VIEW");
   const [createOpen, setCreateOpen] = useState(false);
   const eventsQuery = useQuery({
     queryKey: ["events"],
@@ -57,13 +62,17 @@ export default function EventsListPage() {
             <Button asChild variant="outline">
               <Link to="/eventos/configuracoes">Configurações</Link>
             </Button>
-            <Button asChild variant="outline">
-              <Link to="/eventos/inscricoes">Inscrições</Link>
-            </Button>
-            <Button className="gap-2" onClick={() => setCreateOpen(true)}>
-              <Plus className="h-4 w-4" />
-              Novo evento
-            </Button>
+            {canViewRegistrations && (
+              <Button asChild variant="outline">
+                <Link to="/eventos/inscricoes">Inscrições</Link>
+              </Button>
+            )}
+            {canEdit && (
+              <Button className="gap-2" onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4" />
+                Novo evento
+              </Button>
+            )}
           </div>
         </div>
 
@@ -73,88 +82,100 @@ export default function EventsListPage() {
           </p>
         )}
 
-        <Card className="border-0 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-base">Todos os eventos</CardTitle>
-            <CardDescription>
-              {items.length === 0 && !eventsQuery.isLoading
-                ? "Nenhum evento criado ainda."
-                : `${items.length} evento(s) na sua igreja`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {eventsQuery.isLoading ? (
-              <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin" />
-                A carregar…
-              </div>
-            ) : items.length === 0 ? (
-              <Button onClick={() => setCreateOpen(true)}>
-                Criar primeiro evento
-              </Button>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Título</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Local</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead className="w-[120px]" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((event) => (
-                    <TableRow key={event.id}>
-                      <TableCell className="font-medium">
-                        <Link
-                          to={`/eventos/${event.id}`}
-                          className="hover:text-primary hover:underline"
-                        >
-                          {event.title}
-                        </Link>
-                      </TableCell>
-                      <TableCell>{formatEventDate(event.date)}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {event.location ?? "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={event.published ? "default" : "secondary"}>
-                          {event.published ? "Publicado" : "Rascunho"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          <Button asChild variant="ghost" size="sm">
-                            <Link to={`/eventos/${event.id}`}>Abrir</Link>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="text-destructive hover:text-destructive"
-                            disabled={removeMutation.isPending}
-                            onClick={() => {
-                              if (
-                                window.confirm(
-                                  `Remover «${event.title}»? Esta acção não pode ser desfeita.`,
-                                )
-                              ) {
-                                removeMutation.mutate(event.id);
-                              }
-                            }}
-                            aria-label="Remover evento"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
+        {/* Com erro mas eventos já em cache, a lista continua visível sob o aviso. */}
+        {(!eventsQuery.error || eventsQuery.data) && (
+          <Card className="border-0 shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-base">Todos os eventos</CardTitle>
+              <CardDescription>
+                {items.length === 0 && !eventsQuery.isLoading
+                  ? "Nenhum evento criado ainda."
+                  : `${items.length} evento(s) na sua igreja`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {eventsQuery.isLoading ? (
+                <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  A carregar…
+                </div>
+              ) : items.length === 0 ? (
+                canEdit && (
+                  <Button onClick={() => setCreateOpen(true)}>
+                    Criar primeiro evento
+                  </Button>
+                )
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Título</TableHead>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Local</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead className="w-[120px]" />
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {items.map((event) => (
+                      <TableRow key={event.id}>
+                        <TableCell className="font-medium">
+                          <Link
+                            to={`/eventos/${event.id}`}
+                            className="hover:text-primary hover:underline"
+                          >
+                            {event.title}
+                          </Link>
+                        </TableCell>
+                        <TableCell>{formatEventDate(event.date)}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {event.location ?? "—"}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            <Badge variant={event.published ? "default" : "secondary"}>
+                              {event.published ? "Publicado" : "Rascunho"}
+                            </Badge>
+                            {!isEventDateNotPast(event.date) && (
+                              <Badge variant="outline">Encerrado</Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex justify-end gap-1">
+                            <Button asChild variant="ghost" size="sm">
+                              <Link to={`/eventos/${event.id}`}>Abrir</Link>
+                            </Button>
+                            {canEdit && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive"
+                                disabled={removeMutation.isPending}
+                                onClick={() => {
+                                  if (
+                                    window.confirm(
+                                      `Remover «${event.title}»? Esta acção não pode ser desfeita.`,
+                                    )
+                                  ) {
+                                    removeMutation.mutate(event.id);
+                                  }
+                                }}
+                                aria-label="Remover evento"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <CreateEventWizardModal open={createOpen} onOpenChange={setCreateOpen} />

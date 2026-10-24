@@ -1,9 +1,24 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import type { Schedule } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { CreateScheduleDto } from './dto/create-schedule.dto';
+import { CreateScheduleDto, SCHEDULE_DAYS } from './dto/create-schedule.dto';
 import { UpdateScheduleDto } from './dto/update-schedule.dto';
 import { SiteRevalidationService } from '../site/site-revalidation.service';
 import { parseTimeOnly, toScheduleDto } from './event-format.util';
+
+/** Posição do dia na semana (Domingo→Sábado); valores desconhecidos vão para o fim. */
+function dayIndex(dayOfWeek: string): number {
+  const index = (SCHEDULE_DAYS as readonly string[]).indexOf(dayOfWeek);
+  return index === -1 ? SCHEDULE_DAYS.length : index;
+}
+
+function compareSchedules(a: Schedule, b: Schedule): number {
+  return (
+    a.sortOrder - b.sortOrder ||
+    dayIndex(a.dayOfWeek) - dayIndex(b.dayOfWeek) ||
+    a.timeStart.getTime() - b.timeStart.getTime()
+  );
+}
 
 @Injectable()
 export class SchedulesService {
@@ -18,9 +33,10 @@ export class SchedulesService {
         tenantId,
         ...(activeOnly ? { active: true } : {}),
       },
-      orderBy: [{ sortOrder: 'asc' }, { dayOfWeek: 'asc' }],
+      orderBy: { sortOrder: 'asc' },
     });
-    return rows.map((row) => toScheduleDto(row));
+    // dayOfWeek é texto: ordenar no banco seria alfabético. Array.sort é estável.
+    return rows.sort(compareSchedules).map((row) => toScheduleDto(row));
   }
 
   async createForTenant(tenantId: string, dto: CreateScheduleDto) {

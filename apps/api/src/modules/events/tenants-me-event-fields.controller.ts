@@ -23,7 +23,7 @@ import {
 import { EventFieldDefinitionsService } from './event-field-definitions.service';
 
 @Controller('admin/tenants/me/event-field-definitions')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.EVENTS, PermissionLevel.VIEW)
 export class TenantsMeEventFieldsController {

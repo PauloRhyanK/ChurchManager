@@ -17,7 +17,7 @@ import { CotasOverviewService } from './cotas-overview.service';
 import { ListCotasQueryDto } from './dto/list-cotas-query.dto';
 
 @Controller('admin/tenants/me')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.FINANCIAL, PermissionLevel.VIEW)
 export class TenantsMeCotasController {

@@ -4,7 +4,11 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreateEventTicketTypeDto } from './dto/create-event-ticket-type.dto';
 import { UpdateEventTicketTypeDto } from './dto/update-event-ticket-type.dto';
 import { TicketFieldConfigDto } from './dto/ticket-field-config.dto';
-import { isTicketTypeOnSale, quantityRemaining } from './event-stock.util';
+import {
+  isTicketTypeInSalesWindow,
+  isTicketTypeOnSale,
+  quantityRemaining,
+} from './event-stock.util';
 
 const DEFAULT_BILLING_TYPES = ['PIX', 'BOLETO', 'CREDIT_CARD'];
 
@@ -83,8 +87,8 @@ export class EventTicketTypesService {
       communityLink: row.communityLink,
       allowedBillingTypes: row.allowedBillingTypes,
       maxInstallments: row.maxInstallments,
-      isSoldOut:
-        !isTicketTypeOnSale(row) || (remaining !== null && remaining <= 0),
+      // Esgotado ou fora da janela (link direto): o site não abre o checkout.
+      isSoldOut: !isTicketTypeOnSale(row),
       fields: this.mapFieldConfigs(row)
         .filter((f) => f.enabled)
         .map((f) => ({
@@ -118,8 +122,9 @@ export class EventTicketTypesService {
     return {
       eventId,
       currency,
+      // Esgotados continuam na lista (isSoldOut: true); só a janela de venda filtra.
       ticketTypes: rows
-        .filter((row) => isTicketTypeOnSale(row))
+        .filter((row) => isTicketTypeInSalesWindow(row))
         .map((row) => this.toPublicDto(row)),
     };
   }

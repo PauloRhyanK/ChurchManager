@@ -329,3 +329,21 @@ export const SITE_SECTION_KEYS = SITE_SECTIONS.map((section) => section.key);
 export function findSectionSpec(key: string): SiteSectionSpec | undefined {
   return SITE_SECTIONS.find((section) => section.key === key);
 }
+
+/**
+ * Blocos da página inicial que a igreja pode reordenar, na ordem padrão (a que
+ * o site renderiza sem ordem salva). `schedules` e `events` não são secções
+ * deste registry: vêm da Agenda Semanal e do módulo Eventos. O topo (hero) e o
+ * rodapé (contact) são fixos e ficam de fora.
+ */
+export const SITE_HOME_BLOCKS = [
+  'mission',
+  'schedules',
+  'celulas',
+  'events',
+  'churches',
+  'giving',
+  'youtube',
+] as const;
+
+export type SiteHomeBlock = (typeof SITE_HOME_BLOCKS)[number];

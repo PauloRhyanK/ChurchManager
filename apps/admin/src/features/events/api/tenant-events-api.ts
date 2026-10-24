@@ -94,8 +94,9 @@ export type CreateEventBody = {
   videoUrl?: string | null;
   coverImageUrl?: string | null;
   date: string;
-  timeStart?: string;
-  timeEnd?: string;
+  /** `null` grava sem horário; no PUT limpa o horário guardado. */
+  timeStart?: string | null;
+  timeEnd?: string | null;
   location?: string | null;
   imageUrl?: string | null;
   tags?: string[];
@@ -131,6 +132,14 @@ export async function updateEvent(id: string, body: UpdateEventBody) {
 
 export async function deleteEvent(id: string) {
   const { data } = await api.delete<{ ok: boolean }>(`/admin/tenants/me/events/${id}`);
+  return data;
+}
+
+/** Endereço público do site da igreja (para "Ver no site"), ou `null` se não houver. */
+export async function fetchPublicSiteUrl() {
+  const { data } = await api.get<{ publicSiteUrl: string | null }>(
+    "/admin/tenants/me/public-site",
+  );
   return data;
 }
 

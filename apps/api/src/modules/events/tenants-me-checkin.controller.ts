@@ -21,7 +21,7 @@ import { CreateEventRegistrationDto } from './dto/create-event-registration.dto'
 import { IssueFreeTicketsDto } from './dto/checkin-issue-free-tickets.dto';
 
 @Controller('admin/tenants/me/checkin')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.CHECKIN, PermissionLevel.VIEW)
 export class TenantsMeCheckinController {
@@ -89,7 +89,11 @@ export class TenantsMeCheckinController {
     @Param('eventId', ParseUUIDPipe) eventId: string,
     @Body() dto: CreateEventRegistrationDto,
   ) {
-    return this.registrations.createForEvent(user.tenantId, eventId, dto);
+    // Painel: sem as regras do site (evento passado/rascunho, janela, preço e
+    // login obrigatório); a vaga é reservada como na emissão no local.
+    return this.registrations.createForEvent(user.tenantId, eventId, dto, {
+      enforcePublicRules: false,
+    });
   }
 
   @Post('events/:eventId/issue-free-tickets')

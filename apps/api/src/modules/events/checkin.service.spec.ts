@@ -185,3 +185,21 @@ test('issueFreeTickets emite um ingresso por nome', async () => {
   );
   assert.equal(res.tickets.length, 2);
 });
+
+test('listEvents "hoje" usa o fuso America/Sao_Paulo', async (t) => {
+  // 21:30 em Brasília do dia 22 = 00:30 UTC do dia 23.
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-10-23T00:30:00Z') });
+  let capturedWhere: any;
+  const svc = service({
+    event: {
+      findMany: async (args: any) => {
+        capturedWhere = args.where;
+        return [];
+      },
+    },
+  });
+  await svc.listEvents(TENANT, 'today');
+  assert.equal(capturedWhere.tenantId, TENANT);
+  assert.equal(capturedWhere.date.gte.toISOString(), '2026-10-22T00:00:00.000Z');
+  assert.equal(capturedWhere.date.lt.toISOString(), '2026-10-23T00:00:00.000Z');
+});

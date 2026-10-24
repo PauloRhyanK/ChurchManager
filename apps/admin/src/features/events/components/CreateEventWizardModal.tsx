@@ -70,12 +70,12 @@ export function CreateEventWizardModal({ open, onOpenChange }: Props) {
         published: false,
       }),
     onSuccess: (event) => {
-      toast.success("Rascunho criado. Agora configure os ingressos.");
+      toast.success("Rascunho criado. Configure os ingressos e publique quando estiver pronto.");
       void queryClient.invalidateQueries({ queryKey: ["events"] });
       void queryClient.invalidateQueries({ queryKey: ["events-dashboard"] });
       onOpenChange(false);
       form.reset();
-      navigate(`/eventos/${event.id}?tab=ingressos&onboarding=1`);
+      navigate(`/eventos/${event.id}?tab=ingressos`);
     },
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
@@ -111,7 +111,7 @@ export function CreateEventWizardModal({ open, onOpenChange }: Props) {
             <Textarea
               id="ev-short"
               rows={2}
-              placeholder="Resumo exibido nos cartões do site"
+              placeholder="Resumo exibido nos cartões e no topo da página do evento"
               {...form.register("shortDescription")}
             />
           </div>

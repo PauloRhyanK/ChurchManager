@@ -10,7 +10,7 @@ import { EventReportsService } from './event-reports.service';
 
 /** Endpoints de agregação admin — separados do CRUD para manter responsabilidades claras. */
 @Controller('admin/tenants/me/events-dashboard')
-@SkipThrottle({ links: true })
+@SkipThrottle({ links: true, platform: true })
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.EVENTS, PermissionLevel.VIEW)
 export class TenantsMeEventsDashboardController {
