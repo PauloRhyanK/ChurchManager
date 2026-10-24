@@ -18,6 +18,13 @@ vi.mock("@/features/access/hooks/use-permissions", () => ({
   }),
 }));
 vi.mock("@/pages/Index", () => ({ default: () => <p>Página inicial</p> }));
+vi.mock("@/features/church/pages/ChurchPage", async () => {
+  const { useLocation } = await import("react-router-dom");
+  function ChurchPageMock() {
+    return <p>Página Igreja {useLocation().search}</p>;
+  }
+  return { default: ChurchPageMock };
+});
 vi.mock("@/features/events/pages/RegistrationsPage", () => ({
   default: () => <p>Página de inscrições</p>,
 }));
@@ -125,5 +132,25 @@ describe("AppRoutes — troca de evento sem sair da rota", () => {
     renderAt("/eventos/e1/editar");
     expect(await screen.findByText("Página inicial")).toBeInTheDocument();
     expect(screen.queryByText(/Formulário montado/)).not.toBeInTheDocument();
+  });
+});
+
+describe("AppRoutes — Site dentro de Igreja", () => {
+  it("/site redireciona para a aba Site de Igreja", async () => {
+    perms.modules = { SITE: "VIEW" };
+    renderAt("/site");
+    expect(await screen.findByText("Página Igreja ?aba=site")).toBeInTheDocument();
+  });
+
+  it("/igreja abre com permissão só de Site", async () => {
+    perms.modules = { SITE: "VIEW" };
+    renderAt("/igreja");
+    expect(await screen.findByText(/Página Igreja/)).toBeInTheDocument();
+  });
+
+  it("/igreja sem Igreja nem Site volta para o início", async () => {
+    perms.modules = { EVENTS: "VIEW" };
+    renderAt("/igreja");
+    expect(await screen.findByText("Página inicial")).toBeInTheDocument();
   });
 });

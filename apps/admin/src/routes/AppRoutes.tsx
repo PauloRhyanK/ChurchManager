@@ -9,7 +9,6 @@ import EventsListPage from "@/features/events/pages/EventsListPage";
 import EventSettingsPage from "@/features/events/pages/EventSettingsPage";
 import RegistrationsPage from "@/features/events/pages/RegistrationsPage";
 import CheckinPage from "@/features/checkin/pages/CheckinPage";
-import SitePage from "@/features/site/pages/SitePage";
 import ChurchPage from "@/features/church/pages/ChurchPage";
 import UsersListPage from "@/features/access/pages/UsersListPage";
 import InviteUserPage from "@/features/access/pages/InviteUserPage";
@@ -58,10 +57,9 @@ export function AppRoutes() {
             <Route path="/eventos/:id/editar" element={<EventFormRoutePage />} />
           </Route>
         </Route>
-        <Route element={<PermissionRoute module="SITE" />}>
-          <Route path="/site" element={<SitePage />} />
-        </Route>
-        <Route element={<PermissionRoute module="CHURCH" />}>
+        {/* O site é gerido na aba Site de Igreja; /site fica como atalho. */}
+        <Route path="/site" element={<Navigate to="/igreja?aba=site" replace />} />
+        <Route element={<PermissionRoute module={["CHURCH", "SITE"]} />}>
           <Route path="/igreja" element={<ChurchPage />} />
         </Route>
         <Route path="/configuracoes" element={<Settings />} />

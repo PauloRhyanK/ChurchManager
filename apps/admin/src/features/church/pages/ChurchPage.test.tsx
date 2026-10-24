@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { AxiosError } from "axios";
 import type { ReactNode } from "react";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ChurchPage from "./ChurchPage";
 
@@ -14,7 +15,7 @@ const api = vi.hoisted(() => ({
   updateChurchConfig: vi.fn(),
   createBranch: vi.fn(),
 }));
-const perms = vi.hoisted(() => ({ edit: true }));
+const perms = vi.hoisted(() => ({ edit: true, denied: [] as string[] }));
 
 vi.mock("../api/church-api", async (orig) => ({
   ...(await orig<typeof import("../api/church-api")>()),
@@ -24,9 +25,32 @@ vi.mock("@/components/layout/DashboardLayout", () => ({
   DashboardLayout: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("@/features/access/hooks/use-permissions", () => ({
-  usePermissions: () => ({ can: (_m: string, level: string) => perms.edit || level === "VIEW" }),
+  usePermissions: () => ({
+    can: (module: string, level: string) =>
+      !perms.denied.includes(module) && (perms.edit || level === "VIEW"),
+  }),
 }));
 vi.mock("@/components/ImageUploader", () => ({ ImageUploader: () => null }));
+// A aba Site tem testes próprios; aqui só interessa como conversa com a página.
+vi.mock("@/features/site/components/SiteFlowTab", () => ({
+  SiteFlowTab: ({
+    onDirtyChange,
+    onGoToTab,
+  }: {
+    onDirtyChange: (dirty: boolean) => void;
+    onGoToTab: (tab: string) => void;
+  }) => (
+    <div>
+      <p>Fluxo do site</p>
+      <button onClick={() => onDirtyChange(true)}>Mudar ordem</button>
+      <button onClick={() => onGoToTab("agenda")}>Ir para agenda</button>
+    </div>
+  ),
+}));
+
+function LocationSearch() {
+  return <output data-testid="search">{useLocation().search}</output>;
+}
 
 const config = {
   id: "c1",
@@ -76,11 +100,17 @@ const user = {
   },
 };
 
-function renderPage() {
+function renderPage(path = "/igreja") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <ChurchPage />
+      <MemoryRouter
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        initialEntries={[path]}
+      >
+        <ChurchPage />
+        <LocationSearch />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -88,6 +118,7 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks();
   perms.edit = true;
+  perms.denied = [];
   api.fetchBranches.mockResolvedValue([branch]);
   api.fetchPastors.mockResolvedValue([]);
   api.fetchMinistries.mockResolvedValue([]);
@@ -183,5 +214,48 @@ describe("ChurchPage", () => {
     fireEvent.click(buttons[1]);
     expect(await screen.findByText(/"Sede Centro" será removido/)).toBeInTheDocument();
     expect(confirmSpy).not.toHaveBeenCalled();
+  });
+
+  it("?aba= abre a aba pedida e trocar de aba atualiza a URL", async () => {
+    renderPage("/igreja?aba=pastores");
+    expect(screen.getByRole("tab", { name: /Pastores/ })).toHaveAttribute("aria-selected", "true");
+    await user.click(screen.getByRole("tab", { name: /Agenda Semanal/ }));
+    expect(screen.getByTestId("search")).toHaveTextContent("?aba=agenda");
+    expect(screen.getByRole("tab", { name: /Agenda Semanal/ })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("?aba= desconhecida cai na primeira aba", async () => {
+    renderPage("/igreja?aba=xyz");
+    expect(screen.getByRole("tab", { name: /Filiais/ })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("só com permissão de Site: só a aba Site e nenhuma consulta de Igreja", async () => {
+    perms.denied = ["CHURCH"];
+    renderPage("/igreja?aba=filiais");
+    expect(await screen.findByText("Fluxo do site")).toBeInTheDocument();
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent?.trim())).toEqual(["Site"]);
+    expect(api.fetchBranches).not.toHaveBeenCalled();
+    expect(api.fetchChurchConfig).not.toHaveBeenCalled();
+  });
+
+  it("sem permissão de Site a aba Site não aparece", async () => {
+    perms.denied = ["SITE"];
+    renderPage("/igreja?aba=site");
+    expect(screen.queryByRole("tab", { name: /Site/ })).toBeNull();
+    expect(screen.getByRole("tab", { name: /Filiais/ })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("ordem do site pendente pede confirmação ao trocar de aba", async () => {
+    renderPage("/igreja?aba=site");
+    await user.click(screen.getByRole("button", { name: "Mudar ordem" }));
+    await user.click(screen.getByRole("tab", { name: /Filiais/ }));
+    expect(await screen.findByText("Descartar alterações?")).toBeInTheDocument();
+    expect(screen.getByTestId("search")).toHaveTextContent("?aba=site");
+  });
+
+  it("a aba Site consegue levar a outra aba", async () => {
+    renderPage("/igreja?aba=site");
+    await user.click(screen.getByRole("button", { name: "Ir para agenda" }));
+    expect(screen.getByTestId("search")).toHaveTextContent("?aba=agenda");
   });
 });

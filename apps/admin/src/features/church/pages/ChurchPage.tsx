@@ -10,8 +10,10 @@ import {
   Pencil,
   MapPin,
   Loader2,
+  Globe,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +59,8 @@ import { ImageUploader } from "@/components/ImageUploader";
 const CHURCH_IMAGE_UPLOAD_PATH = "/admin/tenants/me/church-config/upload-image";
 import { getSiteIcon } from "@/features/site/components/site-icons";
 import { usePermissions } from "@/features/access/hooks/use-permissions";
+import type { ChurchTab } from "@/features/site/components/site-flow-blocks";
+import { SiteFlowTab } from "@/features/site/components/SiteFlowTab";
 import { getApiErrorMessage } from "@/lib/api";
 import { ConfigForm } from "../components/ConfigForm";
 import { DiscardChangesDialog } from "../components/DiscardChangesDialog";
@@ -120,14 +124,37 @@ const SCHEDULE_DAYS = [
   "Sábado",
 ];
 
+const CHURCH_TABS: ChurchTab[] = ["filiais", "pastores", "ministerios", "agenda", "ofertorio"];
+
 export default function ChurchPage() {
   const queryClient = useQueryClient();
   const { can } = usePermissions();
   const canEdit = can("CHURCH", "EDIT");
-  const [activeTab, setActiveTab] = useState("branches");
+  const canViewChurch = can("CHURCH", "VIEW");
+  const canViewSite = can("SITE", "VIEW");
+
+  // A aba ativa vive na URL (?aba=), para links diretos e para o "voltar" do navegador.
+  const allowedTabs: ChurchTab[] = [
+    ...(canViewChurch ? CHURCH_TABS : []),
+    ...(canViewSite ? (["site"] as const) : []),
+  ];
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("aba") as ChurchTab | null;
+  const activeTab: ChurchTab =
+    requestedTab && allowedTabs.includes(requestedTab) ? requestedTab : allowedTabs[0];
+  const setActiveTab = (tab: ChurchTab) =>
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("aba", tab);
+      return next;
+    });
 
   // Query / Mutations para Filiais
-  const branchesQuery = useQuery({ queryKey: ["branches"], queryFn: fetchBranches });
+  const branchesQuery = useQuery({
+    queryKey: ["branches"],
+    queryFn: fetchBranches,
+    enabled: canViewChurch,
+  });
   const branchEditor = useEditorDialog<Partial<BranchDto>>();
 
   const branchMutation = useMutation({
@@ -151,7 +178,11 @@ export default function ChurchPage() {
   });
 
   // Query / Mutations para Pastores
-  const pastorsQuery = useQuery({ queryKey: ["pastors"], queryFn: fetchPastors });
+  const pastorsQuery = useQuery({
+    queryKey: ["pastors"],
+    queryFn: fetchPastors,
+    enabled: canViewChurch,
+  });
   const pastorEditor = useEditorDialog<Partial<PastorDto>>();
 
   const pastorMutation = useMutation({
@@ -175,7 +206,11 @@ export default function ChurchPage() {
   });
 
   // Query / Mutations para Ministérios
-  const ministriesQuery = useQuery({ queryKey: ["ministries"], queryFn: fetchMinistries });
+  const ministriesQuery = useQuery({
+    queryKey: ["ministries"],
+    queryFn: fetchMinistries,
+    enabled: canViewChurch,
+  });
   const ministryEditor = useEditorDialog<Partial<MinistryDto>>();
 
   const ministryMutation = useMutation({
@@ -199,7 +234,11 @@ export default function ChurchPage() {
   });
 
   // Query / Mutations para Agenda Semanal
-  const schedulesQuery = useQuery({ queryKey: ["schedules"], queryFn: fetchSchedules });
+  const schedulesQuery = useQuery({
+    queryKey: ["schedules"],
+    queryFn: fetchSchedules,
+    enabled: canViewChurch,
+  });
   const scheduleEditor = useEditorDialog<Partial<ScheduleDto>>();
 
   const scheduleMutation = useMutation({
@@ -223,11 +262,17 @@ export default function ChurchPage() {
   });
 
   // Query / Mutations para Configurações do Tenant (Ofertório e Redes Sociais)
-  const configQuery = useQuery({ queryKey: ["church-config"], queryFn: fetchChurchConfig });
+  const configQuery = useQuery({
+    queryKey: ["church-config"],
+    queryFn: fetchChurchConfig,
+    enabled: canViewChurch,
+  });
 
   // True enquanto o formulário de configuração tiver alterações não salvas.
   const [configDirty, setConfigDirty] = useState(false);
-  const [pendingTab, setPendingTab] = useState<string | null>(null);
+  // True enquanto a aba Site tiver ordem por salvar.
+  const [siteDirty, setSiteDirty] = useState(false);
+  const [pendingTab, setPendingTab] = useState<ChurchTab | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
     what: string;
     name: string;
@@ -236,6 +281,7 @@ export default function ChurchPage() {
 
   const anyDirty =
     configDirty ||
+    siteDirty ||
     branchEditor.dirty ||
     pastorEditor.dirty ||
     ministryEditor.dirty ||
@@ -250,8 +296,12 @@ export default function ChurchPage() {
     return () => window.removeEventListener("beforeunload", handler);
   }, [anyDirty]);
 
-  const handleTabChange = (next: string) => {
-    if (activeTab === "configs" && configDirty && next !== "configs") {
+  const handleTabChange = (value: string) => {
+    const next = value as ChurchTab;
+    if (next === activeTab) return;
+    const leavingDirty =
+      (activeTab === "ofertorio" && configDirty) || (activeTab === "site" && siteDirty);
+    if (leavingDirty) {
       setPendingTab(next);
       return;
     }
@@ -264,31 +314,40 @@ export default function ChurchPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Informações da Igreja</h1>
           <p className="text-muted-foreground">
-            Configure dados institucionais, filiais, pastores, redes sociais e agenda.
+            Configure dados institucionais, filiais, pastores, redes sociais, agenda e o site.
           </p>
         </div>
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
           <TabsList className="flex flex-wrap w-full md:w-auto h-auto bg-muted p-1 gap-1">
-            <TabsTrigger value="branches" className="gap-2 py-2">
-              <Building2 className="h-4 w-4" /> Filiais
-            </TabsTrigger>
-            <TabsTrigger value="pastors" className="gap-2 py-2">
-              <Users className="h-4 w-4" /> Pastores
-            </TabsTrigger>
-            <TabsTrigger value="ministries" className="gap-2 py-2">
-              <Sparkles className="h-4 w-4" /> Ministérios
-            </TabsTrigger>
-            <TabsTrigger value="schedules" className="gap-2 py-2">
-              <CalendarDays className="h-4 w-4" /> Agenda Semanal
-            </TabsTrigger>
-            <TabsTrigger value="configs" className="gap-2 py-2">
-              <Settings className="h-4 w-4" /> Ofertório & Redes
-            </TabsTrigger>
+            {canViewChurch && (
+              <>
+                <TabsTrigger value="filiais" className="gap-2 py-2">
+                  <Building2 className="h-4 w-4" /> Filiais
+                </TabsTrigger>
+                <TabsTrigger value="pastores" className="gap-2 py-2">
+                  <Users className="h-4 w-4" /> Pastores
+                </TabsTrigger>
+                <TabsTrigger value="ministerios" className="gap-2 py-2">
+                  <Sparkles className="h-4 w-4" /> Ministérios
+                </TabsTrigger>
+                <TabsTrigger value="agenda" className="gap-2 py-2">
+                  <CalendarDays className="h-4 w-4" /> Agenda Semanal
+                </TabsTrigger>
+                <TabsTrigger value="ofertorio" className="gap-2 py-2">
+                  <Settings className="h-4 w-4" /> Ofertório & Redes
+                </TabsTrigger>
+              </>
+            )}
+            {canViewSite && (
+              <TabsTrigger value="site" className="gap-2 py-2">
+                <Globe className="h-4 w-4" /> Site
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* TAB 1: FILIAIS */}
-          <TabsContent value="branches" className="space-y-4">
+          <TabsContent value="filiais" className="space-y-4">
             <Card className="border-0 shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <div>
@@ -396,7 +455,7 @@ export default function ChurchPage() {
           </TabsContent>
 
           {/* TAB 2: TIME PASTORAL */}
-          <TabsContent value="pastors" className="space-y-4">
+          <TabsContent value="pastores" className="space-y-4">
             <Card className="border-0 shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <div>
@@ -502,7 +561,7 @@ export default function ChurchPage() {
           </TabsContent>
 
           {/* TAB 3: MINISTÉRIOS */}
-          <TabsContent value="ministries" className="space-y-4">
+          <TabsContent value="ministerios" className="space-y-4">
             <Card className="border-0 shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <div>
@@ -605,7 +664,7 @@ export default function ChurchPage() {
           </TabsContent>
 
           {/* TAB 4: AGENDA SEMANAL */}
-          <TabsContent value="schedules" className="space-y-4">
+          <TabsContent value="agenda" className="space-y-4">
             <Card className="border-0 shadow-sm">
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <div>
@@ -719,7 +778,7 @@ export default function ChurchPage() {
           </TabsContent>
 
           {/* TAB 5: OFERTÓRIO & CONFIGS */}
-          <TabsContent value="configs">
+          <TabsContent value="ofertorio">
             <Card className="border-0 shadow-sm">
               <CardHeader>
                 <CardTitle className="text-lg">Ofertório, Redes Sociais e Contatos</CardTitle>
@@ -739,6 +798,11 @@ export default function ChurchPage() {
                 </QueryState>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* TAB 6: SITE */}
+          <TabsContent value="site">
+            <SiteFlowTab onDirtyChange={setSiteDirty} onGoToTab={handleTabChange} />
           </TabsContent>
         </Tabs>
       </div>
@@ -1223,6 +1287,7 @@ export default function ChurchPage() {
         onOpenChange={(open) => !open && setPendingTab(null)}
         onDiscard={() => {
           setConfigDirty(false);
+          setSiteDirty(false);
           if (pendingTab) setActiveTab(pendingTab);
           setPendingTab(null);
         }}
