@@ -52,7 +52,8 @@ ctr '
 '
 
 # --- falha_nao_apaga ---
-if run_backup errada >/dev/null 2>&1; then falhou "falha_nao_apaga: backup com senha errada retornou 0"; fi
+if SAIDA=$(run_backup errada 2>&1); then falhou "falha_nao_apaga: backup com senha errada retornou 0"; fi
+case "$SAIDA" in *"ERRO: pg_dump falhou"*) ;; *) falhou "falha_nao_apaga: saída sem 'ERRO: pg_dump falhou': $SAIDA" ;; esac
 ctr '
   for f in churchmanager-20200101-020000.dump churchmanager-recente.dump backup-prod-manual.dump; do
     [ -f /backups/$f ] || { echo "sumiu $f"; exit 1; }
@@ -89,12 +90,17 @@ N=$(docker exec -e PGPASSWORD=teste123 "$DB" psql -U postgres -d restore_teste -
 [ "$N" = 2 ] || falhou "restaura: esperado 2 linhas, veio '$N'"
 echo "OK: restaura"
 
-# --- retencao_falha: BACKUP_KEEP_DAYS inválido deve dar exit != 0 ---
-if docker run --rm --network "$NET" -v "$TMP:/backups" -v "$ROOT/docker/backup:/scripts:ro" \
+# --- retencao_falha: BACKUP_KEEP_DAYS inválido deve dar exit != 0 depois de gerar o dump ---
+ANTES=$(ctr 'ls /backups/churchmanager-2*.dump | wc -l')
+sleep 1
+if SAIDA=$(docker run --rm --network "$NET" -v "$TMP:/backups" -v "$ROOT/docker/backup:/scripts:ro" \
   -e PGHOST="$DB" -e PGUSER=postgres -e PGPASSWORD=teste123 -e PGDATABASE=churchmanager_db \
-  -e BACKUP_KEEP_DAYS=abc "$IMG" /scripts/pg-backup.sh >/dev/null 2>&1; then
+  -e BACKUP_KEEP_DAYS=abc "$IMG" /scripts/pg-backup.sh 2>&1); then
   falhou "retencao_falha: retenção com valor inválido retornou 0"
 fi
+case "$SAIDA" in *"retenção falhou"*) ;; *) falhou "retencao_falha: saída sem 'retenção falhou': $SAIDA" ;; esac
+DEPOIS=$(ctr 'ls /backups/churchmanager-2*.dump | wc -l')
+[ "$DEPOIS" -eq $((ANTES + 1)) ] || falhou "retencao_falha: dump novo não foi criado ($ANTES -> $DEPOIS)"
 echo "OK: retencao_falha"
 
 echo "TODOS OS TESTES PASSARAM"
