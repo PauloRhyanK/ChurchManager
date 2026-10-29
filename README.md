@@ -29,7 +29,7 @@ Monorepo com **API Nest.js** + **painel admin** (React/Vite) e Postgres. O site 
 
 ---
 
-**Documentação extra** (abre só quando precisares): [arquitectura](docs/architecture.md) · [financeiro e webhooks Asaas](docs/financial-schema-and-webhooks.md) · [ngrok para webhooks em local](docs/webhooks-local-dev-ngrok.md) · [ADRs](docs/adr/).
+**Documentação extra** (abre só quando precisares): [arquitectura](docs/architecture.md) · [financeiro e webhooks Asaas](docs/financial-schema-and-webhooks.md) · [ngrok para webhooks em local](docs/webhooks-local-dev-ngrok.md) · [backup](docs/backup.md) · [ADRs](docs/adr/).
 
 **Pastas úteis:** [apps/api](apps/api/README.md) · [apps/admin](apps/admin/README.md) · [docker](docker/README.md) (inclui [QA no servidor](docker/README.md#qa-servidor))
 

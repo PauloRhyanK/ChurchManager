@@ -58,6 +58,43 @@ services:
     networks:
       - default
 
+  # Backup diário do Postgres (pg_dump às 02:00, America/Sao_Paulo, mais um na subida).
+  # Dumps em /root/backups/churchmanager no host, 14 dias de retenção local.
+  # Detalhes, restauração e rotina da Locaweb: docs/backup.md
+  db-backup:
+    image: postgres:15-alpine
+    container_name: churchmanager_db_backup
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      TZ: America/Sao_Paulo
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-churchmanager_db}
+      BACKUP_DIR: /backups
+      BACKUP_KEEP_DAYS: "14"
+    volumes:
+      - ./docker/backup:/scripts:ro
+      - /root/backups/churchmanager:/backups
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        i=0
+        until pg_isready -q || [ "$$i" -ge 30 ]; do i=$$((i+1)); sleep 2; done
+        /scripts/pg-backup.sh || echo "[backup] $$(date '+%Y-%m-%d %H:%M:%S') ERRO: backup inicial falhou"
+        echo '0 2 * * * /scripts/pg-backup.sh >> /proc/1/fd/1 2>&1' > /etc/crontabs/root
+        exec crond -f -l 8
+    healthcheck:
+      test: ["CMD-SHELL", "find /backups -maxdepth 1 -name 'churchmanager-*.dump' -mmin -1560 | grep -q ."]
+      interval: 1h
+      timeout: 10s
+      retries: 1
+      start_period: 5m
+    networks:
+      - default
+
   # NPM: Forward Hostname = churchmanager_pgadmin, Porta = 80
   # No pgAdmin → Register Server: Host = db, Port = 5432, user/pass = POSTGRES_USER / POSTGRES_PASSWORD (.env)
   pgadmin:
