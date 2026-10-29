@@ -29,7 +29,7 @@ run_backup() {
     "$IMG" /scripts/pg-backup.sh
 }
 
-psql_db() { docker exec -e PGPASSWORD=teste123 "$DB" psql -U postgres -v ON_ERROR_STOP=1 "$@"; }
+psql_db() { docker exec -e PGPASSWORD=teste123 "$DB" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 "$@"; }
 
 docker network rm "$NET" >/dev/null 2>&1 || true
 docker rm -f "$DB" >/dev/null 2>&1 || true
@@ -37,7 +37,7 @@ docker network create "$NET" >/dev/null
 docker run -d --name "$DB" --network "$NET" -e POSTGRES_PASSWORD=teste123 -e POSTGRES_DB=churchmanager_db "$IMG" >/dev/null
 
 i=0
-until docker exec "$DB" pg_isready -U postgres -d churchmanager_db >/dev/null 2>&1 \
+until docker exec "$DB" pg_isready -h 127.0.0.1 -U postgres -d churchmanager_db >/dev/null 2>&1 \
   && psql_db -d churchmanager_db -Atc 'select 1' >/dev/null 2>&1; do
   i=$((i + 1)); [ "$i" -le 60 ] || falhou "banco não ficou pronto"
   sleep 1
@@ -88,5 +88,13 @@ docker exec -e PGPASSWORD=teste123 "$DB" pg_restore -U postgres -d restore_teste
 N=$(docker exec -e PGPASSWORD=teste123 "$DB" psql -U postgres -d restore_teste -Atc 'select count(*) from igreja')
 [ "$N" = 2 ] || falhou "restaura: esperado 2 linhas, veio '$N'"
 echo "OK: restaura"
+
+# --- retencao_falha: BACKUP_KEEP_DAYS inválido deve dar exit != 0 ---
+if docker run --rm --network "$NET" -v "$TMP:/backups" -v "$ROOT/docker/backup:/scripts:ro" \
+  -e PGHOST="$DB" -e PGUSER=postgres -e PGPASSWORD=teste123 -e PGDATABASE=churchmanager_db \
+  -e BACKUP_KEEP_DAYS=abc "$IMG" /scripts/pg-backup.sh >/dev/null 2>&1; then
+  falhou "retencao_falha: retenção com valor inválido retornou 0"
+fi
+echo "OK: retencao_falha"
 
 echo "TODOS OS TESTES PASSARAM"
