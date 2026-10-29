@@ -71,7 +71,7 @@ services:
       TZ: America/Sao_Paulo
       PGHOST: db
       PGUSER: ${POSTGRES_USER:-postgres}
-      PGPASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-SenhaSuperForte123}
       PGDATABASE: ${POSTGRES_DB:-churchmanager_db}
       BACKUP_DIR: /backups
       BACKUP_KEEP_DAYS: "14"

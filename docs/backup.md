@@ -54,19 +54,19 @@ Restaura em um banco temporário `restore_teste` dentro do `churchmanager_db` e 
 
 ```bash
 DUMP=/root/backups/churchmanager/churchmanager-20261029-020000.dump
-source .env.production   # POSTGRES_USER
+PGU=$(docker exec churchmanager_db printenv POSTGRES_USER)
 
 docker cp "$DUMP" churchmanager_db:/tmp/restore.dump
-docker exec churchmanager_db createdb -U "${POSTGRES_USER}" restore_teste
-docker exec churchmanager_db pg_restore -U "${POSTGRES_USER}" --no-owner -d restore_teste /tmp/restore.dump
+docker exec churchmanager_db createdb -U "$PGU" restore_teste
+docker exec churchmanager_db pg_restore -U "$PGU" --no-owner -d restore_teste /tmp/restore.dump
 
 # As contagens devem ser iguais (ou a de restore_teste um pouco menor, se o dump for antigo)
 for t in tenants events; do
-  docker exec churchmanager_db psql -U "${POSTGRES_USER}" -d restore_teste -tAc "select '$t', count(*) from $t"
-  docker exec churchmanager_db psql -U "${POSTGRES_USER}" -d churchmanager_db -tAc "select '$t', count(*) from $t"
+  docker exec churchmanager_db psql -U "$PGU" -d restore_teste -tAc "select '$t', count(*) from $t"
+  docker exec churchmanager_db psql -U "$PGU" -d churchmanager_db -tAc "select '$t', count(*) from $t"
 done
 
-docker exec churchmanager_db dropdb -U "${POSTGRES_USER}" restore_teste
+docker exec churchmanager_db dropdb -U "$PGU" restore_teste
 docker exec churchmanager_db rm /tmp/restore.dump
 ```
 
@@ -74,16 +74,26 @@ docker exec churchmanager_db rm /tmp/restore.dump
 
 Substitui os dados atuais pelos do dump. Tudo o que foi gravado depois do dump é perdido.
 
-```bash
-DUMP=/root/backups/churchmanager/churchmanager-20261029-020000.dump
-source .env.production
+1. Faça um dump do estado atual (rede de segurança) e **confirme que apareceu `dump OK`** antes de seguir:
 
-docker compose -f docker-compose.prod.yml stop api </dev/null
-docker cp "$DUMP" churchmanager_db:/tmp/restore.dump
-docker exec churchmanager_db pg_restore -U "${POSTGRES_USER}" --clean --if-exists --no-owner -d churchmanager_db /tmp/restore.dump
-docker exec churchmanager_db rm /tmp/restore.dump
-docker compose -f docker-compose.prod.yml up -d api </dev/null
-```
+   ```bash
+   docker exec churchmanager_db_backup /scripts/pg-backup.sh
+   ```
+
+2. Restaure (a `api` só volta se o `pg_restore` terminar com sucesso):
+
+   ```bash
+   DUMP=/root/backups/churchmanager/churchmanager-20261029-020000.dump
+   PGU=$(docker exec churchmanager_db printenv POSTGRES_USER)
+
+   docker compose -f docker-compose.prod.yml stop api </dev/null
+   docker cp "$DUMP" churchmanager_db:/tmp/restore.dump \
+     && docker exec churchmanager_db pg_restore -U "$PGU" --clean --if-exists --single-transaction --no-owner -d churchmanager_db /tmp/restore.dump \
+     && docker exec churchmanager_db rm /tmp/restore.dump \
+     && docker compose -f docker-compose.prod.yml up -d api </dev/null
+   ```
+
+3. Se algum comando falhar, a `api` continua parada e, como a restauração é uma transação única, o banco permanece como estava. Investigue o erro; para voltar ao estado de antes, repita o passo 2 com o dump gerado no passo 1.
 
 Depois, confira `docker logs --tail 50` da `api` e o painel.
 
