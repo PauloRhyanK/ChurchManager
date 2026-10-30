@@ -55,6 +55,7 @@ Restaura em um banco temporário `restore_teste` dentro do `churchmanager_db` e 
 ```bash
 DUMP=/root/backups/churchmanager/churchmanager-20261029-020000.dump
 PGU=$(docker exec churchmanager_db printenv POSTGRES_USER)
+PGD=$(docker exec churchmanager_db printenv POSTGRES_DB)
 
 docker cp "$DUMP" churchmanager_db:/tmp/restore.dump
 docker exec churchmanager_db createdb -U "$PGU" restore_teste
@@ -63,7 +64,7 @@ docker exec churchmanager_db pg_restore -U "$PGU" --no-owner -d restore_teste /t
 # As contagens devem ser iguais (ou a de restore_teste um pouco menor, se o dump for antigo)
 for t in tenants events; do
   docker exec churchmanager_db psql -U "$PGU" -d restore_teste -tAc "select '$t', count(*) from $t"
-  docker exec churchmanager_db psql -U "$PGU" -d churchmanager_db -tAc "select '$t', count(*) from $t"
+  docker exec churchmanager_db psql -U "$PGU" -d "$PGD" -tAc "select '$t', count(*) from $t"
 done
 
 docker exec churchmanager_db dropdb -U "$PGU" restore_teste
@@ -73,6 +74,8 @@ docker exec churchmanager_db rm /tmp/restore.dump
 ### Restauração real
 
 Substitui os dados atuais pelos do dump. Tudo o que foi gravado depois do dump é perdido.
+
+Dump anterior a uma migração do Prisma: restaure num banco recriado (`dropdb` + `createdb`) em vez de `--clean`, senão tabelas novas ficam e o `prisma migrate deploy` da API falha ao subir.
 
 1. Faça um dump do estado atual (rede de segurança) e **confirme que apareceu `dump OK`** antes de seguir:
 
@@ -85,15 +88,16 @@ Substitui os dados atuais pelos do dump. Tudo o que foi gravado depois do dump �
    ```bash
    DUMP=/root/backups/churchmanager/churchmanager-20261029-020000.dump
    PGU=$(docker exec churchmanager_db printenv POSTGRES_USER)
+   PGD=$(docker exec churchmanager_db printenv POSTGRES_DB)
 
    docker compose -f docker-compose.prod.yml stop api </dev/null
    docker cp "$DUMP" churchmanager_db:/tmp/restore.dump \
-     && docker exec churchmanager_db pg_restore -U "$PGU" --clean --if-exists --single-transaction --no-owner -d churchmanager_db /tmp/restore.dump \
+     && docker exec churchmanager_db pg_restore -U "$PGU" --clean --if-exists --single-transaction --no-owner -d "$PGD" /tmp/restore.dump \
      && docker exec churchmanager_db rm /tmp/restore.dump \
      && docker compose -f docker-compose.prod.yml up -d api </dev/null
    ```
 
-3. Se algum comando falhar, a `api` continua parada e, como a restauração é uma transação única, o banco permanece como estava. Investigue o erro; para voltar ao estado de antes, repita o passo 2 com o dump gerado no passo 1.
+3. Se falhar, o banco não foi alterado (a restauração roda numa transação única): só suba a API de volta com `docker compose -f docker-compose.prod.yml up -d api </dev/null`. O dump do passo 1 serve para desfazer uma restauração que *concluiu* mas não era a desejada.
 
 Depois, confira `docker logs --tail 50` da `api` e o painel.
 
