@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Inbox, Loader2 } from "lucide-react";
+import { DollarSign, Inbox, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -150,19 +150,9 @@ const Financial = () => {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div className="flex flex-col gap-2">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Financeiro</h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              Visão geral dos pagadores e estado das cotas.
-            </p>
-            <p className="text-muted-foreground text-xs mt-2 max-w-3xl">
-              «Plano / valor» mostra primeiro a descrição e metadados enviados pelo Asaas (após
-              webhooks); se não houver, usa o plano da assinatura registada na base. Use «Histórico»
-              para ver cada cobrança, estado e, quando existir na descrição Asaas, o total de meses
-              da assinatura e números de parcela enviados nos eventos.
-            </p>
-          </div>
+        <div className="flex items-center gap-2">
+          <DollarSign className="h-7 w-7 text-primary" />
+          <h1 className="text-2xl font-bold tracking-tight">Financeiro</h1>
         </div>
 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end">

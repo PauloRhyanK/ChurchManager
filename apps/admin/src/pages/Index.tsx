@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ArrowRight, CalendarDays, Globe, Landmark, Loader2, Ticket, Users } from "lucide-react";
+import { ArrowRight, CalendarDays, Globe, Landmark, LayoutDashboard, Loader2, Ticket, Users } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { Button } from "@/components/ui/button";
@@ -53,11 +53,9 @@ export default function Index() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div>
+        <div className="flex items-center gap-2">
+          <LayoutDashboard className="h-7 w-7 text-primary" />
           <h1 className="text-2xl font-bold tracking-tight">Visão Geral</h1>
-          <p className="text-muted-foreground text-sm mt-1 max-w-2xl">
-            Resumo com dados reais da sua igreja — financeiro, eventos e configurações.
-          </p>
         </div>
 
         {error && (

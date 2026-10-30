@@ -49,14 +49,9 @@ export default function EventsListPage() {
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <CalendarDays className="h-7 w-7 text-primary" />
-              <h1 className="text-2xl font-bold tracking-tight">Eventos</h1>
-            </div>
-            <p className="text-muted-foreground text-sm mt-1 max-w-2xl">
-              Crie eventos, configure tipos de ingresso e acompanhe inscrições e vendas.
-            </p>
+          <div className="flex items-center gap-2">
+            <CalendarDays className="h-7 w-7 text-primary" />
+            <h1 className="text-2xl font-bold tracking-tight">Eventos</h1>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline">

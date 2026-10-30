@@ -56,17 +56,11 @@ export default function PermissionGroupsPage() {
     <DashboardLayout>
       <div className="space-y-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="h-7 w-7 text-primary" />
-              <h1 className="text-2xl font-bold tracking-tight">
-                Grupos de permissões
-              </h1>
-            </div>
-            <p className="text-muted-foreground text-sm max-w-2xl">
-              Defina o que cada grupo pode ver ou editar. Utilizadores herdam as
-              permissões de todos os grupos a que pertencem.
-            </p>
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-7 w-7 text-primary" />
+            <h1 className="text-2xl font-bold tracking-tight">
+              Grupos de permissões
+            </h1>
           </div>
           {canEdit && (
             <Button
