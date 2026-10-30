@@ -123,7 +123,7 @@ describe("TicketTypeWizardDialog", () => {
     expect(ticketsApi.updateEventTicketType).not.toHaveBeenCalled();
   });
 
-  it("passo 2 mostra a taxa ao lado do preço e esconde-a se o ingresso for gratuito", async () => {
+  it("passo 2 mostra a taxa ao lado do preço e esconde-a se o ingresso for gratuito, permitindo desfazer", async () => {
     renderWizard();
     await goToStep(2);
     expect(screen.getByLabelText("Taxa (R$)")).toBeInTheDocument();
@@ -131,6 +131,11 @@ describe("TicketTypeWizardDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Ingresso gratuito" }));
     await waitFor(() => expect(screen.queryByLabelText("Taxa (R$)")).not.toBeInTheDocument());
     expect(screen.getByLabelText("Preço (R$)")).toHaveValue("0,00");
+
+    // Desfaz voltando para Ingresso pago
+    fireEvent.click(screen.getByRole("button", { name: "Ingresso pago" }));
+    await waitFor(() => expect(screen.getByLabelText("Taxa (R$)")).toBeInTheDocument());
+    expect(screen.getByLabelText("Preço (R$)")).not.toBeDisabled();
   });
 
   it("mínimo por pedido maior que o máximo bloqueia o passo 2 com mensagem", async () => {
@@ -161,5 +166,24 @@ describe("TicketTypeWizardDialog", () => {
     expect(body.fieldConfigs).toEqual([
       { fieldId: "f-name", enabled: true, required: true, sortOrder: 0 },
     ]);
+  });
+
+  it("passo 3 mostra subtítulo 'Campos do ingresso' e ícone de informação em campo personalizado", async () => {
+    const customField = {
+      id: "f-custom",
+      tenantId: "t1",
+      label: "Tamanho da camiseta",
+      type: "TEXT" as const,
+      options: null,
+      isSystem: false,
+    };
+    fieldsApi.fetchEventFieldDefinitions.mockResolvedValue([nameField, customField]);
+    renderWizard();
+    await goToStep(3);
+
+    expect(screen.getByRole("heading", { name: "Campos do ingresso" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Informações sobre Tamanho da camiseta" }),
+    ).toBeInTheDocument();
   });
 });

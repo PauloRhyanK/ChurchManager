@@ -35,9 +35,6 @@ export function ProjectionTopicsEditor({ topics, onChange, disabled }: Projectio
           <h3 id="topicos-fixos" className="text-sm font-semibold">
             Tópicos fixos
           </h3>
-          <p className="text-xs text-muted-foreground">
-            Avisos sem data, como células. Aparecem na tela "participe", depois da agenda.
-          </p>
         </div>
         <Button
           type="button"

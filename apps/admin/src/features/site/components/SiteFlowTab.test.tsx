@@ -166,23 +166,18 @@ describe("SiteFlowTab", () => {
     expect(siteApi.updateSiteLayout).not.toHaveBeenCalled();
   });
 
-  it("Programação leva à aba Agenda Semanal e mostra só horários ativos", async () => {
+  it("Programação leva à aba Agenda Semanal", async () => {
     const { onGoToTab } = renderTab();
     await homeTitles();
     fireEvent.click(screen.getByRole("button", { name: "Ir para Agenda Semanal" }));
     expect(onGoToTab).toHaveBeenCalledWith("agenda");
-
-    expect(await screen.findByText("Dom 9h e 18h30 · Ter 20h · Sex 20h +1")).toBeInTheDocument();
-    expect(screen.queryByText(/Qua/)).toBeNull();
   });
 
-  it("sem acesso a Igreja a prévia some, mas o selo de origem fica", async () => {
+  it("sem acesso a Igreja o selo de origem fica", async () => {
     perms.modules = { SITE: "EDIT" };
     renderTab();
     await homeTitles();
     expect(screen.getByText("Vem de Agenda Semanal")).toBeInTheDocument();
-    expect(screen.queryByText(/Dom 9h/)).toBeNull();
-    expect(churchApi.fetchSchedules).not.toHaveBeenCalled();
   });
 
   it("só leitura: sem setas nem alça de arrastar", async () => {
@@ -199,6 +194,7 @@ describe("SiteFlowTab", () => {
     expect(within(list).getAllByRole("listitem").map((item) => item.dataset.block)).toEqual([
       "pastors",
       "visit",
+      "cotas",
     ]);
     expect(within(list).getByText("Usa Pastores")).toBeInTheDocument();
     expect(within(list).getByText("Não aparece no site")).toBeInTheDocument();

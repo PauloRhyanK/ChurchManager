@@ -7,7 +7,6 @@ import { ImageUploader } from "@/components/ImageUploader";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -73,9 +72,6 @@ export function EventSiteDetailsTab({ event, canEdit }: Props) {
     <Card className="border-0 shadow-sm">
       <CardHeader>
         <CardTitle className="text-base">Detalhes do site</CardTitle>
-        <CardDescription>
-          Mídia e descrição longa exibidas na página pública do evento.
-        </CardDescription>
       </CardHeader>
       <CardContent>
         <fieldset disabled={!canEdit} className="space-y-4 min-w-0">
@@ -94,7 +90,9 @@ export function EventSiteDetailsTab({ event, canEdit }: Props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="site-video">URL do vídeo</Label>
+            <Label htmlFor="site-video" className="flex items-center gap-1.5">
+              URL de vídeo do evento <span className="text-xs font-normal text-muted-foreground">(opcional)</span>
+            </Label>
             <Input
               id="site-video"
               type="url"
@@ -117,7 +115,9 @@ export function EventSiteDetailsTab({ event, canEdit }: Props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="site-details">Descrição longa</Label>
+            <Label htmlFor="site-details" className="flex items-center gap-1.5">
+              Descrição longa <span className="text-xs font-normal text-muted-foreground">(opcional)</span>
+            </Label>
             <Textarea
               id="site-details"
               rows={8}

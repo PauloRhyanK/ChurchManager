@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus } from "lucide-react";
+import { Loader2, Plus, Info } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -9,11 +9,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -50,6 +55,7 @@ import {
   type TicketTypeFormValues,
 } from "@/features/events/schemas/ticket-type-form-schema";
 import { getApiErrorMessage } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 type Props = {
   eventId: string;
@@ -332,15 +338,42 @@ export function TicketTypeWizardDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
+      <DialogContent className="max-w-lg" aria-describedby={undefined}>
+        <DialogHeader className="space-y-3">
           <DialogTitle>
-            {isEdit ? "Editar ingresso" : "Novo ingresso"} — passo {step} de 3
+            {isEdit ? "Editar ingresso" : "Novo ingresso"}
           </DialogTitle>
-          <DialogDescription>
-            Configure o tipo de ingresso em três passos: dados gerais, preço e
-            campos da inscrição.
-          </DialogDescription>
+          <div className="flex items-center gap-2 pt-1 pb-1">
+            {[
+              { num: 1, label: "Dados gerais" },
+              { num: 2, label: "Preço e lote" },
+              { num: 3, label: "Campos" },
+            ].map((s) => (
+              <div key={s.num} className="flex-1">
+                <div
+                  className={cn(
+                    "h-1.5 w-full rounded-full transition-colors",
+                    s.num <= step ? "bg-primary" : "bg-muted",
+                  )}
+                />
+                <span
+                  className={cn(
+                    "mt-1.5 block text-xs font-medium",
+                    s.num === step
+                      ? "text-foreground font-semibold"
+                      : s.num < step
+                        ? "text-muted-foreground"
+                        : "text-muted-foreground/60",
+                  )}
+                >
+                  {s.label}
+                  {s.num === step && (
+                    <span className="sr-only"> — passo {step} de 3</span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
         </DialogHeader>
 
         <form
@@ -566,14 +599,84 @@ function Step2({ form }: StepProps) {
     form.setValue("maxInstallments", "");
   }
 
+  function setPaidTicket() {
+    form.setValue("priceInput", "", { shouldValidate: true });
+    form.setValue("allowedBillingTypes", ["PIX"], { shouldValidate: true });
+  }
+
   return (
     <div className="space-y-4">
-      {!isFree && (
+      {/* Seletor Gratuito / Pago */}
+      <div className="grid grid-cols-2 gap-2 rounded-lg bg-muted p-1">
+        <button
+          type="button"
+          onClick={setPaidTicket}
+          className={cn(
+            "rounded-md py-1.5 text-xs font-medium transition-all",
+            !isFree
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          Ingresso pago
+        </button>
+        <button
+          type="button"
+          onClick={setFreeTicket}
+          className={cn(
+            "rounded-md py-1.5 text-xs font-medium transition-all",
+            isFree
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          Ingresso gratuito
+        </button>
+      </div>
+
+      {/* Valores: Preço e Taxa */}
+      <div className={isFree ? undefined : "grid grid-cols-2 gap-3"}>
         <div className="space-y-2">
-          <Label>Tipos de pagamento</Label>
+          <Label htmlFor="tt-price">Preço (R$)</Label>
+          <Input
+            id="tt-price"
+            placeholder="0,00"
+            disabled={isFree}
+            readOnly={isFree}
+            className={isFree ? "bg-muted text-muted-foreground" : undefined}
+            {...form.register("priceInput")}
+          />
+          {form.formState.errors.priceInput && !isFree && (
+            <p className="text-sm text-red-600">
+              {form.formState.errors.priceInput.message}
+            </p>
+          )}
+        </div>
+        {!isFree && (
+          <div className="space-y-2">
+            <Label htmlFor="tt-fee">Taxa (R$)</Label>
+            <Input id="tt-fee" placeholder="0,00" {...form.register("feeInput")} />
+            {form.formState.errors.feeInput && (
+              <p className="text-sm text-red-600">
+                {form.formState.errors.feeInput.message}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Métodos de pagamento (apenas se pago) */}
+      {!isFree && (
+        <div className="space-y-3 rounded-lg border p-3">
+          <div className="space-y-1">
+            <Label>Métodos de pagamento</Label>
+            <p className="text-xs text-muted-foreground">
+              Formas aceitas no checkout deste ingresso.
+            </p>
+          </div>
           <div className="flex flex-wrap gap-4">
             {BILLING_TYPES.map((type) => (
-              <label key={type} className="flex items-center gap-2 text-sm">
+              <label key={type} className="flex items-center gap-2 text-sm cursor-pointer">
                 <Checkbox
                   checked={selected.includes(type)}
                   onCheckedChange={(c) => toggleBilling(type, Boolean(c))}
@@ -587,58 +690,24 @@ function Step2({ form }: StepProps) {
               {form.formState.errors.allowedBillingTypes.message}
             </p>
           )}
-        </div>
-      )}
 
-      {hasCard && !isFree && (
-        <div className="space-y-2">
-          <Label htmlFor="tt-installments">Máximo de parcelas (cartão)</Label>
-          <Input
-            id="tt-installments"
-            type="number"
-            min={1}
-            max={24}
-            placeholder="À vista"
-            {...form.register("maxInstallments")}
-          />
-        </div>
-      )}
-
-      <div className="space-y-2">
-        <div className="flex justify-end">
-          <Button type="button" variant="outline" size="sm" onClick={setFreeTicket}>
-            Ingresso gratuito
-          </Button>
-        </div>
-        <div className={isFree ? undefined : "grid grid-cols-2 gap-3"}>
-          <div className="space-y-2">
-            <Label htmlFor="tt-price">Preço (R$)</Label>
-            <Input id="tt-price" placeholder="0,00" {...form.register("priceInput")} />
-          </div>
-          {!isFree && (
-            <div className="space-y-2">
-              <Label htmlFor="tt-fee">Taxa (R$)</Label>
-              <Input id="tt-fee" placeholder="0,00" {...form.register("feeInput")} />
+          {hasCard && (
+            <div className="pt-2 border-t space-y-2">
+              <Label htmlFor="tt-installments">Máximo de parcelas (cartão)</Label>
+              <Input
+                id="tt-installments"
+                type="number"
+                min={1}
+                max={24}
+                placeholder="À vista"
+                {...form.register("maxInstallments")}
+              />
             </div>
           )}
         </div>
-        {isFree && (
-          <p className="text-xs text-muted-foreground">
-            Ingresso gratuito — sem cobrança no checkout.
-          </p>
-        )}
-        {form.formState.errors.priceInput && (
-          <p className="text-sm text-red-600">
-            {form.formState.errors.priceInput.message}
-          </p>
-        )}
-        {!isFree && form.formState.errors.feeInput && (
-          <p className="text-sm text-red-600">
-            {form.formState.errors.feeInput.message}
-          </p>
-        )}
-      </div>
+      )}
 
+      {/* Limites e Stock */}
       <div className="grid grid-cols-3 gap-3">
         <div className="space-y-2">
           <Label htmlFor="tt-qty">Stock</Label>
@@ -742,52 +811,79 @@ function Step3({
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        Active os campos solicitados na inscrição e marque os obrigatórios.
-      </p>
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-foreground">Campos do ingresso</h3>
+      </div>
 
       <div className="space-y-2">
-        {configs.map((config, index) => (
-          <div
-            key={config.fieldId}
-            className="flex items-center justify-between gap-3 rounded-lg border p-3"
-          >
-            <div className="flex items-center gap-3">
-              <Checkbox
-                checked={config.enabled}
-                onCheckedChange={(c) =>
-                  update(index, {
-                    enabled: Boolean(c),
-                    required: c ? config.required : false,
-                  })
-                }
-              />
-              <div>
-                <p className="text-sm font-medium">{config.label}</p>
-                <p className="text-xs text-muted-foreground">
-                  {FIELD_TYPE_LABELS[config.type as EventFieldType] ??
-                    config.type}
-                  {config.isSystem ? " · padrão" : ""}
-                  {fieldTypeHasOptions(config.type as EventFieldType) &&
-                    (() => {
-                      const def = defs.find((d) => d.id === config.fieldId);
-                      return def?.options && def.options.length > 0
-                        ? ` (${def.options.join(", ")})`
-                        : "";
-                    })()}
-                </p>
+        {configs.map((config, index) => {
+          const def = defs.find((d) => d.id === config.fieldId);
+          return (
+            <div
+              key={config.fieldId}
+              className="flex items-center justify-between gap-3 rounded-lg border p-3"
+            >
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  checked={config.enabled}
+                  onCheckedChange={(c) =>
+                    update(index, {
+                      enabled: Boolean(c),
+                      required: c ? config.required : false,
+                    })
+                  }
+                />
+                <div>
+                  <p className="text-sm font-medium">{config.label}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {FIELD_TYPE_LABELS[config.type as EventFieldType] ??
+                      config.type}
+                    {config.isSystem ? " · padrão" : " · personalizado"}
+                    {fieldTypeHasOptions(config.type as EventFieldType) &&
+                      (() => {
+                        return def?.options && def.options.length > 0
+                          ? ` (${def.options.join(", ")})`
+                          : "";
+                      })()}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                  <Checkbox
+                    checked={config.required}
+                    disabled={!config.enabled}
+                    onCheckedChange={(c) => update(index, { required: Boolean(c) })}
+                  />
+                  Obrigatório
+                </label>
+                {!config.isSystem && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-foreground inline-flex items-center justify-center p-0.5 rounded focus:outline-none"
+                          aria-label={`Informações sobre ${config.label}`}
+                        >
+                          <Info className="h-4 w-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="left">
+                        <p className="font-medium">Campo personalizado</p>
+                        <p className="text-xs text-muted-foreground">
+                          {fieldTypeHasOptions(config.type as EventFieldType) && def?.options?.length
+                            ? `Opções: ${def.options.join(", ")}`
+                            : "Campo configurado para esta igreja"}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
               </div>
             </div>
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Checkbox
-                checked={config.required}
-                disabled={!config.enabled}
-                onCheckedChange={(c) => update(index, { required: Boolean(c) })}
-              />
-              Obrigatório
-            </label>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {adding ? (
@@ -859,16 +955,34 @@ function Step3({
           </div>
         </div>
       ) : (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-2"
-          onClick={() => setAdding(true)}
-        >
-          <Plus className="h-4 w-4" />
-          Adicionar campo personalizado
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setAdding(true)}
+          >
+            <Plus className="h-4 w-4" />
+            Adicionar campo personalizado
+          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="text-muted-foreground hover:text-foreground inline-flex items-center justify-center p-0.5 rounded focus:outline-none"
+                  aria-label="Informações sobre campo personalizado"
+                >
+                  <Info className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Crie campos específicos para coletar dados adicionais na inscrição.</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
       )}
     </div>
   );
