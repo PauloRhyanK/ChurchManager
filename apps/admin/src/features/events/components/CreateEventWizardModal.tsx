@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -82,13 +81,9 @@ export function CreateEventWizardModal({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle>Novo evento</DialogTitle>
-          <DialogDescription>
-            Passo 1 de 2 — informações básicas. Os ingressos são configurados a
-            seguir.
-          </DialogDescription>
         </DialogHeader>
 
         <form
@@ -107,7 +102,7 @@ export function CreateEventWizardModal({ open, onOpenChange }: Props) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="ev-short">Descrição curta</Label>
+            <Label htmlFor="ev-short">Descrição</Label>
             <Textarea
               id="ev-short"
               rows={2}

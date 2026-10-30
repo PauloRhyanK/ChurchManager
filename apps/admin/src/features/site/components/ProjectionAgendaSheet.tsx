@@ -6,13 +6,12 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { usePermissions } from "@/features/access/hooks/use-permissions";
 import { DiscardChangesDialog } from "@/features/church/components/DiscardChangesDialog";
@@ -160,15 +159,14 @@ export function ProjectionAgendaSheet({ open, onOpenChange, onGoToTab }: Project
 
   return (
     <>
-      <Sheet open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
-        <SheetContent className="flex w-full flex-col gap-0 p-0 sm:max-w-lg">
-          <SheetHeader className="border-b px-6 py-4">
-            <SheetTitle>Agenda do telão</SheetTitle>
-            <SheetDescription>
-              Programação semanal dos próximos {agendaQuery.data?.days ?? 7} dias e eventos
-              publicados, na ordem em que aparecem na tela de projeção.
-            </SheetDescription>
-          </SheetHeader>
+      <Dialog open={open} onOpenChange={(next) => (next ? onOpenChange(true) : close())}>
+        <DialogContent
+          className="flex max-h-[85vh] w-full max-w-2xl flex-col gap-0 p-0 sm:rounded-lg overflow-hidden"
+          aria-describedby={undefined}
+        >
+          <DialogHeader className="border-b px-6 py-4">
+            <DialogTitle>Agenda do telão</DialogTitle>
+          </DialogHeader>
 
           <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
             {agendaQuery.isPending ? (
@@ -184,13 +182,9 @@ export function ProjectionAgendaSheet({ open, onOpenChange, onGoToTab }: Project
                 Nada na agenda dos próximos dias.
               </p>
             ) : (
-              <>
-                <p className="text-xs text-muted-foreground">
-                  Desligar um horário da programação semanal vale para todas as semanas.
-                </p>
-                {[...groups.entries()]
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([date, dayItems]) => {
+              [...groups.entries()]
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([date, dayItems]) => {
                   const label = dayLabel(date);
                   return (
                     <div key={date} role="group" aria-label={label} className="space-y-1.5">
@@ -223,8 +217,7 @@ export function ProjectionAgendaSheet({ open, onOpenChange, onGoToTab }: Project
                       </ul>
                     </div>
                   );
-                })}
-              </>
+                })
             )}
 
             {agendaQuery.isSuccess && (
@@ -271,7 +264,7 @@ export function ProjectionAgendaSheet({ open, onOpenChange, onGoToTab }: Project
             )}
           </div>
 
-          <SheetFooter className="flex-row justify-end gap-2 border-t px-6 py-3">
+          <DialogFooter className="flex-row justify-end gap-2 border-t px-6 py-3">
             <Button type="button" variant="outline" disabled={saveMutation.isPending} onClick={close}>
               {canEdit ? "Cancelar" : "Fechar"}
             </Button>
@@ -285,9 +278,9 @@ export function ProjectionAgendaSheet({ open, onOpenChange, onGoToTab }: Project
                 Salvar
               </Button>
             )}
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <DiscardChangesDialog
         open={confirm !== null}

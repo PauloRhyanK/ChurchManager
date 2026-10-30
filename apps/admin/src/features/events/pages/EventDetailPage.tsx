@@ -1,11 +1,28 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, ExternalLink, Link2, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  Copy,
+  Download,
+  ExternalLink,
+  FileSpreadsheet,
+  Link2,
+  Loader2,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -42,6 +59,10 @@ import {
 } from "@/features/events/lib/format";
 import { isEventDateNotPast } from "@/features/events/lib/event-form-validation";
 import { EventReportSection } from "@/features/events/components/EventReportSection";
+import {
+  exportReportPdf,
+  exportReportSpreadsheet,
+} from "@/features/events/lib/event-report-export";
 import { usePermissions } from "@/features/access/hooks/use-permissions";
 import { getApiErrorMessage } from "@/lib/api";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -198,11 +219,6 @@ export function EventDetailPage() {
               </div>
             )}
           </div>
-          {!event.published && (
-            <p className="text-sm text-muted-foreground mt-1">
-              Este evento é um rascunho e não aparece no site.
-            </p>
-          )}
           <p className="text-muted-foreground text-sm mt-1 break-words">
             {formatEventDate(event.date)}
             {timeRange ? ` · ${timeRange}` : ""}
@@ -252,6 +268,29 @@ export function EventDetailPage() {
               </Link>
             </Button>
           )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" aria-label="Mais opções">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => report && exportReportSpreadsheet(report)}
+                disabled={!report}
+              >
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Exportar planilha
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => report && exportReportPdf(report)}
+                disabled={!report}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Exportar PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -269,7 +308,7 @@ export function EventDetailPage() {
 
         <TabsContent value="ingressos" className="mt-4 space-y-4">
           {canEditTickets && (
-            <div className="flex justify-end">
+            <div className="flex justify-start">
               <Button className="gap-2" onClick={openCreateTicket}>
                 <Plus className="h-4 w-4" />
                 Novo tipo
@@ -280,9 +319,6 @@ export function EventDetailPage() {
           <Card className="border-0 shadow-sm">
             <CardHeader>
               <CardTitle className="text-base">Lotes e preços</CardTitle>
-              <CardDescription>
-                Stock e vendas são geridos pela API — o painel apenas configura e gera links.
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {ticketTypesQuery.error && (
