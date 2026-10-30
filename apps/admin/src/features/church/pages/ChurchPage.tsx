@@ -11,6 +11,8 @@ import {
   MapPin,
   Loader2,
   Globe,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -216,6 +218,27 @@ export default function ChurchPage() {
     onError: (err) => toast.error(getApiErrorMessage(err)),
   });
 
+  async function handleMovePastor(items: PastorDto[], fromIndex: number, toIndex: number) {
+    if (toIndex < 0 || toIndex >= items.length) return;
+    const reordered = [...items];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+
+    queryClient.setQueryData(["pastors"], reordered.map((p, i) => ({ ...p, sortOrder: i })));
+    try {
+      await Promise.all(
+        reordered.map((p, i) =>
+          p.sortOrder !== i ? updatePastor(p.id, toPastorBody({ ...p, sortOrder: i })) : Promise.resolve(),
+        ),
+      );
+      toast.success("Ordem dos pastores atualizada.");
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      void queryClient.invalidateQueries({ queryKey: ["pastors"] });
+    }
+  }
+
   // Query / Mutations para Ministérios
   const ministriesQuery = useQuery({
     queryKey: ["ministries"],
@@ -365,9 +388,6 @@ export default function ChurchPage() {
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Informações da Igreja</h1>
-          <p className="text-muted-foreground">
-            Configure dados institucionais, filiais, pastores, redes sociais, agenda e o site.
-          </p>
         </div>
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
@@ -404,9 +424,6 @@ export default function ChurchPage() {
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <div>
                   <CardTitle className="text-lg">Filiais e Missões</CardTitle>
-                  <CardDescription>
-                    Nossas filiais espalhadas por diferentes regiões e a sede.
-                  </CardDescription>
                 </div>
                 {canEdit && (
                 <Button
@@ -547,12 +564,12 @@ export default function ChurchPage() {
                         <TableHead className="w-[80px]">Foto</TableHead>
                         <TableHead>Nome</TableHead>
                         <TableHead>Visível</TableHead>
-                        <TableHead>Ordem</TableHead>
+                        <TableHead className="w-[90px]">Ordem</TableHead>
                         <TableHead className="w-[100px] text-right" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {items.map((pastor) => (
+                      {items.map((pastor, index) => (
                         <TableRow key={pastor.id}>
                           <TableCell>
                             {pastor.image ? (
@@ -573,8 +590,29 @@ export default function ChurchPage() {
                               {pastor.active ? "Ativo" : "Oculto"}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-muted-foreground text-sm">
-                            {pastor.sortOrder}
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                disabled={!canEdit || index === 0}
+                                onClick={() => handleMovePastor(items, index, index - 1)}
+                                aria-label={`Mover ${pastor.name} para cima`}
+                              >
+                                <ChevronUp className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                disabled={!canEdit || index === items.length - 1}
+                                onClick={() => handleMovePastor(items, index, index + 1)}
+                                aria-label={`Mover ${pastor.name} para baixo`}
+                              >
+                                <ChevronDown className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </TableCell>
                           <TableCell className="text-right">
                             {canEdit && (
@@ -873,7 +911,6 @@ export default function ChurchPage() {
         onClose={branchEditor.close}
         className="max-w-lg"
         title={branchEditor.value?.id ? "Editar Filial" : "Criar Filial"}
-        description="Preencha os dados de localização e imagem da filial."
       >
         {(requestClose) => (
           <form
@@ -994,7 +1031,6 @@ export default function ChurchPage() {
         onClose={pastorEditor.close}
         className="max-w-md"
         title={pastorEditor.value?.id ? "Editar Pastor" : "Adicionar Pastor"}
-        description="Adicione as informações de nome e foto do pastor."
       >
         {(requestClose) => (
           <form
@@ -1086,7 +1122,6 @@ export default function ChurchPage() {
         onClose={ministryEditor.close}
         className="max-w-md"
         title={ministryEditor.value?.id ? "Editar Ministério" : "Adicionar Ministério"}
-        description="Configure as informações básicas do ministério."
       >
         {(requestClose) => (
           <form
@@ -1216,7 +1251,6 @@ export default function ChurchPage() {
         onClose={scheduleEditor.close}
         className="max-w-md"
         title={scheduleEditor.value?.id ? "Editar Programação" : "Nova Programação"}
-        description="Defina o dia da semana, horário e local da programação recorrente."
       >
         {(requestClose) => (
           <form

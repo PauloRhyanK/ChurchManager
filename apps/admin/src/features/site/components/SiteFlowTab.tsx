@@ -108,6 +108,7 @@ export function SiteFlowTab({ onDirtyChange, onGoToTab }: SiteFlowTabProps) {
   // Atalhos para a origem só quando a pessoa consegue abrir o destino.
   const canOpenSource = (source?: FlowSource) => {
     if (source?.tab) return can("CHURCH", "VIEW");
+    if (source?.href?.startsWith("/financeiro")) return can("FINANCIAL", "VIEW");
     if (source?.href) return can("EVENTS", "VIEW");
     return false;
   };

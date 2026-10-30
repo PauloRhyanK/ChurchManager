@@ -14,7 +14,7 @@ interface Props {
   pending: boolean;
   onClose: () => void;
   title: string;
-  description: string;
+  description?: string;
   className?: string;
   children: (requestClose: () => void) => ReactNode;
 }
@@ -35,10 +35,10 @@ export function EditorDialog({ open, dirty, pending, onClose, title, description
   return (
     <>
       <Dialog open={open} onOpenChange={(next) => !next && requestClose()}>
-        <DialogContent className={className}>
+        <DialogContent className={className} aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
-            <DialogDescription>{description}</DialogDescription>
+            {description && <DialogDescription>{description}</DialogDescription>}
           </DialogHeader>
           {children(requestClose)}
         </DialogContent>

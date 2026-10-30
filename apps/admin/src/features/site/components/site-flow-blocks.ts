@@ -129,6 +129,12 @@ export const OTHER_PAGES: FlowBlock[] = [
     sectionKey: "visit",
     badge: "Não aparece no site",
   },
+  {
+    id: "cotas",
+    title: "Cotas",
+    icon: HandHeart,
+    source: { label: "Financeiro", href: "/financeiro", hint: "As cotas vêm do módulo Financeiro." },
+  },
 ];
 
 const RELATIVE_TIME = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });

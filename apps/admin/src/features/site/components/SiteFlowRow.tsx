@@ -9,12 +9,10 @@ import type { SiteSectionDto } from "@/features/site/api/tenant-site-content-api
 import { cn } from "@/lib/utils";
 import {
   formatUpdatedAt,
-  summarize,
   type ChurchTab,
   type FlowBlock,
   type FlowSource,
 } from "./site-flow-blocks";
-import { SiteSourcePreview } from "./SiteSourcePreview";
 
 export interface FlowRowMove {
   index: number;
@@ -58,7 +56,6 @@ export function SiteFlowRow({
   const Icon = block.icon;
   const source = block.source;
   const external = !block.sectionKey && source;
-  const summary = block.note ?? (section ? summarize(section) : "");
   const openable = canOpenSource(source);
 
   let pill: ReactNode;
@@ -153,11 +150,10 @@ export function SiteFlowRow({
           <span className="text-sm font-medium">{block.title}</span>
           {pill}
         </div>
-        {summary && <p className="truncate text-sm text-muted-foreground">{summary}</p>}
-        {block.preview && <SiteSourcePreview kind={block.preview} />}
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
+        {action}
         {move && (
           <>
             <Button
@@ -182,7 +178,6 @@ export function SiteFlowRow({
             </Button>
           </>
         )}
-        {action}
       </div>
     </div>
   );

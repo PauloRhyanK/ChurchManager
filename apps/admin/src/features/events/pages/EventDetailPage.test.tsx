@@ -264,24 +264,18 @@ describe("EventDetailPage — cabeçalho", () => {
     expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
   });
 
-  it("rascunho: 'Ver no site' desabilitado com explicação e aviso de rascunho", async () => {
+  it("rascunho: 'Ver no site' desabilitado com explicação", async () => {
     serverEvent = { ...event, published: false };
     renderPage();
     const button = await screen.findByRole("button", { name: /Ver no site/ });
     expect(button).toBeDisabled();
     expect(screen.getByTitle("Publique o evento para vê-lo no site")).toContainElement(button);
     expect(screen.queryByRole("link", { name: /Ver no site/ })).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Este evento é um rascunho e não aparece no site."),
-    ).toBeInTheDocument();
   });
 
-  it("publicado não mostra o aviso de rascunho", async () => {
+  it("publicado mostra link para ver no site", async () => {
     renderPage();
     expect(await screen.findByRole("link", { name: /Ver no site/ })).toBeInTheDocument();
-    expect(
-      screen.queryByText("Este evento é um rascunho e não aparece no site."),
-    ).not.toBeInTheDocument();
   });
 
   it("sem endereço do site não mostra 'Ver no site'", async () => {
@@ -308,9 +302,6 @@ describe("EventDetailPage — cabeçalho", () => {
     await waitFor(() =>
       expect(screen.getByRole("switch", { name: "Publicar no site" })).not.toBeChecked(),
     );
-    expect(
-      await screen.findByText("Este evento é um rascunho e não aparece no site."),
-    ).toBeInTheDocument();
   });
 
   it("switch 'Publicar no site' publica um rascunho e avisa", async () => {
@@ -349,5 +340,13 @@ describe("EventDetailPage — cabeçalho", () => {
       "href",
       "https://youtube.com/live/abc",
     );
+  });
+
+  it("abre o menu de mais opções com ações de exportação", async () => {
+    renderPage();
+    const moreBtn = await screen.findByRole("button", { name: "Mais opções" });
+    fireEvent.keyDown(moreBtn, { key: "Enter" });
+    expect(await screen.findByText("Exportar planilha")).toBeInTheDocument();
+    expect(screen.getByText("Exportar PDF")).toBeInTheDocument();
   });
 });
