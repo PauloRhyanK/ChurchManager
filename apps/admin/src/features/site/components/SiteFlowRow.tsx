@@ -95,30 +95,36 @@ export function SiteFlowRow({
     action = (
       <Button
         variant="outline"
-        size="sm"
+        size="icon"
+        className="h-8 w-8"
         aria-label={`${canEdit ? "Editar" : "Ver"} ${block.title}`}
+        title={`${canEdit ? "Editar" : "Ver"} ${block.title}`}
         onClick={() => onEdit(key)}
       >
-        <Pencil className="h-3.5 w-3.5 sm:mr-1.5" aria-hidden="true" />
-        <span className="hidden sm:inline">{canEdit ? "Editar" : "Ver"}</span>
+        <Pencil className="h-4 w-4" aria-hidden="true" />
       </Button>
     );
   } else if (source?.tab && openable) {
     const tab = source.tab;
     const label = `Ir para ${source.label}`;
     action = (
-      <Button variant="outline" size="sm" aria-label={label} onClick={() => onGoToTab(tab)}>
-        <span className="hidden sm:inline">{label}</span>
-        <ArrowRight className="h-3.5 w-3.5 sm:ml-1.5" aria-hidden="true" />
+      <Button
+        variant="outline"
+        size="icon"
+        className="h-8 w-8"
+        aria-label={label}
+        title={label}
+        onClick={() => onGoToTab(tab)}
+      >
+        <ArrowRight className="h-4 w-4" aria-hidden="true" />
       </Button>
     );
   } else if (source?.href && openable) {
     const label = `Abrir ${source.label}`;
     action = (
-      <Button variant="outline" size="sm" asChild>
-        <Link to={source.href} aria-label={label}>
-          <span className="hidden sm:inline">{label}</span>
-          <ArrowRight className="h-3.5 w-3.5 sm:ml-1.5" aria-hidden="true" />
+      <Button variant="outline" size="icon" className="h-8 w-8" asChild>
+        <Link to={source.href} aria-label={label} title={label}>
+          <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </Link>
       </Button>
     );

@@ -66,15 +66,9 @@ export default function PlatformChurches() {
   return (
     <DashboardLayout>
       <div className="space-y-8">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Building2 className="h-8 w-8 text-primary" />
-            <h1 className="text-2xl font-bold tracking-tight">Plataforma — Igrejas</h1>
-          </div>
-          <p className="text-muted-foreground text-sm max-w-2xl">
-            Crie novos tenants (igrejas) e o primeiro administrador. Após criar, a igreja configura
-            Asaas e origens públicas no próprio painel desse administrador.
-          </p>
+        <div className="flex items-center gap-2">
+          <Building2 className="h-7 w-7 text-primary" />
+          <h1 className="text-2xl font-bold tracking-tight">Plataforma — Igrejas</h1>
         </div>
 
         <Card className="border-0 shadow-sm">

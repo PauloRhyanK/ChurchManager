@@ -103,17 +103,11 @@ export default function SignupLinksPage() {
   return (
     <DashboardLayout>
       <div className="space-y-8">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
-            <Link2 className="h-7 w-7 text-primary" />
-            <h1 className="text-2xl font-bold tracking-tight">
-              Links de cadastro
-            </h1>
-          </div>
-          <p className="text-muted-foreground text-sm max-w-2xl">
-            Compartilhe um link para que várias pessoas se cadastrem nesta
-            igreja. Cada cadastro precisa da sua aprovação antes de aceder.
-          </p>
+        <div className="flex items-center gap-2">
+          <Link2 className="h-7 w-7 text-primary" />
+          <h1 className="text-2xl font-bold tracking-tight">
+            Links de cadastro
+          </h1>
         </div>
 
         {canEdit && (

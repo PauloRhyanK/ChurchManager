@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Building2,
+  Church,
   Users,
   Sparkles,
   CalendarDays,
@@ -239,6 +240,27 @@ export default function ChurchPage() {
     }
   }
 
+  async function handleMoveMinistry(items: MinistryDto[], fromIndex: number, toIndex: number) {
+    if (toIndex < 0 || toIndex >= items.length) return;
+    const reordered = [...items];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+
+    queryClient.setQueryData(["ministries"], reordered.map((m, i) => ({ ...m, sortOrder: i })));
+    try {
+      await Promise.all(
+        reordered.map((m, i) =>
+          m.sortOrder !== i ? updateMinistry(m.id, toMinistryBody({ ...m, sortOrder: i })) : Promise.resolve(),
+        ),
+      );
+      toast.success("Ordem dos ministérios atualizada.");
+    } catch (err) {
+      toast.error(getApiErrorMessage(err));
+    } finally {
+      void queryClient.invalidateQueries({ queryKey: ["ministries"] });
+    }
+  }
+
   // Query / Mutations para Ministérios
   const ministriesQuery = useQuery({
     queryKey: ["ministries"],
@@ -386,8 +408,9 @@ export default function ChurchPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Informações da Igreja</h1>
+        <div className="flex items-center gap-2">
+          <Church className="h-7 w-7 text-primary" />
+          <h1 className="text-2xl font-bold tracking-tight">Informações da Igreja</h1>
         </div>
 
         <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
@@ -694,11 +717,12 @@ export default function ChurchPage() {
                         <TableHead>Nome</TableHead>
                         <TableHead>Descrição</TableHead>
                         <TableHead>Visível</TableHead>
+                        <TableHead className="w-[90px]">Ordem</TableHead>
                         <TableHead className="w-[100px] text-right" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {items.map((ministry) => {
+                      {items.map((ministry, index) => {
                         const Icon = getSiteIcon(ministry.icon || "Sparkles");
                         return (
                           <TableRow key={ministry.id}>
@@ -715,6 +739,30 @@ export default function ChurchPage() {
                               <Badge variant={ministry.active ? "outline" : "secondary"}>
                                 {ministry.active ? "Ativo" : "Oculto"}
                               </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  aria-label={`Mover ${ministry.name} para cima`}
+                                  disabled={!canEdit || index === 0}
+                                  onClick={() => handleMoveMinistry(items, index, index - 1)}
+                                >
+                                  <ChevronUp className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  aria-label={`Mover ${ministry.name} para baixo`}
+                                  disabled={!canEdit || index === items.length - 1}
+                                  onClick={() => handleMoveMinistry(items, index, index + 1)}
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </TableCell>
                             <TableCell className="text-right">
                               {canEdit && (
