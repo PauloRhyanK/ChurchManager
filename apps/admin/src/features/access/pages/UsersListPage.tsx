@@ -5,6 +5,7 @@ import {
   Loader2,
   Send,
   Trash2,
+  UserCog,
   UserPlus,
   Users,
   X,
@@ -156,15 +157,9 @@ export default function UsersListPage() {
     <DashboardLayout>
       <div className="space-y-8">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <Users className="h-7 w-7 text-primary" />
-              <h1 className="text-2xl font-bold tracking-tight">Utilizadores</h1>
-            </div>
-            <p className="text-muted-foreground text-sm max-w-2xl">
-              Gerencie quem acede ao painel da igreja e a que módulos, através de
-              grupos de permissões.
-            </p>
+          <div className="flex items-center gap-2">
+            <UserCog className="h-7 w-7 text-primary" />
+            <h1 className="text-2xl font-bold tracking-tight">Utilizadores</h1>
           </div>
           {canEdit && (
             <Button

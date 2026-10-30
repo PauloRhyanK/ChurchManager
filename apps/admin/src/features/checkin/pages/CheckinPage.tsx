@@ -151,14 +151,9 @@ export default function CheckinPage() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <QrCode className="h-7 w-7 text-primary" />
-            <h1 className="text-2xl font-bold tracking-tight">Check-in</h1>
-          </div>
-          <p className="text-muted-foreground text-sm mt-1">
-            Dê entrada nos participantes por busca na lista ou leitura do QR code.
-          </p>
+        <div className="flex items-center gap-2">
+          <QrCode className="h-7 w-7 text-primary" />
+          <h1 className="text-2xl font-bold tracking-tight">Check-in</h1>
         </div>
 
         {/* Seleção de evento */}
