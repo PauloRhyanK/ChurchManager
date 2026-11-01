@@ -26,15 +26,42 @@ O serviço `db-backup` (contêiner `churchmanager_db_backup`, definido em `docke
 
 **Não incluir** `/var/lib/docker`: copiar os arquivos do Postgres com o banco ligado gera cópia inconsistente — o dump é o backup do banco. Se a Locaweb rodar antes das 02:00, ela copia o dump da véspera; nada se perde, só fica um dia atrás.
 
+## Agente de backup da Locaweb
+
+A rotina da Locaweb só funciona com o agente `bacula-fd` instalado na VPS. Sem ele, o painel mostra "Sem resposta" e os backups aparecem como "Falha" com 0 Bytes. Criar a rotina não instala o agente. Reinstalou o servidor? Repita estes passos.
+
+Os comandos abaixo rodam **na VPS** (`ssh paraiso`).
+
+1. Instale o agente e guarde a configuração padrão. `NEEDRESTART_SUSPEND=1` evita que o `apt` reinicie outros serviços.
+
+   ```bash
+   NEEDRESTART_SUSPEND=1 apt-get install -y bacula-fd
+   cp /etc/bacula/bacula-fd.conf /etc/bacula/bacula-fd.conf.orig
+   ```
+
+2. No painel, abra **Backup → Configurar agente** e copie o bloco do passo "Configuração do agente". Ele contém a senha do Director: não o coloque em chat, ticket ou no repositório.
+3. Substitua **todo** o conteúdo de `/etc/bacula/bacula-fd.conf` por esse bloco, removendo também os `Director` padrão, para que só o Director da Locaweb tenha acesso. Mantenha as permissões `640 root:bacula`.
+4. Teste a configuração e reinicie o agente:
+
+   ```bash
+   bacula-fd -t -c /etc/bacula/bacula-fd.conf && systemctl restart bacula-fd
+   ss -tlnp | grep 9102   # deve ouvir em 0.0.0.0:9102
+   ```
+
+5. Libere a porta 9102/TCP no firewall do servidor, se houver um ativo. O painel pede origem `0.0.0.0/0`, então o acesso depende da senha do Director.
+6. No painel, clique em **Verificar agente**, rode a rotina e confira se o status é de sucesso com tamanho maior que 0 Bytes.
+
 ## Verificar
 
 ```bash
 docker logs --tail 20 churchmanager_db_backup   # procure "[backup] ... dump OK"
 docker ps --filter name=churchmanager_db_backup # status deve ser "healthy"
 ls -lh /root/backups/churchmanager
+systemctl is-active bacula-fd                   # agente da Locaweb: deve ser "active"
+journalctl -u bacula-fd -n 20 --no-pager
 ```
 
-O healthcheck fica `healthy` quando existe um dump com menos de 26 horas. Se ficar `unhealthy`, o último backup falhou ou não rodou.
+O healthcheck fica `healthy` quando existe um dump com menos de 26 horas. Se ficar `unhealthy`, o último backup falhou ou não rodou. Esse healthcheck não cobre a cópia para a Locaweb: o resultado dela aparece no painel, em **Backup**.
 
 ## Rodar agora
 
