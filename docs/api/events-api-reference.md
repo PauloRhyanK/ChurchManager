@@ -378,6 +378,67 @@ Filtra apenas por `active: true` — **não** aplica a janela de venda. Um ingre
 
 ---
 
+### 5.2 Validação de cupom de desconto
+
+#### `POST /api/public/tenants/:slug/events/:eventId/coupons/validate`
+
+Valida se um código de cupom é válido para a seleção atual de ingressos e calcula o valor exato do desconto em centavos. O site deve chamar este endpoint quando o utilizador digita o cupom e clica em "Aplicar" (ou ao recalcular valores quando a quantidade de ingressos muda).
+
+**Corpo**
+```json
+{
+  "code": "PROMO10",
+  "lines": [
+    {
+      "ticketTypeId": "uuid-do-tipo",
+      "quantity": 2
+    }
+  ],
+  "cpf": "12345678909"
+}
+```
+
+| Campo | Regras |
+|-------|--------|
+| `code` | Obrigatório. Código do cupom (case-insensitive) |
+| `lines` | Obrigatório. Ingressos e quantidades selecionados |
+| `cpf` | Opcional. CPF do pagador (necessário para validar cupons com limite de 1 uso por CPF) |
+
+**Resposta `200`**
+```json
+{
+  "valid": true,
+  "couponId": "uuid-do-cupom",
+  "code": "PROMO10",
+  "name": "Desconto de 10%",
+  "discountType": "PERCENTAGE",
+  "discountValue": 10,
+  "discountCents": 3000,
+  "eligibleTicketTypeIds": null
+}
+```
+
+| Campo | Descrição |
+|-------|-----------|
+| `valid` | Sempre `true` quando responde 200 |
+| `couponId` | Identificador do cupom |
+| `code` | Código canónico em caixa alta |
+| `name` | Descrição promocional do cupom (ou `null`) |
+| `discountType` | `"PERCENTAGE"` ou `"FIXED"` |
+| `discountValue` | Valor nominal (ex.: `10` para 10% ou centavos para valor fixo) |
+| `discountCents` | Valor do abatimento em centavos sobre o total elegível |
+| `eligibleTicketTypeIds` | Lista dos ingressos em que o desconto foi aplicado (`null` se aplicado a todos) |
+
+**Erros comuns:**
+* `400` — `Cupom inválido ou inativo`
+* `400` — `Este cupom ainda não é válido`
+* `400` — `Este cupom expirou`
+* `400` — `Este cupom atingiu o limite de utilizações`
+* `400` — `Limite de utilizações deste cupom atingido para este CPF`
+* `400` — `Este cupom não é válido para os ingressos selecionados`
+
+---
+
 ## 6. Checkout (pagamento)
 
 ### `POST /api/public/tenants/:slug/events/:eventId/checkout`
@@ -403,6 +464,7 @@ Cria pedido (`EventOrder`), reserva stock e gera cobrança Asaas. O site **nunca
   ],
   "billingType": "PIX",
   "installmentCount": 1,
+  "couponCode": "PROMO10",
   "idempotencyKey": "opcional-uuid-da-sessao"
 }
 ```
@@ -414,12 +476,15 @@ Cria pedido (`EventOrder`), reserva stock e gera cobrança Asaas. O site **nunca
 | `lines[].holderNames` | Opcional. Nome por ingresso, índice = unidade. Unidades sem nome herdam `payer.name`; excedentes são ignorados |
 | `billingType` | `PIX` — QR/cópia e cola; `BOLETO` — `bankSlipUrl`; `CREDIT_CARD` — pagar em `invoiceUrl`; `UNDEFINED` — utilizador escolhe no Asaas. Tem de constar de `allowedBillingTypes` de **todos** os tipos do pedido |
 | `installmentCount` | Só aplicado com `billingType: "CREDIT_CARD"` (ignorado nos restantes). Não pode exceder o `maxInstallments` de nenhum tipo do pedido |
+| `couponCode` | Opcional. Código do cupom de desconto (o backend recalcula e aplica o desconto com base no banco) |
 | `fieldValues` | Obrigatório para cada campo com `required: true` em `fields` (secção 5). Campos de sistema (`name`, `email`, `phone`, `cpf`) são satisfeitos por `payer` |
 | `idempotencyKey` | Único global. Se repetido para o mesmo tenant/evento, devolve a transacção existente (ver aviso abaixo) |
 
 > **A resposta idempotente é degradada.** Na repetição da mesma `idempotencyKey`, a API devolve `dueDate`, `invoiceUrl`, `bankSlipUrl` e `pix` sempre a `null` (`asaasPaymentId` e `billingType` também podem vir `null`). O site **não** consegue reconstruir o QR PIX a partir dessa resposta — guarde os dados de pagamento da **primeira** resposta e gere uma `idempotencyKey` nova por tentativa de checkout, usando a mesma chave apenas para retry de rede da mesma tentativa.
 >
 > Reutilizar uma `idempotencyKey` noutro evento ou tenant não devolve a ordem existente — responde `409`. Idem se o pedido anterior ficou sem cobrança associada, ou se dois checkouts com a mesma chave nova correrem em paralelo. Em qualquer `409` de idempotência, gere uma chave nova antes de repetir.
+
+> **Cupom de 100% de desconto (Pedido gratuito):** Quando o cupom zera o total do pedido (`totalCents = 0`), o checkout não gera cobrança no gateway (Asaas) nem exige dados de pagamento. O pedido é confirmado de imediato com `status: "CONFIRMED"` e os bilhetes com QR code são emitidos e entregues no e-mail do pagador instantaneamente.
 
 **Resposta `201`:** `EventCheckoutResponse`
 
