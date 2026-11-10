@@ -1,11 +1,21 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, Loader2, Plus, Info } from "lucide-react";
+import { FileText, Loader2, Plus, Info, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +43,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
   createEventFieldDefinition,
+  deleteEventFieldDefinition,
   fetchEventFieldDefinitions,
   fieldTypeHasOptions,
   type EventFieldDefinitionDto,
@@ -753,6 +764,23 @@ function Step3({
   const [optionsText, setOptionsText] = useState("");
   const [termText, setTermText] = useState("");
   const [previewTermDef, setPreviewTermDef] = useState<EventFieldDefinitionDto | null>(null);
+  const [fieldToDelete, setFieldToDelete] = useState<TicketFieldConfigValue | null>(null);
+
+  const deleteFieldMutation = useMutation({
+    mutationFn: (fieldId: string) => deleteEventFieldDefinition(fieldId),
+    onSuccess: (_, fieldId) => {
+      form.setValue(
+        "fieldConfigs",
+        configs.filter((c) => c.fieldId !== fieldId),
+      );
+      void queryClient.invalidateQueries({
+        queryKey: ["event-field-definitions"],
+      });
+      toast.success("Campo excluído.");
+      setFieldToDelete(null);
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
 
   const knownIds = useMemo(
     () => new Set(configs.map((c) => c.fieldId)),
@@ -886,27 +914,41 @@ function Step3({
                   Obrigatório
                 </label>
                 {!config.isSystem && (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          className="text-muted-foreground hover:text-foreground inline-flex items-center justify-center p-0.5 rounded focus:outline-none"
-                          aria-label={`Informações sobre ${config.label}`}
-                        >
-                          <Info className="h-4 w-4" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="left">
-                        <p className="font-medium">Campo personalizado</p>
-                        <p className="text-xs text-muted-foreground">
-                          {fieldTypeHasOptions(config.type as EventFieldType) && def?.options?.length
-                            ? `Opções: ${def.options.join(", ")}`
-                            : "Campo configurado para esta igreja"}
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+                  <div className="flex items-center gap-1">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            className="text-muted-foreground hover:text-foreground inline-flex items-center justify-center p-0.5 rounded focus:outline-none"
+                            aria-label={`Informações sobre ${config.label}`}
+                          >
+                            <Info className="h-4 w-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="left">
+                          <p className="font-medium">Campo personalizado</p>
+                          <p className="text-xs text-muted-foreground">
+                            {fieldTypeHasOptions(config.type as EventFieldType) && def?.options?.length
+                              ? `Opções: ${def.options.join(", ")}`
+                              : "Campo configurado para esta igreja"}
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      aria-label={`Excluir campo ${config.label}`}
+                      disabled={deleteFieldMutation.isPending}
+                      onClick={() => setFieldToDelete(config)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 )}
               </div>
             </div>
@@ -1057,6 +1099,41 @@ function Step3({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Alert Dialog para confirmar exclusão do campo */}
+      <AlertDialog
+        open={Boolean(fieldToDelete)}
+        onOpenChange={(open) => !open && setFieldToDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir campo personalizado?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza de que deseja excluir o campo <strong>«{fieldToDelete?.label}»</strong>?
+              Ele será removido das opções deste e de outros ingressos. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteFieldMutation.isPending}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteFieldMutation.isPending}
+              onClick={() => {
+                if (fieldToDelete) {
+                  deleteFieldMutation.mutate(fieldToDelete.fieldId);
+                }
+              }}
+            >
+              {deleteFieldMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
