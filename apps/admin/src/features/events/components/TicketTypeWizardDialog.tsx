@@ -339,8 +339,8 @@ export function TicketTypeWizardDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg" aria-describedby={undefined}>
-        <DialogHeader className="space-y-3">
+      <DialogContent className="max-w-xl max-h-[88vh] flex flex-col p-0 overflow-hidden sm:rounded-xl" aria-describedby={undefined}>
+        <DialogHeader className="p-6 pb-3 border-b shrink-0 bg-background space-y-3">
           <DialogTitle>
             {isEdit ? "Editar ingresso" : "Novo ingresso"}
           </DialogTitle>
@@ -378,7 +378,7 @@ export function TicketTypeWizardDialog({
         </DialogHeader>
 
         <form
-          className="space-y-4"
+          className="flex flex-col flex-1 min-h-0 overflow-hidden"
           onSubmit={form.handleSubmit((values) => {
             if (fieldConfigsLoaded) saveMutation.mutate(values);
           })}
@@ -389,7 +389,8 @@ export function TicketTypeWizardDialog({
           }}
           noValidate
         >
-          {step === 1 && <Step1 form={form} />}
+          <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4 min-h-0">
+            {step === 1 && <Step1 form={form} />}
           {step === 2 && <Step2 form={form} />}
           {step === 3 &&
             (fieldConfigsLoaded && fieldsQuery.data ? (
@@ -414,8 +415,9 @@ export function TicketTypeWizardDialog({
             ) : (
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             ))}
+          </div>
 
-          <DialogFooter className="gap-2 sm:justify-between">
+          <DialogFooter className="p-4 sm:p-6 pt-3 border-t shrink-0 bg-background gap-2 sm:justify-between">
             <div>
               {step > 1 && (
                 <Button
@@ -822,9 +824,12 @@ function Step3({
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-foreground">Campos do ingresso</h3>
+        <span className="text-xs text-muted-foreground">
+          {configs.filter((c) => c.enabled).length} de {configs.length} ativos
+        </span>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-2 max-h-[46vh] sm:max-h-[50vh] overflow-y-auto pr-1">
         {configs.map((config, index) => {
           const def = defs.find((d) => d.id === config.fieldId);
           return (
