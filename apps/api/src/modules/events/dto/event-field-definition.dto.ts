@@ -15,6 +15,7 @@ export const EVENT_FIELD_TYPES = [
   'TEXTAREA',
   'SELECT',
   'CHECKBOX',
+  'TERMS',
 ] as const;
 
 export class CreateEventFieldDefinitionDto {
@@ -31,6 +32,11 @@ export class CreateEventFieldDefinitionDto {
   @IsString({ each: true })
   @MaxLength(120, { each: true })
   options?: string[];
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  termText?: string;
 }
 
 export class UpdateEventFieldDefinitionDto {
@@ -49,4 +55,9 @@ export class UpdateEventFieldDefinitionDto {
   @IsString({ each: true })
   @MaxLength(120, { each: true })
   options?: string[];
+
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  termText?: string;
 }

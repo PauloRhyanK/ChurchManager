@@ -201,3 +201,19 @@ test('collectFieldValues ignora campos do sistema e desactivados', () => {
   const result = collectFieldValues(requirements, [{ fieldId: 'f2', value: 'ignorado' }]);
   assert.deepEqual(result, []);
 });
+test("collectFieldValues valida aceite de termo de responsabilidade", () => {
+  const requirements = [
+    { fieldId: "term1", key: "custom_termo", label: "Termo de Imagem", type: "TERMS", enabled: true, required: true },
+  ];
+  assert.throws(
+    () => collectFieldValues(requirements, []),
+    (err: unknown) => err instanceof BadRequestException,
+  );
+  assert.throws(
+    () => collectFieldValues(requirements, [{ fieldId: "term1", value: "false" }]),
+    (err: unknown) => err instanceof BadRequestException,
+  );
+  const ok = collectFieldValues(requirements, [{ fieldId: "term1", value: "true" }]);
+  assert.deepEqual(ok, [{ fieldId: "term1", value: "true" }]);
+});
+

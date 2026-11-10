@@ -7,6 +7,7 @@ export type TicketFieldRequirement = {
   fieldId: string;
   key: string;
   label: string;
+  type?: string;
   enabled: boolean;
   required: boolean;
 };
@@ -35,8 +36,13 @@ export function collectFieldValues(
   for (const req of enabledById.values()) {
     if (!req.required) continue;
     if (SYSTEM_FIELD_KEYS.has(req.key)) continue;
-    if (!providedMap.has(req.fieldId)) {
-      throw new BadRequestException(`Campo obrigatório: ${req.label}`);
+    const val = providedMap.get(req.fieldId);
+    if (!val || (req.type === "TERMS" && (val === "false" || val === "0"))) {
+      throw new BadRequestException(
+        req.type === "TERMS"
+          ? `É necessário aceitar os termos: ${req.label}`
+          : `Campo obrigatório: ${req.label}`,
+      );
     }
   }
 

@@ -114,8 +114,9 @@ export interface PublicTicketFieldDto {
   fieldId: string;
   key: string;
   label: string;
-  type: 'TEXT' | 'EMAIL' | 'PHONE' | 'CPF' | 'TEXTAREA' | 'SELECT' | 'CHECKBOX';
+  type: 'TEXT' | 'EMAIL' | 'PHONE' | 'CPF' | 'TEXTAREA' | 'SELECT' | 'CHECKBOX' | 'TERMS';
   options: string[] | null;
+  termText: string | null;
   required: boolean;
 }
 
@@ -758,6 +759,54 @@ await fetch(`${API}/public/tenants/${slug}/events/${eventId}/checkout`, {
   body: JSON.stringify({ payer, lines, billingType: "PIX", idempotencyKey }),
 });
 ```
+
+
+### Como renderizar o campo de Termo de Responsabilidade (`TERMS`)
+
+Quando `field.type === "TERMS"`, o front do site (Next.js / React) deve renderizar o texto completo do termo em uma caixa com scroll e um checkbox de consentimento explícito:
+
+```tsx
+export function TermsField({
+  field,
+  checked,
+  onChange,
+}: {
+  field: PublicTicketFieldDto;
+  checked: boolean;
+  onChange: (agreed: boolean) => void;
+}) {
+  return (
+    <div className="space-y-2 rounded-lg border bg-gray-50/50 p-4">
+      <div className="font-semibold text-sm text-gray-900">{field.label}</div>
+      <div className="max-h-36 overflow-y-auto rounded-md border border-gray-200 bg-white p-3 text-xs leading-relaxed text-gray-700 whitespace-pre-wrap">
+        {field.termText}
+      </div>
+      <label className="flex items-center gap-2 cursor-pointer pt-1 text-sm font-medium text-gray-800">
+        <input
+          type="checkbox"
+          required={field.required}
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+        />
+        <span>
+          Li e concordo com os termos acima {field.required && <span className="text-red-500">*</span>}
+        </span>
+      </label>
+    </div>
+  );
+}
+```
+
+No envio da inscrição (`POST /events/:eventId/registrations`) ou checkout (`POST /events/:eventId/checkout`), inclua o campo em `fieldValues`:
+```json
+{
+  "fieldValues": [
+    { "fieldId": "uuid-do-termo", "value": "true" }
+  ]
+}
+```
+Se o termo for obrigatório (`required: true`), o backend rejeita a requisição se `value` não for enviado ou for `"false"`.
 
 ### Diferenças em relação ao contrato-alvo
 

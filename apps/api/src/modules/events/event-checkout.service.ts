@@ -133,6 +133,7 @@ export class EventCheckoutService {
         fieldId: fc.fieldId,
         key: fc.field.key,
         label: fc.field.label,
+        type: fc.field.type,
         enabled: fc.enabled,
         required: fc.required,
       })),

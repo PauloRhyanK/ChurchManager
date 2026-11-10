@@ -32,6 +32,7 @@ export class EventTicketTypesService {
         label: fc.field.label,
         type: fc.field.type,
         options: (fc.field.options as string[] | null) ?? null,
+        termText: fc.field.termText ?? null,
         isSystem: fc.field.isSystem,
         enabled: fc.enabled,
         required: fc.required,
@@ -97,6 +98,7 @@ export class EventTicketTypesService {
           label: f.label,
           type: f.type,
           options: f.options,
+          termText: f.termText,
           required: f.required,
         })),
     };

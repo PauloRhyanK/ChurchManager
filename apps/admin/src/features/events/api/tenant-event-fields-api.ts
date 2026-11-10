@@ -7,11 +7,17 @@ export type EventFieldType =
   | "CPF"
   | "TEXTAREA"
   | "SELECT"
-  | "CHECKBOX";
+  | "CHECKBOX"
+  | "TERMS";
 
 /** Tipos cujas opções (valores de escolha) são configuráveis pelo utilizador. */
 export function fieldTypeHasOptions(type: EventFieldType): boolean {
   return type === "SELECT" || type === "CHECKBOX";
+}
+
+/** Indica se o campo é um termo de responsabilidade com texto longo associado. */
+export function isTermsField(type: EventFieldType): boolean {
+  return type === "TERMS";
 }
 
 export interface EventFieldDefinitionDto {
@@ -20,6 +26,7 @@ export interface EventFieldDefinitionDto {
   label: string;
   type: EventFieldType;
   options: string[] | null;
+  termText?: string | null;
   isSystem: boolean;
   createdAt: string;
 }
@@ -28,6 +35,7 @@ export type CreateFieldBody = {
   label: string;
   type: EventFieldType;
   options?: string[];
+  termText?: string;
 };
 
 export async function fetchEventFieldDefinitions() {

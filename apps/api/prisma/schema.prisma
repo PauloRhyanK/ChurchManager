@@ -56,6 +56,7 @@ enum EventFieldType {
   TEXTAREA
   SELECT
   CHECKBOX
+  TERMS
 }
 
 model Tenant {
@@ -265,6 +266,8 @@ model EventFieldDefinition {
   type      EventFieldType
   /// Opções para campos SELECT: string[].
   options   Json?
+  /// Texto completo para campos TERMS.
+  termText  String?        @map("term_text") @db.Text
   /// Campo padrão do sistema (não removível pelo utilizador).
   isSystem  Boolean        @default(false) @map("is_system")
   createdAt DateTime       @default(now()) @map("created_at")

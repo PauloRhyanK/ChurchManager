@@ -37,6 +37,7 @@ export class EventFieldDefinitionsService {
       label: row.label,
       type: row.type,
       options: (row.options as string[] | null) ?? null,
+      termText: row.termText ?? null,
       isSystem: row.isSystem,
       createdAt: row.createdAt,
     };
@@ -73,6 +74,9 @@ export class EventFieldDefinitionsService {
     if (baseKey === 'custom_') {
       throw new BadRequestException('Rótulo do campo inválido');
     }
+    if (dto.type === "TERMS" && !dto.termText?.trim()) {
+      throw new BadRequestException("O texto do termo é obrigatório para termos de responsabilidade");
+    }
     const key = await this.uniqueKey(tenantId, baseKey);
     const row = await this.prisma.eventFieldDefinition.create({
       data: {
@@ -81,6 +85,7 @@ export class EventFieldDefinitionsService {
         label: dto.label,
         type: dto.type,
         options: this.normalizeOptions(dto.type, dto.options),
+        termText: dto.type === "TERMS" ? dto.termText?.trim() ?? null : null,
         isSystem: false,
       },
     });
@@ -109,6 +114,9 @@ export class EventFieldDefinitionsService {
         ...(dto.type !== undefined ? { type: dto.type } : {}),
         ...(dto.options !== undefined
           ? { options: this.normalizeOptions(nextType, dto.options) }
+          : {}),
+        ...(dto.termText !== undefined
+          ? { termText: nextType === "TERMS" ? dto.termText?.trim() ?? null : null }
           : {}),
       },
     });

@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Plus, Info } from "lucide-react";
+import { FileText, Loader2, Plus, Info } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -82,6 +82,7 @@ const FIELD_TYPE_LABELS: Record<EventFieldType, string> = {
   TEXTAREA: "Texto longo",
   SELECT: "Seleção",
   CHECKBOX: "Caixa de seleção",
+  TERMS: "Termo de responsabilidade",
 };
 
 function toDatetimeLocal(iso: string | null): string {
@@ -748,6 +749,8 @@ function Step3({
   const [label, setLabel] = useState("");
   const [type, setType] = useState<EventFieldType>("TEXT");
   const [optionsText, setOptionsText] = useState("");
+  const [termText, setTermText] = useState("");
+  const [previewTermDef, setPreviewTermDef] = useState<EventFieldDefinitionDto | null>(null);
 
   const knownIds = useMemo(
     () => new Set(configs.map((c) => c.fieldId)),
@@ -783,7 +786,12 @@ function Step3({
       const options = fieldTypeHasOptions(type)
         ? optionsText.split(",").map((o) => o.trim()).filter(Boolean)
         : undefined;
-      return createEventFieldDefinition({ label: label.trim(), type, options });
+      return createEventFieldDefinition({
+        label: label.trim(),
+        type,
+        options,
+        termText: type === "TERMS" ? termText.trim() : undefined,
+      });
     },
     onSuccess: (created) => {
       form.setValue("fieldConfigs", [
@@ -803,6 +811,7 @@ function Step3({
       setLabel("");
       setType("TEXT");
       setOptionsText("");
+      setTermText("");
       setAdding(false);
       toast.success("Campo personalizado criado.");
     },
@@ -834,7 +843,21 @@ function Step3({
                   }
                 />
                 <div>
-                  <p className="text-sm font-medium">{config.label}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium">{config.label}</p>
+                    {config.type === "TERMS" && def?.termText && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 px-1.5 text-[11px] text-primary hover:text-primary gap-1"
+                        onClick={() => setPreviewTermDef(def)}
+                      >
+                        <FileText className="h-3 w-3" />
+                        Ver termo
+                      </Button>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {FIELD_TYPE_LABELS[config.type as EventFieldType] ??
                       config.type}
@@ -908,7 +931,7 @@ function Step3({
               </SelectTrigger>
               <SelectContent>
                 {(
-                  ["TEXT", "EMAIL", "PHONE", "CPF", "TEXTAREA", "SELECT", "CHECKBOX"] as EventFieldType[]
+                  ["TEXT", "EMAIL", "PHONE", "CPF", "TEXTAREA", "SELECT", "CHECKBOX", "TERMS"] as EventFieldType[]
                 ).map((t) => (
                   <SelectItem key={t} value={t}>
                     {FIELD_TYPE_LABELS[t]}
@@ -928,6 +951,22 @@ function Step3({
               />
             </div>
           )}
+          {type === "TERMS" && (
+            <div className="space-y-2 animate-in fade-in duration-200">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="nf-term-text" className="text-xs">Texto do termo</Label>
+                <span className="text-[10px] text-muted-foreground">{termText.length} caracteres</span>
+              </div>
+              <Textarea
+                id="nf-term-text"
+                value={termText}
+                onChange={(e) => setTermText(e.target.value)}
+                placeholder="Cole o texto do termo (ex.: Através dessa inscrição, autorizo...)"
+                rows={3}
+                className="text-xs font-sans"
+              />
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             <Button
               type="button"
@@ -943,6 +982,7 @@ function Step3({
               disabled={
                 !label.trim() ||
                 (fieldTypeHasOptions(type) && !optionsText.trim()) ||
+                (type === "TERMS" && !termText.trim()) ||
                 createFieldMutation.isPending
               }
               onClick={() => createFieldMutation.mutate()}
@@ -984,6 +1024,34 @@ function Step3({
           </TooltipProvider>
         </div>
       )}
+
+      {/* Modal de Pré-visualização do Termo */}
+      <Dialog open={Boolean(previewTermDef)} onOpenChange={(open) => !open && setPreviewTermDef(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <FileText className="h-5 w-5 text-primary" />
+              {previewTermDef?.label}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="max-h-60 overflow-y-auto rounded-lg border bg-muted/40 p-3 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
+              {previewTermDef?.termText || "Nenhum texto cadastrado para este termo."}
+            </div>
+            <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
+              <div className="h-4 w-4 rounded border border-primary/40 bg-background flex items-center justify-center text-primary text-[10px]">
+                ✓
+              </div>
+              <span>Exemplo da caixa com rolagem e aceite que o participante verá no ingresso.</span>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setPreviewTermDef(null)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
