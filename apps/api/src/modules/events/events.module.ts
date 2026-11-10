@@ -10,6 +10,7 @@ import { SchedulesService } from './schedules.service';
 import { EventTicketTypesService } from './event-ticket-types.service';
 import { EventCheckoutService } from './event-checkout.service';
 import { EventOrdersService } from './event-orders.service';
+import { EventCouponsService } from './event-coupons.service';
 import { EventReportsService } from './event-reports.service';
 import { EventTagsService } from './event-tags.service';
 import { EventFieldDefinitionsService } from './event-field-definitions.service';
@@ -19,6 +20,7 @@ import { TenantsMeEventsController } from './tenants-me-events.controller';
 import { TenantsMeRegistrationsController } from './tenants-me-registrations.controller';
 import { TenantsMeSchedulesController } from './tenants-me-schedules.controller';
 import { TenantsMeEventTicketTypesController } from './tenants-me-event-ticket-types.controller';
+import { TenantsMeEventCouponsController } from './tenants-me-event-coupons.controller';
 import { TenantsMeEventsDashboardController } from './tenants-me-events-dashboard.controller';
 import { TenantsMeEventTagsController } from './tenants-me-event-tags.controller';
 import { TenantsMeEventFieldsController } from './tenants-me-event-fields.controller';
@@ -38,6 +40,7 @@ import { PublicEventsController } from './public-events.controller';
     TenantsMeRegistrationsController,
     TenantsMeSchedulesController,
     TenantsMeEventTicketTypesController,
+    TenantsMeEventCouponsController,
     TenantsMeEventsDashboardController,
     TenantsMeEventTagsController,
     TenantsMeEventFieldsController,
@@ -51,6 +54,7 @@ import { PublicEventsController } from './public-events.controller';
     EventTicketTypesService,
     EventCheckoutService,
     EventOrdersService,
+    EventCouponsService,
     EventReportsService,
     EventTagsService,
     EventFieldDefinitionsService,
@@ -63,6 +67,7 @@ import { PublicEventsController } from './public-events.controller';
     SchedulesService,
     EventTicketTypesService,
     EventOrdersService,
+    EventCouponsService,
     EventTagsService,
     EventFieldDefinitionsService,
   ],

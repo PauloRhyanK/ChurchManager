@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsEmail,
@@ -78,6 +78,16 @@ export class CreateEventCheckoutDto {
   @ValidateNested({ each: true })
   @Type(() => EventFieldValueDto)
   fieldValues?: EventFieldValueDto[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  @Transform(({ value }) =>
+    value !== undefined && value !== null && String(value).trim() !== ''
+      ? String(value).trim().toUpperCase()
+      : undefined,
+  )
+  couponCode?: string;
 
   @IsOptional()
   @IsString()

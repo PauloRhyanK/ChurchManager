@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, Tenant } from '@prisma/client';
@@ -16,6 +17,8 @@ import { buildEventOrderExternalReference } from './event-order-external-referen
 import { EventTicketTypesService } from './event-ticket-types.service';
 import { validateCheckoutLine } from './event-stock.util';
 import { collectFieldValues } from './event-field-validation.util';
+import { generatePublicCode } from './event-orders.service';
+import { TicketDeliveryService } from './ticket-delivery.service';
 
 function formatDueDate(daysFromNow = 0): string {
   const d = new Date();
@@ -25,12 +28,15 @@ function formatDueDate(daysFromNow = 0): string {
 
 @Injectable()
 export class EventCheckoutService {
+  private readonly logger = new Logger(EventCheckoutService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly asaas: AsaasClient,
     private readonly tenantCredentials: TenantCredentialsService,
     private readonly payerProfiles: PayerProfilesService,
     private readonly ticketTypes: EventTicketTypesService,
+    private readonly delivery: TicketDeliveryService,
   ) {}
 
   async checkout(tenant: Tenant, eventId: string, dto: CreateEventCheckoutDto) {
@@ -48,6 +54,21 @@ export class EventCheckoutService {
           throw new ConflictException(
             'idempotencyKey já utilizada noutro pedido; gere uma chave nova',
           );
+        }
+        if (existing.status === 'CONFIRMED' && existing.totalCents === 0) {
+          return {
+            orderId: existing.id,
+            eventId,
+            transactionId: null,
+            asaasPaymentId: null,
+            status: 'CONFIRMED',
+            billingType: null,
+            value: 0,
+            dueDate: null,
+            invoiceUrl: null,
+            bankSlipUrl: null,
+            pix: null,
+          };
         }
         const tx = existing.transactions[0];
         if (tx) {
@@ -86,43 +107,141 @@ export class EventCheckoutService {
     }
     const typeMap = new Map(types.map((t) => [t.id, t]));
 
-    let totalCents = 0;
+    let subtotalCents = 0;
     for (const line of dto.lines) {
       const type = typeMap.get(line.ticketTypeId)!;
       const err = validateCheckoutLine(type, line.quantity);
       if (err) {
         throw new BadRequestException(err);
       }
-      totalCents += (type.priceCents + type.feeCents) * line.quantity;
+      subtotalCents += (type.priceCents + type.feeCents) * line.quantity;
     }
-    if (totalCents <= 0) {
+    if (subtotalCents <= 0) {
       throw new BadRequestException('Valor total inválido');
     }
 
-    // Tipo de pagamento permitido por todos os ingressos selecionados.
-    for (const type of types) {
-      if (
-        type.allowedBillingTypes.length > 0 &&
-        !type.allowedBillingTypes.includes(dto.billingType)
-      ) {
+    // Validação e cálculo do cupom (se informado)
+    let couponApplied: {
+      id: string;
+      code: string;
+      discountCents: number;
+    } | null = null;
+
+    if (dto.couponCode) {
+      const code = dto.couponCode.trim().toUpperCase();
+      const coupon = await this.prisma.eventCoupon.findUnique({
+        where: {
+          tenantId_eventId_code: { tenantId: tenant.id, eventId, code },
+        },
+        include: {
+          ticketTypes: { select: { ticketTypeId: true } },
+        },
+      });
+
+      if (!coupon || !coupon.active) {
+        throw new BadRequestException('Cupom inválido ou inativo');
+      }
+
+      const now = new Date();
+      if (coupon.validFrom && now < coupon.validFrom) {
+        throw new BadRequestException('Este cupom ainda não é válido');
+      }
+      if (coupon.validUntil && now > coupon.validUntil) {
+        throw new BadRequestException('Este cupom expirou');
+      }
+      if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
         throw new BadRequestException(
-          `Pagamento "${dto.billingType}" não permitido para "${type.name}"`,
+          'Este cupom atingiu o limite de utilizações',
         );
       }
+
+      const usedCountForCpf = await this.prisma.eventOrder.count({
+        where: {
+          tenantId: tenant.id,
+          eventId,
+          couponId: coupon.id,
+          payer: { cpf },
+          status: { notIn: ['CANCELLED', 'FAILED', 'EXPIRED'] },
+        },
+      });
+      if (usedCountForCpf >= coupon.maxUsesPerCpf) {
+        throw new BadRequestException(
+          'Limite de utilizações deste cupom atingido para este CPF',
+        );
+      }
+
+      const restrictedTicketIds = coupon.ticketTypes.map(
+        (t) => t.ticketTypeId,
+      );
+      const hasRestrictions = restrictedTicketIds.length > 0;
+
+      let eligibleAmount = 0;
+      for (const line of dto.lines) {
+        if (
+          hasRestrictions &&
+          !restrictedTicketIds.includes(line.ticketTypeId)
+        ) {
+          continue;
+        }
+        const type = typeMap.get(line.ticketTypeId);
+        if (type) {
+          eligibleAmount += (type.priceCents + type.feeCents) * line.quantity;
+        }
+      }
+
+      if (eligibleAmount <= 0) {
+        throw new BadRequestException(
+          'Este cupom não é válido para os ingressos selecionados',
+        );
+      }
+
+      let discountCents = 0;
+      if (coupon.discountType === 'PERCENTAGE') {
+        discountCents = Math.round(
+          (eligibleAmount * coupon.discountValue) / 100,
+        );
+      } else {
+        discountCents = Math.min(coupon.discountValue, eligibleAmount);
+      }
+
+      couponApplied = {
+        id: coupon.id,
+        code: coupon.code,
+        discountCents,
+      };
     }
 
-    // Parcelamento — só cartão e dentro do limite de cada ingresso.
+    const discountCents = couponApplied?.discountCents ?? 0;
+    const totalCents = Math.max(0, subtotalCents - discountCents);
+
+    // Se o valor for maior que zero, valida regras de pagamento e parcelamento
     const installmentCount =
       dto.billingType === 'CREDIT_CARD' && dto.installmentCount
         ? dto.installmentCount
         : 1;
-    if (installmentCount > 1) {
+
+    if (totalCents > 0) {
+      // Tipo de pagamento permitido por todos os ingressos selecionados.
       for (const type of types) {
-        const max = type.maxInstallments ?? 1;
-        if (installmentCount > max) {
+        if (
+          type.allowedBillingTypes.length > 0 &&
+          !type.allowedBillingTypes.includes(dto.billingType)
+        ) {
           throw new BadRequestException(
-            `"${type.name}" permite no máximo ${max}x`,
+            `Pagamento "${dto.billingType}" não permitido para "${type.name}"`,
           );
+        }
+      }
+
+      // Parcelamento — só cartão e dentro do limite de cada ingresso.
+      if (installmentCount > 1) {
+        for (const type of types) {
+          const max = type.maxInstallments ?? 1;
+          if (installmentCount > max) {
+            throw new BadRequestException(
+              `"${type.name}" permite no máximo ${max}x`,
+            );
+          }
         }
       }
     }
@@ -165,14 +284,25 @@ export class EventCheckoutService {
         }
       }
 
+      if (couponApplied) {
+        await tx.eventCoupon.update({
+          where: { id: couponApplied.id },
+          data: { usedCount: { increment: 1 } },
+        });
+      }
+
       const order = await tx.eventOrder
         .create({
           data: {
             tenantId: tenant.id,
             eventId,
             payerProfileId: profile.id,
-            status: 'PENDING',
+            status: totalCents === 0 ? 'CONFIRMED' : 'PENDING',
+            confirmedAt: totalCents === 0 ? new Date() : null,
             totalCents,
+            discountCents,
+            couponId: couponApplied?.id ?? null,
+            couponCode: couponApplied?.code ?? null,
             currency: event.currency,
             idempotencyKey: dto.idempotencyKey?.trim() || null,
             lines: {
@@ -217,6 +347,52 @@ export class EventCheckoutService {
 
       return order;
     });
+
+    // Se o cupom deu 100% de desconto (total 0), emite bilhetes e confirma sem Asaas
+    if (totalCents === 0) {
+      const payerName = profile.name || 'Participante';
+      await this.prisma.$transaction(async (tx) => {
+        const ticketsData: Prisma.EventTicketCreateManyInput[] = [];
+        for (const line of dto.lines) {
+          for (let i = 0; i < line.quantity; i++) {
+            const named = line.holderNames?.[i]?.trim();
+            ticketsData.push({
+              tenantId: tenant.id,
+              orderId: orderResult.id,
+              ticketTypeId: line.ticketTypeId,
+              publicCode: generatePublicCode(),
+              holderName: named && named.length > 0 ? named : payerName,
+            });
+          }
+        }
+        if (ticketsData.length > 0) {
+          await tx.eventTicket.createMany({ data: ticketsData });
+        }
+      });
+
+      try {
+        await this.delivery.sendTicketsForOrder(orderResult.id);
+      } catch (err) {
+        this.logger.error(
+          `Bilhetes do pedido gratuito ${orderResult.id} emitidos, mas o e-mail falhou`,
+          err,
+        );
+      }
+
+      return {
+        orderId: orderResult.id,
+        eventId,
+        transactionId: null,
+        asaasPaymentId: null,
+        status: 'CONFIRMED',
+        billingType: null,
+        value: 0,
+        dueDate: null,
+        invoiceUrl: null,
+        bankSlipUrl: null,
+        pix: null,
+      };
+    }
 
     let asaasCustomerId = profile.asaasCustomerId;
     if (!asaasCustomerId) {

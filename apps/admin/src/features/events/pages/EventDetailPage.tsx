@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EventPaymentLinkDialog } from "@/features/events/components/EventPaymentLinkDialog";
+import { EventCouponsTab } from "@/features/events/components/EventCouponsTab";
 import { EventSiteDetailsTab } from "@/features/events/components/EventSiteDetailsTab";
 import { TicketTypeWizardDialog } from "@/features/events/components/TicketTypeWizardDialog";
 import { fetchEventRegistrations } from "@/features/events/api/tenant-event-registrations-api";
@@ -71,7 +72,12 @@ import { BarChart3, Ticket, Users } from "lucide-react";
 export function EventDetailPage() {
   const { id = "" } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
-  const initialTab = searchParams.get("tab") === "site" ? "site" : "ingressos";
+  const initialTab =
+    searchParams.get("tab") === "site"
+      ? "site"
+      : searchParams.get("tab") === "cupons"
+        ? "cupons"
+        : "ingressos";
   const queryClient = useQueryClient();
   const { can } = usePermissions();
   const canEdit = can("EVENTS", "EDIT");
@@ -297,6 +303,7 @@ export function EventDetailPage() {
       <Tabs defaultValue={initialTab}>
         <TabsList>
           <TabsTrigger value="ingressos">Tipos de ingresso</TabsTrigger>
+          <TabsTrigger value="cupons">Cupons</TabsTrigger>
           <TabsTrigger value="site">Detalhes do site</TabsTrigger>
           {canViewRegistrations && (
             <TabsTrigger value="inscricoes">
@@ -416,6 +423,14 @@ export function EventDetailPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="cupons" className="mt-4 space-y-4">
+          <EventCouponsTab
+            eventId={id}
+            ticketTypes={ticketTypes}
+            canEdit={canEditTickets}
+          />
         </TabsContent>
 
         <TabsContent value="site" className="mt-4">

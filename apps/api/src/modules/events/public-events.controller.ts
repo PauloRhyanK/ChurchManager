@@ -17,12 +17,14 @@ import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { TenantsService } from '../tenants/tenants.service';
 import { CreateEventRegistrationDto } from './dto/create-event-registration.dto';
 import { CreateEventCheckoutDto } from './dto/create-event-checkout.dto';
+import { ValidateCouponDto } from './dto/validate-coupon.dto';
 import { EventRegistrationsService } from './event-registrations.service';
 import { EventsService } from './events.service';
 import { SchedulesService } from './schedules.service';
 import { EventTicketTypesService } from './event-ticket-types.service';
 import { EventCheckoutService } from './event-checkout.service';
 import { EventOrdersService } from './event-orders.service';
+import { EventCouponsService } from './event-coupons.service';
 import { renderTicketQrPng } from './ticket-qr';
 import { ParticipantSecretGuard } from './participant-secret.guard';
 
@@ -45,6 +47,7 @@ export class PublicEventsController {
     private readonly ticketTypes: EventTicketTypesService,
     private readonly checkout: EventCheckoutService,
     private readonly orders: EventOrdersService,
+    private readonly coupons: EventCouponsService,
   ) {}
 
   /**
@@ -106,6 +109,18 @@ export class PublicEventsController {
   ) {
     const tenant = await this.tenants.findBySlugOrThrow(slug);
     return this.ticketTypes.getPublicById(tenant.id, eventId, ticketId);
+  }
+
+  @Post(':slug/events/:eventId/coupons/validate')
+  @HttpCode(HttpStatus.OK)
+  @SkipThrottle({ links: false })
+  async validateCoupon(
+    @Param('slug') slug: string,
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+    @Body() dto: ValidateCouponDto,
+  ) {
+    const tenant = await this.tenants.findBySlugOrThrow(slug);
+    return this.coupons.validateCoupon(tenant.id, eventId, dto);
   }
 
   @Post(':slug/events/:eventId/checkout')
