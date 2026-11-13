@@ -15,6 +15,10 @@ Os caminhos abaixo são relativos a ela.
 | [`pc/`](pc/) | A ponte de verdade. O **mesmo projeto em todo PC**; o que muda é o papel da máquina. | PCs da igreja |
 | [`docs/`](docs/) | Como implantar e como as peças conversam. | — |
 
+Quem chega agora ao projeto começa por
+[`docs/PARA-A-SESSAO-DO-PC.md`](docs/PARA-A-SESSAO-DO-PC.md): o que mudou em 12/11/2026,
+o que ainda não foi testado e o que falta fazer nos PCs da igreja.
+
 A versão web serve os arquivos de `pc/` (as telas são as mesmas) e entrega a pasta
 `pc/` em `.zip` no endereço `/baixar` — é assim que um PC novo recebe o projeto.
 

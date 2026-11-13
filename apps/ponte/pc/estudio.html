@@ -106,6 +106,18 @@ h2{font-size:17px;font-weight:700}
 .cor{width:44px;height:44px;border-radius:12px;border:1px solid var(--borda);padding:0}
 .cor.nenhuma{border-style:dashed;border-color:#5b6b7e}
 .cor[aria-pressed=true]{border:3px solid #fff;outline:2px solid var(--ok);outline-offset:2px}
+/* O painel de adicionar cor */
+.minhas{display:flex;flex-wrap:wrap;gap:8px}
+.criador{background:var(--fundo);border:1px solid var(--borda);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:6px}
+.criador .topo-cor{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-bottom:6px}
+.criador .previa{width:72px;height:72px;border-radius:16px;border:1px solid var(--borda);flex:none}
+.criador .nome-cor{flex:1 1 180px;display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--apagado)}
+.criador input[type=text]{height:48px;border-radius:12px;border:1px solid var(--borda);background:var(--caixa);color:var(--texto);padding:0 12px;font:inherit;font-size:16px;min-width:0}
+.criador .arco{height:10px;border-radius:5px;margin:0 88px 0 96px;
+  background:linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)}
+.criador .acoes{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.criador .acoes .bt{flex:1 1 140px}
+@media (max-width:640px){.criador .arco{margin:0 76px 0 84px}}
 .marca{display:inline-flex;align-items:center;gap:10px;min-height:44px;font-size:14px;color:var(--suave);cursor:pointer}
 .regua{display:flex;align-items:center;gap:12px;font-size:14px;color:var(--suave);min-height:44px}
 .regua .nome{width:84px;flex:none}
@@ -222,6 +234,35 @@ dialog .bt{min-height:48px;padding:0 20px;font-size:15px}
         <div class="cores" id="cores" role="group" aria-labelledby="rotCor"></div>
         <label class="marca"><input type="checkbox" id="segunda">Alternar com uma segunda cor (uma sim, uma não)</label>
         <div class="cores" id="cores2" role="group" aria-label="Segunda cor" hidden></div>
+        <div class="minhas">
+          <button type="button" class="bt" id="btNovaCor">Adicionar uma cor</button>
+          <button type="button" class="bt" id="btMudarCor" hidden>Mudar esta cor</button>
+          <button type="button" class="bt perigo" id="btTirarCor" hidden>Tirar esta cor</button>
+        </div>
+        <!-- O criador de cor. Enquanto esta aberto, as luzes escolhidas mostram
+             a cor que esta sendo montada (na previa da tela, e na igreja se a
+             chave la de cima estiver ligada). -->
+        <div class="criador" id="criador" hidden>
+          <div class="topo-cor">
+            <span class="previa" id="cPrevia" role="img" aria-label="Como a cor fica"></span>
+            <label class="nome-cor">Nome da cor
+              <input type="text" id="cNome" maxlength="24" autocomplete="off"></label>
+          </div>
+          <div class="arco" aria-hidden="true"></div>
+          <label class="regua"><span class="nome">Matiz</span>
+            <input type="range" min="0" max="359" value="200" id="cMatiz"><output id="cMatizV"></output></label>
+          <label class="regua"><span class="nome">Branco</span>
+            <input type="range" min="0" max="100" value="0" id="cBranco"><output id="cBrancoV"></output></label>
+          <label class="regua"><span class="nome">Temperatura</span>
+            <input type="range" min="-100" max="100" value="0" id="cTemp"><output id="cTempV"></output></label>
+          <label class="regua"><span class="nome">Brilho</span>
+            <input type="range" min="10" max="100" value="100" id="cBrilho"><output id="cBrilhoV"></output></label>
+          <p class="texto" id="cDica"></p>
+          <div class="acoes">
+            <button type="button" class="bt" id="cCancelar">Cancelar</button>
+            <button type="button" class="bt verde" id="cSalvar">Guardar a cor</button>
+          </div>
+        </div>
       </div>
 
       <label class="regua"><span class="nome">Força</span>
@@ -687,6 +728,155 @@ function aplicarCor(){
     a.cores = [estado.cor, estado.segunda.cor];
 }
 
+// ---------------------------------------------------------------------------
+// AS CORES DA CASA: cores que a equipe cria, alem das nove de fabrica.
+//
+// Uma cor e montada com quatro reguas e vira os mesmos numeros que as de
+// fabrica (rgbw e p9), entao TUDO que ja funciona com cor funciona com ela:
+// segunda cor, trocar cores, ideias guardadas, salvar como cena.
+//
+//   matiz        a cor em si, na volta do arco-iris
+//   branco       quanto de luz branca vai misturado (0 = cor viva, 100 = branco)
+//   temperatura  puxa esse branco para o quente ou para o frio. Na cortina o
+//                quente usa a lampada ambar, que existe la; nas outras luzes
+//                e feito com um pouco de vermelho. O frio e um pouco de azul.
+//   brilho       o teto da cor. A regua "Forca" continua valendo por cima.
+//
+// Ficam guardadas NESTE navegador (como as ideias). Uma cena salva com uma cor
+// daqui funciona em qualquer PC, porque a cena guarda os numeros, nao o nome.
+// ---------------------------------------------------------------------------
+const CHAVE_CORES = 'ponte.estudio.cores.v1';
+const DE_FABRICA = ORDEM_CORES.slice();
+let MINHAS = [];                  // [{id, nome, def:{matiz, branco, temp, brilho}}]
+let criando = null;               // {antes: estado em JSON, id: cor em edicao ou null}
+PALETA.__previa = Object.assign({}, PALETA.branco, {nome:'Cor nova'});
+
+function arcoIris(h){
+  const c = 255, x = Math.round(255 * (1 - Math.abs((h / 60) % 2 - 1)));
+  return [[c,x,0],[x,c,0],[0,c,x],[0,x,c],[x,0,c],[c,0,x]][Math.floor(h / 60) % 6];
+}
+function normalizar(def){
+  const n = (v, a, b, padrao) => Number.isFinite(+v) ? limitar(Math.round(+v), a, b) : padrao;
+  return {matiz:n(def && def.matiz, 0, 359, 200), branco:n(def && def.branco, 0, 100, 0),
+          temp:n(def && def.temp, -100, 100, 0), brilho:n(def && def.brilho, 10, 100, 100)};
+}
+function fazerCor(bruto, nome){
+  const def = normalizar(bruto);
+  const [r, g, b] = arcoIris(def.matiz);
+  const viva = 1 - def.branco / 100, w = 255 * def.branco / 100, v = def.brilho / 100;
+  const quente = Math.max(0, -def.temp) / 100, fria = Math.max(0, def.temp) / 100;
+  const num = x => limitar(Math.round(x * v), 0, 255);
+  const rgbw = [num(r * viva + w * .35 * quente), num(g * viva + w * .10 * quente + w * .06 * fria),
+                num(b * viva + w * .30 * fria), num(w)];
+  const p9 = [num(r * viva), num(g * viva + w * .06 * fria), num(b * viva + w * .30 * fria),
+              num(w * (1 - .6 * quente)), num(w * quente)];
+  // Na tela: o branco muda de tom com a temperatura, e o brilho escurece.
+  const brancoNaTela = quente ? misturar([255,244,229], [255,190,110], quente) : misturar([255,244,229], [205,225,255], fria);
+  const naTela = [r, g, b].map((c, i) => Math.round((c * viva + brancoNaTela[i] * (1 - viva)) * (.3 + .7 * v)));
+  return {nome:nome, css:'#' + naTela.map(c => c.toString(16).padStart(2, '0')).join(''), rgbw:rgbw, p9:p9};
+}
+function carregarMinhas(){
+  try{
+    const v = JSON.parse(localStorage.getItem(CHAVE_CORES) || '[]');
+    MINHAS = (Array.isArray(v) ? v : []).filter(c => c && /^minha_[a-z0-9]{1,16}$/.test(c.id) && typeof c.nome === 'string' && c.nome.trim())
+      .slice(0, 24).map(c => ({id:c.id, nome:c.nome.trim().slice(0, 24), def:normalizar(c.def)}));
+  }catch(e){ MINHAS = []; }
+  for (const c of MINHAS) PALETA[c.id] = fazerCor(c.def, c.nome);
+}
+function guardarMinhas(){
+  try{ localStorage.setItem(CHAVE_CORES, JSON.stringify(MINHAS)); return true; }
+  catch(e){ recado('Não consegui guardar a cor neste navegador. Ela vale até fechar esta página.', 'aviso'); return false; }
+}
+function remontarCores(){
+  ORDEM_CORES.length = 0;
+  ORDEM_CORES.push(...DE_FABRICA, ...MINHAS.map(c => c.id));
+  $('cores').textContent = ''; $('cores2').textContent = '';
+  montarCores();
+}
+// A cor que esta marcada na fileira de cima, se for uma das criadas aqui.
+function minhaMarcada(){
+  const b = [...$('cores').children].find(x => x.getAttribute('aria-pressed') === 'true');
+  return b ? MINHAS.find(c => c.id === b.dataset.cor) || null : null;
+}
+function botoesDasMinhas(){
+  const aberta = !!criando, marcada = aberta ? null : minhaMarcada();
+  $('btNovaCor').hidden = aberta;
+  $('btMudarCor').hidden = !marcada; $('btTirarCor').hidden = !marcada;
+  $('btNovaCor').disabled = MINHAS.length >= 24;
+  $('btNovaCor').textContent = MINHAS.length >= 24 ? 'Limite de 24 cores' : 'Adicionar uma cor';
+}
+
+function lerReguas(){
+  return normalizar({matiz:$('cMatiz').value, branco:$('cBranco').value, temp:$('cTemp').value, brilho:$('cBrilho').value});
+}
+function mostrarCriador(){
+  const def = lerReguas();
+  const cor = fazerCor(def, $('cNome').value.trim() || 'Cor nova');
+  PALETA.__previa = cor;
+  $('cPrevia').style.background = cor.css;
+  $('cMatizV').textContent = def.matiz + '°';
+  $('cBrancoV').textContent = def.branco + '%';
+  $('cTempV').textContent = def.temp < -8 ? 'quente' : def.temp > 8 ? 'fria' : 'neutra';
+  $('cBrilhoV').textContent = def.brilho + '%';
+  $('cDica').textContent = def.branco === 0 && def.temp !== 0
+    ? 'A temperatura muda o branco misturado. Com a régua Branco no zero ela não aparece.'
+    : (estado.sel.length ? 'As luzes escolhidas estão mostrando esta cor.' : 'Escolha luzes na coluna 1 para ver a cor nelas.');
+  if (estado.sel.length){ estado.cor = '__previa'; aplicarCor(); }
+  desenhar(); mandar();
+}
+function abrirCriador(cor){
+  if (criando) return;
+  criando = {antes:JSON.stringify(estado), id:cor ? cor.id : null};
+  const def = cor ? cor.def : {matiz:200, branco:0, temp:0, brilho:100};
+  $('cMatiz').value = def.matiz; $('cBranco').value = def.branco; $('cTemp').value = def.temp; $('cBrilho').value = def.brilho;
+  $('cNome').value = cor ? cor.nome : '';
+  $('cSalvar').textContent = cor ? 'Guardar a mudança' : 'Guardar a cor';
+  $('criador').hidden = false;
+  mostrarCriador();
+  $('cNome').focus();
+}
+function fecharCriador(){
+  $('criador').hidden = true;
+  const antes = criando.antes; criando = null;
+  estado = JSON.parse(antes);
+}
+function nomeLivre(base){
+  const usados = new Set(Object.keys(PALETA).filter(k => k !== '__previa' && !(criando && k === criando.id)).map(k => PALETA[k].nome.toLowerCase()));
+  let nome = base, n = 2;
+  while (usados.has(nome.toLowerCase())) nome = base + ' ' + n++;
+  return nome;
+}
+function salvarCor(){
+  const def = lerReguas(), editando = criando.id;
+  const nome = nomeLivre(($('cNome').value.trim() || 'Minha cor').slice(0, 24));
+  const id = editando || 'minha_' + Date.now().toString(36);
+  fecharCriador();
+  PALETA[id] = fazerCor(def, nome);
+  if (editando) Object.assign(MINHAS.find(c => c.id === id), {nome:nome, def:def});
+  else MINHAS.push({id:id, nome:nome, def:def});
+  guardarMinhas(); remontarCores();
+  if (estado.sel.length){ marcar(); estado.cor = id; aplicarCor(); }
+  desenhar(); mandar();
+  recado('Cor "' + nome + '" guardada.', 'nota');
+}
+async function tirarCor(){
+  const cor = minhaMarcada();
+  if (!cor) return;
+  if (!(await perguntar({titulo:'Tirar a cor "' + cor.nome + '"?',
+        texto:'Ela sai da fileira de cores. As cenas já salvas com ela continuam iguais.', sim:'Tirar', perigo:true}))) return;
+  MINHAS = MINHAS.filter(c => c.id !== cor.id);
+  // A cor continua existindo ate fechar a pagina (so some da fileira): o
+  // Desfazer e as ideias guardadas podem estar apontando para ela.
+  guardarMinhas(); remontarCores(); desenhar();
+}
+$('btNovaCor').onclick = () => abrirCriador(null);
+$('btMudarCor').onclick = () => { const c = minhaMarcada(); if (c) abrirCriador(c); };
+$('btTirarCor').onclick = tirarCor;
+$('cCancelar').onclick = () => { fecharCriador(); desenhar(); mandar(); };
+$('cSalvar').onclick = salvarCor;
+for (const id of ['cMatiz', 'cBranco', 'cTemp', 'cBrilho', 'cNome']) $(id).addEventListener('input', mostrarCriador);
+
+
 function montarPontos(){
   for (const p of PONTOS){
     const b = document.createElement('button');
@@ -790,6 +980,7 @@ function desenhar(){
   $('cores2').hidden = !estado.segunda.ligada;
   const cor2 = segundas.length ? umaSo(segundas) : estado.segunda.cor;
   for (const b of $('cores2').children) b.setAttribute('aria-pressed', b.dataset.cor === cor2 ? 'true' : 'false');
+  botoesDasMinhas();
   const semLuz = !estado.sel.length;
   for (const b of [...$('cores').children, ...$('cores2').children]) b.disabled = semLuz;
   const forca = semLuz ? 0 : estado.luz[estado.sel[0]].forca;
@@ -1005,6 +1196,8 @@ async function abrirIdeia(i){
 }
 
 async function guardarIdeia(){
+  // Com o criador de cor aberto o estado tem a cor de previa: sai dele antes.
+  if (criando){ fecharCriador(); desenhar(); mandar(); }
   const nome = $('nomeIdeia').value.trim();
   if (!nome){ recado('Dê um nome à ideia antes de guardar.', 'aviso'); $('nomeIdeia').focus(); return; }
   const ja = IDEIAS.findIndex(i => i.nome.toLowerCase() === nome.toLowerCase());
@@ -1069,6 +1262,7 @@ $('aoVivo').onchange = async () => {
 };
 
 $('btDesfazer').onclick = async () => {
+  if (criando){ fecharCriador(); desenhar(); mandar(); return; }
   if (!historia.length) return;
   const eraPisca = piscando; piscando = false;
   estado = estadoSeguro(JSON.parse(historia.pop()));
@@ -1183,6 +1377,7 @@ $('btCena').onclick = salvarComoCena;
 $('nomeIdeia').oninput = () => { if (ideiaAtiva !== null && $('nomeIdeia').value.trim() !== IDEIAS[ideiaAtiva].nome){ ideiaAtiva = null; desenharIdeias(); } };
 
 // ---------------------------------------------------------------------------
+carregarMinhas(); ORDEM_CORES.push(...MINHAS.map(c => c.id));
 montarPalco(); montarCores(); montarPontos(); montarCartoes();
 lerIdeias();
 desenhar();
