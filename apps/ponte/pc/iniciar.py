@@ -69,11 +69,18 @@ def _atualizar_ao_ligar():
         return
     endereco = maquina["endereco"] or atualizar.ENDERECO_PADRAO
     try:
-        la = atualizar.consultar(endereco, timeout=4.0)["versao"]
-        aqui = versao.calcular(RAIZ)
-        if la == aqui:
-            return
-        print("  [atualizacao] ha uma versao nova ({} -> {}). Trazendo...".format(aqui, la))
+        dela = atualizar.consultar(endereco, timeout=4.0)
+        la = dela["versao"]
+        if isinstance(dela.get("arquivos"), dict):
+            faltam = versao.diferentes(RAIZ, dela["arquivos"])
+            if not faltam:
+                return
+            print("  [atualizacao] ha uma versao nova ({} arquivos mudaram). Trazendo...".format(len(faltam)))
+        else:
+            aqui = versao.calcular(RAIZ)
+            if la == aqui:
+                return
+            print("  [atualizacao] ha uma versao nova ({} -> {}). Trazendo...".format(aqui, la))
         feito = atualizar.aplicar(endereco, RAIZ)
         print("  [atualizacao] pronto: agora na versao {}.".format(feito["para"]))
     except Exception as erro:

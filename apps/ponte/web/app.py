@@ -92,6 +92,9 @@ _espec = importlib.util.spec_from_file_location(
 _mod_versao = importlib.util.module_from_spec(_espec)
 _espec.loader.exec_module(_mod_versao)
 VERSAO = _mod_versao.calcular(PASTA_PC)
+# Nome e impressao de cada arquivo: e com isto que um PC confere, um a um, se
+# tem o que a web tem. O que mais houver na pasta dele nao entra na conta.
+ARQUIVOS = _mod_versao.impressoes(PASTA_PC)
 SUBIU_EM = time.time()
 
 _tranca = threading.Lock()
@@ -405,7 +408,7 @@ def painel_acao():
 
 @app.get("/api/versao")
 def versao():
-    return jsonify({"versao": VERSAO, "em": SUBIU_EM})
+    return jsonify({"versao": VERSAO, "em": SUBIU_EM, "arquivos": ARQUIVOS})
 
 
 @app.get("/api/atualizacao/pacote")

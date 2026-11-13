@@ -2087,7 +2087,8 @@ _remoto = {"aceita": True}
 _luz_escolhida = {"cena": None}
 _maquinas_vistas = {}
 _yt_painel = {"em": 0.0, "dados": None, "pedir": True}
-_atualizacao = {"aqui": None, "la": None, "em": None, "erro": None, "aplicando": False}
+_atualizacao = {"aqui": None, "la": None, "em": None, "erro": None, "aplicando": False,
+                "faltam": None}
 CAMINHO_REMOTO = os.path.join(RAIZ, "_remoto.json")
 
 # controle do painel -> (cue que liga, cue que desliga). Se a igreja nao tem
@@ -2223,8 +2224,15 @@ def _sistemas_do_painel():
 
 def _retrato_da_atualizacao():
     a = _atualizacao
+    # `faltam` e a lista dos arquivos que a web tem e este PC nao tem igual.
+    # Quando a web manda essa lista, e ELA que decide; a comparacao das duas
+    # impressoes da pasta inteira so vale contra uma web antiga.
+    if a["faltam"] is not None:
+        disponivel = bool(a["faltam"])
+    else:
+        disponivel = bool(a["aqui"] and a["la"] and a["aqui"] != a["la"])
     return {"aqui": a["aqui"], "la": a["la"], "erro": a["erro"], "aplicando": a["aplicando"],
-            "disponivel": bool(a["aqui"] and a["la"] and a["aqui"] != a["la"])}
+            "disponivel": disponivel, "faltam": (a["faltam"] or [])[:8]}
 
 
 def _maquinas_do_painel():
@@ -2513,7 +2521,16 @@ def _endereco_de_atualizacao():
 
 def _perguntar_a_versao():
     try:
-        _atualizacao["la"] = mod_atualizar.consultar(_endereco_de_atualizacao())["versao"]
+        dela = mod_atualizar.consultar(_endereco_de_atualizacao())
+        _atualizacao["la"] = dela["versao"]
+        if isinstance(dela.get("arquivos"), dict):
+            _atualizacao["faltam"] = mod_versao.diferentes(RAIZ, dela["arquivos"])
+            if not _atualizacao["faltam"]:
+                # Em dia: este PC passa a se apresentar com a versao da web,
+                # mesmo que a pasta dele tenha mais coisa que o projeto.
+                _atualizacao["aqui"] = dela["versao"]
+        else:
+            _atualizacao["faltam"] = None
         _atualizacao["erro"] = None
     except Exception as erro:
         _atualizacao["erro"] = type(erro).__name__

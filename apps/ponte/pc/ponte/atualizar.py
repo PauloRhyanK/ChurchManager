@@ -7,6 +7,12 @@ dependencias mudou, instala. Se algo falhar no caminho, desfaz.
 O QUE NUNCA TOCA: config.yaml, maquina.yaml, chegada.yaml, as cenas de luz,
 credenciais, a pasta obs/ e o .venv. Ver ponte/versao.py.
 
+E NUNCA APAGA O QUE NAO CONHECE. So sai da pasta um arquivo que UMA
+ATUALIZACAO ANTERIOR pos la e que o projeto novo deixou de ter (a lista do
+que foi posto fica em _projeto.lista). A primeira versao apagava tudo que
+nao estava no pacote; num PC de verdade isso alcanca arquivo que nao e do
+projeto.
+
 QUEM CHAMA: o iniciar.py, ao ligar o PC; e o painel, pelo botao "Atualizar
 agora". Nada aqui decide QUANDO atualizar: isso e de quem chama.
 """
@@ -26,6 +32,7 @@ from ponte import versao as mod_versao
 ENDERECO_PADRAO = "https://ponte.igrejaparaiso.com.br"
 PASTA_ANTERIOR = "_versao_anterior"
 MARCA = "_atualizou.json"
+LISTA = "_projeto.lista"     # o que a ultima atualizacao pos na pasta
 PREFIXO = "ponte-do-culto/"
 TAMANHO_MAXIMO = 40 * 1024 * 1024
 
@@ -34,8 +41,17 @@ class ErroAtualizacao(Exception):
     pass
 
 
+def _lista_anterior(raiz):
+    try:
+        with open(os.path.join(raiz, LISTA), encoding="utf-8") as arq:
+            return {linha.strip() for linha in arq if linha.strip()}
+    except OSError:
+        return set()
+
+
 def consultar(endereco, timeout=6.0):
-    """{"versao": "...", "em": ...} da versao web. Levanta se nao responder."""
+    """{"versao": "...", "arquivos": {nome: impressao}} da versao web. Levanta
+    se nao responder."""
     with urllib.request.urlopen(str(endereco).rstrip("/") + "/api/versao", timeout=timeout) as r:
         dados = json.loads(r.read().decode("utf-8"))
     if not isinstance(dados, dict) or not dados.get("versao"):
@@ -127,12 +143,14 @@ def aplicar(endereco, raiz, instalar_dependencias=True):
                     if r in mod_versao.DA_IGREJA and not os.path.exists(_caminho(raiz, r))}
 
     atuais = set(mod_versao.listar(raiz))
-    sobrando = sorted(atuais - set(do_projeto))
+    # Sai so o que uma atualizacao anterior pos e o projeto deixou de ter.
+    sobrando = sorted((_lista_anterior(raiz) & atuais) - set(do_projeto))
     novos = sorted(set(do_projeto) - atuais) + sorted(so_se_faltar)
 
+    # Guarda so o que vai ser trocado ou tirado: e o que basta para voltar.
     anterior = os.path.join(raiz, PASTA_ANTERIOR)
     shutil.rmtree(anterior, ignore_errors=True)
-    for relativo in sorted(atuais):
+    for relativo in sorted((atuais & set(do_projeto)) | set(sobrando)):
         destino = _caminho(anterior, relativo)
         os.makedirs(os.path.dirname(destino), exist_ok=True)
         shutil.copy2(_caminho(raiz, relativo), destino)
@@ -172,6 +190,11 @@ def aplicar(endereco, raiz, instalar_dependencias=True):
         restaurar(raiz)
         raise
 
+    try:
+        with open(os.path.join(raiz, LISTA), "w", encoding="utf-8") as arq:
+            arq.write("\n".join(sorted(do_projeto)) + "\n")
+    except OSError:
+        pass
     depois = mod_versao.calcular(raiz)
     if depois == antes:
         confirmar(raiz)

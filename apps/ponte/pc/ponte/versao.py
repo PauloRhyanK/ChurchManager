@@ -61,3 +61,42 @@ def calcular(raiz):
             resumo.update(arq.read().replace(b"\r\n", b"\n"))
         resumo.update(b"\0")
     return resumo.hexdigest()[:12]
+
+
+# ---------------------------------------------------------------------------
+# A COMPARACAO QUE VALE: arquivo por arquivo, e so os que a web entrega.
+#
+# A primeira versao comparava a impressao digital da PASTA INTEIRA. Num PC de
+# verdade a pasta tem mais coisa que o projeto (um audio, uma anotacao, um
+# arquivo que o Windows cria), e ai o PC se achava "diferente da web" para
+# sempre: atualizava, religava, e a faixa de atualizacao continuava la
+# (visto em 12/11/2026, na primeira noite de uso). Pior: para "igualar", a
+# atualizacao APAGAVA o que nao reconhecia.
+#
+# Agora a web diz o que ela tem (nome -> impressao de cada arquivo) e o PC
+# confere so esses. O que mais houver na pasta nao e da conta de ninguem.
+# ---------------------------------------------------------------------------
+def impressao(caminho):
+    with open(caminho, "rb") as arq:
+        return hashlib.sha256(arq.read().replace(b"\r\n", b"\n")).hexdigest()[:16]
+
+
+def impressoes(raiz):
+    """{caminho relativo: impressao} dos arquivos do projeto em `raiz`."""
+    return {r: impressao(os.path.join(raiz, *r.split("/"))) for r in listar(raiz)}
+
+
+def diferentes(raiz, da_web):
+    """Os arquivos que a web tem e este PC nao tem igual. [] = em dia."""
+    faltam = []
+    for relativo, esperada in sorted((da_web or {}).items()):
+        partes = relativo.split("/")
+        if any(p in ("", ".", "..") for p in partes) or ":" in relativo:
+            continue
+        caminho = os.path.join(raiz, *partes)
+        try:
+            if impressao(caminho) != esperada:
+                faltam.append(relativo)
+        except OSError:
+            faltam.append(relativo)
+    return faltam
