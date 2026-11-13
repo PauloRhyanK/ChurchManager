@@ -3,163 +3,230 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cenas de luz — Ponte do Culto</title>
+<title>Montar uma cena de luz — Ponte do Culto</title>
 <style>
-/* Painel de CENAS: o jeito do dia a dia de mexer na luz. A mesa (/luzes) e
+/* MONTAR UMA CENA: o jeito do dia a dia de mexer na luz. A mesa (/luzes) e
    canal por canal, para quem esta descobrindo o patch; aqui e por GRUPO de
-   refletor, com cor e intensidade, para quem esta montando o culto.
+   refletor, com cor e forca, para quem esta montando o culto. Movimento e
+   animacao nao moram mais aqui: ficam no painel e no estudio (/estudio).
 
    Seguranca embutida, de proposito: estrobo, programa automatico e reset das
    cabecas saem SEMPRE em 0 de toda cena montada aqui. Nao ha botao de pisca —
    estrobo pode desencadear crise em quem tem epilepsia fotossensivel, e no C
-   qualquer valor a partir de 20 ja pisca. */
+   qualquer valor a partir de 20 ja pisca.
+
+   As cores abaixo sao as mesmas de guia.css, copiadas de proposito: esta
+   pagina nao depende de nenhum outro arquivo nem de internet. */
 :root{
-  --fundo:#0b1016; --caixa:#131b24; --caixa2:#18212c;
-  --linha:#243040; --texto:#e8eef6; --apagado:#8fa0b4;
-  --ok:#22c55e; --erro:#ef4444; --aviso:#f59e0b; --marca:#3b82f6;
+  --fundo:#0b1016; --caixa:#131b24; --caixa2:#18212c; --linha:#243040; --linha2:#3a4757;
+  --texto:#e8eef6; --suave:#b9c6d6; --apagado:#8fa0b4;
+  --ok:#22c55e; --ok-fundo:#0d2a18; --ok-texto:#6ee7a0; --ok-borda:#1f6b3c;
+  --erro:#ef4444; --erro-fundo:#2a1114; --erro-texto:#f8a5a5; --erro-borda:#7a2626;
+  --aviso:#f59e0b; --aviso-fundo:#2a1d07; --aviso-texto:#f7d9a3; --aviso-borda:#6b4a12;
+  --marca:#3b82f6; --marca-fundo:#10213f; --marca-texto:#a9c9ff; --marca-borda:#284a86;
+  color-scheme:dark;
 }
 *{box-sizing:border-box}
+[hidden]{display:none !important}
 body{margin:0;background:var(--fundo);color:var(--texto);
-  font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-.folha{max-width:1100px;margin:0 auto;padding:18px 16px 70px}
-header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px}
-h1{font-size:22px;margin:0;letter-spacing:-.01em}
-.volta{color:var(--marca);text-decoration:none;font-size:14px}
-.volta:hover{text-decoration:underline}
-.pilula{display:inline-flex;align-items:center;gap:7px;background:var(--caixa);
-  border:1px solid var(--linha);border-radius:999px;padding:5px 13px;font-size:13px}
-.ponto{width:9px;height:9px;border-radius:50%;background:var(--apagado)}
-.ponto.on{background:var(--ok)}.ponto.off{background:var(--erro)}
-h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--apagado);
-  margin:26px 0 10px;font-weight:600}
-.dica{font-size:13px;color:var(--apagado);margin:6px 0 0}
-button{font:inherit;font-weight:600;color:var(--texto);background:var(--caixa2);
-  border:1px solid var(--linha);border-radius:10px;padding:10px 16px;cursor:pointer}
-button:hover:not([disabled]){filter:brightness(1.25)}
-button:active:not([disabled]){transform:scale(.98)}
-button[disabled]{opacity:.4;cursor:default}
-button.forte{background:var(--marca);border-color:transparent}
-button.perigo{background:#7f1d1d;border-color:transparent}
-button.verde{background:#15803d;border-color:transparent}
-input[type=text]{font:inherit;color:var(--texto);background:var(--fundo);
-  border:1px solid var(--linha);border-radius:10px;padding:10px 12px;width:100%}
-input:focus{outline:2px solid var(--marca);outline-offset:1px}
-input[type=range]{width:100%;accent-color:var(--marca);height:30px}
+  font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+  -webkit-tap-highlight-color:transparent}
+a{color:var(--marca-texto)}
+a:hover{color:#d3e3ff}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+button[disabled]{opacity:.5;cursor:default}
+button:focus-visible,a:focus-visible,input:focus-visible,summary:focus-visible{
+  outline:3px solid var(--marca-texto);outline-offset:2px}
+
+.folha{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:16px;
+  padding:max(20px,env(safe-area-inset-top)) clamp(14px,4vw,28px) max(48px,env(safe-area-inset-bottom))}
+
+/* cabecalho */
+.topo{display:flex;align-items:center;justify-content:space-between;gap:12px 16px;flex-wrap:wrap}
+.topo .titulo{display:flex;flex-direction:column;gap:2px;min-width:0}
+.volta{display:inline-flex;align-items:center;min-height:44px;font-size:14px;font-weight:600;align-self:flex-start}
+h1{margin:0;font-size:clamp(23px,5.2vw,28px);font-weight:800;letter-spacing:-.02em;line-height:1.15}
+.chave{display:inline-flex;align-items:center;gap:10px;min-height:44px;padding:6px 14px;border-radius:12px;
+  background:var(--caixa2);border:1px solid var(--linha2);color:var(--suave);
+  font-size:14px;font-weight:600;cursor:pointer;user-select:none}
+.chave.ligada{background:var(--ok-fundo);border-color:var(--ok-borda);color:var(--ok-texto)}
+.chave input{width:20px;height:20px;margin:0;accent-color:var(--ok);flex:none}
+
+/* recados: fica grudado no alto para ser visto de qualquer ponto da pagina */
+#aviso{position:sticky;top:8px;z-index:5;padding:12px 14px;border-radius:12px;font-size:15px;
+  background:var(--marca-fundo);border:1px solid var(--marca-borda);color:var(--marca-texto)}
+#aviso.erro{background:var(--erro-fundo);border-color:var(--erro-borda);color:var(--erro-texto)}
+#aviso.bom{background:var(--ok-fundo);border-color:var(--ok-borda);color:var(--ok-texto)}
+#aviso:empty{display:none}
+.faixa-aviso{padding:12px 14px;border-radius:12px;font-size:15px;
+  background:var(--aviso-fundo);border:1px solid var(--aviso-borda);color:var(--aviso-texto)}
+
+/* retrato do palco */
+.caixa{background:var(--caixa);border:1px solid var(--linha);border-radius:16px;padding:16px}
+.retrato{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;padding:14px}
+.retrato .peca{display:flex;flex-direction:column;gap:6px;align-items:center;min-width:0}
+.retrato .luz{width:100%;height:34px;border-radius:8px;background:var(--caixa2);
+  border:1px dashed var(--linha2);overflow:hidden}
+.retrato .luz i{display:block;width:100%;height:100%}
+.retrato .luz.acesa{border:none}
+.retrato .nome{font-size:13px;color:var(--suave);text-align:center;overflow-wrap:anywhere}
+.retrato .nome.off{color:var(--apagado)}
+.nota{margin:0;font-size:13px;color:var(--apagado)}
+
+/* cartoes de grupo */
+.cartao{display:flex;flex-direction:column;gap:12px}
+.cartao .cab{display:flex;align-items:baseline;justify-content:space-between;gap:4px 12px;flex-wrap:wrap}
+h2{margin:0;font-size:17px;font-weight:700}
+.cartao .cab span{font-size:13px;color:var(--apagado)}
+.duas{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+@media (max-width:600px){ .duas{grid-template-columns:1fr} }
+.parte{display:flex;flex-direction:column;gap:10px;min-width:0}
+.rot{font-size:14px;color:var(--suave)}
+.cores{display:flex;flex-wrap:wrap;gap:8px}
+.cor{position:relative;width:44px;height:44px;padding:0;border-radius:12px;border:1px solid var(--linha2);flex:none}
+.cor.nenhuma{border:1px dashed #5b6b7e}
+.cor[aria-pressed="true"]{border:3px solid #fff;box-shadow:0 0 0 2px var(--caixa),0 0 0 4px var(--ok)}
+.cor[aria-pressed="true"]::after{content:"✓";position:absolute;inset:0;display:grid;place-items:center;
+  font-size:18px;font-weight:800;color:#0b1016;
+  text-shadow:0 0 2px #fff,0 0 2px #fff,0 0 3px #fff,0 0 4px #fff}
+.cor:focus-visible{outline-offset:5px}
+.cor.igual{width:auto;min-width:64px;padding:0 14px;background:var(--caixa2);font-size:14px;font-weight:600;color:var(--suave)}
+.cor.igual[aria-pressed="true"]{color:#fff}
+.cor.igual[aria-pressed="true"]::after{content:none}
+.forca{display:flex;align-items:center;gap:12px;font-size:14px;color:var(--suave)}
+.forca input{flex:1;min-width:0;height:44px;margin:0;accent-color:var(--marca)}
+.forca output,.forca b{width:48px;text-align:right;color:var(--texto);font-weight:600;font-variant-numeric:tabular-nums}
+
+/* direcoes do teto: uma fileira de botoes colados */
+.segmentos{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1px;
+  background:var(--linha2);border:1px solid var(--linha2);border-radius:12px;overflow:hidden}
+.segmentos button{min-height:46px;border:none;background:var(--caixa2);color:var(--suave);
+  font-size:14px;font-weight:600;padding:4px 8px}
+.segmentos button:hover{background:#1f2a37}
+.segmentos button[aria-pressed="true"]{background:#2563eb;color:#fff;font-weight:700}
+.segmentos button:focus-visible{outline-offset:-3px;outline-color:#fff}
+@media (max-width:600px){
+  .segmentos{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .segmentos button:first-child{grid-column:1 / -1}
+}
+
+details > summary{display:inline-flex;align-items:center;min-height:44px;cursor:pointer;
+  color:var(--marca-texto);font-size:14px;font-weight:600}
+details .dentro{display:flex;flex-direction:column;gap:10px;padding-top:4px}
+
+/* salvar */
+.salvar{display:flex;flex-direction:column;gap:10px}
+.salvar label{font-size:14px;color:var(--suave)}
+.salvar .linha{display:flex;gap:10px;flex-wrap:wrap}
+.salvar input{flex:1 1 200px;min-width:0;height:52px;border-radius:12px;border:1px solid var(--linha2);
+  background:var(--fundo);color:var(--texto);padding:0 14px;font-size:17px}
+.botao{min-height:48px;padding:0 20px;border-radius:12px;border:1px solid var(--linha2);
+  background:var(--caixa2);color:var(--texto);font-size:15px;font-weight:700}
+.botao:hover:not([disabled]){filter:brightness(1.15)}
+.botao.verde{min-height:52px;padding:0 24px;border:none;background:var(--ok);color:#06210f;font-size:16px;font-weight:800}
+.botao.perigo{background:var(--erro-fundo);border-color:var(--erro-borda);color:var(--erro-texto)}
+.botao.largo{width:100%}
+@media (max-width:600px){ .salvar .botao{width:100%} }
 
 /* cenas salvas */
-.cenas{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
-.cena{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:6px;
-  text-align:left;padding:12px 14px;min-height:76px}
-.cena.ativa{outline:2px solid var(--marca);outline-offset:1px}
-.cena .nome{font-size:16px;font-weight:700;overflow-wrap:anywhere}
-.cena .faixa{display:flex;gap:3px;width:100%}
-.cena .faixa i{flex:1;height:8px;border-radius:3px;background:#1b232d}
-.cena .orig{font-size:11px;color:var(--apagado);font-weight:500}
-.cena .apaga{position:absolute;top:4px;right:6px;background:none;border:none;
-  color:var(--apagado);padding:2px 6px;font-size:16px}
-.cena .apaga:hover{color:var(--erro)}
+h3{margin:0;font-size:15px;font-weight:700}
+.secao{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+.cenas{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(min(100%,220px),1fr));
+  list-style:none;margin:0;padding:0}
+.cena{display:flex;align-items:stretch;border:1px solid var(--linha);border-radius:12px;background:var(--caixa);overflow:hidden}
+.cena.ativa{border-color:var(--ok)}
+.cena .usar{flex:1;min-width:0;min-height:52px;display:flex;flex-direction:column;justify-content:center;gap:5px;
+  text-align:left;padding:8px 12px;border:none;background:none;color:var(--texto)}
+.cena .usar:hover{background:var(--caixa2)}
+.cena .usar .n{font-size:15px;font-weight:700;overflow-wrap:anywhere}
+.cena .usar .f{display:flex;gap:3px}
+.cena .usar .f i{flex:1;height:6px;border-radius:3px}
+.cena .usar .o{font-size:12px;color:var(--apagado)}
+.cena .tirar{flex:none;min-width:44px;padding:0 12px;border:none;border-left:1px solid var(--linha);
+  background:none;color:var(--apagado);font-size:13px;font-weight:600}
+.cena .tirar:hover{background:var(--erro-fundo);color:var(--erro-texto)}
+.cena button:focus-visible{outline-offset:-3px}
+.links{display:flex;flex-direction:column;gap:0;font-size:14px}
+.links a{display:inline-flex;align-items:center;min-height:44px;align-self:flex-start}
 
-/* grupos */
-.grupos{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,480px),1fr))}
-.grupo{background:var(--caixa);border:1px solid var(--linha);border-radius:14px;padding:16px}
-.grupo h3{margin:0;font-size:17px;display:flex;align-items:center;gap:10px}
-.grupo h3 .amostra{width:16px;height:16px;border-radius:50%;border:1px solid var(--linha)}
-.grupo .sub{font-size:13px;color:var(--apagado);margin:2px 0 12px}
-.rot{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--apagado);
-  margin:12px 0 6px;font-weight:600}
-.cores{display:flex;flex-wrap:wrap;gap:8px}
-.cor{width:44px;height:44px;padding:0;border-radius:50%;border:2px solid var(--linha);
-  position:relative}
-.cor.sel{border-color:#fff;box-shadow:0 0 0 3px var(--marca)}
-.cor.nenhuma::after{content:"";position:absolute;inset:8px;border-radius:50%;
-  background:linear-gradient(45deg,transparent 45%,var(--apagado) 45% 55%,transparent 55%)}
-.cor.igual{width:auto;border-radius:999px;padding:0 14px;font-size:13px}
-.intens{display:grid;grid-template-columns:1fr 56px;gap:12px;align-items:center}
-.intens .v{font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
-.posicoes{display:flex;flex-wrap:wrap;gap:8px}
-.posicoes button{padding:8px 14px}
-.posicoes button.sel{background:var(--marca);border-color:transparent}
-details{margin-top:10px}
-summary{cursor:pointer;color:var(--apagado);font-size:13px}
-.fino{display:grid;grid-template-columns:70px 1fr 44px;gap:10px;align-items:center;margin-top:8px}
-.fino span{font-size:13px;color:var(--apagado)}
-.fino b{text-align:right;font-variant-numeric:tabular-nums}
-
-/* modos de movimento — a fileira vira uma REGUA de energia, do mais calmo
-   ao mais agitado, porque e assim que o config os ordena. O perigoso fica
-   separado por uma linha, para ninguem encostar nele sem querer. */
-.modos{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch}
-.modo{display:flex;flex-direction:column;align-items:flex-start;gap:2px;
-  text-align:left;padding:10px 14px;min-width:120px}
-.modo.sel{background:var(--marca);border-color:transparent}
-.modo .q{font-size:15px;font-weight:700}
-.modo .p{font-size:11.5px;color:var(--apagado);font-weight:500}
-.modo.sel .p{color:#e3ecff}
-.modo.risco{border-color:#7f1d1d}
-.modo.risco .q{color:var(--erro)}
-.modo.risco.sel{background:#7f1d1d}
-.modo.risco.sel .q{color:#fff}
-.separador{width:1px;align-self:stretch;background:var(--linha);margin:0 4px}
-
-.barra{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.barra .cresce{flex:1;min-width:200px}
-.vivo{display:inline-flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;
-  user-select:none}
-.vivo input{width:20px;height:20px;accent-color:var(--ok)}
-#aviso{margin:14px 0 0;padding:12px 14px;border-radius:10px;font-size:14px;
-  background:var(--caixa2);border-left:3px solid var(--marca)}
-#aviso.erro{border-left-color:var(--erro)}
-#aviso.bom{border-left-color:var(--ok)}
-#aviso:empty{display:none}
-.rodape{margin-top:30px;padding-top:16px;border-top:1px solid var(--linha)}
+/* dialogo proprio (no lugar das caixas do navegador) */
+.veu{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:16px;background:rgba(3,6,10,.72)}
+.dlg{width:min(100%,420px);background:var(--caixa);border:1px solid var(--linha2);border-radius:16px;
+  padding:20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.dlg h2{font-size:19px}
+.dlg p{margin:0;color:var(--suave);font-size:15px}
+.dlg .acoes{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:4px}
+.dlg .acoes .botao{flex:1 1 140px}
+.botao.sim{background:var(--marca);border-color:transparent;color:#fff}
+.botao.sim.perigo{background:#b91c1c;color:#fff}
 </style>
 </head>
 <body>
 <div class="folha">
 
-<header>
-  <h1>Cenas de luz</h1>
-  <a class="volta" href="/">← painel do culto</a>
-  <a class="volta" href="/luzes">mesa técnica (canal por canal)</a>
-  <span class="pilula"><span class="ponto" id="pontoLuz"></span><span id="txtLuz">lendo…</span></span>
+<header class="topo">
+  <div class="titulo">
+    <a class="volta" href="/">Voltar ao painel</a>
+    <h1>Montar uma cena de luz</h1>
+  </div>
+  <label class="chave ligada" id="chaveVivo"><input type="checkbox" id="aoVivo" checked>Mostrar na igreja enquanto mexo</label>
 </header>
-<p class="dica">Toque numa cena para acender. Para criar uma nova, ajuste os grupos abaixo olhando a luz e salve com um nome.</p>
-<div id="aviso"></div>
 
-<h2>Cenas</h2>
-<div class="barra" style="margin-bottom:12px">
-  <button class="perigo" id="btnApagar">Apagar tudo</button>
-  <span class="dica" style="margin:0">Cenas com nome <b>abertura</b>, <b>louvor</b>, <b>pregacao</b> ou <b>apagar</b> são usadas automaticamente pelos botões do culto.</span>
+<div id="aviso" role="status" aria-live="polite"></div>
+<div class="faixa-aviso" id="semLuz" hidden>As luzes não estão ligadas neste computador. Dá para montar e salvar cenas, mas nada vai acender na igreja. Peça ajuda a quem cuida da parte técnica.</div>
+
+<!-- Retrato do palco: o que a cena que está sendo montada faz em cada grupo -->
+<div class="caixa retrato" id="retrato" role="group" aria-label="Como a cena está ficando"></div>
+<p class="nota" id="notaApagado" hidden>As luzes da igreja foram apagadas. A cena que você estava montando continua aqui: toque em qualquer cor ou força para acendê-la de novo.</p>
+
+<!-- Um cartão por grupo: cor e força -->
+<div id="grupos" style="display:contents"></div>
+
+<button type="button" class="botao largo" id="btnEnviar" hidden>Mostrar agora na igreja</button>
+
+<section class="caixa salvar" aria-label="Salvar a cena">
+  <label for="nome">Nome da cena</label>
+  <div class="linha">
+    <input type="text" id="nome" maxlength="40" autocomplete="off" placeholder="ex.: louvor calmo, ceia, natal">
+    <button type="button" class="botao verde" id="btnSalvar">Salvar cena</button>
+  </div>
+  <p class="nota">Depois de salva, ela aparece em “Cenas salvas”, logo abaixo. Os botões do culto usam as cenas com estes nomes exatos, em minúsculas e sem acento: abertura, louvor, pregacao e apagar.</p>
+</section>
+
+<section class="secao" aria-labelledby="tCenas">
+  <h3 id="tCenas">Cenas salvas</h3>
+  <p class="nota">Toque numa cena para acendê-la na igreja e continuar a montagem a partir dela.</p>
+  <ul class="cenas" id="cenas"></ul>
+  <button type="button" class="botao perigo largo" id="btnApagar">Apagar todas as luzes</button>
+</section>
+
+<nav class="links" aria-label="Outras telas de luz">
+  <a href="/estudio">Testar movimentos e animações no estúdio de luz</a>
+  <a href="/luzes">Mesa canal por canal (técnico)</a>
+</nav>
+
+<details>
+  <summary>Instalar cenas sugeridas</summary>
+  <div class="dentro">
+    <p class="nota">Cria de novo as 8 cenas sugeridas: abertura, louvor, pregacao, oracao, celebracao, ceia, servico e apagar. As que já existirem com o mesmo nome são substituídas.</p>
+    <button type="button" class="botao" id="btnSugestoes" style="align-self:flex-start">Instalar cenas sugeridas</button>
+  </div>
+</details>
+
 </div>
-<div class="cenas" id="cenas"></div>
 
-<h2>Movimento</h2>
-<p class="dica" style="margin:0 0 10px">A cena diz a <b>cor</b>, o modo diz o <b>movimento</b> — e os dois são independentes. Trocar de cena não para o movimento; <b>Parado</b> devolve a cena exata.</p>
-<div class="modos" id="modos"></div>
-
-<h2>Montar cena</h2>
-<div class="barra" style="margin-bottom:12px">
-  <label class="vivo"><input type="checkbox" id="aoVivo" checked> Ao vivo — cada toque já muda a luz</label>
-</div>
-<div class="grupos" id="grupos"></div>
-
-<h2>Salvar</h2>
-<div class="barra">
-  <input class="cresce" type="text" id="nome" maxlength="40" placeholder="nome da cena — ex: louvor, oracao, natal">
-  <button class="verde" id="btnSalvar">Salvar cena</button>
-  <button id="btnEnviar">Enviar para a luz</button>
-</div>
-<p class="dica">Salvar com o nome de uma cena que já existe substitui a anterior.</p>
-
-<div class="rodape">
-  <details>
-    <summary>Cenas sugeridas (instalar de novo)</summary>
-    <p class="dica">Recria as cenas sugeridas: abertura, louvor, pregacao, oracao, celebracao, ceia, servico e apagar. Substitui as que tiverem o mesmo nome.</p>
-    <button id="btnSugestoes" style="margin-top:8px">Instalar cenas sugeridas</button>
-  </details>
+<div class="veu" id="veu" hidden>
+  <div class="dlg" role="alertdialog" aria-modal="true" aria-labelledby="dlgTitulo" aria-describedby="dlgTexto">
+    <h2 id="dlgTitulo"></h2>
+    <p id="dlgTexto"></p>
+    <div class="acoes">
+      <button type="button" class="botao" id="dlgNao">Cancelar</button>
+      <button type="button" class="botao sim" id="dlgSim"></button>
+    </div>
+  </div>
 </div>
 
-</div>
 <script>
 // ---------------------------------------------------------------------------
 // O patch medido com a luz em 08/11/2026 (universo 1). Ver patch.yaml.
@@ -168,12 +235,20 @@ summary{cursor:pointer;color:var(--apagado);font-size:13px}
 //   cabeca: pan, tilt, obturador (255 = fixo), R G B W, (nada), reset
 // ---------------------------------------------------------------------------
 const GRUPOS = [
-  {id:'D', nome:'Luz de frente', sub:'D1, D2, D3 — os 3 grandes no alto, de frente para o altar. Costumam ficar BRANCOS: é a luz que deixa o altar claro', tipo:'rgbw', bases:[1]},
-  {id:'B', nome:'Barra', sub:'B1 a B6 — fileira perto da treliça', tipo:'rgbw', bases:[17,33],
-   alt:'Cor de B5 e B6 (os outros 2)'},
-  {id:'C', nome:'Cortina', sub:'C1 a C4 — no alto da cortina. É ela que dá a COR do momento', tipo:'par9', bases:[49,65,81,97],
-   alt:'Cor alternada (C2 e C4)'},
-  {id:'T', nome:'Teto (cabeças móveis)', sub:'T1 a T6 — os pequenos do teto', tipo:'cabeca', bases:[113,129,145]},
+  {id:'D', nome:'Luz de frente', curto:'Frente', tipo:'rgbw', bases:[1]},
+  {id:'B', nome:'Barra', curto:'Barra', tipo:'rgbw', bases:[17,33],
+   alt:'Vale para 2 dos 6 refletores da barra.'},
+  {id:'C', nome:'Cortina', curto:'Cortina', tipo:'par9', bases:[49,65,81,97],
+   alt:'Vale para um refletor sim, um não.'},
+  {id:'T', nome:'Teto', curto:'Teto', tipo:'cabeca', bases:[113,129,145]},
+];
+
+// Como os grupos aparecem na tela. So aparencia: a conta de cada grupo
+// continua separada, em quadro().
+const CARTOES = [
+  {titulo:'Luz de frente', dica:'ilumina o rosto de quem está no palco', grupos:['D']},
+  {titulo:'Barra e cortina', dica:'a cor do fundo do palco', grupos:['B','C']},
+  {titulo:'Teto', dica:'as luzes que se mexem', grupos:['T']},
 ];
 
 // rgbw = [R,G,B,W] para D, B e cabecas; p9 = [R,G,B,W,A] para a cortina
@@ -196,11 +271,12 @@ const ORDEM_CORES = ['apagado','vermelho','ambar','amarelo','verde','verde_limao
 
 // Posicoes das cabecas, medidas olhando T2/T3 (pan, tilt)
 const POSICOES = {
-  forro:   {nome:'Forro (teto)', pan:255, tilt:255},
-  chao:    {nome:'Chão',         pan:128, tilt:128},
-  esquerda:{nome:'Esquerda',     pan:128, tilt:64},
-  direita: {nome:'Direita',      pan:128, tilt:192},
+  forro:   {nome:'No forro', pan:255, tilt:255},
+  chao:    {nome:'No palco', pan:128, tilt:128},
+  esquerda:{nome:'Esquerda', pan:128, tilt:64},
+  direita: {nome:'Direita',  pan:128, tilt:192},
 };
+const ORDEM_POSICOES = ['chao','forro','esquerda','direita'];
 
 // Regra da equipe (Paulo, 08/11/2026): estas sao as UNICAS luzes do altar.
 // A luz de frente (D) fica BRANCA para o altar ficar claro — inclusive na
@@ -318,19 +394,50 @@ function estadoDeQuadro(q){
 // rede
 // ---------------------------------------------------------------------------
 async function pedir(url, corpo){
-  const r = await fetch(url, corpo === undefined ? {} : {
-    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(corpo)});
+  let r;
+  try{
+    r = await fetch(url, corpo === undefined ? {} : {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(corpo)});
+  } catch(e){
+    const erro = new Error('sem resposta'); erro.semResposta = true; throw erro;
+  }
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.erro || ('erro ' + r.status));
   return j;
 }
 const $ = id => document.getElementById(id);
-function avisar(txt, tipo){ const a = $('aviso'); a.textContent = txt; a.className = tipo || ''; }
+// Recado bom some sozinho (ele fica grudado no alto e taparia a tela); erro
+// fica ate o proximo recado, para dar tempo de ler.
+let avisoSome = null;
+function avisar(txt, tipo){
+  const a = $('aviso'); a.textContent = txt; a.className = tipo || '';
+  clearTimeout(avisoSome);
+  if (tipo === 'bom') avisoSome = setTimeout(() => { a.textContent = ''; }, 6000);
+}
+
+// Recado de erro que um voluntario consegue ler: o que nao deu certo e o que
+// fazer. O texto do servidor vai no fim, entre parenteses, para quem for ajudar.
+function avisarErro(oQue, e){
+  if (e && e.semResposta){
+    avisar(oQue + ' A Ponte do Culto não respondeu. Veja se ela está aberta neste computador e tente de novo.', 'erro');
+    return;
+  }
+  if (!luzLigada){
+    avisar(oQue + ' As luzes não estão ligadas neste computador. Peça ajuda a quem cuida da parte técnica.', 'erro');
+    return;
+  }
+  const detalhe = String((e && e.message) || '').replace(/\blooks\b/gi, 'cenas').replace(/\blook\b/gi, 'cena');
+  avisar(oQue + ' Tente de novo.' + (detalhe ? ' (Detalhe para quem for ajudar: ' + detalhe + ')' : ''), 'erro');
+}
+
+let luzLigada = true;      // ate a ponte dizer o contrario
+let tudoApagado = false;   // "Apagar todas as luzes" foi tocado e nada foi enviado depois
 
 let envioPendente = null;
 function enviarJa(){
   return pedir('/api/luz/canais', {canais: quadro(estado), exclusivo: true})
-    .catch(e => avisar('não consegui mandar para a luz: ' + e.message, 'erro'));
+    .then(() => { if (tudoApagado){ tudoApagado = false; desenharRetrato(); } return true; })
+    .catch(e => { avisarErro('Não consegui mostrar a cena na igreja.', e); return false; });
 }
 function enviarAoVivo(){
   if (!$('aoVivo').checked) return;
@@ -339,75 +446,234 @@ function enviarAoVivo(){
 }
 
 // ---------------------------------------------------------------------------
-// tela: grupos
+// dialogo proprio: pergunta e devolve true/false
 // ---------------------------------------------------------------------------
-function botaoCor(nome, selecionada, aoEscolher){
+let fecharDialogo = null;
+function perguntar(titulo, texto, sim, perigo){
+  return new Promise(resolver => {
+    const veu = $('veu'), antes = document.activeElement;
+    $('dlgTitulo').textContent = titulo; $('dlgTexto').textContent = texto;
+    $('dlgSim').textContent = sim; $('dlgSim').className = 'botao sim' + (perigo ? ' perigo' : '');
+    veu.hidden = false;
+    fecharDialogo = resposta => {
+      fecharDialogo = null; veu.hidden = true;
+      if (antes && antes.focus && document.contains(antes)) antes.focus();
+      resolver(resposta);
+    };
+    $('dlgNao').focus();
+  });
+}
+$('dlgSim').onclick = () => fecharDialogo && fecharDialogo(true);
+$('dlgNao').onclick = () => fecharDialogo && fecharDialogo(false);
+$('veu').onclick = ev => { if (ev.target === $('veu') && fecharDialogo) fecharDialogo(false); };
+document.addEventListener('keydown', ev => {
+  if (!fecharDialogo) return;
+  if (ev.key === 'Escape'){ ev.preventDefault(); fecharDialogo(false); }
+  else if (ev.key === 'Tab'){
+    // o foco fica preso entre os dois botoes enquanto a pergunta esta aberta
+    ev.preventDefault();
+    (document.activeElement === $('dlgNao') ? $('dlgSim') : $('dlgNao')).focus();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// tela: retrato do palco
+// ---------------------------------------------------------------------------
+// As duas cores que um grupo mostra (iguais quando nao ha segunda cor).
+function coresDoGrupo(s){
+  const c2 = (s.cor2 && s.cor2 !== 'igual') ? s.cor2 : s.cor;
+  return [s.cor, c2];
+}
+function fundoDoGrupo(s){
+  const [a, b] = coresDoGrupo(s);
+  return a === b ? PALETA[a].css
+                 : 'linear-gradient(90deg,' + PALETA[a].css + ' 50%,' + PALETA[b].css + ' 50%)';
+}
+function grupoAceso(s){
+  const [a, b] = coresDoGrupo(s);
+  return s.int > 0 && !(a === 'apagado' && b === 'apagado');
+}
+
+function desenharRetrato(){
+  const raiz = $('retrato'); raiz.innerHTML = '';
+  for (const g of GRUPOS){
+    const s = estado[g.id], acesa = grupoAceso(s) && !tudoApagado;
+    const peca = document.createElement('div'); peca.className = 'peca';
+    const luz = document.createElement('span'); luz.className = 'luz' + (acesa ? ' acesa' : '');
+    luz.setAttribute('aria-hidden', 'true');
+    if (acesa){
+      const i = document.createElement('i');
+      i.style.background = fundoDoGrupo(s);
+      i.style.opacity = String(0.35 + 0.65 * s.int / 100);
+      luz.appendChild(i);
+    }
+    const nome = document.createElement('span'); nome.className = 'nome' + (acesa ? '' : ' off');
+    nome.textContent = g.curto + (acesa ? '' : ' · apagado');
+    peca.appendChild(luz); peca.appendChild(nome); raiz.appendChild(peca);
+  }
+  $('notaApagado').hidden = !tudoApagado;
+}
+
+// ---------------------------------------------------------------------------
+// tela: cartoes dos grupos. Montados UMA vez; depois so os estados mudam, para
+// o foco do teclado nao se perder a cada toque.
+// ---------------------------------------------------------------------------
+const PECAS = {};   // por grupo: os botoes e controles que sincronizar() atualiza
+
+function botaoCor(nome, rotulo, aoEscolher){
   const p = PALETA[nome];
   const b = document.createElement('button');
-  b.className = 'cor' + (nome === 'apagado' ? ' nenhuma' : '') + (selecionada ? ' sel' : '');
-  b.style.background = p.css; b.title = p.nome; b.setAttribute('aria-label', p.nome);
+  b.type = 'button';
+  b.className = 'cor' + (nome === 'apagado' ? ' nenhuma' : '');
+  b.style.background = nome === 'apagado' ? 'var(--fundo)' : p.css;
+  b.title = p.nome; b.setAttribute('aria-label', rotulo + ': ' + p.nome);
+  b.setAttribute('aria-pressed', 'false');
   b.onclick = aoEscolher;
   return b;
 }
 
-function desenharGrupos(){
-  const raiz = $('grupos'); raiz.innerHTML = '';
-  for (const g of GRUPOS){
-    const s = estado[g.id];
-    const el = document.createElement('div'); el.className = 'grupo';
-    el.innerHTML = '<h3><span class="amostra" style="background:' + PALETA[s.cor].css + '"></span>' + g.nome + '</h3>' +
-                   '<div class="sub">' + g.sub + '</div><div class="rot">Cor</div>';
-    const cores = document.createElement('div'); cores.className = 'cores';
-    ORDEM_CORES.forEach(n => cores.appendChild(botaoCor(n, s.cor === n, () => {
-      s.cor = n; if (n !== 'apagado' && s.int === 0) s.int = 70;
-      desenharGrupos(); enviarAoVivo();
-    })));
-    el.appendChild(cores);
+function mudou(){ sincronizar(); enviarAoVivo(); }
 
-    if (g.alt){
-      const r2 = document.createElement('div'); r2.className = 'rot'; r2.textContent = g.alt;
-      el.appendChild(r2);
-      const c2 = document.createElement('div'); c2.className = 'cores';
-      const ig = document.createElement('button');
-      ig.className = 'cor igual' + ((s.cor2 || 'igual') === 'igual' ? ' sel' : '');
-      ig.textContent = 'Igual'; ig.onclick = () => { s.cor2 = 'igual'; desenharGrupos(); enviarAoVivo(); };
-      c2.appendChild(ig);
-      ORDEM_CORES.filter(n => n !== 'apagado').forEach(n =>
-        c2.appendChild(botaoCor(n, s.cor2 === n, () => { s.cor2 = n; desenharGrupos(); enviarAoVivo(); })));
-      el.appendChild(c2);
-    }
+function linhaForca(g, pecas){
+  const s = () => estado[g.id];
+  const lin = document.createElement('label'); lin.className = 'forca';
+  lin.appendChild(document.createTextNode('Força'));
+  const rg = document.createElement('input');
+  rg.type = 'range'; rg.min = '0'; rg.max = '100'; rg.value = String(s().int);
+  rg.setAttribute('aria-label', 'Força — ' + g.nome);
+  const vv = document.createElement('b'); vv.setAttribute('aria-hidden', 'true');
+  rg.oninput = () => { s().int = Number(rg.value); mudou(); };
+  lin.appendChild(rg); lin.appendChild(vv);
+  pecas.forca = rg; pecas.forcaTxt = vv;
+  return lin;
+}
 
-    const ri = document.createElement('div'); ri.className = 'rot'; ri.textContent = 'Intensidade';
-    el.appendChild(ri);
-    const lin = document.createElement('div'); lin.className = 'intens';
-    lin.innerHTML = '<input type="range" min="0" max="100" value="' + s.int + '" aria-label="Intensidade ' + g.nome + '"><span class="v">' + s.int + '%</span>';
-    const rg = lin.querySelector('input'), vv = lin.querySelector('.v');
-    rg.oninput = () => { s.int = Number(rg.value); vv.textContent = s.int + '%'; enviarAoVivo(); };
-    el.appendChild(lin);
-
-    if (g.tipo === 'cabeca'){
-      const rp = document.createElement('div'); rp.className = 'rot'; rp.textContent = 'Para onde apontam';
-      el.appendChild(rp);
-      const ps = document.createElement('div'); ps.className = 'posicoes';
-      for (const [k, p] of Object.entries(POSICOES)){
-        const b = document.createElement('button'); b.textContent = p.nome;
-        if (s.pan === p.pan && s.tilt === p.tilt) b.className = 'sel';
-        b.onclick = () => { s.pan = p.pan; s.tilt = p.tilt; desenharGrupos(); enviarAoVivo(); };
-        ps.appendChild(b);
-      }
-      el.appendChild(ps);
-      const det = document.createElement('details');
-      det.innerHTML = '<summary>Ajuste fino da posição</summary>' +
-        '<div class="fino"><span>Horizontal</span><input type="range" min="0" max="255" value="' + s.pan + '"><b>' + s.pan + '</b></div>' +
-        '<div class="fino"><span>Vertical</span><input type="range" min="0" max="255" value="' + s.tilt + '"><b>' + s.tilt + '</b></div>' +
-        '<p class="dica">T1 e T6 estão no mesmo endereço, em pontas opostas do teto: a mesma posição aponta cada um para um lado.</p>';
-      const [rPan, rTilt] = det.querySelectorAll('input'), [bPan, bTilt] = det.querySelectorAll('b');
-      rPan.oninput = () => { s.pan = Number(rPan.value); bPan.textContent = s.pan; enviarAoVivo(); };
-      rTilt.oninput = () => { s.tilt = Number(rTilt.value); bTilt.textContent = s.tilt; enviarAoVivo(); };
-      el.appendChild(det);
-    }
-    raiz.appendChild(el);
+function montarParte(g, comRotulo){
+  const s = () => estado[g.id];
+  const pecas = PECAS[g.id] = {cores:{}, cores2:{}, posicoes:{}};
+  const el = document.createElement('div'); el.className = 'parte';
+  el.setAttribute('role', 'group'); el.setAttribute('aria-label', g.nome);
+  if (comRotulo){
+    const r = document.createElement('span'); r.className = 'rot'; r.textContent = g.nome;
+    el.appendChild(r);
   }
+
+  if (g.tipo === 'cabeca'){
+    // Teto: primeiro PARA ONDE aponta (ou apagado), depois cor e forca.
+    const seg = document.createElement('div'); seg.className = 'segmentos';
+    seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'Para onde o teto aponta');
+    const off = document.createElement('button'); off.type = 'button'; off.textContent = 'Apagado';
+    off.onclick = () => { s().cor = 'apagado'; mudou(); };
+    seg.appendChild(off); pecas.apagado = off;
+    for (const k of ORDEM_POSICOES){
+      const p = POSICOES[k];
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = p.nome;
+      b.onclick = () => {
+        const st = s();
+        // Escolher uma direcao com o teto apagado acende: sem isso o toque
+        // pareceria nao fazer nada. Mesma regra de quando se escolhe uma cor.
+        if (st.cor === 'apagado'){ st.cor = 'branco'; if (st.int === 0) st.int = 70; }
+        st.pan = p.pan; st.tilt = p.tilt; mudou();
+      };
+      seg.appendChild(b); pecas.posicoes[k] = b;
+    }
+    el.appendChild(seg);
+  }
+
+  const cores = document.createElement('div'); cores.className = 'cores';
+  ORDEM_CORES.forEach(n => {
+    if (g.tipo === 'cabeca' && n === 'apagado') return;   // no teto, "Apagado" esta na fileira de cima
+    const b = botaoCor(n, g.nome, () => {
+      const st = s();
+      st.cor = n; if (n !== 'apagado' && st.int === 0) st.int = 70;
+      mudou();
+    });
+    cores.appendChild(b); pecas.cores[n] = b;
+  });
+  el.appendChild(cores);
+  el.appendChild(linhaForca(g, pecas));
+
+  if (g.alt){
+    const det = document.createElement('details');
+    const sm = document.createElement('summary'); sm.textContent = 'Usar uma segunda cor';
+    const dentro = document.createElement('div'); dentro.className = 'dentro';
+    const nota = document.createElement('p'); nota.className = 'nota'; nota.textContent = g.alt;
+    const c2 = document.createElement('div'); c2.className = 'cores';
+    const ig = document.createElement('button'); ig.type = 'button'; ig.className = 'cor igual';
+    ig.textContent = 'Igual'; ig.setAttribute('aria-label', g.nome + ', segunda cor: igual à primeira');
+    ig.setAttribute('aria-pressed', 'false');
+    ig.onclick = () => { s().cor2 = 'igual'; mudou(); };
+    c2.appendChild(ig); pecas.cores2.igual = ig;
+    ORDEM_CORES.filter(n => n !== 'apagado').forEach(n => {
+      const b = botaoCor(n, g.nome + ', segunda cor', () => { s().cor2 = n; mudou(); });
+      c2.appendChild(b); pecas.cores2[n] = b;
+    });
+    dentro.appendChild(nota); dentro.appendChild(c2);
+    det.appendChild(sm); det.appendChild(dentro);
+    el.appendChild(det); pecas.det2 = det;
+  }
+
+  if (g.tipo === 'cabeca'){
+    const det = document.createElement('details');
+    det.innerHTML = '<summary>Ajuste fino da direção</summary><div class="dentro">' +
+      '<label class="forca">Para os lados<input type="range" min="0" max="255" aria-label="Direção do teto, para os lados"><b aria-hidden="true"></b></label>' +
+      '<label class="forca">Para cima e para baixo<input type="range" min="0" max="255" aria-label="Direção do teto, para cima e para baixo"><b aria-hidden="true"></b></label>' +
+      '<p class="nota">Dois refletores do teto ficam em pontas opostas: a mesma direção aponta cada um para um lado.</p></div>';
+    const [rPan, rTilt] = det.querySelectorAll('input'), [bPan, bTilt] = det.querySelectorAll('b');
+    rPan.oninput = () => { s().pan = Number(rPan.value); mudou(); };
+    rTilt.oninput = () => { s().tilt = Number(rTilt.value); mudou(); };
+    Object.assign(pecas, {rPan, rTilt, bPan, bTilt});
+    el.appendChild(det);
+  }
+  return el;
+}
+
+function montarGrupos(){
+  const raiz = $('grupos'); raiz.innerHTML = '';
+  const porId = Object.fromEntries(GRUPOS.map(g => [g.id, g]));
+  for (const c of CARTOES){
+    const sec = document.createElement('section'); sec.className = 'caixa cartao';
+    const cab = document.createElement('div'); cab.className = 'cab';
+    const h = document.createElement('h2'); h.textContent = c.titulo;
+    const d = document.createElement('span'); d.textContent = c.dica;
+    cab.appendChild(h); cab.appendChild(d); sec.appendChild(cab);
+    if (c.grupos.length > 1){
+      const duas = document.createElement('div'); duas.className = 'duas';
+      c.grupos.forEach(id => duas.appendChild(montarParte(porId[id], true)));
+      sec.appendChild(duas);
+    } else {
+      sec.appendChild(montarParte(porId[c.grupos[0]], false));
+    }
+    raiz.appendChild(sec);
+  }
+}
+
+const marcar = (botao, sim) => botao.setAttribute('aria-pressed', sim ? 'true' : 'false');
+function valorSeMudou(campo, valor){ if (campo.value !== String(valor)) campo.value = String(valor); }
+
+// estado -> tela. Nao envia nada: so pinta.
+function sincronizar(){
+  for (const g of GRUPOS){
+    const s = estado[g.id], p = PECAS[g.id];
+    for (const [n, b] of Object.entries(p.cores)) marcar(b, s.cor === n);
+    valorSeMudou(p.forca, s.int);
+    p.forca.setAttribute('aria-valuetext', s.int + '%');
+    p.forcaTxt.textContent = s.int + '%';
+    if (g.alt){
+      const c2 = s.cor2 || 'igual';
+      for (const [n, b] of Object.entries(p.cores2)) marcar(b, c2 === n);
+      if (c2 !== 'igual') p.det2.open = true;
+    }
+    if (g.tipo === 'cabeca'){
+      const off = s.cor === 'apagado';
+      marcar(p.apagado, off);
+      for (const [k, b] of Object.entries(p.posicoes))
+        marcar(b, !off && s.pan === POSICOES[k].pan && s.tilt === POSICOES[k].tilt);
+      valorSeMudou(p.rPan, s.pan); valorSeMudou(p.rTilt, s.tilt);
+      p.bPan.textContent = s.pan; p.bTilt.textContent = s.tilt;
+    }
+  }
+  desenharRetrato();
 }
 
 // ---------------------------------------------------------------------------
@@ -417,48 +683,55 @@ let SALVAS = {}, CONFIG = {}, cenaAtiva = null;
 
 function faixaDaCena(canais){
   const st = estadoDeQuadro(canais);
-  return GRUPOS.map(g => '<i style="background:' + PALETA[st[g.id].cor].css + '"></i>').join('');
+  return GRUPOS.map(g => '<i style="background:' + fundoDoGrupo(st[g.id]) + '"></i>').join('');
 }
 
 function desenharCenas(){
   const raiz = $('cenas'); raiz.innerHTML = '';
   const nomes = [...new Set([...Object.keys(SALVAS), ...Object.keys(CONFIG)])].sort();
-  if (!nomes.length){ raiz.innerHTML = '<span class="dica">Nenhuma cena ainda.</span>'; return; }
+  if (!nomes.length){
+    const li = document.createElement('li'); li.className = 'nota';
+    li.textContent = 'Nenhuma cena salva ainda. Monte uma acima e toque em “Salvar cena”.';
+    raiz.appendChild(li); return;
+  }
   for (const n of nomes){
     const salva = n in SALVAS, canais = salva ? SALVAS[n] : CONFIG[n];
-    const b = document.createElement('button');
-    b.className = 'cena' + (cenaAtiva === n ? ' ativa' : '');
-    b.innerHTML = '<span class="nome"></span><span class="faixa">' + faixaDaCena(canais) + '</span>' +
-                  (salva ? '' : '<span class="orig">antiga, do config — só os 3 grandes</span>');
-    b.querySelector('.nome').textContent = n;
+    const li = document.createElement('li'); li.className = 'cena' + (cenaAtiva === n ? ' ativa' : '');
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'usar';
+    b.setAttribute('aria-pressed', cenaAtiva === n ? 'true' : 'false');
+    b.setAttribute('aria-label', 'Acender a cena ' + n);
+    b.innerHTML = '<span class="n"></span><span class="f" aria-hidden="true">' + faixaDaCena(canais) + '</span>' +
+                  (salva ? '' : '<span class="o">cena fixa, não dá para remover aqui</span>');
+    b.querySelector('.n').textContent = n;
     b.onclick = () => aplicarCena(n, canais);
+    li.appendChild(b);
     if (salva){
-      const x = document.createElement('span');
-      x.className = 'apaga'; x.textContent = '×'; x.title = 'apagar a cena ' + n; x.setAttribute('role','button');
-      x.onclick = ev => { ev.stopPropagation(); removerCena(n); };
-      b.appendChild(x);
+      const x = document.createElement('button'); x.type = 'button';
+      x.className = 'tirar'; x.textContent = 'Remover'; x.setAttribute('aria-label', 'Remover a cena ' + n);
+      x.onclick = () => removerCena(n);
+      li.appendChild(x);
     }
-    raiz.appendChild(b);
+    raiz.appendChild(li);
   }
 }
 
 async function aplicarCena(nome, canais){
   try{
     await pedir('/api/luz/canais', {canais, exclusivo:true});
-    cenaAtiva = nome; $('nome').value = nome;
+    cenaAtiva = nome; $('nome').value = nome; tudoApagado = false;
     estado = estadoDeQuadro(canais);
-    desenharGrupos(); desenharCenas();
-    avisar('cena "' + nome + '" acesa — mexa nos grupos para ajustar e salve de novo', 'bom');
-  } catch(e){ avisar('não consegui acender: ' + e.message, 'erro'); }
+    sincronizar(); desenharCenas();
+    avisar('Cena “' + nome + '” acesa na igreja. Mexa nas cores para ajustar e salve de novo.', 'bom');
+  } catch(e){ avisarErro('Não consegui acender a cena “' + nome + '”.', e); }
 }
 
 async function removerCena(nome){
-  if (!confirm('Apagar a cena "' + nome + '"?')) return;
+  if (!await perguntar('Remover a cena “' + nome + '”?', 'Ela sai da lista de cenas salvas. As luzes não mudam agora.', 'Remover', true)) return;
   try{
     await pedir('/api/luz/look/' + encodeURIComponent(nome) + '/remover', {});
     if (cenaAtiva === nome) cenaAtiva = null;
-    await carregar(); avisar('cena "' + nome + '" apagada', 'bom');
-  } catch(e){ avisar(e.message, 'erro'); }
+    await carregar(); avisar('Cena “' + nome + '” removida.', 'bom');
+  } catch(e){ avisarErro('Não consegui remover a cena “' + nome + '”.', e); }
 }
 
 async function salvarCena(nome, st){
@@ -467,89 +740,58 @@ async function salvarCena(nome, st){
   await pedir('/api/luz/look', {nome, canais: quadro(st)});
 }
 
-// ---------------------------------------------------------------------------
-// tela: modos de movimento
-// ---------------------------------------------------------------------------
-let MODOS = [], modoAtual = 'parado';
-
-async function escolherModo(id){
-  try{
-    const r = await pedir('/api/luz/modo/' + encodeURIComponent(id), {});
-    modoAtual = r.modo || 'parado';
-    desenharModos();
-    avisar(modoAtual === 'parado' ? 'movimento parado — a cena voltou exata'
-                                  : 'movimento: ' + modoAtual, 'bom');
-  } catch(e){ avisar(e.message, 'erro'); }
-}
-
-function botaoModo(id, titulo, legenda, risco){
-  const b = document.createElement('button');
-  b.className = 'modo' + (risco ? ' risco' : '') + (modoAtual === id ? ' sel' : '');
-  b.innerHTML = '<span class="q"></span><span class="p"></span>';
-  b.querySelector('.q').textContent = titulo;
-  b.querySelector('.p').textContent = legenda;
-  b.onclick = () => {
-    // O perigoso pergunta antes. Nao e burocracia: estrobo pode desencadear
-    // crise em quem tem epilepsia fotossensivel, e este botao fica na mesma
-    // tela dos outros.
-    if (risco && !confirm('Ligar o ESTROBO?\n\nLuz pulsante pode desencadear crise em quem tem epilepsia fotossensível. Não use com gente no salão.')) return;
-    escolherModo(id);
-  };
-  return b;
-}
-
-function desenharModos(){
-  const raiz = $('modos'); raiz.innerHTML = '';
-  raiz.appendChild(botaoModo('parado', 'Parado', 'a cena como ela é', false));
-  let jaSeparou = false;
-  for (const m of MODOS){
-    if (m.perigoso && !jaSeparou){
-      const s = document.createElement('span'); s.className = 'separador';
-      raiz.appendChild(s); jaSeparou = true;
-    }
-    raiz.appendChild(botaoModo(m.id, m.nome, m.descricao, m.perigoso));
-  }
-  if (!MODOS.length){
-    const d = document.createElement('span');
-    d.className = 'dica'; d.textContent = 'nenhum modo configurado';
-    raiz.appendChild(d);
-  }
-}
-
 async function carregar(){
   const m = await pedir('/api/luz/mesa');
-  $('pontoLuz').className = 'ponto ' + (m.ligado ? 'on' : 'off');
-  $('txtLuz').textContent = m.ligado ? (m.descricao || 'luz ligada') : 'luz desligada no config';
+  luzLigada = !!m.ligado;
+  $('semLuz').hidden = luzLigada;
   SALVAS = m.looks_salvas || {}; CONFIG = m.looks_config || {};
-  MODOS = m.modos || []; modoAtual = m.modo_atual || 'parado';
-  desenharCenas(); desenharModos();
+  desenharCenas();
 }
 
+// ---------------------------------------------------------------------------
+// botoes fixos
+// ---------------------------------------------------------------------------
+function pintarChave(){
+  const ligada = $('aoVivo').checked;
+  $('chaveVivo').classList.toggle('ligada', ligada);
+  $('btnEnviar').hidden = ligada;
+}
+$('aoVivo').onchange = pintarChave;
+
 $('btnApagar').onclick = async () => {
-  try{ await pedir('/api/luz/apagar', {}); cenaAtiva = null; desenharCenas(); avisar('tudo apagado', 'bom'); }
-  catch(e){ avisar(e.message, 'erro'); }
-};
-$('btnEnviar').onclick = () => enviarJa().then(() => avisar('enviado para a luz', 'bom'));
-$('btnSalvar').onclick = async () => {
   try{
-    const nome = $('nome').value.trim();
-    if ((nome in SALVAS) && !confirm('Já existe uma cena "' + nome + '". Substituir?')) return;
+    clearTimeout(envioPendente);
+    await pedir('/api/luz/apagar', {});
+    cenaAtiva = null; tudoApagado = true;
+    desenharCenas(); desenharRetrato(); avisar('Todas as luzes foram apagadas.', 'bom');
+  } catch(e){ avisarErro('Não consegui apagar as luzes.', e); }
+};
+$('btnEnviar').onclick = async () => {
+  if (await enviarJa()) avisar('A cena está na igreja agora.', 'bom');
+};
+$('btnSalvar').onclick = async () => {
+  const nome = $('nome').value.trim();
+  if (!nome){ avisar('Escreva um nome para a cena antes de salvar.', 'erro'); $('nome').focus(); return; }
+  if ((nome in SALVAS) && !await perguntar('Já existe uma cena “' + nome + '”', 'Salvar agora troca a cena antiga por esta.', 'Substituir', false)) return;
+  try{
     await salvarCena(nome, estado);
     cenaAtiva = nome; await carregar();
     const cue = ['abertura','louvor','pregacao','apagar'].includes(nome);
-    avisar('cena "' + nome + '" salva' + (cue ? ' — e já vale no botão do culto' : ''), 'bom');
-  } catch(e){ avisar(e.message, 'erro'); }
+    avisar('Cena “' + nome + '” salva.' + (cue ? ' Ela já vale no botão do culto.' : ''), 'bom');
+  } catch(e){ avisarErro('Não consegui salvar a cena.', e); }
 };
 $('btnSugestoes').onclick = async () => {
-  if (!confirm('Instalar as 8 cenas sugeridas? As que tiverem o mesmo nome serão substituídas.')) return;
+  if (!await perguntar('Instalar as 8 cenas sugeridas?', 'As cenas que já existirem com o mesmo nome serão substituídas. As luzes não mudam agora.', 'Instalar', false)) return;
   try{
     for (const [n, sug] of Object.entries(SUGESTOES)) await salvarCena(n, estadoDeSugestao(sug));
-    await carregar(); avisar('8 cenas sugeridas instaladas', 'bom');
-  } catch(e){ avisar(e.message, 'erro'); }
+    await carregar(); avisar('As 8 cenas sugeridas foram instaladas.', 'bom');
+  } catch(e){ avisarErro('Não consegui instalar as cenas sugeridas.', e); }
 };
 
-desenharGrupos();
-carregar().catch(e => avisar('não consegui falar com a ponte: ' + e.message, 'erro'));
+montarGrupos();
+sincronizar();
+pintarChave();
+carregar().catch(e => avisarErro('Não consegui carregar as cenas salvas.', e));
 </script>
 </body>
 </html>
