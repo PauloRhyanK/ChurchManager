@@ -1916,7 +1916,8 @@ PACOTE = (
     "chegada.yaml", "looks_salvas.yaml", "patch.yaml",
     "config.exemplo.yaml", "maquina.exemplo.yaml", "config.secundaria.yaml",
     "configurar-este-pc.bat", "configurar-este-pc.ps1",
-    "iniciar-ponte.bat", "iniciar-ponte.ps1", "gerar_click.py",
+    "iniciar-ponte.bat", "iniciar-ponte.ps1", "iniciar.py", "instalar-do-zero.ps1",
+    "gerar_click.py",
     "verificar.py", "verificar_obs.py", "descobrir_holyrics.py", "descobrir_luzes.py",
 )
 

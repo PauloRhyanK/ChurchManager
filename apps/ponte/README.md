@@ -74,7 +74,10 @@ dela, `configurar-este-pc.bat` pergunta o papel da máquina e faz o resto. Detal
   igreja ainda não foi ligada a ele.
 - **Feito e testado só localmente (12/11/2026):** o painel do culto novo, que é a mesma
   tela no PC, no celular e em `ponte.igrejaparaiso.com.br/painel`, com comandos pela
-  web; a atualização automática dos PCs; a tela de montar cena redesenhada.
+  web; a atualização automática dos PCs; a tela de montar cena redesenhada; o estúdio de luz
+  (`/estudio`), com animação por luz e limites de velocidade no motor. **Nada disso foi
+  visto com refletor, OBS ou Holyrics de verdade.** As animações do estúdio só chegam à
+  igreja depois que o PC do som for atualizado; até lá aparecem só na prévia da tela.
 - **Feito e testado só localmente:** instalador `configurar-este-pc`; o cofre da versão
   web e o envio da configuração pelo PC principal.
 - **Escrito e ainda não testado num Windows:** `instalar-do-zero.ps1`, o instalador de
