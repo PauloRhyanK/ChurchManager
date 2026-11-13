@@ -1,0 +1,339 @@
+# ===========================================================================
+#  CHEGADA — o passo a passo de quem chega para o culto
+#
+#  Este arquivo É o guia. Cada passo abaixo vira UMA TELA: uma frase grande,
+#  uma linha de apoio, um botão. Mudou o procedimento? Muda aqui, salva, e as
+#  telas se atualizam sozinhas em alguns segundos — não precisa reiniciar.
+#
+#  De onde vieram os passos: do "Manual Geral da Equipe Multimídia" (capítulos
+#  1, 5 e 6) e do que foi medido na igreja em novembro de 2026.
+#
+#  A REGRA DO TEXTO, pedida pelo Paulo em 12/11 depois de ver a primeira
+#  versão, que era uma lista cheia de explicação:
+#
+#    frase:   o que fazer, em poucas palavras. É o que aparece GRANDE.
+#    apoio:   uma linha só. Opcional.
+#    como:    o passo a passo do manual. Fica ESCONDIDO atrás de
+#    porque:  "Como faço isso?" — quem já sabe, não lê.
+#
+#  CADA PASSO É DE UM DE TRÊS TIPOS, e o tipo sai do que você escreve:
+#
+#    confere: <nome>   O SISTEMA MEDE. A tela avança sozinha quando a medida
+#                      passa, e só assim. Ninguém marca "feito" numa coisa que
+#                      dá para medir — é isso que impede o guia de mentir.
+#    acao: <nome>      UM CLIQUE. O painel faz por você.
+#    (nenhum dos dois) VOCÊ FAZ. É coisa física: cabo, botão, câmera.
+#
+#  Um passo pode ter `confere` E `acao` juntos: o botão resolve, a medida
+#  confirma que resolveu.
+#
+#  Outros campos: titulo (nome curto, para listas), se_falhar (aparece quando
+#  a medida está vermelha), rotulo_acao, confirmar, link {rotulo, url},
+#  imagem: obs (mostra o que o OBS está pondo no ar).
+#
+#  Cuidado com a indentação: YAML usa espaços, nunca Tab.
+# ===========================================================================
+
+# O endereço que aparece GRANDE nas páginas dos PCs, para o voluntário abrir
+# no celular. Enquanto a versão da web não existir, quem vale é o endereço
+# local, que a ponte descobre sozinha e mostra logo abaixo.
+endereco: ponte.igrejaparaiso.com.br
+
+# ENQUANTO ISTO FOR false, AS TELAS MOSTRAM O ENDERECO LOCAL, e nao o de cima.
+# O dominio ainda nao aponta para lugar nenhum: mostrar em letra gigante um
+# endereco que nao abre mandaria o voluntario para uma pagina morta no
+# primeiro minuto. Vire para true no dia em que a versao da web estiver no ar.
+endereco_no_ar: false
+
+# manual     = alguém passa os slides no Holyrics (é como a igreja opera hoje)
+# automatico = as letras seguem sozinhas pelo timecode (o futuro; ainda não
+#              existe, então este valor só muda o que a tela mostra)
+letras:
+  modo: manual
+
+rede:
+  # A TV e o notebook pegam endereço por DHCP e ele MUDA (em 12/11 mudaram os
+  # dois). O MAC não muda: quando o endereço daqui parar de responder, a ponte
+  # procura a máquina pelo MAC e segue. Os IPs abaixo são só o primeiro palpite.
+  tv:
+    ip: 192.168.1.53
+    mac: "64-CC-22-04-06-EC"
+    script: 'C:\Users\User\Documents\Retorno TV\tv-control.ps1'
+  obs:
+    mac: "B4-45-06-B4-51-8D"
+  holyrics_exe: 'C:\Holyrics\Holyrics.exe'
+
+obs:
+  # O nome tem que bater EXATAMENTE com o que aparece no OBS em
+  # Coleção de Cenas. Se a equipe renomear lá, renomeie aqui.
+  colecao: "Culto ao vivo (novo)"
+
+# `papel` liga a função à máquina: é o que faz a página do notebook mostrar
+# os passos da transmissão, e a do PC do som mostrar os do áudio.
+ilhas:
+  - { id: projecao,    nome: Projeção,    onde: "PC do Holyrics",          papel: holyrics }
+  - { id: transmissao, nome: Transmissão, onde: "Notebook da transmissão", papel: transmissao }
+  - { id: audio,       nome: Áudio,       onde: "PC do som e mesa X32",    papel: som }
+  - { id: cameras,     nome: Câmeras,     onde: "Câmeras e placa Blackmagic" }
+
+passos:
+
+  # ------------------------------------------------------------- PROJEÇÃO --
+  - id: p_energia
+    ilha: projecao
+    titulo: Nobreak, TV e projetor ligados
+    frase: Ligue o nobreak, a TV de retorno e o projetor.
+    como:
+      - "Nobreak da projeção ligado."
+      - "TV de retorno do altar ligada (pelo controle ou no botão)."
+      - "Projetor ligado."
+    porque: "O projetor só liga com a energia do Altar ligada. Se ele não acender, é lá que está o problema, não no cabo."
+
+  - id: p_holyrics
+    ilha: projecao
+    titulo: Holyrics aberto
+    frase: Abra o Holyrics.
+    apoio: Normalmente ele já abre sozinho.
+    confere: holyrics
+    acao: abrir_holyrics
+    rotulo_acao: Abrir o Holyrics
+    se_falhar: "Se o Holyrics está aberto e isto continua vermelho, o API Server dele está desligado: no Holyrics, Arquivo › Configurações › API Server."
+
+  # DOIS PASSOS PARA A TV, E NAO UM, DE PROPOSITO. A primeira versao era um
+  # so, com `confere: tv` — e ficava VERDE assim que a TV aparecia na rede,
+  # sem ninguem ter aberto o retorno. "A TV esta ligada" e "a letra esta
+  # aparecendo nela" sao coisas diferentes, e so a primeira da para medir.
+  - id: p_tv
+    ilha: projecao
+    titulo: TV de retorno ligada
+    frase: Ligue a TV de retorno.
+    apoio: Esta tela avança sozinha quando a TV aparecer na rede.
+    confere: tv
+    se_falhar: "A TV não respondeu na rede. Ela está ligada? Se está, desligue e ligue no controle e espere uns 20 segundos."
+
+  - id: p_retorno
+    ilha: projecao
+    titulo: Retorno aberto na TV
+    frase: Abra o retorno na TV do altar.
+    apoio: Um clique. Leva uns 20 segundos. Depois olhe para a TV.
+    acao: retorno_tv
+    rotulo_acao: Abrir o retorno na TV
+    como:
+      - "O botão abre o Moonlight na TV e entra neste PC sozinho."
+      - "Depois olhe para a TV: tem que aparecer a letra em fonte grande."
+      - "Não apareceu? Clique de novo. Já estava aparecendo? É só marcar Feito."
+    porque: "O cantor lê a letra nessa TV. Sem ela, ele canta olhando para o telão, de costas para a igreja."
+
+  - id: p_luz
+    ilha: projecao
+    titulo: Luz respondendo
+    frase: Ligue o PC do som.
+    apoio: É ele que leva a luz até os refletores.
+    confere: luz
+    como:
+      - "O PC do som precisa estar ligado e dentro do Windows."
+      - "Nele, a janela preta da ponte tem que estar aberta."
+    se_falhar: "Vá ao PC do som. Tela acesa? Entrou no Windows? Se a janela preta não está lá, abra o atalho de iniciar. Se tem duas, feche as duas e abra uma."
+    porque: "O PC do Holyrics não alcança a interface de luz — ela fica atrás de outro roteador. O PC do som é a ponte até ela."
+
+  - id: p_midias
+    ilha: projecao
+    titulo: Slides e vídeos do dia
+    frase: Baixe os slides e vídeos de hoje.
+    apoio: Estão no Gmail, perfil Datashow.
+    como:
+      - "Abra o Gmail no perfil Datashow e baixe o .zip do dia."
+      - "Em Downloads: botão direito no .zip › Extrair Tudo."
+      - "Mova a pasta para o local padrão de mídias."
+      - "No Holyrics: guia Mídia › Imagem › botão direito › Adicionar Pasta."
+      - "Não chegou o mapa ou as letras do louvor? Cobre agora, não na hora do culto."
+
+  - id: p_letras
+    ilha: projecao
+    titulo: Letras na lista do dia
+    frase: Ponha as músicas de hoje no Holyrics.
+    apoio: Esta tela avança quando a lista tiver música.
+    confere: lista_do_dia
+    link: { rotulo: Abrir a tela de letras, url: /letras }
+    como:
+      - "Música que já está no acervo: na tela de letras, procure e ponha na lista do dia com um clique."
+      - "Música nova: cole a letra na tela de letras, copie o resultado e, no Holyrics, F2 para criar e Ctrl+V."
+      - "Máximo de 3 linhas por slide. Quebre a frase onde a música respira."
+    se_falhar: "A lista de músicas do Holyrics está vazia."
+    porque: "Comentário longo na letra encolhe a fonte gigante da TV de retorno. Use // só para recados curtos."
+
+  - id: p_avisos
+    ilha: projecao
+    titulo: Avisos e cronômetro
+    frase: Ponha o vídeo de avisos e o cronômetro.
+    como:
+      - "No tema de espera: tire o vídeo antigo de fundo e ponha o vídeo de avisos atualizado."
+      - "Ctrl+T abre o cronômetro. Configure a contagem regressiva."
+      - "Agende: culto às 18h → agendar para 17h30 com 30 minutos de contagem."
+
+  # ---------------------------------------------------------- TRANSMISSÃO --
+  - id: t_nobreak
+    ilha: transmissao
+    titulo: Nobreak da sala ligado
+    frase: Ligue o nobreak da sala.
+    apoio: É ele que liga a internet da transmissão.
+
+  - id: t_notebook
+    ilha: transmissao
+    titulo: Notebook ligado
+    frase: Busque e ligue o notebook.
+    apoio: Ele fica na Sala do Cordeiro.
+
+  - id: t_cabos
+    ilha: transmissao
+    titulo: Cabos do notebook
+    frase: Rede na direita. USB na esquerda.
+    desenho: notebook
+    como:
+      - "Cabo de REDE no lado DIREITO."
+      - "Placa de captura e todos os USB só no lado ESQUERDO."
+      - "Energia conectada."
+    porque: "Com a placa Blackmagic no USB da direita, a imagem da câmera sai esticada no OBS."
+
+  - id: t_obs
+    ilha: transmissao
+    titulo: OBS aberto
+    frase: Abra o OBS no notebook.
+    apoio: A ponte se conecta nele sozinha.
+    confere: obs
+    se_falhar: "O OBS está aberto? Se está e isto continua vermelho: no OBS, Ferramentas › Configurações do Servidor WebSocket › Ativar. E não clique em Gerar senha — isso desconecta a ponte."
+
+  - id: t_colecao
+    ilha: transmissao
+    titulo: Coleção de cenas do culto
+    frase: Ponha o OBS na coleção do culto.
+    confere: obs_colecao
+    acao: obs_colecao
+    rotulo_acao: Trocar para a coleção do culto
+    confirmar: true
+    se_falhar: "O OBS abriu em outra coleção de cenas."
+    porque: "As cenas Abertura, Louvor, Pregação e Ofertório que o painel aciona só existem nessa coleção."
+
+  - id: t_estudio
+    ilha: transmissao
+    titulo: Modo Estúdio ligado
+    frase: Ligue o Modo Estúdio.
+    confere: obs_estudio
+    acao: obs_estudio
+    rotulo_acao: Ligar o Modo Estúdio
+    porque: "Sem ele, todo clique em cena vai direto para o YouTube, sem conferir enquadramento antes."
+
+  - id: t_imagem
+    ilha: transmissao
+    titulo: Imagem e som conferidos
+    frase: A imagem está certa?
+    apoio: Câmeras aparecendo, sem esticar. Barra de áudio mexendo no OBS.
+    imagem: obs
+    porque: "Imagem esticada é placa no USB errado. Áudio parado é o Reaper fechado ou o NDI Send desligado no PC do som."
+
+  - id: t_youtube
+    ilha: transmissao
+    titulo: Título e chave do YouTube
+    frase: Acerte o título e deixe em teste.
+    apoio: Não listado, por enquanto.
+    link: { rotulo: Abrir a tela de transmissão, url: /youtube }
+    como:
+      - "Ajuste o título do culto de hoje."
+      - "Deixe em TESTE (não listado) por enquanto."
+      - "Confira que a chave do canal certo está aplicada no OBS."
+      - "Monetização: confira no YouTube Studio que está em Manual. Isso o painel não alcança."
+
+  - id: t_transmitir
+    ilha: transmissao
+    titulo: Transmissão no ar
+    frase: Comece a transmissão.
+    apoio: Ainda em teste. Só quem tem o link vê.
+    confere: transmitindo
+    acao: transmitir
+    rotulo_acao: Iniciar a transmissão
+    confirmar: true
+    se_falhar: "O OBS ainda não está transmitindo."
+
+  - id: t_validar
+    ilha: transmissao
+    titulo: Testado pelo celular
+    frase: Abra a live no celular.
+    apoio: Imagem chega? Som chega, limpo? Espere uns 20 segundos.
+
+  - id: t_publico
+    ilha: transmissao
+    titulo: Em público
+    frase: Mude para público.
+    apoio: Só depois do teste pelo celular.
+    link: { rotulo: Abrir a tela de transmissão, url: /youtube }
+
+  # ---------------------------------------------------------------- ÁUDIO --
+  - id: a_x32
+    ilha: audio
+    titulo: Mesa X32 ligada
+    frase: Ligue a mesa X32.
+    apoio: Espere uns 30 segundos até ela terminar de iniciar.
+
+  - id: a_usb
+    ilha: audio
+    titulo: USB e rede da mesa
+    frase: Confira o USB e a rede da mesa.
+    como:
+      - "X32 ligada ao PC do Reaper pelo cabo USB."
+      - "Cabo de rede do PC conectado e piscando."
+    porque: "O USB leva o som para o Reaper. A rede leva do Reaper para a transmissão, por NDI."
+
+  - id: a_reaper
+    ilha: audio
+    titulo: Reaper no template do culto
+    frase: Abra o Reaper no template do culto.
+    como:
+      - "Reaper › File › Recent Projects › Culto – Template."
+      - "O medidor de entrada tem que piscar verde."
+      - "Sem áudio? X32 ligada, USB conectado, e Device Setup reconhecendo a X32."
+
+  - id: a_ndi
+    ilha: audio
+    titulo: NDI Send ligado
+    frase: Ligue o NDI Send.
+    apoio: Na track do Main Out, em Routing.
+    porque: "É esse envio que leva o som para o OBS. Se cair, a transmissão fica muda; o reserva é o áudio analógico na Blackmagic."
+
+  - id: a_mics
+    ilha: audio
+    titulo: Microfones testados
+    frase: Teste cada microfone.
+    apoio: Tem que chegar no amarelo. Nunca no vermelho.
+    como:
+      - "Pregador, cantores, bateria: um por um."
+      - "Ficou vermelho? Baixe o GAIN daquele canal."
+
+  # -------------------------------------------------------------- CÂMERAS --
+  - id: c_inspecao
+    ilha: cameras
+    titulo: Câmeras ligando
+    frase: Ligue cada câmera e teste o visor.
+
+  - id: c_hdmi
+    ilha: cameras
+    titulo: HDMI na Blackmagic
+    frase: Ligue o HDMI de cada câmera na placa.
+    apoio: Deixe folga nos cabos.
+
+  - id: c_foco
+    ilha: cameras
+    titulo: Foco manual e exposição
+    frase: Ponha o foco em manual.
+    apoio: E ajuste a exposição para a luz de hoje.
+
+  - id: c_bateria
+    ilha: cameras
+    titulo: Bateria e cartão
+    frase: Confira bateria e cartão.
+    apoio: Pelo menos 10 GB livres.
+
+  - id: c_obs
+    ilha: cameras
+    titulo: Câmeras aparecendo no OBS
+    frase: Sua câmera aparece na imagem?
+    imagem: obs

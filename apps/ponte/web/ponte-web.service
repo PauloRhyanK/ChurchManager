@@ -1,0 +1,29 @@
+# Exemplo de servico systemd para a versao web. Ajuste os caminhos e o usuario.
+#
+# UM PROCESSO SO (--workers 1): o estado do culto mora na memoria. Com dois,
+# um receberia o retrato da igreja e o outro responderia a tela com o velho.
+#
+# As variaveis ficam em /etc/ponte-web.env (chmod 600), fora do repositorio:
+#   PONTE_SENHA=...      a senha que a equipe digita        (8+ caracteres)
+#   PONTE_CHAVE=...      o segredo que a igreja apresenta   (24+ caracteres)
+#   PONTE_SEGREDO=...    assina o cookie de sessao          (aleatorio, 64 hex)
+
+[Unit]
+Description=Ponte do Culto - versao web
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ponte
+WorkingDirectory=/opt/ponte-do-culto/apps/ponte/web
+EnvironmentFile=/etc/ponte-web.env
+ExecStart=/opt/ponte-do-culto/apps/ponte/web/.venv/bin/gunicorn --workers 1 --threads 8 --bind 127.0.0.1:8710 --access-logfile - app:app
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

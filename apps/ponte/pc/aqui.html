@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ponte do Culto</title>
+<link rel="stylesheet" href="/guia.css">
+</head>
+<body>
+<!-- A PAGINA DESTE PC — a que abre sozinha quando ele liga.
+
+     E o MESMO arquivo em toda maquina; o que muda e o papel dela:
+
+       holyrics     o PC principal. Comeca por um formulario (qual culto, que
+                    horas, quem veio) e depois pergunta UMA coisa por vez.
+       transmissao  o notebook. So se apresenta, mostra o endereco para o
+                    celular e o estado das coisas.
+       som          o PC do Reaper. O mesmo, mais os checks que so quem esta
+                    na frente da mesa consegue marcar. -->
+<div class="tela" id="app"></div>
+<script src="/guia.js"></script>
+<script>
+let tela = 'casa';          // 'casa' = a pagina do papel; 'passo' = perguntas; 'form' = formulario
+const F = {ordem: null, hora: null, presentes: null, erro: '', enviando: false};
+
+G.extra = () => [tela, F.ordem, F.presentes, F.erro, F.enviando];
+
+const minhasIlhas = () => ch().ilhas.filter(i => i.papel === G.d.papel).map(i => i.id);
+
+// O que o PC principal pergunta: as funcoes dele, e depois as de quem NAO
+// veio. Funcao sem ninguem nao pode ficar esquecida — cai para quem esta aqui.
+function ilhasDoGuia() {
+  const c = ch(), minhas = minhasIlhas();
+  if (G.d.papel !== 'holyrics' || !c.culto) return minhas;
+  const veio = c.culto.presentes || [];
+  return [...minhas, ...c.ilhas.map(i => i.id).filter(id => !minhas.includes(id) && !veio.includes(id))];
+}
+
+G.aoVoltar = () => {
+  const lista = passosDas(ilhasDoGuia()), i = lista.indexOf(passoDaVez(lista));
+  if (i > 0) G.fixo = lista[i - 1].id;
+  else if (G.d.papel !== 'holyrics') { tela = 'casa'; G.fixo = null; }
+  redesenhar(true);
+};
+
+const peca = (nome, cls, estado, det) => ({nome, cls, estado, det: det || ''});
+
+function avisos() {
+  const c = ch();
+  return (G.semContato ? '<div class="faixa erro">Sem contato com a ponte deste PC. A janela preta está aberta?</div>' : '')
+       + (!G.d.principal_ok ? `<div class="faixa erro"><b>Sem contato com o PC do Holyrics.</b> Ele está ligado? O que aparece abaixo é só o que este PC sabe sozinho.</div>` : '')
+       + (c && c.erro_do_roteiro ? `<div class="faixa erro">${e(c.erro_do_roteiro)}</div>` : '');
+}
+
+// ---------------------------------------------------------------- HOLYRICS --
+function ladoDoPrincipal() {
+  return `<div class="rotulo">Agora na igreja</div>${htmlPecas(pecas(), true)}
+    ${htmlEndereco(true)}
+    <div style="display:flex;gap:6px 16px;flex-wrap:wrap">
+      <a class="leve" href="/">Painel do culto</a><a class="leve" href="/letras">Letras</a>
+      ${ch().culto ? '<button class="leve cinza" data-ir="form">Mudar o culto de hoje</button>' : ''}</div>`;
+}
+
+function formulario() {
+  const c = ch();
+  if (F.ordem === null)     F.ordem = (c.culto && c.culto.ordem) || (c.ordem && c.ordem.id) || (c.ordens[0] || {}).id;
+  if (F.hora === null)      F.hora = (c.culto && c.culto.hora) || '19:30';
+  if (F.presentes === null) F.presentes = (c.culto && c.culto.presentes) || minhasIlhas();
+  const minhas = minhasIlhas();
+  return `<div><h1 class="ola">Olá, voluntário.</h1>
+      <div class="sub">Você está no <b>${e(G.d.nome)}</b>. Daqui você prepara o culto inteiro.</div></div>
+    <div class="pergunta"><div class="q">1 · Qual culto é hoje?</div>
+      <div class="opcoes">${c.ordens.map(o => `<button class="op ${o.id === F.ordem ? 'sel' : ''}" data-ordem="${e(o.id)}">${e(o.nome)}</button>`).join('')}</div></div>
+    <div class="pergunta"><label for="hora">2 · Que horas começa?</label>
+      <input class="campo" id="hora" inputmode="numeric" placeholder="19:30" value="${e(F.hora)}"></div>
+    <div class="pergunta"><div class="q">3 · Quem veio hoje?</div>
+      <div class="opcoes">${c.ilhas.map(il => { const veio = F.presentes.includes(il.id);
+        return `<button class="op ${veio ? 'veio' : ''}" data-veio="${e(il.id)}" aria-pressed="${veio}">${e(il.nome)}${minhas.includes(il.id) ? ' · eu' : (veio ? '' : ' · ninguém')}</button>`; }).join('')}</div></div>
+    ${F.erro ? `<div class="faixa erro">${e(F.erro)}</div>` : ''}
+    <div><button class="bt forte" data-enviar="1" ${F.enviando ? 'disabled' : ''}>${F.enviando ? 'Começando…' : 'Começar'}</button></div>`;
+}
+
+function principal() {
+  const c = ch(), app = $('app');
+  const comForm = !c.culto || tela === 'form';
+  // O FORMULARIO NAO E REFEITO a cada medida que muda: refazer apagaria o que
+  // a pessoa esta digitando na hora. So o lado direito se atualiza.
+  if (comForm && $('formulario') && !F._refazer) { $('lado').innerHTML = ladoDoPrincipal(); return; }
+  F._refazer = false;
+  if (comForm) {
+    app.innerHTML = avisos() + `<div class="duas cresce"><div class="principal" id="formulario">${formulario()}</div>
+      <div class="lado" id="lado">${ladoDoPrincipal()}</div></div>`;
+    return;
+  }
+  const lista = passosDas(ilhasDoGuia()), p = passoDaVez(lista);
+  const meio = p ? htmlPasso(p, lista)
+    : `<div class="w-meio"><div class="pilula sim"><i></i><span>${lista.length} de ${lista.length}</span></div>
+         <h1 class="frase">Tudo pronto.</h1><p class="apoio">Agora é com a ordem do culto.</p></div>
+       <div class="w-pe"><a class="bt forte" href="/">Ir para o painel do culto</a></div>`;
+  app.innerHTML = avisos() + `<div class="duas cresce" style="align-items:stretch">
+      <div class="principal">${meio}</div><div class="lado" id="lado">${ladoDoPrincipal()}</div></div>`;
+}
+
+// -------------------------------------------------------------- SECUNDARIOS --
+function secundario() {
+  const c = ch(), app = $('app'), papel = G.d.papel, L = G.d.local || {};
+  const quem = papel === 'som' ? 'PC do som' : 'notebook da transmissão';
+  const cabeca = `<div><h1 class="ola">Olá, voluntário.</h1>
+    <div class="sub">Este é o <b>${e(quem)}</b>.${papel === 'som' ? ' Aqui o Reaper é com você.' : ''}</div></div>`;
+  const elo = peca('PC do Holyrics', G.d.principal_ok ? 'sim' : 'nao', G.d.principal_ok ? 'conectado' : 'sem contato',
+                   G.d.principal_ok ? 'é ele quem comanda' : 'ele está ligado?');
+
+  if (!c) {   // sem a principal, so da para dizer o que este PC sabe sozinho
+    const so = papel === 'som' ? peca('Reaper', L.reaper_aberto ? 'sim' : '', L.reaper_aberto ? 'aberto' : 'fechado', 'neste PC')
+                               : peca('OBS', L.obs_aberto ? 'sim' : 'nao', L.obs_aberto ? 'aberto' : 'fechado', 'neste notebook');
+    app.innerHTML = cabeca + avisos() + htmlPecas([so, elo]);
+    return;
+  }
+
+  const ilhas = minhasIlhas(), lista = passosDas(ilhas);
+  if (tela === 'passo') {
+    const p = passoDaVez(lista);
+    if (p) { app.innerHTML = avisos() + htmlPasso(p, lista); return; }
+    tela = 'casa';
+  }
+  const faltando = lista.filter(p => !p.feito).length;
+  const resto = pecas().filter(x => x.nome !== 'OBS' && x.nome !== 'Holyrics' && x.nome !== 'TV de retorno');
+
+  if (papel === 'som') {
+    // Aqui os passos sao CHECKS: so quem esta na frente da mesa sabe se o
+    // Reaper abriu no template certo. A ponte nao enxerga a mesa nem o Reaper.
+    const checks = lista.map(p => `<button class="lin ${p.feito ? 'ok' : ''}" ${p.feito ? 'data-desfazer' : 'data-feito'}="${e(p.id)}" aria-pressed="${p.feito}">
+        <span class="q">${p.feito ? '✓' : ''}</span><span class="x">${e(p.titulo)}</span></button>`).join('');
+    const sozinho = [resto.find(x => x.nome === 'Luz') || peca('Luz', '', 'sem medida'), elo, resto.find(x => x.nome === 'Letras')].filter(Boolean);
+    app.innerHTML = avisos() + `<div class="duas cresce"><div class="principal">${cabeca}
+        <div class="linhas">${checks}</div>
+        ${faltando ? '<div><button class="leve" data-ir="passo">Como faço isso?</button></div>' : ''}</div>
+      <div class="lado">${htmlEndereco(true)}
+        <div class="rotulo">O que este PC faz sozinho</div>${htmlPecas(sozinho, true)}
+        <div class="faixa aviso"><b>Não desligue nem deixe este PC dormir.</b> É ele que leva a luz.</div></div></div>`;
+    return;
+  }
+
+  const obs = peca('OBS', L.obs_aberto ? 'sim' : 'nao', L.obs_aberto ? 'aberto' : 'fechado',
+                   L.obs_aberto ? 'neste notebook' : 'abra o OBS neste notebook');
+  app.innerHTML = cabeca + avisos() + htmlEndereco(false) + htmlPecas([obs, elo, ...resto.filter(x => x.nome !== 'Luz')]) + `
+    <div class="cresce"></div>
+    <div class="w-pe">${faltando
+      ? `<span class="apoio" style="flex:1 1 260px">${faltando === 1 ? 'Falta 1 passo' : 'Faltam ' + faltando + ' passos'} da transmissão.</span>
+         <button class="bt forte" data-ir="passo" style="flex:0 0 auto">Fazer agora</button>`
+      : '<span class="apoio">Nada para fazer aqui agora. Pode deixar esta tela aberta.</span>'}</div>`;
+}
+
+G.render = () => {
+  document.title = G.d.nome + ' — Ponte do Culto';
+  $('app').className = 'tela';
+  if (G.d.papel === 'holyrics' && ch()) principal(); else secundario();
+};
+
+document.addEventListener('click', async ev => {
+  const alvo = ev.target.closest('button');
+  if (!alvo) return;
+  const d = alvo.dataset;
+  if (d.ir) {
+    tela = d.ir; G.fixo = null; G.como = false; F._refazer = true;
+    if (d.ir === 'form') { F.ordem = F.hora = F.presentes = null; F.erro = ''; }
+    redesenhar(true);
+  } else if (d.ordem) {
+    F.ordem = d.ordem; F._refazer = true; redesenhar(true);
+  } else if (d.veio) {
+    F.presentes = F.presentes.includes(d.veio) ? F.presentes.filter(x => x !== d.veio) : [...F.presentes, d.veio];
+    F._refazer = true; redesenhar(true);
+  } else if (d.enviar) {
+    F.erro = ''; F.enviando = true; F._refazer = true; redesenhar(true);
+    try {
+      const r = await fetch('/api/aqui/culto', {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ordem: F.ordem, hora: F.hora, presentes: F.presentes})});
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.erro || ('erro ' + r.status));
+      tela = 'casa'; G.pulados.clear();
+      F.enviando = false; F._refazer = true;
+      receberChegada(j);
+    } catch (x) { F.enviando = false; F.erro = x.message; F._refazer = true; redesenhar(true); }
+  }
+});
+// O que a pessoa digita na hora fica guardado SEM redesenhar a tela.
+document.addEventListener('input', ev => { if (ev.target.id === 'hora') F.hora = ev.target.value.trim(); });
+
+comecar();
+</script>
+</body>
+</html>

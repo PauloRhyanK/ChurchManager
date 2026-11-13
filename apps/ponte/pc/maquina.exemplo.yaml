@@ -1,0 +1,25 @@
+# ===========================================================================
+#  QUEM É ESTA MÁQUINA
+#
+#  O projeto é o mesmo em todo PC da igreja. O que muda de um para o outro é
+#  só este arquivo — por isso ele NÃO é copiado junto quando o projeto é
+#  atualizado: cada PC tem o seu.
+#
+#  papel:
+#    holyrics     o PC principal. Mede, guarda o progresso, executa. A página
+#                 dele começa pelo formulário do culto e pergunta uma coisa
+#                 por vez.
+#    transmissao  o notebook do OBS. A página se apresenta, mostra o endereço
+#                 para o celular e o estado das coisas.
+#    som          o PC do Reaper. O mesmo, mais os checks da mesa de som.
+#
+#  principal:
+#    Só nas máquinas que NÃO são a principal: o endereço da principal, de onde
+#    elas leem o estado do culto. Exemplo: http://192.168.1.143:8700
+#
+#  PARA UMA MÁQUINA ASSUMIR NO LUGAR DA PRINCIPAL (se ela quebrar): troque o
+#  papel desta para holyrics, apague a linha `principal`, e aponte as outras
+#  para cá. Hoje isso é manual.
+# ===========================================================================
+papel: holyrics
+nome: PC do Holyrics

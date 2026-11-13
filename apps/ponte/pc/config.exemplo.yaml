@@ -1,0 +1,926 @@
+# ===========================================================================
+#  PONTE DO CULTO — configuração
+#
+#  Este é o único arquivo que a equipe precisa editar no dia a dia.
+#  Depois de salvar: feche a janela preta e clique de novo no atalho
+#  "1. INICIAR Ponte do Culto" da área de trabalho.
+#
+#  Cuidado com a indentação: YAML usa espaços, nunca Tab.
+# ===========================================================================
+
+servidor:
+  # 0.0.0.0 deixa o painel acessível de qualquer aparelho na rede da igreja
+  # (celular, tablet). Use 127.0.0.1 para travar só neste PC.
+  host: 0.0.0.0
+  porta: 8700
+
+
+# --- OBS -------------------------------------------------------------------
+# O OBS de transmissão NÃO roda na mesma máquina da ponte. Em 01/11/2026 ele
+# foi localizado na rede: 192.168.1.183, máquina de nome TRANSMISSÃO, ligada e
+# respondendo. É esse o host abaixo.
+#
+# Na MÁQUINA TRANSMISSÃO, dentro do OBS:
+#   Ferramentas > Configurações do Servidor WebSocket
+#   [x] Ativar Servidor WebSocket   |   porta 4455   |   definir uma senha
+#
+# Essa senha vai em obs.senha aqui. Se o Firewall do Windows perguntar, liberar
+# para redes privadas — sem isso a porta fica fechada de fora mesmo com o
+# servidor ligado.
+#
+# Conferido em 01/11/2026 conectando de verdade: OBS 33.0.1, obs-websocket
+# 5.7.6, Windows 11. A senha sai do botão Copiar da janela "Informações de
+# conexão WebSocket" — NÃO transcrever de foto, porque i, l, I e 1 ficam
+# idênticos na tela e já custaram uma rodada aqui.
+#
+# ATENÇÃO: a senha muda toda vez que alguém clica em "Gerar senha" e dá OK.
+# Se a ponte parar de conectar do nada, suspeite disso antes de rede.
+# O ENDEREÇO ABAIXO NÃO É CONFIÁVEL ENQUANTO A REDE NÃO FOR ARRUMADA.
+# Em 01/11 o OBS estava em 192.168.1.183; em 08/11 tinha migrado para a faixa
+# 192.168.0.x sozinho, porque há dois servidores DHCP disputando o mesmo
+# switch. Identifique a máquina pelo MAC B4-45-06-B4-51-8D, não pelo número.
+#
+# Enquanto isso, ela é alcançável por IPv6 — as duas máquinas compartilham o
+# prefixo 2804:31fc:39b:8300::/64. Mas esse endereço é temporário e rotaciona,
+# então serve para teste, não para ficar escrito aqui.
+#
+# O caminho definitivo: desligar o DHCP de um dos equipamentos, depois reservar
+# IP fixo para o MAC acima, e só então preencher este campo de vez.
+#
+# 12/11/2026, culto de quinta: o IPv6 acima tinha MORRIDO — ele rotaciona,
+# como este comentário já avisava. Achei a máquina pelo MAC, na tabela de
+# vizinhos do Windows, em 192.168.1.36, e a porta 4455 respondendo. É esse o
+# host agora. Ele também pode mudar: se o OBS voltar a dar erro do nada, rode
+# no PowerShell
+#     Get-NetNeighbor | ? LinkLayerAddress -eq "B4-45-06-B4-51-8D"
+# e ponha aqui o IPv4 que aparecer. A cura de vez é reservar IP no roteador.
+obs:
+  ativo: true
+  host: "192.168.1.36"
+  porta: 4455
+  senha: "TROQUE-PELA-SENHA-DO-OBS"
+
+
+# --- Holyrics --------------------------------------------------------------
+# Versão instalada: 2.30.0. Servidor API ligado em 01/11/2026, na porta 8091,
+# confirmado respondendo tanto em 127.0.0.1 quanto no IP da rede.
+#
+# COLE O TOKEN ABAIXO. É o que falta pra isso funcionar. O token está no
+# Holyrics em Arquivo > Configurações > API Server, na mesma tela da porta.
+#
+# O TOKEN VAI EM ?token= NA QUERY. Testado contra nove outras formas (header,
+# Authorization, Bearer, corpo JSON, corpo form, token no caminho): só a query
+# funciona. Todas as outras devolvem "invalid token".
+#
+# CUIDADO COM O 401 DAQUI: ele tem dois motivos bem diferentes, e só o texto
+# separa os dois.
+#   {"error": "invalid token"}        -> o token está errado
+#   {"error": "unauthorized action"}  -> o token vale, mas essa ação não foi
+#                                        liberada pra ele
+# Olhar só o código HTTP confunde os dois e manda consertar a coisa errada.
+#
+# No Holyrics cada token tem permissão POR AÇÃO, e token novo vem sem nenhuma
+# marcada. Em 01/11/2026 era exatamente esse o estado aqui: token aceito, 37 de
+# 37 ações negadas. As permissões se liberam na mesma tela do API Server.
+#
+# As outras portas do Holyrics NÃO são a API, já testadas: 777 e 888 falam HTTP
+# mas respondem 404 em tudo; 4888 devolve JSON mas not_found em qualquer
+# caminho; 1313 é o plugin de telas de palco (/view/text, /multiview), que
+# serve pra LER o que está no telão, não pra mandar o Holyrics fazer algo.
+holyrics:
+  ativo: true
+  host: 127.0.0.1
+  porta: 8091
+  token: "COLE-AQUI-O-TOKEN-DO-API-SERVER"
+  # Confirmada existente e permitida nesta instalação. Só leitura.
+  acao_de_teste: GetCurrentPresentation
+
+
+# --- Luzes -----------------------------------------------------------------
+# driver: nenhum  -> passos de luz são pulados (use enquanto não há hardware)
+# driver: artnet  -> manda Art-Net pela rede; quem converte pra DMX é o QLC+
+#                    ou uma mesa que receba Art-Net
+#
+# host: o IP de quem recebe. 192.168.1.255 é o broadcast da faixa desta
+# máquina (192.168.1.x). Se a rede da igreja for outra faixa, ajustar aqui —
+# ou apontar pro IP exato do PC que roda o QLC+.
+#
+# 255.255.255.255 é o "grite para todo aparelho no cabo", e está assim de
+# propósito para o PRIMEIRO teste com a Lumikit: esse endereço é entregue a
+# todo mundo no mesmo segmento físico MESMO que esteja noutra faixa de IP — e
+# ela sai de fábrica em 192.168.0.30, que esta máquina não enxerga. Art-Net é
+# de mão única: manda e ninguém responde, então não precisa de rota de volta
+# para a luz acender.
+#
+# DEPOIS que ela tiver IP fixo (o 192.168.1.40 está reservado e confirmado
+# livre), troque por ele: broadcast entrega a mensagem a toda a rede sem
+# necessidade.
+#
+# MEDIDO CONTRA O HARDWARE em 08/11, e custou tempo achar:
+#
+#   universo 1, NÃO 0. Os refletores respondem pelo conector DMX OUT 1 da
+#   Lumikit, o da direita. No conector 0 não acendeu nada, em padrão nenhum.
+#   Se um dia a luz "sumir", conferir isto antes de qualquer outra coisa.
+#
+#   A Lumikit está hoje em "SAÍDA DMX: Conectores 0 e 1" (modo 1), não mais
+#   em "RDM + DMX".
+#
+# ATENÇÃO: esta máquina NÃO alcança a Lumikit — ela está em 192.168.0.30,
+# atrás do roteador cascateado 192.168.0.102. Quem comanda a luz hoje é o
+# PC-PARAISO. Este bloco fica pronto para o dia em que a rede for unificada;
+# aí troque o host por 192.168.0.30 (ou o endereço final dela).
+#
+# DESLIGADO DE PROPÓSITO EM 08/11, e vale ler antes de religar.
+#
+# Esta máquina NÃO ALCANÇA a Lumikit: ela está em 192.168.0.30, atrás do
+# roteador cascateado 192.168.0.102, e aqui não há rota para aquela faixa.
+# Nem a interface nem o roteador respondem a ping daqui.
+#
+# Com `driver: artnet`, o painel ficava MENTINDO: bolinha verde, "Art-Net
+# para 255.255.255.255", cliques aceitos, modo mudando — e nenhuma luz se
+# mexendo, porque broadcast morre na borda do segmento. O Paulo ficou
+# clicando sem entender. Tudo verde e nada acontecendo é pior que um erro
+# claro.
+#
+# Com `nenhum`, a bolinha fica vermelha, a página diz "luz desligada no
+# config" e os passos de luz das cues aparecem como "pulado". Honesto.
+#
+# QUANDO RELIGAR: no dia em que o 192.168.0.102 virar bridge (DHCP dele
+# desligado, ligado à rede pela porta LAN e não pela WAN), tudo vira um
+# segmento só. Aí ponha `driver: artnet` e `host: 192.168.0.30` — ou o
+# endereço final dela, que o 192.168.1.40 está reservado.
+#
+# Enquanto isso, QUEM COMANDA A LUZ É O PC-PARAISO, que está no mesmo
+# segmento dela.
+#
+# MODO AGENTE, escolhido em 08/11 e vale entender o porquê.
+#
+# `agente` não manda luz para lugar nenhum: ele GUARDA o que deveria estar no
+# ar, e o PC do som vem buscar quatro vezes por segundo e aplica lá.
+#
+# O motivo é a rede: a Lumikit está atrás de um roteador com NAT. O PC do som
+# alcança ela; esta máquina não. E NAT só deixa passar conexão de SAÍDA — logo
+# não adianta esta máquina empurrar comando para lá. Invertendo o sentido,
+# quem pergunta é quem consegue perguntar, e nada na rede precisa mudar.
+#
+# O que isso dá, na prática: o painel desta máquina — que é o que todo mundo
+# alcança, inclusive o Mac e os celulares — volta a comandar a luz de verdade.
+#
+# O MOVIMENTO NÃO VIAJA. Vai o quadro parado e o NOME do modo; quem calcula o
+# movimento, a 30 quadros por segundo, é o outro lado. Rede só carrega
+# mudança, e o movimento sai suave.
+#
+# O DIA EM QUE O ROTEADOR VIRAR BRIDGE: aí esta máquina alcança a Lumikit
+# direto, e dá para trocar por `driver: artnet` com `host` no endereço dela.
+# Os dois caminhos passam a existir, que é a redundância que a equipe quer.
+luzes:
+  driver: agente
+  quem_busca: PC do som
+  host: 255.255.255.255
+  universo: 1
+
+  # De quanto em quanto tempo o quadro inteiro é reenviado, mesmo sem
+  # ninguém mexer em nada. Art-Net não tem confirmação: sem reenvio, um
+  # pacote perdido deixaria a luz errada até a próxima cue — que num culto
+  # pode ser quinze minutos depois. A própria Lumikit denuncia, piscando
+  # erro no LED quando o sinal para de chegar.
+  # 1 segundo basta para manter o enlace e se recuperar de perda. Quem
+  # quiser comportamento de mesa use 0.033 (30 Hz). 0 desliga o reenvio.
+  reenvio_segundos: 1.0
+
+
+# ===========================================================================
+#  GRUPOS DE LUZ — onde o motor de movimento encontra cada coisa
+#
+#  O movimento precisa saber qual canal é brilho e quais são pan e tilt. Isto
+#  é o patch da igreja, medido em 08/11/2026; noutra igreja muda tudo, e é
+#  por isso que mora no config e não no código.
+#
+#  Os deslocamentos são relativos ao canal inicial de cada bloco.
+# ===========================================================================
+grupos_de_luz:
+  cortina:
+    bases: [49, 65, 81, 97]   # C1, C2, C3, C4 — da frente para o fundo
+    brilho: 0                 # o canal de brilho é o próprio inicial
+    obturador: 1              # o estrobo, que só o modo marcado usa
+
+  teto:
+    bases: [113, 129, 145]    # T2+T3 · T1+T6 · T4+T5
+    pan: 0
+    tilt: 1
+    obturador: 2
+
+  barra:
+    bases: [17, 33]           # B1-B4 · B5-B6
+    # Sem canal de brilho: é RGBW direto, a cor É a intensidade. Então
+    # modular quer dizer escalar os quatro juntos, preservando a proporção.
+    cores: [0, 1, 2, 3]
+
+
+# ===========================================================================
+#  MODOS DE MOVIMENTO
+#
+#  A IDEIA: cena é COR, modo é MOVIMENTO, e os dois são independentes. Você
+#  escolhe "Louvor" e escolhe "Animado". Troca para "Oração" e o movimento
+#  continua. Sem isso seria preciso uma cena para cada combinação de cor e
+#  movimento, e elas se multiplicam sem fim.
+#
+#  "Parado" devolve EXATAMENTE a cena: o movimento é calculado na hora de
+#  enviar, numa cópia, e nunca gravado no quadro. Ele some, não é desfeito.
+#
+#  O QUE SE MEXE: só o teto anda de verdade (pan e tilt). Cortina e barra são
+#  refletores fixos — neles "movimento" é intensidade subindo e descendo.
+#  A LUZ DE FRENTE NUNCA ENTRA. Ela ilumina quem está no altar e é o que a
+#  câmera precisa; movimento é sempre detalhe atrás e acima.
+#
+#  energia: só ordena os botões no painel, do mais calmo ao mais agitado.
+#  Tipos: respirar (senoide suave) · onda (pulso que corre pelos refletores)
+#         batida (sobe rápido e decai) · circulo · pendulo · estrobo
+#  minimo: até onde a intensidade desce, como fração do que a cena mandou.
+#  defasagem: atraso entre um refletor e o próximo, em frações de período —
+#             é o que faz a luz ANDAR em vez de pulsar tudo junto.
+# ===========================================================================
+movimentos:
+
+  respiro:
+    nome: Respiro
+    descricao: só a cortina, inspirando e expirando devagar
+    energia: 1
+    efeitos:
+      - grupo: cortina
+        tipo: respirar
+        periodo: 5.0
+        minimo: 0.5
+
+  lento:
+    nome: Lento
+    descricao: teto em círculos largos, cortina respirando em onda
+    energia: 2
+    efeitos:
+      # SEM centro_pan / centro_tilt de propósito: o círculo gira em volta de
+      # ONDE A CENA APONTOU a cabeça. Mire pelo ajuste fino do painel,
+      # olhando a luz, e o movimento acompanha. Com o centro fixo aqui, só
+      # quem edita este arquivo conseguia corrigir a mira.
+      - grupo: teto
+        tipo: circulo
+        periodo: 14.0
+        raio: 48              # era 22 e ficou pequeno demais na sala
+        defasagem: 0.333      # as três cabeças em terços do círculo
+        pan_min: 64
+        pan_max: 192
+        tilt_min: 64
+        tilt_max: 192
+      - grupo: cortina
+        tipo: respirar
+        periodo: 5.0
+        minimo: 0.55
+        defasagem: 0.18       # o brilho caminha ao longo da cortina
+
+  onda:
+    nome: Onda
+    descricao: um pulso correndo pela cortina, teto parado
+    energia: 3
+    efeitos:
+      - grupo: cortina
+        tipo: onda
+        periodo: 1.8
+        minimo: 0.25
+        largura: 0.45
+        defasagem: 0.25       # C1, C2, C3, C4 em sequência
+
+  pendulo:
+    nome: Pêndulo
+    descricao: teto varrendo de um lado ao outro, em oposição
+    energia: 3
+    efeitos:
+      - grupo: teto
+        tipo: pendulo
+        periodo: 6.5
+        raio: 62              # varredura larga: é o efeito deste modo
+        defasagem: 0.5        # uma vai enquanto a outra volta
+        pan_min: 56
+        pan_max: 200
+        tilt_min: 64
+        tilt_max: 192
+
+  animado:
+    nome: Animado
+    descricao: círculos mais rápidos, onda na cortina, barra no contratempo
+    energia: 5
+    efeitos:
+      - grupo: teto
+        tipo: circulo
+        periodo: 5.0
+        raio: 52
+        defasagem: 0.333
+        inverter: [1]         # a do meio gira ao contrário: desencontro
+        pan_min: 64
+        pan_max: 192
+        tilt_min: 64
+        tilt_max: 192
+      - grupo: cortina
+        tipo: onda
+        periodo: 1.2
+        minimo: 0.3
+        largura: 0.4
+        defasagem: 0.25
+      - grupo: barra
+        tipo: batida
+        periodo: 1.2
+        minimo: 0.35
+        defasagem: 0.5
+
+  batida:
+    nome: Batida
+    descricao: cortina batendo no tempo, teto girando médio
+    energia: 6
+    efeitos:
+      # 0,55 s dá pouco mais de uma batida por segundo — perto de 110 BPM,
+      # que é o andamento de boa parte do louvor. Ainda longe do estrobo.
+      - grupo: cortina
+        tipo: batida
+        periodo: 0.55
+        minimo: 0.2
+        largura: 0.3
+      - grupo: teto
+        tipo: circulo
+        periodo: 6.0
+        raio: 46
+        defasagem: 0.333
+        pan_min: 64
+        pan_max: 192
+        tilt_min: 64
+        tilt_max: 192
+
+  celebracao:
+    nome: Celebração
+    descricao: tudo em movimento, o mais agitado sem piscar duro
+    energia: 8
+    efeitos:
+      - grupo: teto
+        tipo: circulo
+        periodo: 3.5
+        raio: 58
+        defasagem: 0.333
+        inverter: [0, 2]      # duas de um lado, uma do outro
+        pan_min: 56
+        pan_max: 200
+        tilt_min: 56
+        tilt_max: 200
+      - grupo: cortina
+        tipo: onda
+        periodo: 0.75
+        minimo: 0.35
+        largura: 0.35
+        defasagem: 0.25
+      - grupo: barra
+        tipo: batida
+        periodo: 0.75
+        minimo: 0.3
+        defasagem: 0.5
+
+  # ----------------------------------------------------------------------
+  # MARCADO COMO PERIGOSO, e isto tem efeito de verdade: o painel desenha
+  # este botão separado dos outros e NENHUMA CUE DO CULTO pode escolher um
+  # modo. Ele só liga por clique de gente, e desliga no "Parado".
+  #
+  # É o único lugar do projeto inteiro que escreve na faixa de estrobo.
+  # Estrobo pode desencadear crise em quem tem epilepsia fotossensível.
+  # Existe para vocês testarem e decidirem — não para ficar num culto sem
+  # uma decisão consciente.
+  # ----------------------------------------------------------------------
+  estrobo:
+    nome: Estrobo
+    descricao: PISCA DURO — testar sem gente no salão
+    energia: 9
+    perigoso: true
+    efeitos:
+      # Começou no mínimo (30 e 145) e o Paulo viu na luz: tão lento que, nas
+      # palavras dele, "não poderia ser capaz de fazer mal a ninguém". Subiu
+      # para o meio da faixa a pedido dele, DEPOIS de ter visto o mínimo.
+      #
+      # E aqui a ressalva passa a valer de verdade: nesta velocidade já se
+      # está na faixa que preocupa para epilepsia fotossensível. O que antes
+      # era precaução teórica agora é concreto. Subir mais exige olhar de
+      # novo, e nunca com gente no salão.
+      - grupo: cortina
+        tipo: estrobo
+        periodo: 1.0
+        valor: 90             # faixa 20-255; era 30
+        guarda: 0             # só pisca onde o BRILHO da cena está aceso
+      - grupo: teto
+        tipo: estrobo
+        periodo: 1.0
+        valor: 195            # faixa 140-250; era 145
+        guarda: 2             # só pisca onde o obturador já estava aberto
+
+
+# --- Looks de luz ----------------------------------------------------------
+# Cada look é um conjunto de canais DMX e seus valores (canal 1–512, valor
+# 0–255). Os números abaixo são EXEMPLO: trocar pelos canais reais dos
+# refletores depois que a mesa estiver endereçada.
+#
+# Canais não citados numa look ficam como estavam — a ponte guarda o estado.
+looks:
+  abertura:
+    1: 160
+    2: 160
+    3: 120
+  louvor:
+    1: 255
+    2: 210
+    3: 60
+  pregacao:
+    1: 230
+    2: 230
+    3: 0
+  apagar:
+    1: 0
+    2: 0
+    3: 0
+
+
+# --- Cues ------------------------------------------------------------------
+# Cada cue vira um botão no painel. Os passos rodam na ordem.
+# Um passo que falha NÃO para os outros.
+#
+# Tipos de passo:
+#   luzes: <nome da look>
+#   obs: { requestType: <nome>, requestData: { ... } }
+#   holyrics: { action: <nome>, payload: { ... } }
+#   esperar: <segundos>   (máximo 5)
+#
+# Os sceneName do OBS têm que bater EXATAMENTE com o nome da cena lá.
+# Com a ponte no ar, abra http://127.0.0.1:8700/api/cenas-obs pra ver a lista.
+# REGRA: nenhuma cue cita id de música. A playlist muda toda semana, e cue com
+# id fixo quebra no domingo seguinte sem ninguém entender por quê. Tudo aqui
+# age sobre "o que estiver no ar" ou sobre a playlist carregada — assim a
+# mesma cue serve todo culto, sem manutenção.
+#
+# Os nomes de ação abaixo foram conferidos contra a documentação oficial
+# (github.com/holyrics/API-Server) e testados nesta instalação 2.30.0.
+# F10 é a tela preta do Holyrics; F9 é tela vazia; F8 é papel de parede.
+#
+# O OBS DE HOJE — relido direto do equipamento em 08/11/2026
+#
+# Coleção ativa: "Culto ao vivo (novo)". Cinco cenas, e cada uma já carrega a
+# visibilidade das suas fontes. Por isso as cues abaixo só TROCAM DE CENA, em
+# vez de ligar e desligar fonte uma a uma — é mais simples e menos frágil.
+#
+#   1. Abertura      vídeo de abertura + audio projecao
+#   2. Louvor        câmera + áudio "Louvor" + letras (ocultas por padrão)
+#   3. Pregação      câmera + áudio "Palavra"
+#   4. Ofertório     câmera + imagem do ofertório + os dois áudios
+#   5. Telão cheio   Holyrics em tela cheia (NDI)
+#
+# SOBRE AS FONTES "Palavra" E "Louvor": são o MESMO dispositivo de áudio
+# capturado duas vezes, com tratamentos diferentes — "Palavra" tem Ganho e
+# Supressão de ruídos, "Louvor" não tem filtro nenhum. Supressão de ruído
+# ajuda voz e estraga música, então alternar as duas troca o processamento por
+# momento. Montagem da equipe, e é boa: as cues respeitam isso trocando de
+# cena, que já carrega a escolha certa.
+#
+# MODO ESTÚDIO ESTÁ LIGADO. Por isso as cues mexem no PREVIEW, não no programa:
+# SetCurrentProgramScene cortaria direto no ar, sem transição, no meio do
+# culto. A ponte prepara, e quem opera decide a hora de cortar. Para a cue
+# cortar sozinha, trocar por SetCurrentProgramScene — mas isso é decisão de
+# quem dirige o culto, não minha.
+#
+# Nomes de cena são conferidos pelo OBS letra por letra. Para ver a lista de
+# verdade, com a ponte no ar:  http://127.0.0.1:8700/api/cenas-obs
+#
+# REGRA DOS MOMENTOS: cada um declara o estado completo do que lhe interessa,
+# NUNCA um delta. É o que faz "pular direto para a Palavra" funcionar sem
+# deixar o ofertório pendurado no ar.
+cues:
+  - id: pre_culto
+    nome: Pré-culto
+    cor: "#334155"
+    passos:
+      - luzes: abertura
+      - obs: { requestType: SetCurrentPreviewScene, requestData: { sceneName: "1. Abertura" } }
+      # Telão no ar: se alguém deixou preto no culto passado, volta sozinho.
+      - holyrics: { action: SetF10, payload: { enable: false } }
+
+  - id: abertura
+    nome: Abertura
+    cor: "#1d4ed8"
+    passos:
+      - luzes: abertura
+      - obs: { requestType: SetCurrentPreviewScene, requestData: { sceneName: "2. Louvor" } }
+      - obs_fonte: { cena: "2. Louvor", fonte: "Letras - Holyrics", visivel: false }
+      - holyrics: { action: SetF10, payload: { enable: false } }
+
+  - id: louvor
+    nome: Louvor
+    cor: "#7c3aed"
+    passos:
+      - luzes: louvor
+      - obs: { requestType: SetCurrentPreviewScene, requestData: { sceneName: "2. Louvor" } }
+      - obs_fonte: { cena: "2. Louvor", fonte: "Letras - Holyrics", visivel: true }
+      - holyrics: { action: SetF10, payload: { enable: false } }
+      # De propósito não escolhe música: quem opera o Holyrics escolhe, e a
+      # cue só prepara o ambiente pra ela aparecer.
+
+  - id: avisos
+    nome: Avisos
+    cor: "#0891b2"
+    passos:
+      - luzes: pregacao
+      - obs: { requestType: SetCurrentPreviewScene, requestData: { sceneName: "3. Pregação" } }
+      - obs_fonte: { cena: "2. Louvor", fonte: "Letras - Holyrics", visivel: false }
+      - holyrics: { action: CloseCurrentPresentation }
+
+  - id: ofertorio
+    nome: Ofertório
+    cor: "#0e7490"
+    passos:
+      - luzes: pregacao
+      - obs: { requestType: SetCurrentPreviewScene, requestData: { sceneName: "4. Ofertório" } }
+      - obs_fonte: { cena: "2. Louvor", fonte: "Letras - Holyrics", visivel: false }
+
+  - id: pregacao
+    nome: Pregação
+    cor: "#b45309"
+    passos:
+      - luzes: pregacao
+      - obs: { requestType: SetCurrentPreviewScene, requestData: { sceneName: "3. Pregação" } }
+      # Tira a letra da transmissão E do telão ao entrar na pregação. Hoje são
+      # dois cliques em dois programas diferentes, e é onde mais se esquece.
+      - obs_fonte: { cena: "2. Louvor", fonte: "Letras - Holyrics", visivel: false }
+      - holyrics: { action: CloseCurrentPresentation }
+
+  # --- recados para o palco ------------------------------------------------
+  # SetTextCommunicationPanel escreve na tela de retorno que a equipe no palco
+  # enxerga — não no telão do público. Serve para avisar sem ninguém atravessar
+  # a igreja no meio do culto.
+  #
+  # CUIDADO COM SetAlert, que é outra coisa: ele escreve no telão do PÚBLICO,
+  # e SOBRESCREVE o texto que estiver guardado lá. Em 08/11 havia a mensagem de
+  # dízimos com a chave PIX; uma chamada de teste apagou ela. Se for usar
+  # SetAlert numa cue, ou repita o texto completo, ou aceite que o anterior
+  # se perde.
+
+  - id: recado_5min
+    nome: "Palco: 5 minutos"
+    cor: "#6d28d9"
+    passos:
+      - holyrics:
+          action: SetTextCommunicationPanel
+          payload: { text: "FALTAM 5 MINUTOS", show: true }
+
+  - id: recado_limpar
+    nome: Limpar recado
+    cor: "#475569"
+    passos:
+      - holyrics:
+          action: SetTextCommunicationPanel
+          payload: { text: "", show: false }
+
+  # Outros recados úteis — é copiar um bloco acima e trocar o texto:
+  #   "PODE ENCERRAR"   "CHAMAR O PASTOR"   "AJUSTAR O MICROFONE"
+
+  - id: gravar
+    nome: Começar gravação
+    cor: "#15803d"
+    passos:
+      - obs: { requestType: StartRecord }
+
+  - id: parar_gravacao
+    nome: Parar gravação
+    cor: "#166534"
+    # Pergunta antes, e por um motivo diferente do Encerrar: a gravação é a
+    # única cópia do culto. Transmissão perdida se recupera na memória de
+    # quem assistiu; gravação interrompida por engano, não. Apertar duas
+    # vezes é inofensivo — o OBS responde 501 para quem já parou, e a ponte
+    # lê isso como "já estava assim".
+    confirmar: true
+    passos:
+      - obs: { requestType: StopRecord }
+
+  # --- transmissão ao vivo -------------------------------------------------
+  # As duas pedem confirmação, e por motivos OPOSTOS: começar põe a igreja no
+  # ar publicamente (um clique errado no pré-culto transmite o salão vazio);
+  # parar tira do ar no meio do culto, que é pior ainda.
+  #
+  # Entrar duas vezes é seguro e não precisa de condição no YAML: o OBS
+  # responde 500 (OutputRunning) para quem já está transmitindo e 501
+  # (OutputNotRunning) para quem já parou, e a ponte lê os dois como
+  # "já estava assim", não como erro. Ver JA_ESTAVA em ponte/cues.py.
+  #
+  # A chave de transmissão é a que já está configurada no OBS; a ponte não
+  # mexe nela. Para trocar título, miniatura ou visibilidade no YouTube
+  # seria preciso a API do YouTube, que ainda não existe aqui.
+
+  - id: transmitir
+    nome: Transmitir ao vivo
+    cor: "#dc2626"
+    confirmar: true
+    passos:
+      - obs: { requestType: StartStream }
+
+  - id: parar_transmissao
+    nome: Parar transmissão
+    cor: "#7f1d1d"
+    confirmar: true
+    passos:
+      - obs: { requestType: StopStream }
+
+  - id: tela_preta
+    nome: Tela preta
+    cor: "#334155"
+    passos:
+      - holyrics: { action: SetF10, payload: { enable: true } }
+
+  - id: tela_volta
+    nome: Voltar telão
+    cor: "#0f766e"
+    passos:
+      - holyrics: { action: SetF10, payload: { enable: false } }
+
+  - id: encerrar
+    nome: Encerrar
+    cor: "#b91c1c"
+    # confirmar: true faz o painel perguntar antes de rodar.
+    confirmar: true
+    passos:
+      # AS SAÍDAS PRIMEIRO, de propósito. Tudo que vem depois é desmontagem:
+      # telão apagando, luz caindo. Isso não é conteúdo — não precisa ir ao ar
+      # para quem está assistindo em casa, nem ficar no fim da gravação.
+      - obs: { requestType: StopStream }
+      - obs: { requestType: StopRecord }
+      - holyrics: { action: CloseCurrentPresentation }
+      - holyrics: { action: SetF10, payload: { enable: true } }
+      - esperar: 1
+      - luzes: apagar
+
+
+# ===========================================================================
+#  ORDENS DE CULTO
+#
+#  Uma ordem é só uma LISTA DE IDS DE CUE, na sequência em que acontecem.
+#  Não existe "momento" como formato separado: um momento É uma cue. Quem já
+#  sabe editar uma cue acima já sabe montar uma ordem aqui.
+#
+#  As cues que NÃO estão na ordem carregada viram os botões avulsos do painel
+#  — tela preta, recado para o palco, gravar. Isso o painel calcula sozinho,
+#  não precisa configurar.
+#
+#  Cada ordem precisa citar ids que existam lá em cima. O verificar.py
+#  confere isso antes de qualquer culto.
+# ===========================================================================
+ordens:
+  - id: domingo_manha
+    nome: Domingo de manhã
+    momentos: [pre_culto, abertura, louvor, avisos, ofertorio, pregacao, encerrar]
+
+  - id: quinta
+    nome: Quinta
+    momentos: [pre_culto, abertura, louvor, pregacao, encerrar]
+
+# Qual ordem já vem carregada quando a ponte sobe. Trocar durante o dia é um
+# toque no painel — não precisa reiniciar nada.
+ordem_padrao: domingo_manha
+
+
+# ===========================================================================
+#  LOUVORES — a prova de conceito do nível 2 (execução musical)
+#
+#  AS SEÇÕES SÃO MEDIDAS EM COMPASSOS, não em segundos — e essa escolha é a
+#  coisa mais importante deste bloco.
+#
+#  "O refrão tem 36 segundos" é uma pergunta que ninguém sabe responder.
+#  "O refrão tem 16 compassos" o músico responde sem pensar, porque é assim
+#  que ele conta enquanto toca. Com o BPM, compasso vira segundo por conta
+#  exata: segundos = compassos × tempos_por_compasso × 60 ÷ bpm.
+#
+#  E tem uma consequência maior: se a banda toca com CLIQUE naquele BPM e as
+#  seções são compassos inteiros, a linha do tempo fica determinística. A
+#  primeira versão disto não precisa de timecode — precisa de um "começou
+#  agora" e de um metrônomo.
+#
+#  Mudar o andamento da música reescala tudo sozinho. Em segundos, cada
+#  número teria que ser recalculado à mão.
+#
+#  MAS ESSE RACIOCÍNIO ESTÁ ERRADO, e vale ficar escrito para ninguém
+#  refazê-lo. Medido em 08/11, contra fontes reais:
+#
+#  1. O Holyrics tem BPM de UMA das quatro músicas. Os outros três números
+#     abaixo foram inventados por mim.
+#  2. O MultiTracks diz que a "Bondade de Deus" tem 64 BPM; o Holyrics diz
+#     68. Nem a fonte do número é confiável.
+#  3. E o decisivo: o MultiTracks avisa que essa música TEM VARIAÇÃO DE
+#     ANDAMENTO — "This song includes tempo variations so we recommend you
+#     use the included click." Música que acelera e desacelera não tem "o
+#     BPM"; nenhuma conta de compasso × BPM vai acertar o tempo dela.
+#  4. O mapa real do MultiTracks tem 14 seções (Intro, Verso 1, Refrão,
+#     Verso 2, Refrão, Ponte, Ponte, Breakdown, Refrão, Vamp, Refrão, Tag,
+#     Tag, Final). O meu tem 8, com nomes diferentes.
+#
+#  CONCLUSÃO: não dá para CALCULAR a linha do tempo. Dá para SEGUIR uma.
+#
+#  E há dois jeitos de seguir, não um. O segundo já funciona hoje:
+#
+#  1. TIMECODE, recebendo a posição de quem toca. É o certo para o culto,
+#     porque aí quem manda é o playback da banda — mas depende de a mesa ou o
+#     playback mandarem MTC/LTC para cá, e isso ainda não existe.
+#
+#  2. A GRAVAÇÃO TOCANDO AQUI, e cada seção guardando o SEGUNDO em que entra
+#     nela. O relógio é o `currentTime` do arquivo, não um cronômetro nosso.
+#     Marcar é ouvir e tocar o botão na entrada de cada parte: quem marca não
+#     precisa saber o andamento, não conta compasso, e variação de tempo não
+#     o atrapalha — ele está OUVINDO. As marcas ficam em `_marcas_louvor.json`
+#     e não aqui, porque escrever este arquivo por código apagaria estes
+#     comentários, que são metade do seu valor.
+#
+#  O (2) é o que torna o (1) uma troca de fonte, não um recomeço: nos dois
+#  casos a página pergunta "em que segundo a música está" e acerta a seção.
+#
+#  `audio:` diz qual arquivo a página carrega. Hoje aponta para um CLICK
+#  gerado aqui (`gerar_click.py`), 100 bpm constante — é ANDAIME: serve para
+#  provar a corrente inteira andando com som, sem depender dos arquivos da
+#  igreja nem de música com direito autoral. Quando a equipe trouxer o VS,
+#  troca-se o nome do arquivo e remarcam-se os segundos. Nada de código muda.
+#
+#  Os compassos abaixo continuam ESTIMATIVA, e a tela diz isso: parte com
+#  segundo marcado aparece com "✓" e borda verde; parte sem marca aparece com
+#  "~" na frente do tempo. Estimativa apresentada como medida é o pior dos
+#  dois mundos.
+#
+#  A ESTRUTURA, essa sim, já é o desenho de verdade. Cada seção declara o
+#  ESTADO COMPLETO do que lhe interessa — cena de luz e modo de movimento —
+#  exatamente como os momentos do culto. É isso que faz "repetir o refrão"
+#  funcionar: voltar para uma seção reaplica tudo dela, sem herdar nada da
+#  anterior. Era o pedido do ministro na reunião.
+#
+#  Os nomes das músicas são o repertório real que está no Holyrics hoje.
+#  As seções e os tempos são PALPITE: quem divide música é a banda.
+# ===========================================================================
+louvores:
+  # O `slide` é o índice da letra no Holyrics. Estes NÃO são chute: vieram de
+  # ler os 34 slides reais desta música e casar cada seção com o verso que
+  # começa ali. Slide 3 é "ERGUEMOS NOSSA VOZ", que é o refrão; 15 é "cai a
+  # canção", que é a ponte; 33 é o último "AVANTE PELO REINO".
+  #
+  # Só esta música está mapeada. As outras três mostram a letra ao serem
+  # escolhidas, mas não saltam de slide — mapear é ler a letra uma vez, e
+  # quem faz isso bem é quem canta.
+  - id: avante
+    nome: AVANTE
+    bpm: 140            # NÃO confirmado — o Holyrics não guarda bpm desta
+    tempos_por_compasso: 4
+    # Click NO ANDAMENTO DESTA MUSICA, 140 bpm, e as marcas abaixo caem em
+    # compasso exato. Nao e o VS — nao tem instrumento, nao tem voz — mas e o
+    # click dela, e as entradas das partes sao reais contra este arquivo.
+    # Trocar pelo VS quando a equipe trouxer, e remarcar ouvindo.
+    audio: click-140bpm.wav
+    holyrics_id: "1741522267781"
+    # ESTA ESTRUTURA FOI LIDA, NAO INVENTADA — e a anterior era invencao.
+    #
+    # A primeira versao tinha 9 secoes com um slide cada, escolhidos por mim
+    # lendo a letra. O defeito so apareceu quando a letra passou a andar
+    # sozinha: a secao dizia onde COMECAR, e nada dizia onde terminar, entao
+    # a Ponte engolia 11 slides em 8 compassos e o Verso 1 ficava parado 16
+    # compassos num slide so. Mapa grosseiro, e o erro era visivel de longe.
+    #
+    # Os slides abaixo vem dos marcadores que a PROPRIA BANDA escreveu nos
+    # slides do Holyrics: "//Solo: masculino", "//cai a canção...", "//sobe a
+    # voz...", "//marcação mais alta da bateria". Sao 19 marcadores — fino
+    # demais para luz, porque cada alternancia homens/mulheres vira um — entao
+    # aqui eles estao agrupados em 13 partes musicais. As FRONTEIRAS sao
+    # deles; o agrupamento e meu, e e o que a banda pode corrigir.
+    #
+    # OS COMPASSOS AINDA SAO MEUS: 4 por slide, uniforme. Contra um click
+    # isso e honesto — nao ha musica para dizer outra coisa. Contra o VS de
+    # verdade nao vale nada, e nem precisa: ali se marca ouvindo, e a marca
+    # apaga a estimativa.
+    secoes:
+      - { nome: "Intro",            compassos: 8,  cena: louvor,     modo: lento,      slide: 0 }
+      - { nome: "Verso 1 (solo)",   compassos: 8,  cena: louvor,     modo: respiro,    slide: 0 }
+      - { nome: "Pré-refrão",       compassos: 4,  cena: louvor,     modo: onda,       slide: 2 }
+      - { nome: "Refrão",           compassos: 8,  cena: celebracao, modo: animado,    slide: 3 }
+      - { nome: "Instrumental",     compassos: 8,  cena: louvor,     modo: pendulo,    slide: 5 }
+      - { nome: "Pré-refrão",       compassos: 4,  cena: louvor,     modo: onda,       slide: 6 }
+      - { nome: "Refrão",           compassos: 16, cena: celebracao, modo: animado,    slide: 7 }
+      - { nome: "Avante pelo Reino", compassos: 16, cena: celebracao, modo: batida,    slide: 11 }
+      - { nome: "Ponte: cai",       compassos: 16, cena: oracao,     modo: lento,      slide: 15 }
+      - { nome: "Ponte: sobe",      compassos: 16, cena: louvor,     modo: onda,       slide: 19 }
+      - { nome: "Ponte: bateria",   compassos: 12, cena: celebracao, modo: batida,     slide: 23 }
+      - { nome: "Refrão final",     compassos: 16, cena: celebracao, modo: celebracao, slide: 26 }
+      - { nome: "Final",            compassos: 16, cena: celebracao, modo: batida,     slide: 30 }
+
+  # slide 4 é "SOU GRATO POR SEU AMOR" (o refrão), 7 é o solo do verso 2,
+  # 24 é "FUI PERDOADO OUTRA VEZ" (a ponte).
+  - id: sou_grato
+    nome: SOU GRATO POR SEU AMOR
+    bpm: 72             # NÃO confirmado
+    tempos_por_compasso: 4
+    audio: click-100bpm.wav
+    holyrics_id: "1792960553483"
+    secoes:
+      - { nome: "Intro",   compassos: 4,  cena: oracao, modo: respiro, slide: 0 }
+      - { nome: "Verso 1", compassos: 16, cena: oracao, modo: respiro, slide: 1 }
+      - { nome: "Refrão",  compassos: 16, cena: louvor, modo: lento,   slide: 4 }
+      - { nome: "Verso 2", compassos: 16, cena: oracao, modo: respiro, slide: 7 }
+      - { nome: "Refrão",  compassos: 16, cena: louvor, modo: lento,   slide: 11 }
+      - { nome: "Final",   compassos: 8,  cena: oracao, modo: parado,  slide: 30 }
+
+  # slide 4 é "ACLAME AO SENHOR TODA A TERRA" (o refrão), 9 recomeça o verso.
+  - id: aclame
+    nome: ACLAME AO SENHOR
+    bpm: 76             # NÃO confirmado
+    tempos_por_compasso: 4
+    audio: click-100bpm.wav
+    holyrics_id: "1765742225575"
+    secoes:
+      - { nome: "Intro",   compassos: 4,  cena: louvor,     modo: respiro, slide: 0 }
+      - { nome: "Verso 1", compassos: 16, cena: louvor,     modo: respiro, slide: 1 }
+      - { nome: "Refrão",  compassos: 16, cena: celebracao, modo: lento,   slide: 4 }
+      - { nome: "Verso 2", compassos: 16, cena: louvor,     modo: respiro, slide: 9 }
+      - { nome: "Refrão",  compassos: 16, cena: celebracao, modo: lento,   slide: 11 }
+      - { nome: "Final",   compassos: 8,  cena: louvor,     modo: parado,  slide: 24 }
+
+  # Esta não tem marcador nenhum no Holyrics — 16 slides corridos. O mapa
+  # veio de ler a letra: 3 e 7 são "EU CANTAREI DA BONDADE DE DEUS" (o
+  # refrão), 8 começa "TUA DOCE VOZ", 12 é "TUA BONDADE ME SEGUIRÁ".
+  # A ÚNICA com BPM de verdade: 68, lido do Holyrics, compasso 4/4. Eu tinha
+  # chutado 64. As outras três o Holyrics não guarda — pedir à banda.
+  - id: bondade
+    nome: Bondade de Deus
+    bpm: 68             # CONFIRMADO pelo Holyrics
+    tempos_por_compasso: 4
+    audio: click-100bpm.wav
+    holyrics_id: "1783470797806"
+    secoes:
+      - { nome: "Intro",        compassos: 4,  cena: oracao,     modo: respiro, slide: 0 }
+      - { nome: "Verso 1",      compassos: 16, cena: oracao,     modo: respiro, slide: 0 }
+      - { nome: "Refrão",       compassos: 16, cena: louvor,     modo: lento,   slide: 3 }
+      - { nome: "Verso 2",      compassos: 16, cena: oracao,     modo: respiro, slide: 8 }
+      - { nome: "Refrão",       compassos: 16, cena: louvor,     modo: lento,   slide: 7 }
+      - { nome: "Ponte",        compassos: 16, cena: celebracao, modo: animado, slide: 12 }
+      - { nome: "Refrão final", compassos: 16, cena: celebracao, modo: animado, slide: 3 }
+      - { nome: "Final",        compassos: 8,  cena: oracao,     modo: parado,  slide: 15 }
+
+
+# ===========================================================================
+#  YOUTUBE — título, visibilidade e para onde o OBS transmite
+#
+#  O que o OBS já faz é começar e parar. O que ele NÃO alcança é o que
+#  pertence ao YouTube: o título que quem assiste vê, se a live é pública ou
+#  não listada, e a miniatura. É para isso que este bloco existe.
+#
+#  CADA CANAL PRECISA DA SUA PRÓPRIA AUTORIZAÇÃO. Não é escolha de projeto:
+#  o Google amarra o consentimento a um canal. Por isso a lista abaixo — nas
+#  sextas a transmissão vai para outro canal, e ele precisa do dele.
+#
+#  Para acrescentar um canal: copie um bloco, dê um id e um arquivo de token
+#  próprio, e autorize pelo painel em /youtube. O arquivo de token é criado
+#  sozinho; ele NUNCA vai para o pacote que se distribui.
+#
+#  A ARMADILHA DOS 7 DIAS: se a tela de consentimento do projeto Google
+#  ficar em "Testando", a autorização expira a cada 7 dias e quebra
+#  exatamente no domingo. Tem que estar em "Em produção".
+# ===========================================================================
+youtube:
+  ativo: true
+
+  # O arquivo que o Google Cloud entrega ao criar o ID do cliente OAuth.
+  # É o mesmo para todos os canais: ele identifica o APLICATIVO, não a conta.
+  credencial: _google_oauth.json
+
+  # Para onde o Google devolve a autorização. Precisa estar registrado
+  # IGUAL no console, caractere por caractere.
+  redirect_uri: http://localhost:8765/
+
+  canais:
+    - id: paraiso
+      nome: Igreja Paraíso
+      token: _youtube_token.json
+
+    # Descomente e autorize pelo painel quando for configurar as sextas.
+    # - id: sexta
+    #   nome: Canal das sextas
+    #   token: _youtube_token_sexta.json
+
+
+# ===========================================================================
+#  VERSÃO WEB — o espelho em ponte.igrejaparaiso.com.br
+#
+#  QUEM MANDA É A IGREJA, A WEB ESPELHA. Esta máquina (a principal) abre uma
+#  conexão DE SAÍDA para a versão web a cada 2 segundos: entrega o estado do
+#  culto e traz os pedidos que alguém fez por lá (marcar um passo, abrir o
+#  retorno na TV). É o mesmo desenho do PC do som com a luz, pelo mesmo
+#  motivo: de fora ninguém alcança a rede da igreja, mas a igreja alcança fora.
+#
+#  A consequência que importa: se a internet cair, o culto não sente nada.
+#  A web fica mostrando "sem contato com a igreja" e o painel local segue.
+#
+#  `chave` é o segredo que prova para a web que quem fala é a igreja. É a
+#  MESMA que foi posta na VPS em PONTE_CHAVE. Trate como senha: só aqui.
+#
+#  Só a máquina principal (papel: holyrics no maquina.yaml) usa este bloco.
+# ===========================================================================
+web:
+  ativo: false
+  url: https://ponte.igrejaparaiso.com.br
+  chave: "COLE-AQUI-A-CHAVE-DA-WEB"

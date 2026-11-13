@@ -1,0 +1,805 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Louvor — Ponte do Culto</title>
+<style>
+/* TUDO NUMA TELA SO, SEM ROLAR — inclusive no celular. E a terceira versao.
+   A primeira era uma planilha; a segunda tinha blocos bons mas exigia
+   rolagem. No meio do louvor, rolar e perder: a mao procura, o olho procura,
+   e a secao certa ja passou.
+
+   Entao a altura vira restricao de projeto. A pagina e uma coluna de altura
+   fixa: cabecalho, repertorio, titulo, BLOCOS e transporte. Os blocos ficam
+   com `flex:1` e `grid-auto-rows:1fr`, ou seja, DIVIDEM o que sobrar — numa
+   musica de 6 secoes eles ficam gordos, numa de 9 ficam mais magros, e em
+   nenhuma delas aparece barra de rolagem.
+
+   Anterior e Proximo lado a lado, e o botao grande embaixo ocupando a largura
+   toda: e o gesto mais pedido pelo ministro, e no celular fica onde o
+   polegar alcanca sem esticar. */
+:root{
+  --fundo:#0b1016; --caixa:#131b24; --caixa2:#18212c;
+  --linha:#243040; --texto:#e8eef6; --apagado:#8fa0b4;
+  --ok:#22c55e; --erro:#ef4444; --aviso:#f59e0b; --marca:#3b82f6;
+  --marcar:#a855f7;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--fundo);color:var(--texto);overflow:hidden;
+  font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  -webkit-tap-highlight-color:transparent}
+
+.folha{
+  height:100vh; height:100dvh;
+  max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:8px;
+  padding:max(10px,env(safe-area-inset-top)) 12px max(10px,env(safe-area-inset-bottom));
+}
+
+/* 1 — cabeçalho, com tocar/parar junto para não gastar uma faixa só deles */
+.topo{display:flex;align-items:center;gap:10px;flex:none}
+.topo h1{font-size:14px;margin:0;color:var(--apagado);font-weight:700;
+  letter-spacing:.12em;text-transform:uppercase}
+.topo a{color:var(--marca);text-decoration:none;font-size:12.5px}
+.mini{min-height:34px;padding:0 13px;border-radius:9px;font-size:13.5px;font-weight:700;
+  background:var(--caixa2);border:1px solid var(--linha);color:var(--texto);cursor:pointer}
+.mini.tocar{background:#15803d;border-color:transparent}
+.selo{margin-left:auto;font-size:11px;color:var(--aviso);border:1px solid var(--aviso);
+  border-radius:999px;padding:2px 10px;cursor:help;flex:none;white-space:nowrap}
+.selo.real{color:var(--ok);border-color:var(--ok)}
+.selo.parcial{color:var(--marca);border-color:var(--marca)}
+
+/* 2 — repertório */
+.repertorio{display:flex;gap:7px;overflow-x:auto;flex:none;scrollbar-width:none}
+.repertorio::-webkit-scrollbar{display:none}
+.rep{flex:none;min-height:36px;padding:0 15px;border-radius:999px;font-size:13.5px;
+  font-weight:700;background:var(--caixa2);border:1px solid var(--linha);
+  color:var(--texto);cursor:pointer;white-space:nowrap}
+.rep.sel{background:var(--texto);color:var(--fundo);border-color:transparent}
+
+/* 3 — o que está tocando */
+.agora{display:flex;align-items:baseline;gap:12px;flex:none}
+.agora .titulo{font-size:clamp(17px,3.4vw,25px);font-weight:800;letter-spacing:-.02em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0}
+.agora .bpm{font-size:12px;color:var(--apagado);flex:none}
+/* O nome do arquivo de audio e util no PC e so atrapalha no celular: era ele
+   que espremia "AVANTE" ate virar "AV...". Some antes do titulo sofrer. */
+@media (max-width:620px){ .agora .arquivo{display:none} }
+.agora .slide{font-size:12px;color:var(--ok);font-weight:700;flex:none;
+  font-variant-numeric:tabular-nums}
+.agora .rel{margin-left:auto;font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:clamp(14px,2.6vw,19px);font-variant-numeric:tabular-nums;color:var(--apagado);flex:none}
+/* A barra agora e um CONTROLE, nao um enfeite: tocar nela busca no audio.
+   Por isso 14px de altura — 5px era bonito e impossivel de acertar no dedo. */
+.barra{height:14px;border-radius:7px;background:#1b232d;overflow:hidden;flex:none;
+  cursor:pointer;position:relative}
+.barra i{display:block;height:100%;background:var(--marca);width:0}
+.barra u{position:absolute;top:0;bottom:0;width:2px;background:#ffffff55}
+
+/* 4 — OS BLOCOS: dividem a altura que sobra, sem rolagem */
+.blocos{flex:1;min-height:0;display:grid;gap:7px;
+  grid-template-columns:repeat(auto-fill,minmax(128px,1fr));grid-auto-rows:1fr}
+.bloco{position:relative;min-height:0;padding:10px 11px;border-radius:13px;
+  background:var(--caixa);border:2px solid var(--linha);color:var(--texto);cursor:pointer;
+  text-align:left;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden}
+.bloco .q{font-size:clamp(14px,2.4vw,19px);font-weight:800;line-height:1.1}
+.bloco .t{font-size:11.5px;color:var(--apagado);font-variant-numeric:tabular-nums}
+.bloco.feito{opacity:.42}
+.bloco.atual{background:var(--marca);border-color:#fff}
+.bloco.atual .t{color:#dbe7ff}
+.bloco.proximo{border-color:var(--apagado);border-style:dashed}
+/* Secao com segundo MARCADO contra a gravacao: a borda verde e a unica
+   diferenca visivel entre "eu sei quando isso entra" e "eu estimei". */
+.bloco.marcada{border-left:5px solid var(--ok)}
+.bloco.alvo{border-color:var(--marcar);border-style:solid;box-shadow:0 0 0 2px #a855f766}
+.bloco .fica{position:absolute;top:7px;right:9px;font-size:9.5px;color:var(--apagado);
+  letter-spacing:.09em;text-transform:uppercase;font-weight:800}
+.bloco.atual .fica{color:#fff}
+.bloco .conf{font-size:10.5px;color:var(--apagado);margin-top:3px;display:none}
+.bloco.atual .conf{color:#dbe7ff}
+body.detalhes .bloco .conf{display:block}
+
+/* 5 — transporte: anterior e próximo LADO A LADO, principal embaixo e largo */
+.nav{display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:none}
+/* A fileira da letra e menor que a das partes de proposito: na condução, a
+   parte e a decisao e a letra e o acompanhamento. E quando a mao esta no
+   comando, ela fica verde — para nao haver duvida de quem manda. */
+.nav.letras button{min-height:clamp(44px,6.5vh,56px);font-size:clamp(13px,2.2vw,16px)}
+body.mao .nav.letras button{border-color:var(--ok);color:var(--ok)}
+.nav button{min-height:clamp(52px,8vh,66px);border-radius:13px;font-size:clamp(14px,2.4vw,17px);
+  font-weight:800;background:var(--caixa2);border:1px solid var(--linha);
+  color:var(--texto);cursor:pointer}
+.principal{min-height:clamp(58px,9vh,74px);border-radius:13px;font-size:clamp(17px,3vw,21px);
+  font-weight:800;background:var(--marca);border:none;color:#fff;cursor:pointer;flex:none}
+body.marcando .principal{background:var(--marcar)}
+.nav button:active,.principal:active{transform:scale(.985)}
+.alt{background:none;border:none;color:var(--apagado);font-size:11.5px;
+  text-decoration:underline;cursor:pointer;padding:0}
+/* ALTURA FIXA, E ISSO E REQUISITO, nao estetica. A primeira versao usava
+   flex-wrap:wrap: entrar no modo de marcar acrescentava tres botoes, a linha
+   quebrava em duas e O BOTAO GRANDE SUBIA alguns pixels. Quem esta marcando
+   ao vivo tem o dedo parado em cima dele esperando a parte entrar — mover o
+   botao nesse instante e garantir marca errada. Entao a linha nunca quebra:
+   rola de lado, como o repertorio, e o transporte fica onde estava. */
+.pe{display:flex;align-items:center;gap:14px;flex:none;flex-wrap:nowrap;
+  overflow-x:auto;scrollbar-width:none;min-height:30px}
+.pe::-webkit-scrollbar{display:none}
+.pe > *{flex:none}
+.so-marcando{display:none}
+body.marcando .so-marcando{display:inline-block}
+body.marcando .nao-marcando{display:none}
+.registro{flex:none;min-height:20px;font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:12px;color:var(--apagado);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.registro b{color:var(--ok)}
+.registro .falhou{color:var(--erro)}
+/* A TRAVA. Desarmada por padrao, de proposito: abrir esta pagina nao pode
+   mexer na luz do salao. So depois de um toque consciente e que a seccao
+   passa a acionar cena e movimento de verdade. */
+.armar{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;
+  color:var(--apagado);cursor:pointer;user-select:none}
+.armar input{width:20px;height:20px;accent-color:var(--ok)}
+body.armado .armar span{color:var(--ok);font-weight:700}
+</style>
+</head>
+<body>
+<div class="folha">
+
+  <div class="topo">
+    <h1>Louvor</h1>
+    <a href="/">painel</a>
+    <a href="/cenas">cenas</a>
+    <button class="mini tocar" id="tocar">▶</button>
+    <button class="mini" id="parar">■</button>
+    <span class="selo" id="selo" title="">—</span>
+  </div>
+
+  <div class="repertorio" id="repertorio"></div>
+
+  <div class="agora">
+    <span class="titulo" id="titulo">—</span>
+    <span class="bpm" id="bpm"></span>
+    <span class="bpm arquivo" id="arquivo"></span>
+    <!-- Qual slide esta no telao AGORA. Para a camera: e o que prova que a
+         letra anda sozinha, sem ninguem tocar em nada. -->
+    <span class="slide" id="slideAgora"></span>
+    <span class="rel" id="relogio">0:00</span>
+  </div>
+  <div class="barra" id="barra"><i id="progresso"></i></div>
+
+  <div class="blocos" id="blocos"></div>
+
+  <div class="nav">
+    <button id="anterior">◀ Parte</button>
+    <button id="proximo">Parte ▶</button>
+  </div>
+  <!-- PASSAR A LETRA NA MAO. Nao e enfeite: enquanto a divisao nao esta
+       pronta, conduzir a letra no dedo e o jeito de usar isto no culto, e
+       era exatamente o que faltava. -->
+  <div class="nav letras">
+    <button id="slideAnterior">◀ Letra</button>
+    <button id="slideProximo">Letra ▶</button>
+  </div>
+  <button class="principal" id="principal">↻ Repetir esta parte</button>
+  <div class="pe">
+    <label class="armar"><input type="checkbox" id="armado"> <span>acionar a luz de verdade</span></label>
+    <button class="alt nao-marcando" id="alternar">mostrar o que cada bloco aciona</button>
+    <button class="alt" id="modoMarcar">marcar os tempos</button>
+    <button class="alt so-marcando" id="desfazer">desfazer última</button>
+    <button class="alt so-marcando" id="salvar">salvar marcas</button>
+    <button class="alt so-marcando" id="limpar">apagar todas</button>
+  </div>
+  <!-- O REGISTRO existe para a CAMERA. Sem ele, um video da tela mostra
+       blocos mudando de cor e nada prova que algo saiu daqui. Com ele, a
+       mesma filmagem mostra o comando e a luz reagindo no mesmo quadro. -->
+  <div class="registro" id="registro"></div>
+
+</div>
+
+<!-- O RELOGIO DO CULTO MORA AQUI.
+     Nao e enfeite nem previa: este elemento E a fonte de tempo da pagina.
+     `preload="metadata"` busca so o cabecalho do arquivo — o WAV do click tem
+     20 MB e nao faz sentido baixar inteiro antes de alguem apertar tocar. -->
+<audio id="som" preload="metadata"></audio>
+
+<script>
+const $ = id => document.getElementById(id);
+const som = $('som');
+let LOUVORES = [], atual = null, secao = 0, t = 0, pulso = null;
+let marcas = [];        // [{nome, segundo}] — alinhado por INDICE com as seções
+let marcando = false, alvoMarca = 0;
+
+const mmss = s => (s=Math.max(0,Math.round(s||0)), Math.floor(s/60)+':'+String(s%60).padStart(2,'0'));
+
+// ---------------------------------------------------------------------------
+// A LINHA DO TEMPO
+//
+// ISTO SUBSTITUI UM MODELO ERRADO, e vale ficar escrito porque voltar ao
+// errado e tentador: a versao anterior calculava tudo a partir do BPM,
+// multiplicando compassos por segundos-por-compasso. Parece certo e e falso,
+// porque gravacao moderna de louvor VARIA DE ANDAMENTO — o MultiTracks avisa
+// isso nas proprias musicas e recomenda usar o click do pacote. Com variacao,
+// o erro vai somando e no fim da musica a letra esta um verso atrasada.
+//
+// Agora: quem sabe o tempo e a GRAVACAO. Cada secao pode ter um `segundo`
+// MARCADO ouvindo o audio, e esse numero manda. Onde ainda nao ha marca, o
+// BPM entra como ESTIMATIVA — e a tela diz qual e qual, porque estimativa
+// apresentada como medida e o pior dos dois mundos.
+// ---------------------------------------------------------------------------
+function estimativaDe(m, s){
+  if (s.segundos !== undefined && s.segundos !== null) return s.segundos;
+  const tempos = (s.compassos || 0) * (m.tempos_por_compasso || 4);
+  return tempos * 60 / (m.bpm || 100);
+}
+
+/** Onde cada secao COMECA, em segundos. Marca manda; BPM so preenche buraco. */
+function inicios(m){
+  const saida = []; let caminhando = 0;
+  m.secoes.forEach((s, i) => {
+    const marca = marcas[i];
+    if (marca && marca.segundo !== undefined && marca.segundo !== null) caminhando = marca.segundo;
+    saida.push(caminhando);
+    caminhando += estimativaDe(m, s);
+  });
+  return saida;
+}
+
+/** Onde cada secao TERMINA — que e onde a proxima comeca. */
+function fins(m){
+  const ini = inicios(m);
+  return ini.map((_, i) => i + 1 < ini.length ? ini[i+1] : duracao(m));
+}
+
+// ---------------------------------------------------------------------------
+// A LETRA ANDA SLIDE A SLIDE, NAO SECAO A SECAO
+//
+// ISTO ESTAVA ERRADO e o erro era visivel de longe: cada secao apontava para
+// UM slide, entao num verso de 16 compassos a letra ficava congelada no
+// primeiro verso enquanto a igreja cantava os quatro seguintes. Nove trocas
+// numa musica de 34 slides.
+//
+// O mapa de slides que ja existe no config diz onde cada secao COMECA. Os
+// slides de uma secao sao, entao, os que vao do slide dela ate o slide da
+// secao seguinte — isso nao e palpite, e leitura do mapa. O que E estimativa
+// e a REPARTICAO dentro da secao: sem marca por slide, divide-se o tempo da
+// secao em partes iguais. Contra um click de andamento fixo isso e exato;
+// contra gravacao que varia, e aproximacao — e um dia cada slide tera a sua
+// propria marca, do mesmo jeito que as secoes tem hoje.
+// ---------------------------------------------------------------------------
+function eventosDeSlide(m){
+  const ini = inicios(m), fim = fins(m), eventos = [];
+  m.secoes.forEach((s, i) => {
+    if (s.slide === undefined || s.slide === null) return;
+    // O slide onde a PROXIMA secao comeca delimita esta.
+    let proximo = null;
+    for (let k = i+1; k < m.secoes.length; k++){
+      if (m.secoes[k].slide !== undefined && m.secoes[k].slide !== null){
+        proximo = m.secoes[k].slide; break;
+      }
+    }
+    if (proximo === null) proximo = (m.total_slides != null ? m.total_slides : s.slide + 1);
+    // Refrao que volta a um slide anterior da conta negativa: ali a secao
+    // mostra um slide so, e nao inventamos uma faixa que nao existe.
+    const quantos = Math.max(1, proximo - s.slide);
+    const passo = (fim[i] - ini[i]) / quantos;
+    for (let n = 0; n < quantos; n++){
+      eventos.push({segundo: ini[i] + n * passo, slide: s.slide + n, secao: i});
+    }
+  });
+  return eventos.sort((a, b) => a.segundo - b.segundo);
+}
+
+/** Refaz a linha de slides. Chamar SEMPRE que o tempo das secoes mudar:
+    marca nova, marca apagada, ou o audio revelando sua duracao real. */
+function recalcular(){
+  if (atual) atual._slides = eventosDeSlide(atual);
+}
+
+// ---------------------------------------------------------------------------
+// QUEM MANDA NA LETRA: O RELOGIO OU A MAO
+//
+// Enquanto `slideManual` e null, manda a linha do tempo. No instante em que
+// alguem aperta "Letra ▶", a mao assume e o relogio para de mexer no telao —
+// senao os dois brigariam e o operador perderia, que e o pior resultado
+// possivel no meio de um culto.
+//
+// A mao devolve o comando quando o audio volta a tocar ou quando se toca uma
+// parte: sao os dois gestos que dizem "segue voce".
+// ---------------------------------------------------------------------------
+let slideManual = null;
+
+function assumirMao(valor){
+  slideManual = valor;
+  document.body.classList.toggle('mao', valor !== null);
+}
+
+/** O slide que deve estar no telao: o da mao, se houver; senao o do tempo. */
+function slideAtual(){
+  return slideManual !== null ? slideManual : slideEm(t);
+}
+
+/** Qual slide deve estar no telao NESTE segundo. */
+function slideEm(segundo){
+  if (!atual || !atual._slides || !atual._slides.length) return null;
+  let escolhido = null;
+  for (const evento of atual._slides){
+    if (segundo >= evento.segundo - 0.001) escolhido = evento.slide;
+    else break;
+  }
+  return escolhido;
+}
+
+/** Quantos slides esta secao cobre — para a tela dizer isso. */
+function faixaDaSecao(i){
+  if (!atual || !atual._slides) return null;
+  const dela = atual._slides.filter(e => e.secao === i);
+  if (!dela.length) return null;
+  return {de: dela[0].slide, ate: dela[dela.length-1].slide, quantos: dela.length};
+}
+
+/** Duracao: a do AUDIO quando ele esta carregado; a estimada quando nao ha audio. */
+function duracao(m){
+  if (som.duration && isFinite(som.duration) && som.duration > 0) return som.duration;
+  const ini = inicios(m);
+  return ini[ini.length-1] + estimativaDe(m, m.secoes[m.secoes.length-1]);
+}
+const temAudio = () => !!(som.duration && isFinite(som.duration) && som.duration > 0);
+const marcadas  = () => marcas.filter(x => x && x.segundo !== undefined && x.segundo !== null).length;
+
+function secaoEm(segundo){
+  if (!atual) return 0;
+  const ini = inicios(atual);
+  let i = 0; for (let k=0;k<ini.length;k++) if (segundo >= ini[k] - 0.001) i = k;
+  return i;
+}
+
+// ---------------------------------------------------------------------------
+// ESCOLHER A MUSICA
+// ---------------------------------------------------------------------------
+async function escolher(id){
+  atual = LOUVORES.find(m => m.id === id) || null;
+  secao = 0; t = 0; ultimoDisparo = null; ultimoSlide = null;
+  marcas = []; alvoMarca = 0; assumirMao(null);
+  parar();
+
+  // Carrega o audio da musica. `audio:` no config.yaml diz qual arquivo e.
+  // Sem audio a pagina continua funcionando pelo BPM — e o selo diz isso.
+  som.removeAttribute('src');
+  if (atual && atual.audio){
+    som.src = '/api/louvor/audio/' + encodeURIComponent(atual.audio);
+    som.load();
+  }
+  desenhar();
+
+  // Quantos slides a musica REALMENTE tem, perguntado ao Holyrics. Sem este
+  // numero a ultima secao nao sabe ate onde vai, e a letra para no slide
+  // dela em vez de percorrer o final da musica.
+  if (atual && atual.holyrics_id){
+    try{
+      const r = await fetch('/api/louvor/musica/' + encodeURIComponent(atual.holyrics_id));
+      if (r.ok) atual.total_slides = (await r.json()).total_slides;
+    } catch(e){}
+  }
+
+  // As marcas vem do servidor, nao do config: sao feitas clicando aqui, e
+  // escrever YAML por codigo apagaria os comentarios daquele arquivo.
+  if (atual && atual.id){
+    try{
+      const r = await fetch('/api/louvor/marcas/' + encodeURIComponent(atual.id));
+      marcas = (await r.json()).marcas || [];
+      alvoMarca = marcadas();
+    } catch(e){}
+  }
+  recalcular();
+  desenhar();
+
+  // Escolher a musica POE A LETRA NO TELAO. So com a trava armada: trocar de
+  // musica na lista nao pode mudar o que a igreja esta vendo.
+  if (atual && atual.holyrics_id && $('armado').checked){
+    mostrarNoTelao().then(() => disparar(true)).catch(() => {});
+  }
+}
+
+/** Ir para uma secao: BUSCA NO AUDIO. E aqui que a pagina deixa de fingir. */
+function irPara(i){
+  if (!atual) return;
+  assumirMao(null);   // tocar numa parte devolve a conducao ao tempo
+  secao = Math.max(0, Math.min(atual.secoes.length-1, i));
+  t = inicios(atual)[secao];
+  buscar(t);
+  desenhar();
+}
+
+function buscar(segundo){
+  if (!temAudio()) return;
+  try{ som.currentTime = Math.max(0, Math.min(som.duration - 0.05, segundo)); }
+  catch(e){}   // alguns navegadores recusam busca antes de ter trecho bufferizado
+}
+
+// ---------------------------------------------------------------------------
+// O PULSO
+//
+// Um so, de 100 ms, e ele LE o audio — nao conta o tempo por conta propria.
+// Enquanto o audio esta pausado o pulso nem roda: nada para contar.
+// ---------------------------------------------------------------------------
+function tick(){
+  if (temAudio()) t = som.currentTime;
+  else t += 0.1;
+  const fim = duracao(atual);
+  if (!temAudio() && t >= fim){ t = fim; parar(); }
+  const i = secaoEm(t);
+  if (i !== secao){ secao = i; desenhar(); }
+  else { atualizarRelogio(); marcarSlideNaTela(); disparar(false); }
+  // `disparar` tambem fora da troca de secao PORQUE A LETRA ANDA DENTRO DELA.
+  // Ele so vai a rede quando algo muda de verdade — as guardas `ultimoDisparo`
+  // e `ultimoSlide` seguram o resto.
+}
+
+function comecarPulso(){ if (!pulso) pulso = setInterval(tick, 100); }
+function tocar(){
+  if (!atual) return;
+  if (temAudio() || som.src){
+    som.play().catch(() => comecarPulso());   // sem audio utilizavel, simula
+  }
+  comecarPulso();
+  $('tocar').textContent = '❚❚';
+}
+function parar(){
+  if (pulso) clearInterval(pulso), pulso = null;
+  try{ som.pause(); } catch(e){}
+  $('tocar').textContent = '▶';
+}
+const tocando = () => !!pulso;
+
+// A duracao so se conhece quando o cabecalho do arquivo chega — e a ultima
+// secao termina nela, entao a linha de slides muda nesse instante.
+som.addEventListener('loadedmetadata', () => { recalcular(); desenhar(); });
+som.addEventListener('ended',  () => parar());
+som.addEventListener('pause',  () => { if (pulso) { clearInterval(pulso); pulso = null; } $('tocar').textContent = '▶'; });
+// Dar play e dizer "segue voce": o relogio retoma a letra.
+som.addEventListener('play',   () => { assumirMao(null); comecarPulso(); $('tocar').textContent = '❚❚'; });
+som.addEventListener('error',  () => { desenhar(); anotarTexto('não consegui carregar ' + (atual && atual.audio || 'o áudio'), true); });
+// Buscar com o audio pausado tambem tem que mover a tela.
+som.addEventListener('seeked', () => { t = som.currentTime; secao = secaoEm(t); desenhar(); });
+
+$('tocar').onclick = () => tocando() ? parar() : tocar();
+$('parar').onclick = () => { parar(); t = 0; secao = 0; buscar(0); desenhar(); };
+$('anterior').onclick = () => irPara(secao-1);
+$('proximo').onclick  = () => irPara(secao+1);
+
+function andarLetra(passo){
+  if (!atual) return;
+  const teto = (atual.total_slides || 0) - 1;
+  const partida = slideAtual();
+  // Sem mapa e sem tempo, comecar do zero e o unico palpite honesto.
+  const alvo = Math.max(0, Math.min(teto < 0 ? 0 : teto,
+                 (partida === null ? (passo > 0 ? 0 : 0) : partida + passo)));
+  assumirMao(alvo);
+  marcarSlideNaTela();
+  disparar(true);
+}
+$('slideAnterior').onclick = () => andarLetra(-1);
+$('slideProximo').onclick  = () => andarLetra(+1);
+
+// Teclado, para quem conduz de notebook: setas andam a letra.
+document.addEventListener('keydown', evento => {
+  if (evento.target.tagName === 'INPUT') return;
+  if (evento.key === 'ArrowRight'){ evento.preventDefault(); andarLetra(+1); }
+  if (evento.key === 'ArrowLeft'){  evento.preventDefault(); andarLetra(-1); }
+});
+$('barra').onclick = e => {
+  if (!atual) return;
+  const caixa = e.currentTarget.getBoundingClientRect();
+  const fracao = Math.max(0, Math.min(1, (e.clientX - caixa.left) / caixa.width));
+  t = fracao * duracao(atual);
+  buscar(t); secao = secaoEm(t); desenhar();
+};
+$('alternar').onclick = () => {
+  document.body.classList.toggle('detalhes');
+  $('alternar').textContent = document.body.classList.contains('detalhes')
+    ? 'esconder o que cada bloco aciona' : 'mostrar o que cada bloco aciona';
+};
+
+// ---------------------------------------------------------------------------
+// MARCAR OS TEMPOS
+//
+// O jeito de a linha do tempo ficar certa sem ninguem digitar segundo nenhum:
+// toca a gravacao, e a cada parte que ENTRA, um toque no botao grande. O
+// segundo que o audio esta mostrando vira o inicio daquela parte.
+//
+// E assim e nao por BPM porque e assim que a informacao existe no mundo: quem
+// marca esta OUVINDO. Nao precisa saber o andamento, nao precisa contar
+// compasso, nao e prejudicado por a musica acelerar no refrao.
+// ---------------------------------------------------------------------------
+$('modoMarcar').onclick = () => {
+  marcando = !marcando;
+  document.body.classList.toggle('marcando', marcando);
+  alvoMarca = marcando ? marcadas() : 0;
+  desenhar();
+};
+
+$('principal').onclick = () => {
+  if (!atual) return;
+  if (!marcando){ irPara(secao); return; }                     // repetir esta parte
+  if (alvoMarca >= atual.secoes.length){ gravarMarcas(); return; }  // acabou: grava
+  const segundo = temAudio() ? som.currentTime : t;
+  marcas[alvoMarca] = {nome: atual.secoes[alvoMarca].nome, segundo: Math.round(segundo*1000)/1000};
+  anotarTexto('marcou "' + atual.secoes[alvoMarca].nome + '" em ' + segundo.toFixed(2) + 's', false);
+  alvoMarca++;
+  recalcular(); desenhar();
+};
+$('desfazer').onclick = () => {
+  if (alvoMarca > 0){ alvoMarca--; marcas[alvoMarca] = null; recalcular(); desenhar(); }
+};
+$('limpar').onclick = () => {
+  if (!confirm('Apagar todas as marcas desta música?')) return;
+  marcas = []; alvoMarca = 0; recalcular(); desenhar(); gravarMarcas();
+};
+$('salvar').onclick = () => gravarMarcas();
+
+async function gravarMarcas(){
+  if (!atual) return;
+  const corpo = marcas.filter(x => x && x.segundo !== undefined && x.segundo !== null);
+  try{
+    const r = await fetch('/api/louvor/marcas/' + encodeURIComponent(atual.id), {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({marcas: corpo})
+    });
+    if (!r.ok) throw new Error(await r.text());
+    marcas = (await r.json()).marcas || [];
+    alvoMarca = marcadas();
+    anotarTexto('gravou ' + marcas.length + ' marca(s) de "' + atual.nome + '"', false);
+    recalcular(); desenhar();
+  } catch(e){ anotarTexto('não consegui gravar as marcas', true); }
+}
+
+// ---------------------------------------------------------------------------
+// A LUZ DE VERDADE
+//
+// Desarmado por padrao. Abrir esta pagina nao pode mexer na luz do salao —
+// alguem pode estar so olhando, no meio de um culto.
+// ---------------------------------------------------------------------------
+let ultimoDisparo = null, ultimoSlide = null, retentandoSlide = false;
+
+// O Holyrics precisa de um instante entre "poe esta musica no ar" e "pula
+// para o slide 7": MEDIDO em 09/11, dois 502 seguidos no log da ponte porque
+// o ActionGoToIndex chegou antes de a apresentacao existir. Meio segundo
+// resolve, e quem errar mesmo assim cai na retentativa abaixo.
+const esperar = ms => new Promise(r => setTimeout(r, ms));
+const PAUSA_APOS_MOSTRAR = 500;
+
+async function mostrarNoTelao(){
+  if (!atual || !atual.holyrics_id) return;
+  await fetch('/api/louvor/mostrar/' + encodeURIComponent(atual.holyrics_id), {method:'POST'});
+  await esperar(PAUSA_APOS_MOSTRAR);
+  ultimoSlide = null;
+}
+
+$('armado').onchange = () => {
+  document.body.classList.toggle('armado', $('armado').checked);
+  ultimoDisparo = null; ultimoSlide = null;
+  if ($('armado').checked){
+    mostrarNoTelao().then(() => disparar(true)).catch(() => disparar(true));
+  }
+};
+
+async function disparar(forcar){
+  if (!$('armado').checked || !atual) return;
+  const s = atual.secoes[secao];
+  if (!s) return;
+
+  const feitos = [], falhas = [];
+
+  // `fetch` SO LANCA SE A REDE CAIR. Um 502 do Holyrics, um 400 de cena que
+  // nao existe — tudo isso chega como resposta normal, e um `try/catch`
+  // sozinho conta como sucesso. Era o que esta pagina fazia, e o registro
+  // existe justamente para PROVAR na camera que o comando saiu: um registro
+  // que pinta de verde um 502 e pior do que nenhum registro.
+  async function mandar(caminho, rotulo){
+    const r = await fetch(caminho, {method:'POST'});
+    if (!r.ok) throw new Error(rotulo + ' (' + r.status + ')');
+    feitos.push(rotulo);
+  }
+
+  // LUZ — cena e modo. So manda quando MUDA: com o pulso a 10 por segundo,
+  // repetir o mesmo pedido seria enxurrada inutil na rede.
+  const assinatura = s.cena + '|' + s.modo;
+  if (forcar || assinatura !== ultimoDisparo){
+    ultimoDisparo = assinatura;
+    try{
+      // Cena primeiro, modo depois: o modo modula o que a cena pos no ar, e
+      // na ordem inversa havia um instante com o movimento sobre a cena velha.
+      await mandar('/api/luz/cena/' + encodeURIComponent(s.cena), 'cena ' + s.cena);
+      await mandar('/api/luz/modo/' + encodeURIComponent(s.modo), 'modo ' + s.modo);
+    } catch(e){
+      // Falhar aqui nao pode parar a musica. Quem opera precisa continuar
+      // conduzindo mesmo com a luz fora do ar. Zerar a assinatura faz a
+      // proxima passagem TENTAR DE NOVO em vez de achar que ja mandou.
+      ultimoDisparo = null; falhas.push(String(e.message || e));
+    }
+  }
+
+  // LETRA — o slide DESTE SEGUNDO, nao o do comeco da secao. Era o do comeco
+  // da secao, e por isso a letra congelava 16 compassos num verso enquanto a
+  // igreja cantava os versos seguintes.
+  //
+  // Sem mapa de slide, a letra fica onde esta: melhor nao mexer do que mandar
+  // o telao para o verso errado.
+  const slide = slideAtual();
+  if (slide !== null && (forcar || slide !== ultimoSlide)){
+    ultimoSlide = slide;
+    try{ await mandar('/api/louvor/slide/' + slide, 'letra no slide ' + (slide + 1)); }
+    catch(e){
+      ultimoSlide = null; falhas.push(String(e.message || e));
+      // UMA segunda tentativa, nao um laco: a falha mais comum aqui e de
+      // tempo (o Holyrics ainda montando a apresentacao), e essa passa
+      // sozinha. A trava impede que 10 chamadas por segundo virem 10
+      // retentativas por segundo quando a falha for de verdade.
+      if (!retentandoSlide){
+        retentandoSlide = true;
+        setTimeout(() => { retentandoSlide = false; disparar(false); }, 700);
+      }
+    }
+  }
+
+  if (feitos.length || falhas.length) anotar(s.nome, feitos, falhas);
+}
+
+// O registro e para a CAMERA. Mostra a hora de relogio, porque num video
+// isso e o que amarra o que se ve na tela ao que se ve no salao.
+function horaAgora(){
+  const agora = new Date();
+  return [agora.getHours(), agora.getMinutes(), agora.getSeconds()]
+    .map(n => String(n).padStart(2,'0')).join(':');
+}
+function anotar(nome, feitos, falhas){
+  const el = $('registro'); el.innerHTML = '';
+  el.append(horaAgora() + '  ' + mmss(t) + '  ' + nome + '  →  ');
+  // O que DEU e o que NAO DEU, lado a lado. Parte da luz pode ter saido e a
+  // letra nao; dizer so "falhou" esconderia metade do que aconteceu.
+  if (feitos.length){
+    const b = document.createElement('b'); b.textContent = feitos.join('  ·  ');
+    el.appendChild(b);
+  }
+  if (falhas.length){
+    if (feitos.length) el.append('  ·  ');
+    const x = document.createElement('span');
+    x.className = 'falhou'; x.textContent = 'FALHOU: ' + falhas.join('  ·  ');
+    el.appendChild(x);
+  }
+}
+function anotarTexto(texto, ruim){
+  const el = $('registro'); el.innerHTML = '';
+  el.append(horaAgora() + '  →  ');
+  const n = document.createElement(ruim ? 'span' : 'b');
+  if (ruim) n.className = 'falhou';
+  n.textContent = texto; el.appendChild(n);
+}
+
+// ---------------------------------------------------------------------------
+// DESENHAR
+// ---------------------------------------------------------------------------
+function marcarSlideNaTela(){
+  if (!atual) return;
+  const slide = slideAtual();
+  $('slideAgora').textContent = slide === null ? ''
+    : 'slide ' + (slide + 1) + (atual.total_slides ? '/' + atual.total_slides : '')
+      + (slideManual !== null ? ' · na mão' : '');
+}
+
+function atualizarRelogio(){
+  if (!atual) return;
+  const total = duracao(atual);
+  $('relogio').textContent = mmss(t) + ' / ' + mmss(total);
+  $('progresso').style.width = (total ? 100 * t / total : 0) + '%';
+}
+
+/** O selo diz a VERDADE sobre de onde vem o tempo. Era "simulação" fixo. */
+function atualizarSelo(){
+  const el = $('selo');
+  el.className = 'selo';
+  if (!atual){ el.textContent = '—'; el.title = ''; return; }
+  const quantas = marcadas(), total = atual.secoes.length;
+  if (!temAudio()){
+    el.textContent = atual.audio ? 'áudio não carregou' : 'sem áudio · estimado pelo BPM';
+    el.title = 'O tempo está sendo contado por um cronômetro nosso a partir do BPM. '
+             + 'Serve para ensaiar a tela, não para acompanhar gravação que varia de andamento.';
+    return;
+  }
+  if (quantas >= total){
+    el.className = 'selo real';
+    el.textContent = 'áudio + ' + total + ' marcas';
+    el.title = 'O tempo vem do áudio e todas as partes têm segundo marcado contra esta gravação.';
+  } else if (quantas > 0){
+    el.className = 'selo parcial';
+    el.textContent = 'áudio · ' + quantas + '/' + total + ' marcadas';
+    el.title = 'As partes marcadas usam o segundo real; as demais ainda são estimadas pelo BPM.';
+  } else {
+    el.textContent = 'áudio · sem marcas';
+    el.title = 'O relógio já é o do áudio, mas nenhuma parte foi marcada: as entradas são estimativas do BPM.';
+  }
+}
+
+function desenhar(){
+  const rep = $('repertorio'); rep.innerHTML = '';
+  for (const m of LOUVORES){
+    const b = document.createElement('button');
+    b.className = 'rep' + (atual && atual.id === m.id ? ' sel' : '');
+    b.textContent = m.nome;
+    b.onclick = () => escolher(m.id);
+    rep.appendChild(b);
+  }
+  atualizarSelo();
+  if (!atual){ $('titulo').textContent = 'escolha uma música'; $('bpm').textContent = ''; return; }
+
+  $('bpm').textContent = atual.bpm + ' bpm · ' + (atual.tempos_por_compasso || 4) + '/4';
+  $('arquivo').textContent = atual.audio ? '· ' + atual.audio : '';
+  $('titulo').textContent = atual.nome;
+  atualizarRelogio();
+  marcarSlideNaTela();
+
+  const total = duracao(atual);
+  const ini = inicios(atual);
+
+  // Riscos na barra onde cada secao entra — num video, e o que mostra a letra
+  // trocando no lugar certo da musica.
+  const barra = $('barra');
+  barra.querySelectorAll('u').forEach(u => u.remove());
+  if (total) ini.forEach((seg, i) => {
+    if (i === 0) return;
+    const u = document.createElement('u');
+    u.style.left = (100 * seg / total) + '%';
+    barra.appendChild(u);
+  });
+
+  const alvo = $('blocos'); alvo.innerHTML = '';
+  atual.secoes.forEach((s, i) => {
+    const marca = marcas[i];
+    const temMarca = !!(marca && marca.segundo !== undefined && marca.segundo !== null);
+    const b = document.createElement('button');
+    b.className = 'bloco' + (i === secao ? ' atual' : (i < secao ? ' feito' : ''))
+                + (i === secao + 1 ? ' proximo' : '')
+                + (temMarca ? ' marcada' : '')
+                + (marcando && i === alvoMarca ? ' alvo' : '');
+    b.innerHTML = '<div><div class="q"></div><div class="conf"></div></div><div class="t"></div>';
+    b.querySelector('.q').textContent = s.nome;
+    // Mostra QUANDO a parte entra, e se esse numero e medido ou estimado.
+    // Quando entra, e QUANTOS SLIDES a parte percorre. O segundo numero e o
+    // que responde "a letra anda aqui dentro ou fica parada?".
+    const faixa = faixaDaSecao(i);
+    b.querySelector('.t').textContent =
+      (temMarca ? mmss(ini[i]) + ' ✓' : '~' + mmss(ini[i]))
+      + (faixa ? (faixa.quantos > 1
+          ? ' · slides ' + (faixa.de+1) + '–' + (faixa.ate+1)
+          : ' · slide ' + (faixa.de+1)) : '');
+    b.querySelector('.conf').textContent = s.cena + ' · ' + s.modo;
+    if (i === secao || i === secao + 1){
+      const f = document.createElement('span');
+      f.className = 'fica'; f.textContent = i === secao ? 'agora' : 'próximo';
+      b.appendChild(f);
+    }
+    b.onclick = () => marcando ? (alvoMarca = i, desenhar()) : irPara(i);
+    alvo.appendChild(b);
+  });
+
+  // O botao grande muda de funcao conforme o modo, e DIZ o que vai fazer.
+  const p = $('principal');
+  if (marcando){
+    p.textContent = alvoMarca < atual.secoes.length
+      ? '⚑ Marcar "' + atual.secoes[alvoMarca].nome + '" agora'
+      : '✓ todas marcadas — toque para salvar';
+  } else {
+    p.textContent = '↻ Repetir esta parte';
+  }
+
+  disparar(false);
+}
+
+fetch('/api/louvores').then(r => r.json()).then(d => {
+  LOUVORES = d.louvores || [];
+  if (LOUVORES.length) escolher(LOUVORES[0].id);
+  else desenhar();
+}).catch(() => { $('titulo').textContent = 'não consegui falar com a ponte'; });
+</script>
+</body>
+</html>

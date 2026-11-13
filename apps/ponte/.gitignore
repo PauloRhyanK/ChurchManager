@@ -1,0 +1,30 @@
+# ---------------------------------------------------------------------------
+# O QUE NUNCA ENTRA NESTE REPOSITORIO
+#
+# Segredos e o que e de UMA maquina so. O repositorio tem os .exemplo; cada PC
+# e a VPS preenchem os seus.
+# ---------------------------------------------------------------------------
+
+# segredos: token do Holyrics, senha do OBS, chave da web
+config.yaml
+# o papel de cada maquina
+maquina.yaml
+# credenciais do Google/YouTube, tokens, backups do OBS (tem chave de transmissao)
+_*.json
+*.pem
+*.key
+.env
+.env.*
+
+# estado e logs de execucao
+*.log
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# midia e acervo: audio e pesado, e as letras do acervo tem direito autoral
+*.wav
+*.mp3
+*.m4a
+acervo/

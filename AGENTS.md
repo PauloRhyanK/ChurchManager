@@ -3,6 +3,7 @@
 ## Estrutura
 - `apps/api` — NestJS + Prisma (PostgreSQL).
 - `apps/admin` — painel React + Vite + shadcn/ui.
+- `apps/ponte` — Ponte do Culto (equipe de multimídia): Python/Flask, sem banco, independente da API e do painel. `web/` roda na VPS em `ponte.igrejaparaiso.com.br`; `pc/` roda nos PCs da igreja. Ver `apps/ponte/README.md`. Os gates abaixo não se aplicam a ela.
 - O site público fica em **outro repositório** e consome a API via HTTP (ADR 0002). O painel é fornecedor de dados e não conhece o site.
 - Como subir localmente: ver `README.md`.
 

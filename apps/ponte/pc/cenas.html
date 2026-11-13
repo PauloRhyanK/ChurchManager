@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cenas de luz — Ponte do Culto</title>
+<style>
+/* Painel de CENAS: o jeito do dia a dia de mexer na luz. A mesa (/luzes) e
+   canal por canal, para quem esta descobrindo o patch; aqui e por GRUPO de
+   refletor, com cor e intensidade, para quem esta montando o culto.
+
+   Seguranca embutida, de proposito: estrobo, programa automatico e reset das
+   cabecas saem SEMPRE em 0 de toda cena montada aqui. Nao ha botao de pisca —
+   estrobo pode desencadear crise em quem tem epilepsia fotossensivel, e no C
+   qualquer valor a partir de 20 ja pisca. */
+:root{
+  --fundo:#0b1016; --caixa:#131b24; --caixa2:#18212c;
+  --linha:#243040; --texto:#e8eef6; --apagado:#8fa0b4;
+  --ok:#22c55e; --erro:#ef4444; --aviso:#f59e0b; --marca:#3b82f6;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--fundo);color:var(--texto);
+  font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.folha{max-width:1100px;margin:0 auto;padding:18px 16px 70px}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+h1{font-size:22px;margin:0;letter-spacing:-.01em}
+.volta{color:var(--marca);text-decoration:none;font-size:14px}
+.volta:hover{text-decoration:underline}
+.pilula{display:inline-flex;align-items:center;gap:7px;background:var(--caixa);
+  border:1px solid var(--linha);border-radius:999px;padding:5px 13px;font-size:13px}
+.ponto{width:9px;height:9px;border-radius:50%;background:var(--apagado)}
+.ponto.on{background:var(--ok)}.ponto.off{background:var(--erro)}
+h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--apagado);
+  margin:26px 0 10px;font-weight:600}
+.dica{font-size:13px;color:var(--apagado);margin:6px 0 0}
+button{font:inherit;font-weight:600;color:var(--texto);background:var(--caixa2);
+  border:1px solid var(--linha);border-radius:10px;padding:10px 16px;cursor:pointer}
+button:hover:not([disabled]){filter:brightness(1.25)}
+button:active:not([disabled]){transform:scale(.98)}
+button[disabled]{opacity:.4;cursor:default}
+button.forte{background:var(--marca);border-color:transparent}
+button.perigo{background:#7f1d1d;border-color:transparent}
+button.verde{background:#15803d;border-color:transparent}
+input[type=text]{font:inherit;color:var(--texto);background:var(--fundo);
+  border:1px solid var(--linha);border-radius:10px;padding:10px 12px;width:100%}
+input:focus{outline:2px solid var(--marca);outline-offset:1px}
+input[type=range]{width:100%;accent-color:var(--marca);height:30px}
+
+/* cenas salvas */
+.cenas{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.cena{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:6px;
+  text-align:left;padding:12px 14px;min-height:76px}
+.cena.ativa{outline:2px solid var(--marca);outline-offset:1px}
+.cena .nome{font-size:16px;font-weight:700;overflow-wrap:anywhere}
+.cena .faixa{display:flex;gap:3px;width:100%}
+.cena .faixa i{flex:1;height:8px;border-radius:3px;background:#1b232d}
+.cena .orig{font-size:11px;color:var(--apagado);font-weight:500}
+.cena .apaga{position:absolute;top:4px;right:6px;background:none;border:none;
+  color:var(--apagado);padding:2px 6px;font-size:16px}
+.cena .apaga:hover{color:var(--erro)}
+
+/* grupos */
+.grupos{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,480px),1fr))}
+.grupo{background:var(--caixa);border:1px solid var(--linha);border-radius:14px;padding:16px}
+.grupo h3{margin:0;font-size:17px;display:flex;align-items:center;gap:10px}
+.grupo h3 .amostra{width:16px;height:16px;border-radius:50%;border:1px solid var(--linha)}
+.grupo .sub{font-size:13px;color:var(--apagado);margin:2px 0 12px}
+.rot{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--apagado);
+  margin:12px 0 6px;font-weight:600}
+.cores{display:flex;flex-wrap:wrap;gap:8px}
+.cor{width:44px;height:44px;padding:0;border-radius:50%;border:2px solid var(--linha);
+  position:relative}
+.cor.sel{border-color:#fff;box-shadow:0 0 0 3px var(--marca)}
+.cor.nenhuma::after{content:"";position:absolute;inset:8px;border-radius:50%;
+  background:linear-gradient(45deg,transparent 45%,var(--apagado) 45% 55%,transparent 55%)}
+.cor.igual{width:auto;border-radius:999px;padding:0 14px;font-size:13px}
+.intens{display:grid;grid-template-columns:1fr 56px;gap:12px;align-items:center}
+.intens .v{font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
+.posicoes{display:flex;flex-wrap:wrap;gap:8px}
+.posicoes button{padding:8px 14px}
+.posicoes button.sel{background:var(--marca);border-color:transparent}
+details{margin-top:10px}
+summary{cursor:pointer;color:var(--apagado);font-size:13px}
+.fino{display:grid;grid-template-columns:70px 1fr 44px;gap:10px;align-items:center;margin-top:8px}
+.fino span{font-size:13px;color:var(--apagado)}
+.fino b{text-align:right;font-variant-numeric:tabular-nums}
+
+/* modos de movimento — a fileira vira uma REGUA de energia, do mais calmo
+   ao mais agitado, porque e assim que o config os ordena. O perigoso fica
+   separado por uma linha, para ninguem encostar nele sem querer. */
+.modos{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch}
+.modo{display:flex;flex-direction:column;align-items:flex-start;gap:2px;
+  text-align:left;padding:10px 14px;min-width:120px}
+.modo.sel{background:var(--marca);border-color:transparent}
+.modo .q{font-size:15px;font-weight:700}
+.modo .p{font-size:11.5px;color:var(--apagado);font-weight:500}
+.modo.sel .p{color:#e3ecff}
+.modo.risco{border-color:#7f1d1d}
+.modo.risco .q{color:var(--erro)}
+.modo.risco.sel{background:#7f1d1d}
+.modo.risco.sel .q{color:#fff}
+.separador{width:1px;align-self:stretch;background:var(--linha);margin:0 4px}
+
+.barra{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.barra .cresce{flex:1;min-width:200px}
+.vivo{display:inline-flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;
+  user-select:none}
+.vivo input{width:20px;height:20px;accent-color:var(--ok)}
+#aviso{margin:14px 0 0;padding:12px 14px;border-radius:10px;font-size:14px;
+  background:var(--caixa2);border-left:3px solid var(--marca)}
+#aviso.erro{border-left-color:var(--erro)}
+#aviso.bom{border-left-color:var(--ok)}
+#aviso:empty{display:none}
+.rodape{margin-top:30px;padding-top:16px;border-top:1px solid var(--linha)}
+</style>
+</head>
+<body>
+<div class="folha">
+
+<header>
+  <h1>Cenas de luz</h1>
+  <a class="volta" href="/">← painel do culto</a>
+  <a class="volta" href="/luzes">mesa técnica (canal por canal)</a>
+  <span class="pilula"><span class="ponto" id="pontoLuz"></span><span id="txtLuz">lendo…</span></span>
+</header>
+<p class="dica">Toque numa cena para acender. Para criar uma nova, ajuste os grupos abaixo olhando a luz e salve com um nome.</p>
+<div id="aviso"></div>
+
+<h2>Cenas</h2>
+<div class="barra" style="margin-bottom:12px">
+  <button class="perigo" id="btnApagar">Apagar tudo</button>
+  <span class="dica" style="margin:0">Cenas com nome <b>abertura</b>, <b>louvor</b>, <b>pregacao</b> ou <b>apagar</b> são usadas automaticamente pelos botões do culto.</span>
+</div>
+<div class="cenas" id="cenas"></div>
+
+<h2>Movimento</h2>
+<p class="dica" style="margin:0 0 10px">A cena diz a <b>cor</b>, o modo diz o <b>movimento</b> — e os dois são independentes. Trocar de cena não para o movimento; <b>Parado</b> devolve a cena exata.</p>
+<div class="modos" id="modos"></div>
+
+<h2>Montar cena</h2>
+<div class="barra" style="margin-bottom:12px">
+  <label class="vivo"><input type="checkbox" id="aoVivo" checked> Ao vivo — cada toque já muda a luz</label>
+</div>
+<div class="grupos" id="grupos"></div>
+
+<h2>Salvar</h2>
+<div class="barra">
+  <input class="cresce" type="text" id="nome" maxlength="40" placeholder="nome da cena — ex: louvor, oracao, natal">
+  <button class="verde" id="btnSalvar">Salvar cena</button>
+  <button id="btnEnviar">Enviar para a luz</button>
+</div>
+<p class="dica">Salvar com o nome de uma cena que já existe substitui a anterior.</p>
+
+<div class="rodape">
+  <details>
+    <summary>Cenas sugeridas (instalar de novo)</summary>
+    <p class="dica">Recria as cenas sugeridas: abertura, louvor, pregacao, oracao, celebracao, ceia, servico e apagar. Substitui as que tiverem o mesmo nome.</p>
+    <button id="btnSugestoes" style="margin-top:8px">Instalar cenas sugeridas</button>
+  </details>
+</div>
+
+</div>
+<script>
+// ---------------------------------------------------------------------------
+// O patch medido com a luz em 08/11/2026 (universo 1). Ver patch.yaml.
+//   rgbw  : R G B W, sem canal de brilho
+//   par9  : brilho, estrobo, programa, velocidade, R G B W Ambar
+//   cabeca: pan, tilt, obturador (255 = fixo), R G B W, (nada), reset
+// ---------------------------------------------------------------------------
+const GRUPOS = [
+  {id:'D', nome:'Luz de frente', sub:'D1, D2, D3 — os 3 grandes no alto, de frente para o altar. Costumam ficar BRANCOS: é a luz que deixa o altar claro', tipo:'rgbw', bases:[1]},
+  {id:'B', nome:'Barra', sub:'B1 a B6 — fileira perto da treliça', tipo:'rgbw', bases:[17,33],
+   alt:'Cor de B5 e B6 (os outros 2)'},
+  {id:'C', nome:'Cortina', sub:'C1 a C4 — no alto da cortina. É ela que dá a COR do momento', tipo:'par9', bases:[49,65,81,97],
+   alt:'Cor alternada (C2 e C4)'},
+  {id:'T', nome:'Teto (cabeças móveis)', sub:'T1 a T6 — os pequenos do teto', tipo:'cabeca', bases:[113,129,145]},
+];
+
+// rgbw = [R,G,B,W] para D, B e cabecas; p9 = [R,G,B,W,A] para a cortina
+const PALETA = {
+  apagado:      {nome:'Apagado',       css:'#1b232d', rgbw:[0,0,0,0],        p9:[0,0,0,0,0]},
+  vermelho:     {nome:'Vermelho',      css:'#ef2b2b', rgbw:[255,0,0,0],      p9:[255,0,0,0,0]},
+  ambar:        {nome:'Âmbar',         css:'#ff9a1f', rgbw:[255,80,0,0],     p9:[0,0,0,0,255]},
+  amarelo:      {nome:'Amarelo',       css:'#ffd21f', rgbw:[255,170,0,0],    p9:[255,170,0,0,0]},
+  verde:        {nome:'Verde',         css:'#22c55e', rgbw:[0,255,0,0],      p9:[0,255,0,0,0]},
+  verde_limao:  {nome:'Verde-limão claro', css:'#c8f56b', rgbw:[120,255,0,90], p9:[120,255,0,90,0]},
+  ciano:        {nome:'Ciano',         css:'#22d3ee', rgbw:[0,180,255,0],    p9:[0,180,255,0,0]},
+  azul:         {nome:'Azul',          css:'#2f5bff', rgbw:[0,0,255,0],      p9:[0,0,255,0,0]},
+  roxo:         {nome:'Roxo',          css:'#8b3dff', rgbw:[110,0,255,0],    p9:[110,0,255,0,0]},
+  rosa:         {nome:'Rosa',          css:'#ff3d9a', rgbw:[255,0,110,0],    p9:[255,0,110,0,0]},
+  branco_quente:{nome:'Branco quente', css:'#ffe2b0', rgbw:[110,35,0,255],   p9:[0,0,0,255,140]},
+  branco:       {nome:'Branco',        css:'#f5f7fa', rgbw:[0,0,0,255],      p9:[0,0,0,255,0]},
+  branco_frio:  {nome:'Branco frio',   css:'#d6e8ff', rgbw:[0,0,90,200],     p9:[0,0,90,200,0]},
+};
+const ORDEM_CORES = ['apagado','vermelho','ambar','amarelo','verde','verde_limao','ciano','azul','roxo','rosa','branco_quente','branco','branco_frio'];
+
+// Posicoes das cabecas, medidas olhando T2/T3 (pan, tilt)
+const POSICOES = {
+  forro:   {nome:'Forro (teto)', pan:255, tilt:255},
+  chao:    {nome:'Chão',         pan:128, tilt:128},
+  esquerda:{nome:'Esquerda',     pan:128, tilt:64},
+  direita: {nome:'Direita',      pan:128, tilt:192},
+};
+
+// Regra da equipe (Paulo, 08/11/2026): estas sao as UNICAS luzes do altar.
+// A luz de frente (D) fica BRANCA para o altar ficar claro — inclusive na
+// camera. Quem da a cor do momento e a CORTINA; barra e teto sao detalhe.
+// As cabecas do teto apontando para o Chao iluminam o piso do altar de cima.
+const SUGESTOES = {
+  apagar:    {D:{cor:'apagado',int:0}, B:{cor:'apagado',int:0}, C:{cor:'apagado',cor2:'igual',int:0}, T:{cor:'apagado',int:0,pos:'chao'}},
+  abertura:  {D:{cor:'branco',int:100}, B:{cor:'ambar',int:50}, C:{cor:'ambar',cor2:'igual',int:100}, T:{cor:'branco_quente',int:50,pos:'chao'}},
+  // louvor: Paulo pediu a barra mais clara (parte branca) e o todo menos escuro
+  louvor:    {D:{cor:'branco',int:100}, B:{cor:'branco',cor2:'azul',int:100}, C:{cor:'azul',cor2:'roxo',int:100}, T:{cor:'azul',int:80,pos:'chao'}},
+  // pregacao: cortina do fundo numa cor neutra, verde-limao claro (Paulo)
+  pregacao:  {D:{cor:'branco',int:100}, B:{cor:'branco',int:40}, C:{cor:'verde_limao',cor2:'igual',int:70}, T:{cor:'branco',int:70,pos:'chao'}},
+  oracao:    {D:{cor:'branco',int:70}, B:{cor:'azul',int:30}, C:{cor:'azul',cor2:'igual',int:80}, T:{cor:'azul',int:40,pos:'chao'}},
+  celebracao:{D:{cor:'branco',int:100}, B:{cor:'amarelo',int:60}, C:{cor:'vermelho',cor2:'ambar',int:100}, T:{cor:'ambar',int:60,pos:'chao'}},
+  ceia:      {D:{cor:'branco',int:80}, B:{cor:'apagado',int:0}, C:{cor:'vermelho',cor2:'igual',int:70}, T:{cor:'branco_quente',int:40,pos:'chao'}},
+  servico:   {D:{cor:'branco',int:100}, B:{cor:'branco',int:100}, C:{cor:'branco',cor2:'igual',int:100}, T:{cor:'branco',int:100,pos:'chao'}},
+};
+
+// ---------------------------------------------------------------------------
+// estado -> quadro DMX completo. TODO canal de todo grupo entra, inclusive os
+// zeros: estrobo, programa e reset em 0 vencem qualquer residuo do quadro.
+// ---------------------------------------------------------------------------
+let estado = JSON.parse(JSON.stringify(SUGESTOES.apagar));
+estado.T.pan = 128; estado.T.tilt = 128;
+
+const esc = (v, int) => Math.round(v * int / 100);
+
+function quadro(st){
+  const q = {};
+  for (const g of GRUPOS){
+    const s = st[g.id];
+    if (g.tipo === 'rgbw'){
+      // B tem dois enderecos: 17 = B1-B4, 33 = B5-B6. A cor alternada vai no 2o.
+      g.bases.forEach((b, idx) => {
+        const nomeCor = (idx === 1 && s.cor2 && s.cor2 !== 'igual') ? s.cor2 : s.cor;
+        PALETA[nomeCor].rgbw.forEach((v,i) => q[b+i] = esc(v, s.int));
+      });
+    } else if (g.tipo === 'par9'){
+      g.bases.forEach((b, idx) => {
+        const nomeCor = (idx % 2 === 1 && s.cor2 && s.cor2 !== 'igual') ? s.cor2 : s.cor;
+        const cor = PALETA[nomeCor];
+        q[b] = nomeCor === 'apagado' ? 0 : Math.round(255 * s.int / 100); // brilho
+        q[b+1] = 0;  // estrobo: SEMPRE 0
+        q[b+2] = 0;  // programa automatico: SEMPRE 0
+        q[b+3] = 0;  // velocidade do programa
+        cor.p9.forEach((v,i) => q[b+4+i] = v);
+      });
+    } else if (g.tipo === 'cabeca'){
+      const c = PALETA[s.cor].rgbw;
+      const acesa = s.cor !== 'apagado' && s.int > 0;
+      for (const b of g.bases){
+        q[b] = s.pan; q[b+1] = s.tilt;
+        q[b+2] = acesa ? 255 : 0;          // obturador: 255 = fixo, nunca estrobo
+        c.forEach((v,i) => q[b+3+i] = esc(v, s.int));
+        q[b+7] = 0;
+        q[b+8] = 0;                        // reset: SEMPRE 0
+      }
+    }
+  }
+  return q;
+}
+
+function estadoDeSugestao(sug){
+  const st = JSON.parse(JSON.stringify(sug));
+  const p = POSICOES[st.T.pos] || POSICOES.forro;
+  st.T.pan = p.pan; st.T.tilt = p.tilt;
+  return st;
+}
+
+// quadro -> estado (para editar uma cena salva). Aproxima pela cor mais
+// proxima da paleta; uma cena feita na mesa tecnica pode nao bater exato.
+function corMaisProxima(vetor, campo){
+  const m = Math.max(...vetor);
+  if (m === 0) return {cor:'apagado', int:0};
+  const norm = vetor.map(v => v * 255 / m);
+  let melhor = 'branco', dist = Infinity;
+  for (const n of ORDEM_CORES){
+    if (n === 'apagado') continue;
+    const ref = PALETA[n][campo];
+    const refM = Math.max(...ref) || 1;
+    const d = ref.reduce((a, v, i) => a + Math.pow(v * 255 / refM - norm[i], 2), 0);
+    if (d < dist){ dist = d; melhor = n; }
+  }
+  const refM = Math.max(...PALETA[melhor][campo]);
+  return {cor:melhor, int:Math.max(1, Math.min(100, Math.round(m / refM * 100)))};
+}
+function estadoDeQuadro(q){
+  const v = c => Number(q[c] || 0);
+  const st = {};
+  for (const g of GRUPOS){
+    const b = g.bases[0];
+    if (g.tipo === 'rgbw'){
+      st[g.id] = corMaisProxima([v(b),v(b+1),v(b+2),v(b+3)], 'rgbw');
+      if (g.bases.length > 1){
+        const b2 = g.bases[1];
+        const dois = corMaisProxima([v(b2),v(b2+1),v(b2+2),v(b2+3)], 'rgbw');
+        st[g.id].cor2 = dois.cor === st[g.id].cor ? 'igual' : dois.cor;
+      }
+    } else if (g.tipo === 'par9'){
+      const um = corMaisProxima([v(b+4),v(b+5),v(b+6),v(b+7),v(b+8)], 'p9');
+      const b2 = g.bases[1];
+      const dois = corMaisProxima([v(b2+4),v(b2+5),v(b2+6),v(b2+7),v(b2+8)], 'p9');
+      const dim = v(b);
+      st.C = {cor: dim ? um.cor : 'apagado', cor2: dois.cor === um.cor ? 'igual' : dois.cor,
+              int: Math.round(dim / 2.55)};
+    } else if (g.tipo === 'cabeca'){
+      const r = v(b+2) ? corMaisProxima([v(b+3),v(b+4),v(b+5),v(b+6)], 'rgbw') : {cor:'apagado', int:0};
+      st.T = {cor:r.cor, int:r.int, pan: q[b] === undefined ? 255 : v(b), tilt: q[b+1] === undefined ? 255 : v(b+1)};
+    }
+  }
+  return st;
+}
+
+// ---------------------------------------------------------------------------
+// rede
+// ---------------------------------------------------------------------------
+async function pedir(url, corpo){
+  const r = await fetch(url, corpo === undefined ? {} : {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(corpo)});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.erro || ('erro ' + r.status));
+  return j;
+}
+const $ = id => document.getElementById(id);
+function avisar(txt, tipo){ const a = $('aviso'); a.textContent = txt; a.className = tipo || ''; }
+
+let envioPendente = null;
+function enviarJa(){
+  return pedir('/api/luz/canais', {canais: quadro(estado), exclusivo: true})
+    .catch(e => avisar('não consegui mandar para a luz: ' + e.message, 'erro'));
+}
+function enviarAoVivo(){
+  if (!$('aoVivo').checked) return;
+  clearTimeout(envioPendente);
+  envioPendente = setTimeout(enviarJa, 70);
+}
+
+// ---------------------------------------------------------------------------
+// tela: grupos
+// ---------------------------------------------------------------------------
+function botaoCor(nome, selecionada, aoEscolher){
+  const p = PALETA[nome];
+  const b = document.createElement('button');
+  b.className = 'cor' + (nome === 'apagado' ? ' nenhuma' : '') + (selecionada ? ' sel' : '');
+  b.style.background = p.css; b.title = p.nome; b.setAttribute('aria-label', p.nome);
+  b.onclick = aoEscolher;
+  return b;
+}
+
+function desenharGrupos(){
+  const raiz = $('grupos'); raiz.innerHTML = '';
+  for (const g of GRUPOS){
+    const s = estado[g.id];
+    const el = document.createElement('div'); el.className = 'grupo';
+    el.innerHTML = '<h3><span class="amostra" style="background:' + PALETA[s.cor].css + '"></span>' + g.nome + '</h3>' +
+                   '<div class="sub">' + g.sub + '</div><div class="rot">Cor</div>';
+    const cores = document.createElement('div'); cores.className = 'cores';
+    ORDEM_CORES.forEach(n => cores.appendChild(botaoCor(n, s.cor === n, () => {
+      s.cor = n; if (n !== 'apagado' && s.int === 0) s.int = 70;
+      desenharGrupos(); enviarAoVivo();
+    })));
+    el.appendChild(cores);
+
+    if (g.alt){
+      const r2 = document.createElement('div'); r2.className = 'rot'; r2.textContent = g.alt;
+      el.appendChild(r2);
+      const c2 = document.createElement('div'); c2.className = 'cores';
+      const ig = document.createElement('button');
+      ig.className = 'cor igual' + ((s.cor2 || 'igual') === 'igual' ? ' sel' : '');
+      ig.textContent = 'Igual'; ig.onclick = () => { s.cor2 = 'igual'; desenharGrupos(); enviarAoVivo(); };
+      c2.appendChild(ig);
+      ORDEM_CORES.filter(n => n !== 'apagado').forEach(n =>
+        c2.appendChild(botaoCor(n, s.cor2 === n, () => { s.cor2 = n; desenharGrupos(); enviarAoVivo(); })));
+      el.appendChild(c2);
+    }
+
+    const ri = document.createElement('div'); ri.className = 'rot'; ri.textContent = 'Intensidade';
+    el.appendChild(ri);
+    const lin = document.createElement('div'); lin.className = 'intens';
+    lin.innerHTML = '<input type="range" min="0" max="100" value="' + s.int + '" aria-label="Intensidade ' + g.nome + '"><span class="v">' + s.int + '%</span>';
+    const rg = lin.querySelector('input'), vv = lin.querySelector('.v');
+    rg.oninput = () => { s.int = Number(rg.value); vv.textContent = s.int + '%'; enviarAoVivo(); };
+    el.appendChild(lin);
+
+    if (g.tipo === 'cabeca'){
+      const rp = document.createElement('div'); rp.className = 'rot'; rp.textContent = 'Para onde apontam';
+      el.appendChild(rp);
+      const ps = document.createElement('div'); ps.className = 'posicoes';
+      for (const [k, p] of Object.entries(POSICOES)){
+        const b = document.createElement('button'); b.textContent = p.nome;
+        if (s.pan === p.pan && s.tilt === p.tilt) b.className = 'sel';
+        b.onclick = () => { s.pan = p.pan; s.tilt = p.tilt; desenharGrupos(); enviarAoVivo(); };
+        ps.appendChild(b);
+      }
+      el.appendChild(ps);
+      const det = document.createElement('details');
+      det.innerHTML = '<summary>Ajuste fino da posição</summary>' +
+        '<div class="fino"><span>Horizontal</span><input type="range" min="0" max="255" value="' + s.pan + '"><b>' + s.pan + '</b></div>' +
+        '<div class="fino"><span>Vertical</span><input type="range" min="0" max="255" value="' + s.tilt + '"><b>' + s.tilt + '</b></div>' +
+        '<p class="dica">T1 e T6 estão no mesmo endereço, em pontas opostas do teto: a mesma posição aponta cada um para um lado.</p>';
+      const [rPan, rTilt] = det.querySelectorAll('input'), [bPan, bTilt] = det.querySelectorAll('b');
+      rPan.oninput = () => { s.pan = Number(rPan.value); bPan.textContent = s.pan; enviarAoVivo(); };
+      rTilt.oninput = () => { s.tilt = Number(rTilt.value); bTilt.textContent = s.tilt; enviarAoVivo(); };
+      el.appendChild(det);
+    }
+    raiz.appendChild(el);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// tela: cenas salvas
+// ---------------------------------------------------------------------------
+let SALVAS = {}, CONFIG = {}, cenaAtiva = null;
+
+function faixaDaCena(canais){
+  const st = estadoDeQuadro(canais);
+  return GRUPOS.map(g => '<i style="background:' + PALETA[st[g.id].cor].css + '"></i>').join('');
+}
+
+function desenharCenas(){
+  const raiz = $('cenas'); raiz.innerHTML = '';
+  const nomes = [...new Set([...Object.keys(SALVAS), ...Object.keys(CONFIG)])].sort();
+  if (!nomes.length){ raiz.innerHTML = '<span class="dica">Nenhuma cena ainda.</span>'; return; }
+  for (const n of nomes){
+    const salva = n in SALVAS, canais = salva ? SALVAS[n] : CONFIG[n];
+    const b = document.createElement('button');
+    b.className = 'cena' + (cenaAtiva === n ? ' ativa' : '');
+    b.innerHTML = '<span class="nome"></span><span class="faixa">' + faixaDaCena(canais) + '</span>' +
+                  (salva ? '' : '<span class="orig">antiga, do config — só os 3 grandes</span>');
+    b.querySelector('.nome').textContent = n;
+    b.onclick = () => aplicarCena(n, canais);
+    if (salva){
+      const x = document.createElement('span');
+      x.className = 'apaga'; x.textContent = '×'; x.title = 'apagar a cena ' + n; x.setAttribute('role','button');
+      x.onclick = ev => { ev.stopPropagation(); removerCena(n); };
+      b.appendChild(x);
+    }
+    raiz.appendChild(b);
+  }
+}
+
+async function aplicarCena(nome, canais){
+  try{
+    await pedir('/api/luz/canais', {canais, exclusivo:true});
+    cenaAtiva = nome; $('nome').value = nome;
+    estado = estadoDeQuadro(canais);
+    desenharGrupos(); desenharCenas();
+    avisar('cena "' + nome + '" acesa — mexa nos grupos para ajustar e salve de novo', 'bom');
+  } catch(e){ avisar('não consegui acender: ' + e.message, 'erro'); }
+}
+
+async function removerCena(nome){
+  if (!confirm('Apagar a cena "' + nome + '"?')) return;
+  try{
+    await pedir('/api/luz/look/' + encodeURIComponent(nome) + '/remover', {});
+    if (cenaAtiva === nome) cenaAtiva = null;
+    await carregar(); avisar('cena "' + nome + '" apagada', 'bom');
+  } catch(e){ avisar(e.message, 'erro'); }
+}
+
+async function salvarCena(nome, st){
+  nome = (nome || '').trim();
+  if (!nome) throw new Error('dê um nome à cena');
+  await pedir('/api/luz/look', {nome, canais: quadro(st)});
+}
+
+// ---------------------------------------------------------------------------
+// tela: modos de movimento
+// ---------------------------------------------------------------------------
+let MODOS = [], modoAtual = 'parado';
+
+async function escolherModo(id){
+  try{
+    const r = await pedir('/api/luz/modo/' + encodeURIComponent(id), {});
+    modoAtual = r.modo || 'parado';
+    desenharModos();
+    avisar(modoAtual === 'parado' ? 'movimento parado — a cena voltou exata'
+                                  : 'movimento: ' + modoAtual, 'bom');
+  } catch(e){ avisar(e.message, 'erro'); }
+}
+
+function botaoModo(id, titulo, legenda, risco){
+  const b = document.createElement('button');
+  b.className = 'modo' + (risco ? ' risco' : '') + (modoAtual === id ? ' sel' : '');
+  b.innerHTML = '<span class="q"></span><span class="p"></span>';
+  b.querySelector('.q').textContent = titulo;
+  b.querySelector('.p').textContent = legenda;
+  b.onclick = () => {
+    // O perigoso pergunta antes. Nao e burocracia: estrobo pode desencadear
+    // crise em quem tem epilepsia fotossensivel, e este botao fica na mesma
+    // tela dos outros.
+    if (risco && !confirm('Ligar o ESTROBO?\n\nLuz pulsante pode desencadear crise em quem tem epilepsia fotossensível. Não use com gente no salão.')) return;
+    escolherModo(id);
+  };
+  return b;
+}
+
+function desenharModos(){
+  const raiz = $('modos'); raiz.innerHTML = '';
+  raiz.appendChild(botaoModo('parado', 'Parado', 'a cena como ela é', false));
+  let jaSeparou = false;
+  for (const m of MODOS){
+    if (m.perigoso && !jaSeparou){
+      const s = document.createElement('span'); s.className = 'separador';
+      raiz.appendChild(s); jaSeparou = true;
+    }
+    raiz.appendChild(botaoModo(m.id, m.nome, m.descricao, m.perigoso));
+  }
+  if (!MODOS.length){
+    const d = document.createElement('span');
+    d.className = 'dica'; d.textContent = 'nenhum modo configurado';
+    raiz.appendChild(d);
+  }
+}
+
+async function carregar(){
+  const m = await pedir('/api/luz/mesa');
+  $('pontoLuz').className = 'ponto ' + (m.ligado ? 'on' : 'off');
+  $('txtLuz').textContent = m.ligado ? (m.descricao || 'luz ligada') : 'luz desligada no config';
+  SALVAS = m.looks_salvas || {}; CONFIG = m.looks_config || {};
+  MODOS = m.modos || []; modoAtual = m.modo_atual || 'parado';
+  desenharCenas(); desenharModos();
+}
+
+$('btnApagar').onclick = async () => {
+  try{ await pedir('/api/luz/apagar', {}); cenaAtiva = null; desenharCenas(); avisar('tudo apagado', 'bom'); }
+  catch(e){ avisar(e.message, 'erro'); }
+};
+$('btnEnviar').onclick = () => enviarJa().then(() => avisar('enviado para a luz', 'bom'));
+$('btnSalvar').onclick = async () => {
+  try{
+    const nome = $('nome').value.trim();
+    if ((nome in SALVAS) && !confirm('Já existe uma cena "' + nome + '". Substituir?')) return;
+    await salvarCena(nome, estado);
+    cenaAtiva = nome; await carregar();
+    const cue = ['abertura','louvor','pregacao','apagar'].includes(nome);
+    avisar('cena "' + nome + '" salva' + (cue ? ' — e já vale no botão do culto' : ''), 'bom');
+  } catch(e){ avisar(e.message, 'erro'); }
+};
+$('btnSugestoes').onclick = async () => {
+  if (!confirm('Instalar as 8 cenas sugeridas? As que tiverem o mesmo nome serão substituídas.')) return;
+  try{
+    for (const [n, sug] of Object.entries(SUGESTOES)) await salvarCena(n, estadoDeSugestao(sug));
+    await carregar(); avisar('8 cenas sugeridas instaladas', 'bom');
+  } catch(e){ avisar(e.message, 'erro'); }
+};
+
+desenharGrupos();
+carregar().catch(e => avisar('não consegui falar com a ponte: ' + e.message, 'erro'));
+</script>
+</body>
+</html>

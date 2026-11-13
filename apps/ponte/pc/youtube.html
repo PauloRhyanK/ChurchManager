@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Transmissão — Ponte do Culto</title>
+<style>
+/* Mesma linguagem das outras telas: fundo escuro, porque num culto uma tela
+   clara vira refletor apontado pro operador. */
+:root{
+  --fundo:#0b1016; --caixa:#131b24; --caixa2:#18212c;
+  --linha:#243040; --texto:#e8eef6; --apagado:#8fa0b4;
+  --ok:#22c55e; --erro:#ef4444; --aviso:#f59e0b; --marca:#3b82f6;
+  --vivo:#dc2626;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--fundo);color:var(--texto);
+  font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.folha{max-width:860px;margin:0 auto;padding:18px 16px 70px}
+header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+h1{font-size:22px;margin:0;letter-spacing:-.01em}
+.volta{color:var(--marca);text-decoration:none;font-size:14px}
+.volta:hover{text-decoration:underline}
+h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--apagado);
+  margin:26px 0 10px;font-weight:600}
+.dica{font-size:13px;color:var(--apagado);margin:6px 0 0}
+.cartao{background:var(--caixa);border:1px solid var(--linha);border-radius:14px;padding:16px}
+.cartao + .cartao{margin-top:12px}
+
+button{font:inherit;font-weight:600;color:var(--texto);background:var(--caixa2);
+  border:1px solid var(--linha);border-radius:10px;padding:10px 16px;cursor:pointer}
+button:hover:not([disabled]){filter:brightness(1.25)}
+button:active:not([disabled]){transform:scale(.98)}
+button[disabled]{opacity:.45;cursor:default}
+button.forte{background:var(--marca);border-color:transparent}
+button.verde{background:#15803d;border-color:transparent}
+button.perigo{background:#7f1d1d;border-color:transparent}
+input[type=text],textarea{font:inherit;color:var(--texto);background:var(--fundo);
+  border:1px solid var(--linha);border-radius:10px;padding:11px 13px;width:100%}
+textarea{min-height:90px;resize:vertical;font-size:14px}
+input:focus,textarea:focus{outline:2px solid var(--marca);outline-offset:1px}
+label.rot{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--apagado);margin:14px 0 6px;font-weight:600}
+
+.cabeca{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.cabeca .canal{font-size:19px;font-weight:700}
+.cabeca .sub{font-size:13px;color:var(--apagado)}
+.selo{display:inline-flex;align-items:center;gap:6px;border-radius:999px;
+  padding:3px 11px;font-size:12px;font-weight:700;border:1px solid var(--linha)}
+.selo.pub{background:#3f1515;border-color:transparent;color:#ffb4b4}
+.selo.oculto{background:#1e2733;color:var(--apagado)}
+
+/* o interruptor ao vivo / teste */
+.chave{display:flex;gap:0;border:1px solid var(--linha);border-radius:12px;overflow:hidden;
+  width:fit-content}
+.chave button{border:none;border-radius:0;padding:13px 26px;background:transparent;
+  font-size:15px}
+.chave button.sel.vivo{background:var(--vivo)}
+.chave button.sel.teste{background:#334155}
+.chave button:not(.sel){color:var(--apagado)}
+
+.link{display:flex;gap:8px;align-items:center;margin-top:8px}
+.link code{flex:1;background:var(--fundo);border:1px solid var(--linha);border-radius:10px;
+  padding:11px 13px;font-size:13px;overflow-wrap:anywhere}
+.link button{white-space:nowrap}
+
+.chaves{display:grid;gap:8px}
+.chaveitem{display:flex;align-items:center;gap:12px;background:var(--caixa2);
+  border:1px solid var(--linha);border-radius:10px;padding:11px 14px}
+.chaveitem .n{font-weight:700;flex:1}
+.chaveitem .marca{font-size:12px;color:var(--ok);font-weight:700}
+
+.barra{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
+#aviso{margin:14px 0 0;padding:12px 14px;border-radius:10px;font-size:14px;
+  background:var(--caixa2);border-left:3px solid var(--marca)}
+#aviso.erro{border-left-color:var(--erro)}
+#aviso.bom{border-left-color:var(--ok)}
+#aviso:empty{display:none}
+.alerta{background:#2a1a10;border:1px solid #7c4a12;border-radius:10px;padding:12px 14px;
+  font-size:13.5px;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="folha">
+
+<header>
+  <h1>Transmissão</h1>
+  <a class="volta" href="/">← painel do culto</a>
+</header>
+<p class="dica">Título, visibilidade e para onde o OBS transmite. Começar e parar continua sendo pelos botões do painel.</p>
+<div id="aviso"></div>
+
+<div id="canais"></div>
+
+</div>
+<script>
+const $ = id => document.getElementById(id);
+let DADOS = {canais: []};
+
+function avisar(txt, tipo){ const a=$('aviso'); a.textContent=txt||''; a.className=tipo||''; }
+
+async function pedir(url, corpo, metodo){
+  const r = await fetch(url, corpo === undefined
+    ? {method: metodo || 'GET'}
+    : {method: metodo || 'POST', headers:{'Content-Type':'application/json'},
+       body: JSON.stringify(corpo)});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.erro || ('erro ' + r.status));
+  return j;
+}
+
+function elemento(tag, classe, texto){
+  const e = document.createElement(tag);
+  if (classe) e.className = classe;
+  if (texto !== undefined) e.textContent = texto;
+  return e;
+}
+
+// --------------------------------------------------------------------------
+// canal ainda sem autorização
+// --------------------------------------------------------------------------
+function desenharNaoAutorizado(c){
+  const cx = elemento('div','cartao');
+  const cab = elemento('div','cabeca');
+  cab.append(elemento('span','canal', c.nome),
+             elemento('span','sub','ainda não autorizado'));
+  cx.appendChild(cab);
+  cx.appendChild(elemento('p','dica',
+    'Cada canal do YouTube precisa da sua própria autorização — é o Google que amarra o consentimento a um canal.'));
+
+  const b = elemento('button','forte','Gerar link de autorização');
+  const caixaLink = elemento('div');
+  b.onclick = async () => {
+    try{
+      const d = await pedir('/api/youtube/' + c.id + '/autorizacao');
+      caixaLink.innerHTML = '';
+      caixaLink.appendChild(elemento('label','rot','Abra este endereço e autorize'));
+      const lin = elemento('div','link');
+      const cod = elemento('code', null, d.url);
+      const cp = elemento('button', null, 'copiar');
+      cp.onclick = () => { navigator.clipboard.writeText(d.url); avisar('link copiado','bom'); };
+      lin.append(cod, cp);
+      caixaLink.appendChild(lin);
+      caixaLink.appendChild(elemento('p','dica',
+        'No fim vai aparecer uma página de erro de conexão. Isso é o sucesso: copie a barra de endereço inteira e cole abaixo.'));
+      caixaLink.appendChild(elemento('label','rot','Cole aqui a barra de endereço'));
+      const campo = document.createElement('input');
+      campo.type='text'; campo.placeholder='http://localhost:8765/?code=...';
+      caixaLink.appendChild(campo);
+      const env = elemento('button','verde','Concluir autorização');
+      env.onclick = async () => {
+        try{ await pedir('/api/youtube/' + c.id + '/codigo', {codigo: campo.value});
+             avisar('canal autorizado','bom'); await carregar(); }
+        catch(e){ avisar(e.message,'erro'); }
+      };
+      const bar = elemento('div','barra'); bar.appendChild(env);
+      caixaLink.appendChild(bar);
+    } catch(e){ avisar(e.message,'erro'); }
+  };
+  const bar = elemento('div','barra'); bar.appendChild(b);
+  cx.append(bar, caixaLink);
+  return cx;
+}
+
+// --------------------------------------------------------------------------
+// canal autorizado
+// --------------------------------------------------------------------------
+function desenharCanal(c){
+  if (!c.autorizado) return desenharNaoAutorizado(c);
+
+  const cx = elemento('div','cartao');
+  const cab = elemento('div','cabeca');
+  const real = c.canal_real || {};
+  cab.appendChild(elemento('span','canal', real.nome || c.nome));
+  if (real.inscritos) cab.appendChild(elemento('span','sub',
+    real.inscritos + ' inscritos · ' + (real.videos || '?') + ' vídeos'));
+  cx.appendChild(cab);
+
+  if (c.aviso){
+    const al = elemento('div','alerta');
+    al.textContent = 'Confira: ' + c.aviso;
+    cx.appendChild(al);
+  }
+  if (c.erro){
+    const al = elemento('div','alerta'); al.textContent = c.erro; cx.appendChild(al);
+    return cx;
+  }
+
+  const t = c.transmissao;
+  if (!t){
+    cx.appendChild(elemento('p','dica',
+      'Nenhuma transmissão ativa ou agendada neste canal. Crie uma no YouTube e recarregue.'));
+    return cx;
+  }
+
+  // --- título
+  cx.appendChild(elemento('label','rot',
+    'Título ' + (t.estado === 'active' ? '(NO AR AGORA)' : '(agendada)')));
+  const titulo = document.createElement('input');
+  titulo.type = 'text'; titulo.value = t.titulo || ''; titulo.maxLength = 100;
+  cx.appendChild(titulo);
+
+  // --- visibilidade
+  cx.appendChild(elemento('label','rot','Quem pode ver'));
+  const chave = elemento('div','chave');
+  let escolhida = t.privacidade;
+  const bVivo = elemento('button', 'vivo', 'AO VIVO');
+  const bTeste = elemento('button', 'teste', 'TESTE');
+  function pintar(){
+    bVivo.className = 'vivo' + (escolhida === 'public' ? ' sel' : '');
+    bTeste.className = 'teste' + (escolhida !== 'public' ? ' sel' : '');
+  }
+  bVivo.onclick = () => { escolhida = 'public'; pintar(); };
+  bTeste.onclick = () => { escolhida = 'unlisted'; pintar(); };
+  pintar();
+  chave.append(bVivo, bTeste);
+  cx.appendChild(chave);
+  cx.appendChild(elemento('p','dica',
+    'AO VIVO é pública: aparece no canal e nas buscas. TESTE é não listada: só quem tem o link vê.'));
+
+  // --- link, sempre à vista
+  cx.appendChild(elemento('label','rot','Link da transmissão'));
+  const lin = elemento('div','link');
+  const cod = elemento('code', null, t.link);
+  const cp = elemento('button', null, 'copiar');
+  cp.onclick = () => { navigator.clipboard.writeText(t.link); avisar('link copiado','bom'); };
+  const abrir = elemento('button', null, 'abrir');
+  abrir.onclick = () => window.open(t.link, '_blank');
+  lin.append(cod, cp, abrir);
+  cx.appendChild(lin);
+
+  // --- salvar
+  const bar = elemento('div','barra');
+  const salvar = elemento('button','verde','Salvar título e visibilidade');
+  salvar.onclick = async () => {
+    salvar.disabled = true;
+    try{
+      await pedir('/api/youtube/' + c.id + '/transmissao',
+                  {titulo: titulo.value, privacidade: escolhida});
+      avisar('transmissão atualizada','bom');
+      await carregar();
+    } catch(e){ avisar(e.message,'erro'); salvar.disabled = false; }
+  };
+  bar.appendChild(salvar);
+  cx.appendChild(bar);
+
+  // --- para onde o OBS transmite
+  cx.appendChild(elemento('h2', null, 'Para onde o OBS transmite'));
+  const destino = elemento('div','chaves');
+  destino.appendChild(elemento('p','dica','lendo as chaves…'));
+  cx.appendChild(destino);
+  carregarChaves(c, destino);
+
+  return cx;
+}
+
+async function carregarChaves(c, alvo){
+  try{
+    const d = await pedir('/api/youtube/' + c.id + '/chaves');
+    alvo.innerHTML = '';
+    for (const k of d.chaves){
+      const it = elemento('div','chaveitem');
+      it.appendChild(elemento('span','n', k.nome));
+      if (d.no_obs === k.id) it.appendChild(elemento('span','marca','✓ é a que o OBS usa'));
+      const b = elemento('button', null, 'usar esta');
+      b.disabled = d.no_obs === k.id;
+      b.onclick = async () => {
+        if (!confirm('Mandar o OBS transmitir usando "' + k.nome + '"?\n\nIsso muda PARA ONDE a transmissão vai. Não faça no meio de um culto.')) return;
+        try{ await pedir('/api/youtube/' + c.id + '/chave/' + encodeURIComponent(k.id), {});
+             avisar('OBS apontado para "' + k.nome + '"','bom'); await carregar(); }
+        catch(e){ avisar(e.message,'erro'); }
+      };
+      it.appendChild(b);
+      alvo.appendChild(it);
+    }
+    alvo.appendChild(elemento('p','dica',
+      'A chave em si nunca aparece aqui nem chega ao navegador — quem lê e grava no OBS é o servidor.'));
+  } catch(e){
+    alvo.innerHTML = '';
+    alvo.appendChild(elemento('p','dica','não consegui ler as chaves: ' + e.message));
+  }
+}
+
+async function carregar(){
+  try{
+    DADOS = await pedir('/api/youtube');
+    const raiz = $('canais'); raiz.innerHTML = '';
+    for (const c of DADOS.canais) raiz.appendChild(desenharCanal(c));
+  } catch(e){
+    $('canais').innerHTML = '';
+    $('canais').appendChild(elemento('div','cartao','Não consegui falar com a ponte: ' + e.message));
+  }
+}
+carregar();
+</script>
+</body>
+</html>

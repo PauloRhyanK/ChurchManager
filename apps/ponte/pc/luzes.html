@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mesa de teste — Ponte do Culto</title>
+<style>
+/* Tela escura como o painel: num culto, tela clara vira refletor apontado
+   pro operador. Tudo grande de proposito — isto vai ser usado com tres ou
+   quatro pessoas olhando a mesma tela e opinando. */
+:root{
+  --fundo:#0b1016; --caixa:#131b24; --caixa2:#18212c;
+  --linha:#243040; --texto:#e8eef6; --apagado:#8fa0b4;
+  --ok:#22c55e; --erro:#ef4444; --aviso:#f59e0b; --marca:#3b82f6;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--fundo);color:var(--texto);
+  font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+}
+.folha{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
+header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+h1{font-size:21px;margin:0;letter-spacing:-.01em}
+.volta{color:var(--marca);text-decoration:none;font-size:14px}
+.volta:hover{text-decoration:underline}
+.pilula{
+  display:inline-flex;align-items:center;gap:7px;background:var(--caixa);
+  border:1px solid var(--linha);border-radius:999px;padding:5px 13px;font-size:13px;
+}
+.ponto{width:9px;height:9px;border-radius:50%;background:var(--apagado)}
+.ponto.on{background:var(--ok)}.ponto.off{background:var(--erro)}
+
+h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+   color:var(--apagado);margin:30px 0 10px;font-weight:600}
+.cartao{background:var(--caixa);border:1px solid var(--linha);border-radius:12px;padding:16px}
+
+button{
+  font:inherit;font-weight:600;color:var(--texto);background:var(--caixa2);
+  border:1px solid var(--linha);border-radius:9px;padding:10px 16px;cursor:pointer;
+}
+button:hover:not([disabled]){filter:brightness(1.25)}
+button:active:not([disabled]){transform:scale(.98)}
+button[disabled]{opacity:.4;cursor:default}
+button.forte{background:var(--marca);border-color:transparent}
+button.perigo{background:#7f1d1d;border-color:transparent}
+button.verde{background:#15803d;border-color:transparent}
+input[type=text],input[type=number]{
+  font:inherit;color:var(--texto);background:var(--fundo);
+  border:1px solid var(--linha);border-radius:9px;padding:10px 12px;width:100%;
+}
+input:focus{outline:2px solid var(--marca);outline-offset:1px}
+
+/* --- varredura --- */
+.varre{display:grid;gap:14px;grid-template-columns:minmax(0,210px) 1fr;align-items:center}
+@media(max-width:700px){.varre{grid-template-columns:1fr}}
+.numerao{
+  text-align:center;background:var(--fundo);border:1px solid var(--linha);
+  border-radius:12px;padding:14px 10px;
+}
+.numerao .rot{font-size:11px;letter-spacing:.14em;color:var(--apagado);text-transform:uppercase}
+.numerao .n{font-size:58px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.setas{display:flex;gap:8px;margin-top:10px}
+.setas button{flex:1}
+.campo{display:flex;gap:8px;align-items:center;margin-top:10px}
+.campo input{flex:1}
+.dica{font-size:13px;color:var(--apagado);margin:8px 0 0}
+
+/* --- faders --- */
+.fader{
+  display:grid;grid-template-columns:62px 1fr 120px 64px 34px;gap:12px;
+  align-items:center;padding:9px 0;border-bottom:1px solid var(--linha);
+}
+.fader:last-child{border-bottom:none}
+@media(max-width:700px){
+  .fader{grid-template-columns:52px 1fr 60px;grid-template-areas:"n r r" "s s v";}
+  .fader .cn{grid-area:n}.fader .rot{grid-area:r}
+  .fader input[type=range]{grid-area:s}.fader .val{grid-area:v}
+  .fader .x{display:none}
+}
+.cn{font-weight:800;font-variant-numeric:tabular-nums;font-size:19px;text-align:right}
+.rot{font-size:14px;color:var(--apagado);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rot.vazio{font-style:italic;opacity:.6}
+input[type=range]{width:100%;accent-color:var(--marca);height:30px}
+.val{font-variant-numeric:tabular-nums;text-align:right;font-weight:700}
+.x{background:none;border:none;color:var(--apagado);padding:4px;font-size:18px;cursor:pointer}
+.x:hover{color:var(--erro)}
+
+.linha{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
+.linha .cresce{flex:1;min-width:180px}
+
+.chip{
+  display:inline-flex;align-items:center;gap:8px;background:var(--caixa2);
+  border:1px solid var(--linha);border-radius:999px;padding:7px 8px 7px 14px;
+  font-size:14px;margin:0 8px 8px 0;
+}
+.chip b{font-weight:600}
+.chip small{color:var(--apagado)}
+.chip button{padding:3px 9px;font-size:12px;border-radius:999px}
+
+#aviso{
+  margin:14px 0 0;padding:12px 14px;border-radius:10px;font-size:14px;
+  background:var(--caixa2);border-left:3px solid var(--marca);
+}
+#aviso.erro{border-left-color:var(--erro)}
+#aviso.bom{border-left-color:var(--ok)}
+#aviso:empty{display:none}
+</style>
+</head>
+<body>
+<div class="folha">
+
+<header>
+  <h1>Mesa de teste de luz</h1>
+  <a class="volta" href="/">← voltar ao painel</a>
+  <a class="volta" href="/cenas">cenas de luz →</a>
+  <span class="pilula" id="estado"><span class="ponto" id="pontoLuz"></span><span id="txtLuz">lendo…</span></span>
+</header>
+<p class="dica">Art-Net é de mão única: ninguém confirma recebimento. Quando aqui diz <em>enviado</em>, significa que o pacote saiu — quem confere luz é o olho.</p>
+
+<div id="aviso"></div>
+
+<!-- ============ VARREDURA ============ -->
+<h2>1 · Varredura — descobrir o que é cada canal</h2>
+<div class="cartao">
+  <div class="varre">
+    <div class="numerao">
+      <div class="rot">canal</div>
+      <div class="n" id="canalAtual">1</div>
+      <div class="setas">
+        <button id="anterior">◀</button>
+        <button id="proximo">▶</button>
+      </div>
+    </div>
+    <div>
+      <p class="dica" style="margin-top:0">
+        Acende <strong>só este canal</strong>, com todos os outros em zero. Vá avançando
+        e escreva o que acendeu. Se um canal tem mais de um refletor, escreva os dois.
+      </p>
+      <div class="campo">
+        <input type="text" id="rotulo" placeholder="o que acendeu? ex: par frontal esquerdo — vermelho" autocomplete="off">
+        <button class="verde" id="salvarRotulo">Salvar</button>
+      </div>
+      <div class="linha">
+        <button id="acender" class="forte">Acender sozinho</button>
+        <button id="apagarTudo" class="perigo">Apagar tudo</button>
+        <span class="dica">nível</span>
+        <input type="number" id="nivelVarre" min="0" max="255" value="255" style="width:84px">
+        <span class="dica">ir para</span>
+        <input type="number" id="irCanal" min="1" max="512" placeholder="nº" style="width:84px">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ FADERS ============ -->
+<h2>2 · Montar a look — mexer e olhar</h2>
+<div class="cartao">
+  <div id="faders"></div>
+  <p class="dica" id="semFaders">Nenhum canal na mesa ainda. Adicione abaixo, ou use a varredura acima — todo canal que você rotular entra aqui sozinho.</p>
+  <div class="linha">
+    <input type="number" id="novoCanal" min="1" max="512" placeholder="canal" style="width:110px">
+    <button id="adicionar">Adicionar canal</button>
+    <button id="zerar">Zerar faders</button>
+  </div>
+</div>
+
+<!-- ============ SALVAR ============ -->
+<h2>3 · Guardar como preset</h2>
+<div class="cartao">
+  <div class="linha" style="margin-top:0">
+    <input type="text" id="nomeLook" class="cresce" placeholder="nome do preset — ex: louvor_quente" autocomplete="off">
+    <button class="verde" id="salvarLook">Salvar preset</button>
+  </div>
+  <p class="dica">
+    Vai para o <code>looks_salvas.yaml</code>, separado do <code>config.yaml</code> —
+    assim os comentários escritos à mão não se perdem. Um preset com o mesmo nome de
+    um do config substitui aquele. As cues chamam pelo nome, então salvar aqui já muda
+    o culto, sem reiniciar nada.
+  </p>
+
+  <h2 style="margin-top:22px">Presets salvos na mesa</h2>
+  <div id="salvas"><span class="dica">nenhum ainda</span></div>
+
+  <h2 style="margin-top:22px">Vindos do config.yaml</h2>
+  <div id="doConfig"><span class="dica">—</span></div>
+</div>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let PATCH = {}, SALVAS = {}, CONFIG = {}, LIGADO = false;
+let canal = 1;
+const mesa = new Map();          // canal -> valor, o que esta nos faders
+
+function avisar(texto, tipo){
+  const el = $('aviso');
+  el.textContent = texto || '';
+  el.className = tipo || '';
+  if (texto) clearTimeout(avisar._t), avisar._t = setTimeout(() => {
+    el.textContent = ''; el.className = '';
+  }, 6000);
+}
+
+async function pedir(caminho, corpo){
+  const r = await fetch(caminho, corpo === undefined ? {} : {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(corpo)
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.erro || ('erro ' + r.status));
+  return d;
+}
+
+/* Manda no maximo um pacote a cada 50ms e sempre o ULTIMO valor. Arrastar um
+   fader dispara dezenas de eventos por segundo; mandar todos entope a rede e
+   nao deixa a luz mais precisa — o que importa e onde o dedo parou. */
+let pendente = null, enviando = false;
+async function mandar(canais, exclusivo){
+  pendente = {canais, exclusivo};
+  if (enviando) return;
+  enviando = true;
+  while (pendente){
+    const agora = pendente; pendente = null;
+    try { await pedir('/api/luz/canais', agora); }
+    catch(e){ avisar(e.message, 'erro'); pendente = null; }
+    await new Promise(r => setTimeout(r, 50));
+  }
+  enviando = false;
+}
+
+// ---------- varredura ----------
+function desenharVarredura(){
+  $('canalAtual').textContent = canal;
+  $('rotulo').value = PATCH[canal] || '';
+}
+function irPara(n){
+  canal = Math.max(1, Math.min(512, n|0));
+  desenharVarredura();
+  acenderSozinho();
+}
+function acenderSozinho(){
+  const nivel = Math.max(0, Math.min(255, parseInt($('nivelVarre').value, 10) || 0));
+  mandar({[canal]: nivel}, true);
+}
+$('anterior').onclick = () => irPara(canal - 1);
+$('proximo').onclick  = () => irPara(canal + 1);
+$('acender').onclick  = acenderSozinho;
+$('irCanal').onchange = e => { if (e.target.value) irPara(parseInt(e.target.value, 10)); };
+$('apagarTudo').onclick = async () => {
+  try { await pedir('/api/luz/apagar', {}); mesa.forEach((_,c) => mesa.set(c,0)); desenharFaders(); avisar('tudo em zero', 'bom'); }
+  catch(e){ avisar(e.message, 'erro'); }
+};
+$('salvarRotulo').onclick = async () => {
+  try{
+    const d = await pedir('/api/luz/patch', {canal, rotulo: $('rotulo').value});
+    if (d.rotulo) { PATCH[canal] = d.rotulo; if (!mesa.has(canal)) mesa.set(canal, 0); }
+    else delete PATCH[canal];
+    desenharFaders();
+    avisar('canal ' + canal + ' anotado', 'bom');
+  } catch(e){ avisar(e.message, 'erro'); }
+};
+$('rotulo').addEventListener('keydown', e => { if (e.key === 'Enter') $('salvarRotulo').click(); });
+
+// ---------- faders ----------
+function desenharFaders(){
+  const alvo = $('faders');
+  alvo.innerHTML = '';
+  const canais = [...mesa.keys()].sort((a,b) => a-b);
+  $('semFaders').style.display = canais.length ? 'none' : '';
+  for (const c of canais){
+    const linha = document.createElement('div');
+    linha.className = 'fader';
+
+    const n = document.createElement('div');
+    n.className = 'cn'; n.textContent = c;
+
+    const rot = document.createElement('div');
+    rot.className = 'rot' + (PATCH[c] ? '' : ' vazio');
+    rot.textContent = PATCH[c] || 'sem anotação';
+    rot.title = PATCH[c] || '';
+
+    const sl = document.createElement('input');
+    sl.type = 'range'; sl.min = 0; sl.max = 255; sl.value = mesa.get(c);
+
+    const val = document.createElement('div');
+    val.className = 'val'; val.textContent = mesa.get(c);
+
+    sl.oninput = () => {
+      const v = parseInt(sl.value, 10);
+      mesa.set(c, v); val.textContent = v;
+      mandar({[c]: v}, false);
+    };
+
+    const x = document.createElement('button');
+    x.className = 'x'; x.textContent = '×'; x.title = 'tirar da mesa';
+    x.onclick = () => { mandar({[c]: 0}, false); mesa.delete(c); desenharFaders(); };
+
+    linha.append(n, rot, sl, val, x);
+    alvo.appendChild(linha);
+  }
+}
+$('adicionar').onclick = () => {
+  const v = parseInt($('novoCanal').value, 10);
+  if (!(v >= 1 && v <= 512)) return avisar('canal precisa ser de 1 a 512', 'erro');
+  if (!mesa.has(v)) mesa.set(v, 0);
+  $('novoCanal').value = '';
+  desenharFaders();
+};
+$('zerar').onclick = () => {
+  const zeros = {}; mesa.forEach((_, c) => { mesa.set(c, 0); zeros[c] = 0; });
+  mandar(zeros, false); desenharFaders();
+};
+
+// ---------- presets ----------
+function chip(nome, canais, salva){
+  const el = document.createElement('span');
+  el.className = 'chip';
+  const b = document.createElement('b'); b.textContent = nome;
+  const s = document.createElement('small');
+  s.textContent = Object.keys(canais).length + ' canais';
+  const usar = document.createElement('button');
+  usar.textContent = 'carregar';
+  usar.onclick = () => {
+    mesa.clear();
+    for (const [c, v] of Object.entries(canais)) mesa.set(parseInt(c,10), parseInt(v,10));
+    desenharFaders();
+    const envio = {}; mesa.forEach((v,c) => envio[c] = v);
+    mandar(envio, true);
+    $('nomeLook').value = nome;
+    avisar('preset "' + nome + '" carregado na mesa', 'bom');
+  };
+  el.append(b, s, usar);
+  if (salva){
+    const rm = document.createElement('button');
+    rm.textContent = 'apagar'; rm.className = 'perigo';
+    rm.onclick = async () => {
+      if (!confirm('Apagar o preset "' + nome + '"?')) return;
+      try { await pedir('/api/luz/look/' + encodeURIComponent(nome) + '/remover', {}); await carregar(); avisar('apagado', 'bom'); }
+      catch(e){ avisar(e.message, 'erro'); }
+    };
+    el.append(rm);
+  }
+  return el;
+}
+function desenharPresets(){
+  const a = $('salvas'), b = $('doConfig');
+  a.innerHTML = ''; b.innerHTML = '';
+  const ns = Object.keys(SALVAS).sort();
+  if (!ns.length) a.innerHTML = '<span class="dica">nenhum ainda</span>';
+  ns.forEach(n => a.appendChild(chip(n, SALVAS[n], true)));
+  const nc = Object.keys(CONFIG).sort().filter(n => !(n in SALVAS));
+  if (!nc.length) b.innerHTML = '<span class="dica">—</span>';
+  nc.forEach(n => b.appendChild(chip(n, CONFIG[n], false)));
+}
+$('salvarLook').onclick = async () => {
+  const nome = $('nomeLook').value.trim();
+  if (!nome) return avisar('dê um nome ao preset', 'erro');
+  // Manda TODOS os canais da mesa, inclusive os que estão em zero. Zero não
+  // é ausência: é a declaração de que aquele canal fica apagado. O quadro DMX
+  // é persistente, e há canais de programa automático e de reset nos
+  // refletores — um valor alto preso num deles estraga o culto inteiro, e a
+  // look seguinte não conserta se não falar dele.
+  const canais = {}; mesa.forEach((v, c) => { canais[c] = v; });
+  if (!Object.keys(canais).length) return avisar('não há canal nenhum na mesa para salvar', 'erro');
+  try {
+    await pedir('/api/luz/look', {nome, canais});
+    await carregar();
+    avisar('preset "' + nome + '" salvo e já valendo nas cues', 'bom');
+  } catch(e){ avisar(e.message, 'erro'); }
+};
+
+// ---------- carga ----------
+async function carregar(){
+  try{
+    const d = await pedir('/api/luz/mesa');
+    LIGADO = d.ligado; PATCH = {};
+    for (const [c, t] of Object.entries(d.patch || {})) PATCH[parseInt(c,10)] = t;
+    SALVAS = d.looks_salvas || {}; CONFIG = d.looks_config || {};
+    $('pontoLuz').className = 'ponto ' + (LIGADO ? 'on' : 'off');
+    $('txtLuz').textContent = LIGADO ? (d.descricao || 'luzes ligadas')
+                                     : ('driver: ' + (d.driver || 'nenhum') + ' — nada vai sair');
+    for (const c of Object.keys(PATCH)) if (!mesa.has(+c)) mesa.set(+c, 0);
+    desenharFaders(); desenharPresets(); desenharVarredura();
+  } catch(e){ avisar(e.message, 'erro'); }
+}
+carregar();
+</script>
+</body>
+</html>

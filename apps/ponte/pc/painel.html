@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ponte do Culto</title>
+<style>
+  /* Tema escuro fixo: o painel vive numa cabine, muitas vezes no escuro, e
+     uma tela clara vira um refletor apontado pro operador. */
+  :root {
+    --fundo: #0b1020;
+    --cartao: #151c31;
+    --borda: #273150;
+    --texto: #e8ecf8;
+    --apagado: #94a3c4;
+    --ok: #22c55e;
+    --erro: #ef4444;
+    --pulado: #64748b;
+    --aviso: #f59e0b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 16px;
+    background: var(--fundo);
+    color: var(--texto);
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+  h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  .relogio { color: var(--apagado); font-size: 15px; font-variant-numeric: tabular-nums; }
+  /* Atalhos empurrados para a direita, longe dos botoes de culto. */
+  .atalhos { margin-left: auto; display: flex; gap: 14px; flex-wrap: wrap; }
+  .atalhos a {
+    color: var(--marca, #3b82f6); text-decoration: none; font-size: 13.5px;
+    font-weight: 600; white-space: nowrap;
+  }
+  .atalhos a:hover { text-decoration: underline; }
+
+  .status { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 20px; }
+  .pill {
+    display: flex; align-items: center; gap: 7px;
+    background: var(--cartao); border: 1px solid var(--borda);
+    border-radius: 999px; padding: 7px 14px; font-size: 14px;
+  }
+  .ponto { width: 9px; height: 9px; border-radius: 50%; background: var(--pulado); flex: none; }
+  .ponto.ok { background: var(--ok); }
+  .ponto.erro { background: var(--erro); }
+  .ponto.enviando { background: var(--aviso); }
+  .pill .detalhe { color: var(--apagado); font-size: 13px; }
+
+  /* Barra do que esta no ar AGORA. Fica acima dos botoes de proposito:
+     quem opera precisa ver o estado antes de decidir o proximo clique. */
+  .aovivo {
+    display: flex; flex-wrap: wrap; align-items: stretch;
+    gap: 0; margin-bottom: 20px;
+    background: var(--cartao); border: 1px solid var(--borda);
+    border-radius: 12px; overflow: hidden;
+  }
+  .aovivo .campo {
+    flex: 1 1 190px; min-width: 0;
+    padding: 12px 16px;
+    border-right: 1px solid var(--borda);
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .aovivo .campo:last-child { border-right: none; }
+  .aovivo .rotulo {
+    font-size: 10px; letter-spacing: .11em; text-transform: uppercase;
+    color: var(--apagado);
+  }
+  .aovivo .valor {
+    font-size: 16px; font-weight: 600; line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+  .aovivo .valor.apagado { color: var(--apagado); font-weight: 400; }
+  .aovivo .extra { font-size: 12.5px; color: var(--apagado); }
+  .aovivo .marca {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 600;
+    padding: 2px 8px; border-radius: 999px;
+    border: 1px solid currentColor; margin-top: 2px; align-self: flex-start;
+  }
+  .aovivo .marca.gravando    { color: var(--erro); }
+  .aovivo .marca.transmitindo{ color: var(--erro); }
+  .aovivo .marca.preta       { color: var(--aviso); }
+  .aovivo .marca::before {
+    content: ""; width: 7px; height: 7px; border-radius: 50%;
+    background: currentColor;
+  }
+
+  /* --- a ordem do culto ---------------------------------------------- */
+  .ordem { margin-bottom: 26px; }
+  .ordem-cabeca {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 10px; flex-wrap: wrap;
+  }
+  .ordem-rotulo {
+    font-size: 11px; letter-spacing: .11em; text-transform: uppercase;
+    color: var(--apagado); font-weight: 600;
+  }
+  .dica { font-size: 12.5px; color: var(--apagado); }
+
+  #trocaOrdem {
+    margin-left: auto;
+    background: var(--cartao); color: var(--texto);
+    border: 1px solid var(--borda); border-radius: 8px;
+    padding: 6px 10px; font-family: inherit; font-size: 14px;
+  }
+
+  .momentos { list-style: none; margin: 0 0 12px; padding: 0; }
+  .momento {
+    display: flex; align-items: center; gap: 12px;
+    width: 100%; text-align: left;
+    background: var(--cartao); color: var(--texto);
+    border: 1px solid var(--borda); border-left: 4px solid transparent;
+    border-radius: 10px; padding: 13px 16px; margin-bottom: 7px;
+    font-family: inherit; font-size: 16px; cursor: pointer;
+    transition: filter .12s ease, transform .06s ease;
+  }
+  .momento:hover { filter: brightness(1.18); }
+  .momento:active { transform: scale(.995); }
+  .momento:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+  .momento[disabled] { cursor: wait; filter: saturate(.4); }
+  .momento .ponto-cor {
+    width: 10px; height: 10px; border-radius: 50%; flex: none;
+  }
+  .momento .indice {
+    font-family: ui-monospace, monospace; font-size: 12px;
+    color: var(--apagado); min-width: 18px; flex: none;
+  }
+  .momento .rotulo { flex: 1; min-width: 0; }
+  .momento .marca-agora {
+    font-size: 11px; font-weight: 700; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--ok); flex: none;
+  }
+  /* Passado = CONCLUIDO, nao bloqueado. Dois cuidados de proposito:
+     o apagamento e leve (a 45% lia como botao desabilitado), e passar o
+     mouse ou focar devolve a opacidade cheia — o item responde, logo da
+     para clicar. Voltar no culto e normal, e a tela nao pode sugerir o
+     contrario. */
+  .momento.passado { opacity: .6; }
+  .momento.passado:hover,
+  .momento.passado:focus-visible { opacity: 1; }
+  .momento .feito { color: var(--ok); font-weight: 700; font-size: 14px; }
+  .momento.atual {
+    border-left-color: var(--ok);
+    background: color-mix(in srgb, var(--ok) 10%, var(--cartao));
+    font-weight: 600;
+  }
+
+  .proximo {
+    width: 100%; min-height: 78px;
+    border: none; border-radius: 14px;
+    background: var(--ok); color: #04210f;
+    font-family: inherit; font-size: 20px; font-weight: 700;
+    cursor: pointer; padding: 14px 18px;
+    transition: filter .15s ease, transform .06s ease;
+  }
+  .proximo:hover { filter: brightness(1.1); }
+  .proximo:active { transform: scale(.985); }
+  .proximo:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  .proximo[disabled] { filter: saturate(.25) brightness(.65); cursor: default; }
+  .proximo small {
+    display: block; font-size: 12px; font-weight: 600;
+    opacity: .72; letter-spacing: .08em; text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+
+  .secao {
+    font-size: 11px; letter-spacing: .11em; text-transform: uppercase;
+    color: var(--apagado); font-weight: 600; margin: 0 0 10px;
+  }
+
+  .botoes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px;
+  }
+  button.cue {
+    min-height: 104px;
+    border: none; border-radius: 14px;
+    color: #fff; font-size: 19px; font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    padding: 16px;
+    transition: transform .06s ease, filter .15s ease;
+    position: relative;
+  }
+  button.cue:hover { filter: brightness(1.12); }
+  button.cue:active { transform: scale(.975); }
+  button.cue:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  button.cue[disabled] { filter: saturate(.3) brightness(.7); cursor: wait; }
+  button.cue .rodando {
+    display: block; font-size: 13px; font-weight: 500;
+    opacity: .85; margin-top: 6px;
+  }
+
+  .registro { margin-top: 24px; }
+  .registro h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--apagado); margin: 0 0 10px; font-weight: 600;
+  }
+  .entrada {
+    background: var(--cartao); border: 1px solid var(--borda);
+    border-left-width: 4px; border-radius: 10px;
+    padding: 12px 14px; margin-bottom: 8px;
+  }
+  .entrada.ok { border-left-color: var(--ok); }
+  .entrada.falhou { border-left-color: var(--erro); }
+  .entrada .titulo { font-weight: 600; margin-bottom: 7px; font-size: 15px; }
+  .entrada .titulo span { color: var(--apagado); font-weight: 400; font-size: 13px; }
+  .passo { font-size: 14px; display: flex; gap: 8px; padding: 2px 0; align-items: baseline; }
+  .passo .sistema { color: var(--apagado); min-width: 78px; flex: none; }
+  .passo.erro .texto { color: #fca5a5; }
+  .passo.pulado .texto { color: var(--pulado); }
+
+  .vazio { color: var(--apagado); font-size: 15px; line-height: 1.6; }
+  code {
+    background: #0d1426; border: 1px solid var(--borda);
+    padding: 1px 6px; border-radius: 5px; font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Ponte do Culto</h1>
+  <span class="relogio" id="relogio"></span>
+  <!-- Os caminhos para as outras telas ficam AQUI, no cabecalho, e nao
+       espalhados no meio dos botoes de culto. Quem esta operando precisa
+       de uma regiao onde nada dispara cue: clicar sem querer num link e
+       chato; clicar sem querer num momento do culto, nao. -->
+  <nav class="atalhos">
+    <a href="/youtube">Transmissão</a>
+    <a href="/cenas">Cenas de luz</a>
+    <a href="/luzes">Mesa técnica</a>
+  </nav>
+</header>
+
+<div class="status" id="status"></div>
+<div class="aovivo" id="aovivo" hidden></div>
+
+<div class="ordem" id="ordem" hidden>
+  <div class="ordem-cabeca">
+    <span class="ordem-rotulo">Ordem do culto</span>
+    <span class="dica">toque em qualquer momento para ir direto — inclusive voltar</span>
+    <select id="trocaOrdem" aria-label="Trocar a ordem do culto"></select>
+  </div>
+  <ol class="momentos" id="momentos"></ol>
+  <button class="proximo" id="proximo"></button>
+</div>
+
+<h2 class="secao" id="rotuloAvulsas" hidden>Fora da ordem</h2>
+<div class="botoes" id="botoes"></div>
+
+<div class="registro">
+  <h2>O que aconteceu</h2>
+  <div id="registro"><p class="vazio">Nada rodou ainda.</p></div>
+</div>
+
+<script>
+const elBotoes   = document.getElementById('botoes');
+const elStatus   = document.getElementById('status');
+const elRegistro = document.getElementById('registro');
+const elRelogio  = document.getElementById('relogio');
+
+function relogio() {
+  elRelogio.textContent = new Date().toLocaleTimeString('pt-BR');
+}
+relogio();
+setInterval(relogio, 1000);
+
+const elOrdem     = document.getElementById('ordem');
+const elMomentos  = document.getElementById('momentos');
+const elProximo   = document.getElementById('proximo');
+const elTroca     = document.getElementById('trocaOrdem');
+const elRotuloAv  = document.getElementById('rotuloAvulsas');
+
+let ORDEM = null;       // ultimo retrato recebido do servidor
+let TODAS_CUES = [];
+let ocupado = false;    // evita disparar dois pedidos do mesmo painel
+
+async function carregarTudo() {
+  try {
+    const [cues, ordens] = await Promise.all([
+      (await fetch('/api/cues')).json(),
+      (await fetch('/api/ordens')).json()
+    ]);
+    TODAS_CUES = cues;
+
+    elTroca.innerHTML = '';
+    for (const o of (ordens.disponiveis || [])) {
+      const op = document.createElement('option');
+      op.value = o.id;
+      op.textContent = o.nome + ' (' + o.quantos + ')';
+      elTroca.appendChild(op);
+    }
+    elTroca.onchange = () => trocarOrdem(elTroca.value);
+
+    desenharOrdem(ordens.carregada);
+  } catch (e) {
+    elBotoes.innerHTML = '<p class="vazio">Perdi a conexao com a ponte. A janela preta ainda esta aberta?</p>';
+  }
+}
+
+function desenharOrdem(ordem) {
+  ORDEM = ordem;
+  const temOrdem = ordem && ordem.momentos && ordem.momentos.length;
+  elOrdem.hidden = !temOrdem;
+
+  if (temOrdem) {
+    if (elTroca.value !== ordem.id) elTroca.value = ordem.id;
+
+    elMomentos.innerHTML = '';
+    ordem.momentos.forEach((m, i) => {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.className = 'momento'
+        + (i === ordem.atual ? ' atual' : '')
+        + (ordem.atual !== null && i < ordem.atual ? ' passado' : '');
+
+      const ponto = document.createElement('span');
+      ponto.className = 'ponto-cor';
+      ponto.style.background = m.cor;
+
+      const passou = ordem.atual !== null && i < ordem.atual;
+      const num = document.createElement('span');
+      // Visto no lugar do numero: "ja passamos por aqui", e nao "indisponivel".
+      num.className = 'indice' + (passou ? ' feito' : '');
+      num.textContent = passou ? '✓' : (i + 1);
+
+      const rot = document.createElement('span');
+      rot.className = 'rotulo';
+      rot.textContent = m.nome;
+
+      b.append(ponto, num, rot);
+      if (i === ordem.atual) {
+        const agora = document.createElement('span');
+        agora.className = 'marca-agora';
+        agora.textContent = 'agora';
+        b.appendChild(agora);
+      }
+      b.onclick = () => irPara(m);
+      li.appendChild(b);
+      elMomentos.appendChild(li);
+    });
+
+    // O botao diz PARA ONDE vai. "Proximo" sozinho nao informa nada, e num
+    // culto a diferenca entre avancar para o Ofertorio e para a Pregacao
+    // importa muito.
+    const proxId = ordem.proximo_id;
+    const prox = proxId && ordem.momentos.find(m => m.id === proxId);
+    if (prox) {
+      elProximo.disabled = false;
+      elProximo.innerHTML = '';
+      const r = document.createElement('small');
+      r.textContent = ordem.atual === null ? 'Começar por' : 'Próximo';
+      const n = document.createTextNode(prox.nome);
+      elProximo.append(r, n);
+      elProximo.onclick = () => irPara(prox);
+    } else {
+      elProximo.disabled = true;
+      elProximo.textContent = 'A ordem terminou';
+      elProximo.onclick = null;
+    }
+  }
+
+  // Avulsas = as cues que NAO estao na ordem. Calculado, nunca configurado.
+  const naOrdem = new Set(temOrdem ? ordem.momentos.map(m => m.id) : []);
+  const avulsas = TODAS_CUES.filter(c => !naOrdem.has(c.id));
+  elRotuloAv.hidden = !(temOrdem && avulsas.length);
+  elBotoes.innerHTML = '';
+  if (!avulsas.length && !temOrdem) {
+    elBotoes.innerHTML = '<p class="vazio">Nenhuma cue no <code>config.yaml</code>.</p>';
+    return;
+  }
+  for (const cue of avulsas) {
+    const b = document.createElement('button');
+    b.className = 'cue';
+    b.style.background = cue.cor;
+    b.textContent = cue.nome;
+    b.onclick = () => rodar(cue, b);
+    elBotoes.appendChild(b);
+  }
+}
+
+async function trocarOrdem(id) {
+  try {
+    const r = await fetch('/api/ordem/carregar/' + encodeURIComponent(id), { method: 'POST' });
+    const j = await r.json();
+    if (j.ordem) desenharOrdem(j.ordem);
+  } catch (e) { /* o poll de 3s corrige */ }
+}
+
+async function irPara(momento) {
+  if (ocupado) return;
+  if (momento.confirmar && !confirm('Entrar em "' + momento.nome + '"?')) return;
+
+  ocupado = true;
+  elProximo.disabled = true;
+  document.querySelectorAll('.momento').forEach(b => b.disabled = true);
+  try {
+    const r = await fetch('/api/ordem/ir/' + encodeURIComponent(momento.id), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // A versao que ESTE painel viu. Se outro operador mexeu nesse meio
+      // tempo, o servidor recusa com 409 em vez de obedecer cego.
+      body: JSON.stringify({ versao: ORDEM ? ORDEM.versao : null })
+    });
+    const j = await r.json();
+    if (j.ordem) desenharOrdem(j.ordem);
+    if (r.ok) {
+      registrar(j);
+    } else if (j.ocupado) {
+      registrar({ nome: momento.nome, tudo_ok: false, passos: [
+        { sistema: 'Ponte', estado: 'erro', detalhe: 'outra cue ainda esta rodando' }] });
+    } else if (j.conflito) {
+      registrar({ nome: momento.nome, tudo_ok: false, passos: [
+        { sistema: 'Ponte', estado: 'erro', detalhe: 'alguem mudou a ordem; a tela foi atualizada' }] });
+    } else {
+      registrar({ nome: momento.nome, tudo_ok: false, passos: [
+        { sistema: 'Ponte', estado: 'erro', detalhe: j.erro || 'nao deu certo' }] });
+    }
+  } catch (e) {
+    registrar({ nome: momento.nome, tudo_ok: false, passos: [
+      { sistema: 'Ponte', estado: 'erro', detalhe: 'sem resposta do servidor' }] });
+  } finally {
+    ocupado = false;
+    document.querySelectorAll('.momento').forEach(b => b.disabled = false);
+    atualizarStatus();
+  }
+}
+
+async function rodar(cue, botao) {
+  if (cue.confirmar && !confirm('Rodar "' + cue.nome + '"?')) return;
+
+  const texto = botao.textContent;
+  botao.disabled = true;
+  botao.innerHTML = texto + '<span class="rodando">rodando...</span>';
+
+  try {
+    const r = await fetch('/api/cue/' + encodeURIComponent(cue.id), { method: 'POST' });
+    registrar(await r.json());
+  } catch (e) {
+    registrar({ nome: cue.nome, tudo_ok: false,
+      passos: [{ sistema: 'Ponte', estado: 'erro', detalhe: 'sem resposta do servidor' }] });
+  } finally {
+    botao.disabled = false;
+    botao.textContent = texto;
+    atualizarStatus();
+  }
+}
+
+function registrar(resultado) {
+  if (elRegistro.querySelector('.vazio')) elRegistro.innerHTML = '';
+
+  const div = document.createElement('div');
+  div.className = 'entrada ' + (resultado.tudo_ok ? 'ok' : 'falhou');
+
+  const titulo = document.createElement('div');
+  titulo.className = 'titulo';
+  titulo.textContent = resultado.nome + ' ';
+  const hora = document.createElement('span');
+  hora.textContent = new Date().toLocaleTimeString('pt-BR');
+  titulo.appendChild(hora);
+  div.appendChild(titulo);
+
+  for (const p of resultado.passos || []) {
+    const linha = document.createElement('div');
+    linha.className = 'passo ' + p.estado;
+    const sistema = document.createElement('span');
+    sistema.className = 'sistema';
+    sistema.textContent = p.sistema;
+    const texto = document.createElement('span');
+    texto.className = 'texto';
+    texto.textContent = (p.estado === 'ok' ? '' : p.estado + ' — ') + p.detalhe;
+    linha.append(sistema, texto);
+    div.appendChild(linha);
+  }
+
+  elRegistro.prepend(div);
+  while (elRegistro.children.length > 12) elRegistro.lastChild.remove();
+}
+
+async function atualizarStatus() {
+  try {
+    const sistemas = await (await fetch('/api/status')).json();
+    elStatus.innerHTML = '';
+    for (const s of sistemas) {
+      const pill = document.createElement('div');
+      pill.className = 'pill';
+      const ponto = document.createElement('span');
+      ponto.className = 'ponto ' + s.estado;
+      const nome = document.createElement('span');
+      nome.textContent = s.nome;
+      const detalhe = document.createElement('span');
+      detalhe.className = 'detalhe';
+      detalhe.textContent = s.detalhe;
+      pill.append(ponto, nome, detalhe);
+      // A pilula de Luzes leva para a mesa de teste. Sem este caminho a mesa
+      // existe e ninguem acha: quem precisa dela esta com a luz na frente,
+      // nao lendo manual.
+      if (s.nome === 'Luzes') {
+        const ir = document.createElement('a');
+        ir.href = '/luzes';
+        ir.textContent = 'mesa de teste →';
+        ir.style.cssText = 'margin-left:8px;color:var(--marca,#3b82f6);text-decoration:none;font-weight:600';
+        ir.title = 'descobrir canais e montar presets de luz';
+        pill.appendChild(ir);
+      }
+      elStatus.appendChild(pill);
+    }
+  } catch (e) {
+    elStatus.innerHTML = '<div class="pill"><span class="ponto erro"></span>Ponte fora do ar</div>';
+  }
+}
+
+const elAoVivo = document.getElementById('aovivo');
+
+function campo(rotulo, valor, apagado) {
+  const d = document.createElement('div');
+  d.className = 'campo';
+  const r = document.createElement('div');
+  r.className = 'rotulo';
+  r.textContent = rotulo;
+  const v = document.createElement('div');
+  v.className = 'valor' + (apagado ? ' apagado' : '');
+  v.textContent = valor;
+  d.append(r, v);
+  return d;
+}
+
+function marca(texto, classe) {
+  const s = document.createElement('span');
+  s.className = 'marca ' + classe;
+  s.textContent = texto;
+  return s;
+}
+
+async function atualizarAoVivo() {
+  let e;
+  try {
+    e = await (await fetch('/api/estado')).json();
+  } catch (err) {
+    elAoVivo.hidden = true;
+    return;
+  }
+
+  // Convergencia entre aparelhos: se outro operador avancou o culto pelo
+  // celular, este painel descobre aqui, sem ninguem recarregar nada. Nao
+  // redesenha no meio de um pedido nosso, para nao atropelar a resposta.
+  if (e.ordem && !ocupado && (!ORDEM || e.ordem.versao !== ORDEM.versao)) {
+    desenharOrdem(e.ordem);
+  }
+
+  // Sem nenhum dos dois respondendo, a barra some em vez de mentir
+  if (!e.holyrics && !e.obs) { elAoVivo.hidden = true; return; }
+  elAoVivo.hidden = false;
+  elAoVivo.innerHTML = '';
+
+  if (e.obs) {
+    const c = campo('No ar', e.obs.no_ar || '—');
+    if (e.obs.gravando)     c.appendChild(marca('gravando', 'gravando'));
+    if (e.obs.transmitindo) c.appendChild(marca('no ar', 'transmitindo'));
+    elAoVivo.appendChild(c);
+
+    if (e.obs.preview && e.obs.preview !== e.obs.no_ar) {
+      elAoVivo.appendChild(campo('Preparado', e.obs.preview));
+    }
+  }
+
+  if (e.holyrics) {
+    const h = e.holyrics;
+    let c;
+    if (h.vazio) {
+      c = campo('Telão', 'nada no ar', true);
+    } else {
+      c = campo('Telão', h.nome || h.tipo || 'apresentação');
+      if (h.slide && h.total) {
+        const x = document.createElement('div');
+        x.className = 'extra';
+        x.textContent = 'slide ' + h.slide + ' de ' + h.total;
+        c.appendChild(x);
+      }
+    }
+    if (h.preta) c.appendChild(marca('tela preta', 'preta'));
+    elAoVivo.appendChild(c);
+  }
+}
+
+carregarTudo();
+atualizarStatus();
+atualizarAoVivo();
+setInterval(atualizarStatus, 15000);
+setInterval(atualizarAoVivo, 3000);
+</script>
+
+</body>
+</html>
