@@ -965,3 +965,23 @@ web:
 #
 #  E em cada cue, `descricao:` troca a frase que o botão Próximo mostra.
 # ===========================================================================
+
+
+# ===========================================================================
+#  VIGIA DO RETORNO NA TV (opcional; sem este bloco ele já funciona)
+#
+#  A TV do altar às vezes solta o retorno no meio do culto (Wi-Fi, economia
+#  de energia, o aplicativo fechando). O PC principal acompanha o registro do
+#  Sunshine e, quando a TV solta, reabre sozinho. Ele não liga a TV, não abre
+#  o retorno se ninguém abriu hoje, e não mexe se houver outro aplicativo na
+#  tela. Depois de três tentativas sem a TV voltar, para e avisa no painel.
+#
+#  Só roda no PC principal, e só se o chegada.yaml tiver `rede.tv.script`.
+# ===========================================================================
+# vigia_tv:
+#   ativo: true
+#   espera_s: 25          # sem retorno por quanto tempo antes de agir
+#   intervalo_s: 120      # entre uma tentativa e outra
+#   max_falhas: 3
+#   janela: ["18:30", "22:30"]   # se quiser restringir ao horário de culto
+#   log: 'C:\Program Files\Sunshine\config\sunshine.log'

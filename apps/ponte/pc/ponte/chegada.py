@@ -120,6 +120,7 @@ class Chegada:
         self._feitos = {}
         self._dia = _hoje()
         self._tv_ip = None
+        self._vigia = None      # o vigia do retorno na TV, quando este PC tem um
         self._obs = None
         self._holyrics = None
         self._agindo = set()
@@ -395,10 +396,77 @@ class Chegada:
         return None
 
     def _mede_tv(self):
-        ip = self._ip_da_tv()
-        if ip:
+        # Com o vigia ligado, quem bate na TV e so ele, de 5 em 5 segundos.
+        # Antes esta medida abria uma conexao propria a cada volta, e a TV
+        # ficava com varias conexoes penduradas.
+        if self._vigia is not None:
+            ligada, ip = self._vigia.tv()
+        else:
+            ip = self._ip_da_tv()
+            ligada = bool(ip)
+        if ligada:
             return True, "TV ligada e na rede ({})".format(ip)
         return False, "a TV nao respondeu na rede"
+
+    def _mede_retorno_tv(self):
+        """O retorno esta NO AR? Quem responde e o Sunshine (a TV esta
+        recebendo a tela), nao o script ter rodado sem erro."""
+        if self._vigia is None:
+            return None, "este PC nao vigia o retorno na TV"
+        r = self._vigia.retrato()
+        if r["estado"] == "sem_sinal":
+            return None, r["texto"]
+        return r["estado"] == "no_ar", r["texto"], r["desde"]
+
+    # -- a TV, para o vigia (ponte/vigia_tv.py) -------------------------------
+
+    def tem_tv(self):
+        conf = self._roteiro["rede"].get("tv") or {}
+        return bool(conf.get("script"))
+
+    def ligar_vigia(self, vigia):
+        self._vigia = vigia
+
+    def ip_da_tv(self):
+        return self._ip_da_tv()
+
+    def tela_da_tv(self, ip):
+        """O id do aplicativo que esta na tela da TV, ou None se nao deu para
+        saber. Pergunta pelo mesmo script do retorno (-Action Status)."""
+        conf = self._roteiro["rede"].get("tv") or {}
+        script = conf.get("script")
+        if not script or not os.path.exists(script) or not ip:
+            return None
+        try:
+            resultado = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                 "-File", script, "-Action", "Status", "-TvIp", ip],
+                capture_output=True, timeout=20,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except Exception:
+            return None
+        saida = (resultado.stdout or b"").decode("cp850", errors="ignore")
+        if "com.limelight.webos" in saida:
+            return "com.limelight.webos"
+        # Um id de aplicativo do webOS tem cara de "com.webos.app.hdmi1" ou
+        # "youtube.leanback.v4": tres pedacos ou mais, separados por ponto.
+        import re
+        achado = re.search(r"\b[a-z][a-z0-9\-]*(?:\.[a-z0-9_\-]+){2,}\b", saida)
+        return achado.group(0) if achado else None
+
+    def reabrir_retorno(self, do_vigia=False):
+        """(ok, texto). Passa pelo MESMO caminho do botao da chegada, com a
+        mesma guarda: o vigia e uma pessoa nunca mandam as teclas juntos."""
+        passo_id = None
+        with self._tranca:
+            for passo in self._roteiro["passos"]:
+                if passo.get("acao") == "retorno_tv":
+                    passo_id = passo["id"]
+                    break
+        if passo_id is None:
+            return False, "o chegada.yaml nao tem o passo de abrir o retorno na TV"
+        feito = self.agir(passo_id, {"do_vigia": bool(do_vigia)})
+        return feito["ok"], feito["texto"]
 
     def _mede_lista_do_dia(self):
         cliente = self._cliente_holyrics()
@@ -481,6 +549,10 @@ class Chegada:
         ultima = [l.strip() for l in saida.splitlines() if l.strip()][-1:] or [""]
         if resultado.returncode != 0:
             raise ErroChegada("o script do retorno falhou: {}".format(ultima[0] or "sem detalhe"))
+        # Uma PESSOA abriu: o vigia passa a cuidar do retorno. Quando quem
+        # chamou foi o proprio vigia, ele nao pode zerar a conta das falhas.
+        if self._vigia is not None and not dados.get("do_vigia"):
+            self._vigia.abriram_na_mao()
         return True, "comando enviado para a TV. Olhe para ela: apareceu a letra?"
 
     def _faz_obs_colecao(self, dados):

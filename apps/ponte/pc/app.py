@@ -28,6 +28,7 @@ from ponte import mesa as mod_mesa
 from ponte import movimento as mod_movimento
 from ponte import seguidor as mod_seguidor
 from ponte import versao as mod_versao
+from ponte import vigia_tv as mod_vigia_tv
 from ponte import youtube as mod_youtube
 from ponte.cues import executar
 from ponte.holyrics import ClienteHolyrics
@@ -610,6 +611,7 @@ def estado():
         corpo = dict(_estado)
     with _tranca_ordem:
         corpo["ordem"] = _retrato_da_ordem()
+    corpo["retorno_tv"] = _vigia["valor"].retrato() if _vigia["valor"] else None
     return jsonify(corpo)
 
 
@@ -2083,6 +2085,7 @@ def _retomar_ordem(config):
 #  rodar qualquer coisa do config.
 # ---------------------------------------------------------------------------
 _historico = collections.deque(maxlen=40)
+_vigia = {"valor": None}      # o vigia do retorno na TV (ponte/vigia_tv.py)
 _remoto = {"aceita": True}
 _luz_escolhida = {"cena": None}
 _maquinas_vistas = {}
@@ -2215,6 +2218,13 @@ def _sistemas_do_painel():
             "o PC do som não está buscando a luz. Ele está ligado, com a ponte aberta?")
     else:
         por("Luz", luz is not None, True, "")
+    if _vigia["valor"] is not None:
+        r = _vigia["valor"].retrato()
+        if r["estado"] in ("caiu", "reconectando", "desistiu", "fora_da_janela"):
+            itens.append({"nome": "Retorno na TV", "estado": "erro", "rotulo": r["texto"],
+                          "detalhe": r["texto"] + ". A letra não está aparecendo na TV do altar."})
+        elif r["estado"] == "no_ar":
+            itens.append({"nome": "Retorno na TV", "estado": "ok", "detalhe": ""})
     espelho = _espelho["valor"].retrato() if _espelho["valor"] else None
     if espelho is not None:
         por("Painel na web", True, espelho.get("ok") is not False,
@@ -2298,6 +2308,7 @@ def _retrato_do_painel():
         "controles": controles,
         "recados": recados,
         "tem_recado_limpar": "recado_limpar" in _cues_por_id,
+        "retorno_tv": _vigia["valor"].retrato() if _vigia["valor"] else None,
         "historico": list(_historico)[:12],
         "remoto": dict(_remoto),
         "atualizacao": _retrato_da_atualizacao(),
@@ -2453,6 +2464,29 @@ def _acao_do_painel(dados, origem):
             titulo = ("Transmissão aberta ao público" if valor == "public"
                       else "Transmissão só para quem tem o link")
             resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
+        elif tipo == "retorno":
+            vigia = _vigia["valor"]
+            if vigia is None:
+                return {"erro": "este PC não cuida do retorno na TV"}, 400
+            oque = str(dados.get("acao") or "")
+            if oque == "pausar":
+                vigia.pausar(dados.get("minutos"))
+                titulo = "Vigia do retorno pausado"
+            elif oque == "retomar":
+                vigia.retomar()
+                titulo = "Vigia do retorno retomado"
+            elif oque == "reabrir":
+                # Abrir o retorno leva uns 20 segundos: vai numa thread, e a
+                # tela acompanha pelo estado do vigia.
+                def reabrir():
+                    ok, texto = _chegada.reabrir_retorno()
+                    _anotar("Retorno na TV", ok, texto, origem)
+                threading.Thread(target=reabrir, daemon=True).start()
+                return {"ok": True, "titulo": "Reabrindo o retorno na TV",
+                        "detalhe": "leva uns 20 segundos"}, 200
+            else:
+                return {"erro": "o painel não sabe fazer isso"}, 400
+            resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
         elif tipo == "ordem":
             with _tranca_ordem:
                 if not _carregar_ordem(str(dados.get("id") or "")):
@@ -2482,6 +2516,21 @@ def _anotar_quem_falou():
             "versao": request.headers.get("X-Ponte-Versao", "")[:20] or None,
             "em": time.time()}
     return None
+
+
+@app.post("/api/retorno/pausar")
+def retorno_pausar():
+    """Corpo opcional {"minutos": 30}; sem corpo, pausa ate o fim do dia."""
+    corpo, codigo = _acao_do_painel(
+        {"tipo": "retorno", "acao": "pausar",
+         "minutos": (request.get_json(silent=True) or {}).get("minutos")}, "local")
+    return jsonify(corpo), codigo
+
+
+@app.post("/api/retorno/retomar")
+def retorno_retomar():
+    corpo, codigo = _acao_do_painel({"tipo": "retorno", "acao": "retomar"}, "local")
+    return jsonify(corpo), codigo
 
 
 @app.get("/api/painel")
@@ -2662,6 +2711,17 @@ def main():
     if _espelho["valor"] is not None:
         _espelho["valor"].comecar()
         print("  [espelho] ligado: entregando o estado para a versao web")
+    # O vigia do retorno na TV: so no PC principal, e so se o chegada.yaml
+    # diz onde esta o script que fala com a TV.
+    conf_vigia = _config.get("vigia_tv") or {}
+    if (_maquina["principal"] is None and conf_vigia.get("ativo", True) is not False
+            and _chegada.tem_tv()):
+        _vigia["valor"] = mod_vigia_tv.VigiaDaTV(
+            conf_vigia, ip_da_tv=_chegada.ip_da_tv, na_tela=_chegada.tela_da_tv,
+            reabrir=lambda: _chegada.reabrir_retorno(do_vigia=True))
+        _chegada.ligar_vigia(_vigia["valor"])
+        _vigia["valor"].comecar()
+        print("  [retorno] vigia ligado: reabre o retorno na TV se ele cair")
     try:
         with open(CAMINHO_REMOTO, encoding="utf-8") as arq:
             _remoto["aceita"] = bool(json.load(arq).get("aceita", True))

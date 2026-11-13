@@ -370,7 +370,7 @@ def aqui_imagem():
 # (_acao_do_painel no pc/app.py) e pode recusar tudo com uma chave no painel
 # local. "ordem" (trocar a ordem do culto inteira) fica de fora de proposito.
 ACOES_DO_PAINEL = ("ir", "gravar", "transmitir", "tela_preta", "recado", "cena_luz",
-                   "apagar_luz", "modo_luz", "cortar", "visibilidade")
+                   "apagar_luz", "modo_luz", "cortar", "visibilidade", "retorno")
 
 
 @app.get("/api/painel")

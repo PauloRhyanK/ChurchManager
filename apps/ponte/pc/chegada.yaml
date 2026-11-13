@@ -117,6 +117,10 @@ passos:
     frase: Abra o retorno na TV do altar.
     apoio: Um clique. Leva uns 20 segundos. Depois olhe para a TV.
     acao: retorno_tv
+    # O verde vem do Sunshine dizer que a TV esta recebendo, nao de o comando
+    # ter saido (ver ponte/vigia_tv.py).
+    confere: retorno_tv
+    se_falhar: A TV não está recebendo o retorno.
     rotulo_acao: Abrir o retorno na TV
     como:
       - "O botão abre o Moonlight na TV e entra neste PC sozinho."

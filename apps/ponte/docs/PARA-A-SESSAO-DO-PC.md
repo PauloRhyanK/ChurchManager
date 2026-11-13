@@ -154,6 +154,45 @@ com o da versão antiga em 200 mil estados sorteados, sem diferença. Saiu a se�
 - "Mostrar na igreja enquanto mexo" nasce desligado.
 - Testes: `python _testar_estudio.py` (93 checagens, sem equipamento).
 
+### 10. Atualização: comparação arquivo por arquivo (correção de 12/11, 23h)
+
+A primeira versão comparava a impressão digital da pasta inteira com a da web. Numa
+pasta de verdade há mais que o projeto, então o PC nunca ficava "em dia" e a faixa de
+atualização não sumia. Agora `/api/versao` devolve nome e impressão de cada arquivo, e
+o PC confere só esses (`versao.diferentes`).
+
+**A versão antiga apagava da pasta o que não reconhecia como do projeto.** Se a
+atualização rodou aí mais de uma vez antes desta correção, confira se falta algum
+arquivo solto na pasta da ponte. Agora só sai o que uma atualização anterior pôs
+(`_projeto.lista`) e o projeto deixou de ter.
+
+### 11. Vigia do retorno na TV (feito a partir da sua especificação)
+
+- **`pc/ponte/vigia_tv.py`** (novo) e `_testar_vigia_tv.py` (34 checagens, sem TV).
+  Segue a especificação: sessão pelo `sunshine.log`, 25 s de espera, uma tentativa a
+  cada 2 minutos, para em 3 falhas, só confirma pelo `CLIENT CONNECTED` em até 40 s,
+  não age com outro aplicativo na tela nem com a TV desligada, e só depois que o
+  retorno foi aberto uma vez desde que a ponte subiu.
+- A reabertura passa por `Chegada.reabrir_retorno()`, que usa o mesmo `agir()` do
+  botão: a guarda contra teclas em dobro é a mesma.
+- `_mede_tv` passou a ler o estado do vigia, em vez de bater na TV por conta própria.
+- Medida nova `retorno_tv` (verde pelo Sunshine). **O `chegada.yaml` daí é da igreja e
+  não é atualizado**: para o passo `p_retorno` ficar verde pela medida, acrescente nele
+  `confere: retorno_tv`.
+- No painel: linha "TV do altar" no cartão Telão e palco, com "Reabrir o retorno" e
+  "Pausar o vigia"; pílula "Retorno na TV" no alto. Rotas `/api/retorno/pausar` e
+  `/api/retorno/retomar`. Config opcional `vigia_tv` (ver o fim do `config.exemplo.yaml`).
+- **O que eu não pude ver e você precisa conferir:**
+  - a saída de `tv-control.ps1 -Action Status`. Eu não tenho esse script. O código
+    procura `com.limelight.webos` na saída e, se não achar, o primeiro texto com cara
+    de id de aplicativo (três pedaços ou mais separados por ponto, em minúsculas).
+    Se a saída tiver outro texto assim (um nome de máquina, por exemplo), o vigia vai
+    achar que há "outro aplicativo" e não vai reabrir. Ver `Chegada.tela_da_tv`;
+  - o texto exato das linhas do `sunshine.log` (procuro `CLIENT CONNECTED` e
+    `CLIENT DISCONNECTED`, como no seu diagnóstico);
+  - a confirmação pelas portas UDP 47998-48010 não foi feita: só o registro decide;
+  - os cinco passos do teste com a TV, da seção 7 da sua especificação.
+
 ## O que NÃO foi testado
 
 Tudo foi verificado num Mac, com OBS, Holyrics e YouTube desligados e a luz no driver

@@ -275,7 +275,7 @@ function desenhar() {
 
   pintar('pilulas', (d.sistemas || []).map(s =>
     '<span class="pilula ' + esc(s.estado) + '" title="' + esc(s.detalhe || '') + '"><i aria-hidden="true"></i>' +
-    esc(s.nome) + (s.estado === 'erro' ? ': sem resposta' : s.estado === 'desligado' ? ': desligado' : '') + '</span>').join(''));
+    esc(s.nome) + (s.estado === 'erro' ? ': ' + esc(s.rotulo || 'sem resposta') : s.estado === 'desligado' ? ': desligado' : '') + '</span>').join(''));
 
   desenharFaixas(d);
   desenharMenu(d);
@@ -469,11 +469,27 @@ function desenharLuz(d) {
 }
 
 function desenharTelao(d) {
-  const t = d.telao, c = d.controles || {}, recados = d.recados || [];
-  const tem = (t && c.tela_preta) || recados.length > 0;
+  const t = d.telao, c = d.controles || {}, recados = d.recados || [], rt = d.retorno_tv;
+  const tem = (t && c.tela_preta) || recados.length > 0 || !!rt;
   mostrar('cartao-telao', !!tem);
   if (!tem) return;
   let h = '<h2>Telão e palco</h2>';
+  if (rt) {
+    // A TV do altar. O vigia reabre sozinho quando ela solta o retorno; aqui
+    // a pessoa ve o que ele esta fazendo e pode reabrir ou pausar.
+    const ruim = ['caiu', 'reconectando', 'desistiu', 'fora_da_janela'].indexOf(rt.estado) >= 0;
+    h += '<div style="display:flex;flex-direction:column;gap:6px"><span style="font-size:14px;color:' +
+      (ruim ? 'var(--aviso-texto)' : 'var(--suave)') + '">TV do altar: <b' + (ruim ? ' style="color:#fff"' : '') + '>' + esc(rt.texto) + '</b></span>' +
+      '<div class="grade g2">' +
+      botao(rt.estado === 'no_ar' ? 'Reabrir o retorno' : 'Abrir o retorno', {tipo: 'retorno', acao: 'reabrir'},
+        {confirmar: rt.estado === 'no_ar' ? {titulo: 'Reabrir o retorno na TV?', texto: 'A TV já está recebendo a letra. Reabrir faz a imagem sumir por uns 20 segundos.', sim: 'Reabrir'} : null}) +
+      (rt.pausado
+        ? botao('Voltar a vigiar', {tipo: 'retorno', acao: 'retomar'}, {classe: 'bt forte'})
+        : botao('Pausar o vigia', {tipo: 'retorno', acao: 'pausar'},
+            {confirmar: {titulo: 'Pausar o vigia do retorno?', texto: 'Até o fim do dia, a ponte não reabre o retorno sozinha se a TV soltar.', sim: 'Pausar'}})) +
+      '</div></div>';
+    if ((t && c.tela_preta) || recados.length) h += '<div class="corte" style="padding-top:0"></div>';
+  }
   if (t && c.tela_preta) {
     h += '<div class="linha"><span>Telão <b>' + (t.preta ? 'escuro' : 'mostrando') + '</b></span>' + (t.preta
       ? botao('Voltar a mostrar', {tipo: 'tela_preta', ligar: false}, {classe: 'bt forte'})
