@@ -2,6 +2,10 @@
 
 Cole o texto abaixo na sessão do Claude que alcança a VPS.
 
+> **Histórico.** A implantação de 12/11/2026 acabou em Docker, não em systemd: o proxy
+> da VPS é o Nginx Proxy Manager em contêiner e não alcança `127.0.0.1` do host. Onde
+> este prompt e o [`IMPLANTAR-NA-VPS.md`](IMPLANTAR-NA-VPS.md) divergirem, vale o segundo.
+
 ---
 
 Quero pôr no ar a versão web da **Ponte do Culto**, o sistema da equipe de multimídia

@@ -11,7 +11,8 @@ Ela **nunca** abre conexão para a igreja.
 
 Restrições que vêm disso:
 
-- **Um processo só**: `gunicorn --workers 1 --threads 8`. O estado mora na memória.
+- **Um processo só**: `gunicorn --workers 1 --threads 8` (já está no `Dockerfile`). O
+  estado mora na memória.
 - **Reiniciar é barato**: a igreja reentrega o retrato em 2 segundos.
 - A pasta `pc/` precisa estar ao lado de `web/` (a aplicação serve arquivos de lá e
   monta o `.zip` de `/baixar` a partir dela). Traga a pasta `apps/ponte/` inteira.
@@ -30,27 +31,52 @@ Não defina `PONTE_HTTP`: ela existe só para teste local sem HTTPS.
 Guarde as três num arquivo fora do repositório, por exemplo `/etc/ponte-web.env`
 com `chmod 600`. **Nenhuma delas vai para o Git, para log ou para o chat.**
 
+## Como a VPS está montada (conferido em 12/11/2026)
+
+Todos os sites da VPS são contêineres Docker na rede `proxy-network`, atrás do
+Nginx Proxy Manager (contêiner `global-proxy`), que também emite os certificados
+(Let's Encrypt). O proxy alcança cada site pelo **nome do contêiner**, não por uma
+porta do host. Por isso a Ponte roda do mesmo jeito: contêiner `ponte-web`, sem porta
+publicada. Dentro dele o processo é o usuário `ponte`, sem privilégio, com o sistema
+de arquivos só de leitura.
+
+A primeira versão deste documento previa systemd ouvindo em `127.0.0.1:8710`. Não
+serve aqui: o proxy está dentro do Docker e não enxerga o `127.0.0.1` do host.
+
 ## Passos
 
-1. Criar um usuário de sistema `ponte` sem login e clonar o ChurchManager em
-   `/opt/ponte-do-culto`, trazendo só a pasta da Ponte:
+1. Clonar o ChurchManager em `/opt/ponte-do-culto`, trazendo só a pasta da Ponte:
 
    ```bash
    git clone --filter=blob:none --sparse https://github.com/PauloRhyanK/ChurchManager.git /opt/ponte-do-culto
    git -C /opt/ponte-do-culto sparse-checkout set apps/ponte
    ```
 
-   É um clone **separado** do que já existe na VPS para a API: aquele fica na pasta
-   do root, que o usuário `ponte` não lê (e o serviço roda com `ProtectHome=true`).
-2. Em `/opt/ponte-do-culto/apps/ponte`:
-   `python3 -m venv web/.venv && web/.venv/bin/pip install -r web/requirements.txt`
-3. Criar `/etc/ponte-web.env` com as três variáveis.
-4. Instalar `apps/ponte/web/ponte-web.service` em `/etc/systemd/system/`, ajustar caminhos,
-   `systemctl enable --now ponte-web`.
-5. Proxy reverso com HTTPS para `127.0.0.1:8710` (Caddy ou nginx + certbot). O proxy
-   precisa repassar `X-Forwarded-For` — o limite de tentativas de senha usa esse
-   cabeçalho — e **não** pode ter cache.
-6. DNS: registro `A` de `ponte.igrejaparaiso.com.br` para o IP da VPS.
+   É um clone separado do que a API usa (`~/projetos/churchmanager`), para que
+   atualizar a Ponte nunca mexa na API, e vice-versa.
+2. Criar `/etc/ponte-web.env` (`chmod 600`, dono root) com as três variáveis, uma por
+   linha, no formato `NOME=valor`, sem aspas e sem espaços em volta do `=`.
+3. Subir: `cd /opt/ponte-do-culto/apps/ponte && docker compose up -d --build`
+4. No Nginx Proxy Manager, criar o Proxy Host:
+   - Domain: `ponte.igrejaparaiso.com.br` · Scheme: `http` · Forward Hostname:
+     `ponte-web` · Port: `8710`
+   - **Cache Assets: desligado.** Block Common Exploits: ligado.
+   - SSL: pedir certificado novo (Let's Encrypt), Force SSL e HTTP/2 ligados.
+
+   O proxy já repassa `X-Forwarded-For` por padrão — o limite de tentativas de senha
+   usa esse cabeçalho.
+5. DNS: registro `A` de `ponte.igrejaparaiso.com.br` para o IP da VPS, **sem o proxy
+   da Cloudflare** ("DNS only", nuvem cinza): a Cloudflare guardaria em cache o
+   `guia.css` e o `guia.js`. O registro precisa existir antes de pedir o certificado.
+
+## Atualizar depois
+
+```bash
+cd /opt/ponte-do-culto && git pull --ff-only && cd apps/ponte && docker compose up -d --build
+```
+
+Trocar a senha: editar `/etc/ponte-web.env` e rodar
+`cd /opt/ponte-do-culto/apps/ponte && docker compose up -d --force-recreate`.
 
 ## Como conferir
 
@@ -83,4 +109,5 @@ chat nem o repositório** — o Paulo copia de um lugar e cola no outro.
 - Não abrir porta no roteador da igreja nem criar túnel para dentro dela.
 - Não subir mais de um worker.
 - Não pôr segredo em arquivo versionado, em variável de build ou em log.
-- Não expor o gunicorn direto na internet: só atrás do proxy com HTTPS.
+- Não expor o gunicorn direto na internet: só atrás do proxy com HTTPS. Não publicar
+  porta (`ports:`) no `docker-compose.yml`.

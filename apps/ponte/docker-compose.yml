@@ -1,0 +1,37 @@
+# Ponte do Culto - versao web, na VPS.
+#
+# Mesmo desenho dos outros sites da VPS: um conteiner na rede `proxy-network`,
+# SEM porta publicada, e o Nginx Proxy Manager encaminha para `ponte-web:8710`.
+#
+# Os segredos ficam FORA do repositorio, em /etc/ponte-web.env (chmod 600, root):
+#   PONTE_SENHA=...      a senha que a equipe digita        (8+ caracteres)
+#   PONTE_CHAVE=...      o segredo que a igreja apresenta   (24+ caracteres)
+#   PONTE_SEGREDO=...    assina o cookie de sessao          (aleatorio, 64 hex)
+#
+# Subir / atualizar:  docker compose up -d --build
+services:
+  ponte-web:
+    build: .
+    image: ponte-web:local
+    container_name: ponte-web
+    restart: unless-stopped
+    env_file:
+      - /etc/ponte-web.env
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8710/saude', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - proxy-network
+
+networks:
+  proxy-network:
+    external: true
