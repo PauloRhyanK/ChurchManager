@@ -40,6 +40,7 @@ tela com o retrato velho.
 import base64
 import collections
 import hmac
+import importlib.util
 import io
 import json
 import os
@@ -83,8 +84,18 @@ app.config.update(
     MAX_CONTENT_LENGTH=12 * 1024 * 1024,
 )
 
+# A versao do projeto que esta pasta pc/ tem. E com ela que cada PC descobre
+# que esta atras. O calculo mora em pc/ponte/versao.py, para os dois lados
+# usarem exatamente a mesma conta.
+_espec = importlib.util.spec_from_file_location(
+    "ponte_versao", os.path.join(PASTA_PC, "ponte", "versao.py"))
+_mod_versao = importlib.util.module_from_spec(_espec)
+_espec.loader.exec_module(_mod_versao)
+VERSAO = _mod_versao.calcular(PASTA_PC)
+SUBIU_EM = time.time()
+
 _tranca = threading.Lock()
-_igreja = {"chegada": None, "em": 0.0, "maquina": ""}
+_igreja = {"chegada": None, "painel": None, "em": 0.0, "maquina": ""}
 _fila = collections.deque(maxlen=50)
 _tentativas = {}          # ip -> [quantas erradas, ate quando esta bloqueado]
 _codigos = {}             # codigo de instalacao -> [vale ate, usos que restam]
@@ -131,7 +142,11 @@ def _porteiro():
     # /api/cofre e /api/instalar/pacote conferem a propria credencial (chave e
     # codigo); /instalar.ps1 e so o roteiro, sem segredo nenhum.
     livre = ("/entrar", "/saude", "/api/espelho", "/guia.css",
-             "/api/cofre", "/api/instalar/pacote", "/instalar.ps1")
+             "/api/cofre", "/api/instalar/pacote", "/instalar.ps1",
+             # O projeto e publico (esta no GitHub): a versao e o pacote de
+             # atualizacao nao levam segredo nenhum, e os PCs secundarios, que
+             # nao guardam chave, precisam alcanca-los.
+             "/api/versao", "/api/atualizacao/pacote")
     if request.path in livre or _logado():
         return None
     if request.path.startswith("/api/"):
@@ -156,7 +171,7 @@ __AVISO__
 @app.get("/entrar")
 def entrar():
     if _logado():
-        return redirect("/chegada")
+        return redirect("/")
     return PAGINA_ENTRAR.replace("__AVISO__", "")
 
 
@@ -171,7 +186,7 @@ def entrar_enviar():
             _tentativas.pop(ip, None)
         session.permanent = True
         session["ok"] = True
-        return redirect("/chegada")
+        return redirect("/")
     # A senha e uma so, compartilhada pela equipe, entao adivinhar tem que
     # custar caro.
     _errou(ip)
@@ -190,7 +205,13 @@ def sair():
 
 @app.get("/")
 def raiz():
-    return redirect("/chegada")
+    return redirect("/painel")
+
+
+@app.get("/painel")
+def pagina_painel():
+    """O painel do culto: o MESMO arquivo que o PC da igreja usa."""
+    return send_from_directory(PASTA_PC, "painel.html")
 
 
 @app.get("/chegada")
@@ -275,6 +296,60 @@ def aqui_imagem():
     return jsonify({"erro": "a foto do OBS so aparece na rede da igreja"}), 404
 
 
+# -- o painel do culto ---------------------------------------------------------
+
+# O que a web pode pedir no painel. A igreja confere de novo do lado dela
+# (_acao_do_painel no pc/app.py) e pode recusar tudo com uma chave no painel
+# local. "ordem" (trocar a ordem do culto inteira) fica de fora de proposito.
+ACOES_DO_PAINEL = ("ir", "gravar", "transmitir", "tela_preta", "recado", "cena_luz",
+                   "apagar_luz", "modo_luz", "cortar", "visibilidade")
+
+
+@app.get("/api/painel")
+def painel_retrato():
+    with _tranca:
+        viva = _igreja_viva()
+        painel = _igreja["painel"]
+        ha = time.time() - _igreja["em"] if _igreja["em"] else None
+    corpo = dict(painel or {})
+    corpo.update({"local": False, "viva": viva, "versao_da_web": VERSAO})
+    if not viva:
+        corpo["erro"] = ("A igreja ainda não se conectou a esta versão web." if ha is None
+                         else "Sem contato com a igreja há {:.0f} segundos. "
+                              "O que está na tela pode estar velho.".format(ha))
+    elif painel is None:
+        corpo["erro"] = ("O PC da igreja está numa versão antiga, que ainda não manda o painel "
+                         "do culto para cá. Atualize a ponte de lá.")
+    return jsonify(corpo)
+
+
+@app.post("/api/painel/acao")
+def painel_acao():
+    dados = request.get_json(silent=True)
+    if not isinstance(dados, dict) or dados.get("tipo") not in ACOES_DO_PAINEL:
+        return jsonify({"erro": "o painel na web não faz isso"}), 400
+    with _tranca:
+        if not _igreja_viva():
+            return jsonify({"erro": "Sem contato com a igreja — o pedido não foi enviado."}), 503
+        if not ((_igreja["painel"] or {}).get("remoto") or {}).get("aceita", False):
+            return jsonify({"erro": "Os comandos pela web estão desligados na igreja."}), 403
+        _fila.append({"tipo": "painel", "passo": None, "corpo": dados, "em": time.time()})
+    return jsonify({"ok": True, "enviado": True,
+                    "titulo": "Pedido enviado para a igreja", "detalhe": "acompanhe na tela"})
+
+
+@app.get("/api/versao")
+def versao():
+    return jsonify({"versao": VERSAO, "em": SUBIU_EM})
+
+
+@app.get("/api/atualizacao/pacote")
+def atualizacao_pacote():
+    """So o projeto. E o que um PC busca para se atualizar."""
+    return send_file(_zip_pc(), mimetype="application/zip", as_attachment=True,
+                     download_name="ponte-do-culto-pc.zip")
+
+
 # -- a igreja ligando ---------------------------------------------------------
 
 @app.post("/api/espelho")
@@ -288,7 +363,9 @@ def espelho():
         return jsonify({"erro": "retrato invalido"}), 400
     agora = time.time()
     with _tranca:
-        _igreja.update({"chegada": chegada, "em": agora, "maquina": str(dados.get("maquina") or "")})
+        painel = dados.get("painel")
+        _igreja.update({"chegada": chegada, "em": agora, "maquina": str(dados.get("maquina") or ""),
+                        "painel": painel if isinstance(painel, dict) else None})
         # Pedido velho nao e entregue: "abrir o retorno na TV" de 10 minutos
         # atras, chegando agora porque a internet voltou, e uma surpresa ruim.
         comandos = [c for c in _fila if agora - c["em"] <= 60]

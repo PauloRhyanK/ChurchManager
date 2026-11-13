@@ -3,607 +3,575 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ponte do Culto</title>
+<title>Painel do culto — Ponte do Culto</title>
 <style>
-  /* Tema escuro fixo: o painel vive numa cabine, muitas vezes no escuro, e
-     uma tela clara vira um refletor apontado pro operador. */
-  :root {
-    --fundo: #0b1020;
-    --cartao: #151c31;
-    --borda: #273150;
-    --texto: #e8ecf8;
-    --apagado: #94a3c4;
-    --ok: #22c55e;
-    --erro: #ef4444;
-    --pulado: #64748b;
-    --aviso: #f59e0b;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    padding: 16px;
-    background: var(--fundo);
-    color: var(--texto);
-    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-    -webkit-text-size-adjust: 100%;
-  }
-  header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 12px;
-    margin-bottom: 4px;
-  }
-  h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
-  .relogio { color: var(--apagado); font-size: 15px; font-variant-numeric: tabular-nums; }
-  /* Atalhos empurrados para a direita, longe dos botoes de culto. */
-  .atalhos { margin-left: auto; display: flex; gap: 14px; flex-wrap: wrap; }
-  .atalhos a {
-    color: var(--marca, #3b82f6); text-decoration: none; font-size: 13.5px;
-    font-weight: 600; white-space: nowrap;
-  }
-  .atalhos a:hover { text-decoration: underline; }
+/* O PAINEL DO CULTO.
 
-  .status { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 20px; }
-  .pill {
-    display: flex; align-items: center; gap: 7px;
-    background: var(--cartao); border: 1px solid var(--borda);
-    border-radius: 999px; padding: 7px 14px; font-size: 14px;
-  }
-  .ponto { width: 9px; height: 9px; border-radius: 50%; background: var(--pulado); flex: none; }
-  .ponto.ok { background: var(--ok); }
-  .ponto.erro { background: var(--erro); }
-  .ponto.enviando { background: var(--aviso); }
-  .pill .detalhe { color: var(--apagado); font-size: 13px; }
+   UMA TELA SO, e a mesma em tres lugares: no PC da igreja, no celular e na
+   versao web. Tudo que ela mostra vem de /api/painel; tudo que ela faz vai
+   para /api/painel/acao. Na web esses dois enderecos existem com o mesmo
+   nome e o mesmo formato, e e por isso que este arquivo nao sabe (nem
+   precisa saber) onde esta rodando, alem do campo `local` do retrato.
 
-  /* Barra do que esta no ar AGORA. Fica acima dos botoes de proposito:
-     quem opera precisa ver o estado antes de decidir o proximo clique. */
-  .aovivo {
-    display: flex; flex-wrap: wrap; align-items: stretch;
-    gap: 0; margin-bottom: 20px;
-    background: var(--cartao); border: 1px solid var(--borda);
-    border-radius: 12px; overflow: hidden;
-  }
-  .aovivo .campo {
-    flex: 1 1 190px; min-width: 0;
-    padding: 12px 16px;
-    border-right: 1px solid var(--borda);
-    display: flex; flex-direction: column; gap: 3px;
-  }
-  .aovivo .campo:last-child { border-right: none; }
-  .aovivo .rotulo {
-    font-size: 10px; letter-spacing: .11em; text-transform: uppercase;
-    color: var(--apagado);
-  }
-  .aovivo .valor {
-    font-size: 16px; font-weight: 600; line-height: 1.25;
-    overflow-wrap: anywhere;
-  }
-  .aovivo .valor.apagado { color: var(--apagado); font-weight: 400; }
-  .aovivo .extra { font-size: 12.5px; color: var(--apagado); }
-  .aovivo .marca {
-    display: inline-flex; align-items: center; gap: 6px;
-    font-size: 12px; font-weight: 600;
-    padding: 2px 8px; border-radius: 999px;
-    border: 1px solid currentColor; margin-top: 2px; align-self: flex-start;
-  }
-  .aovivo .marca.gravando    { color: var(--erro); }
-  .aovivo .marca.transmitindo{ color: var(--erro); }
-  .aovivo .marca.preta       { color: var(--aviso); }
-  .aovivo .marca::before {
-    content: ""; width: 7px; height: 7px; border-radius: 50%;
-    background: currentColor;
-  }
+   A REGRA DO DESENHO: a pergunta "onde o culto esta e o que eu faco agora"
+   se responde sem ler. O momento atual e a maior coisa da tela, o proximo e
+   o maior botao. O que se mexe fora da ordem esta em tres cartoes por
+   assunto, e cada botao diz o que faz em portugues de gente.
 
-  /* --- a ordem do culto ---------------------------------------------- */
-  .ordem { margin-bottom: 26px; }
-  .ordem-cabeca {
-    display: flex; align-items: center; gap: 12px;
-    margin-bottom: 10px; flex-wrap: wrap;
-  }
-  .ordem-rotulo {
-    font-size: 11px; letter-spacing: .11em; text-transform: uppercase;
-    color: var(--apagado); font-weight: 600;
-  }
-  .dica { font-size: 12.5px; color: var(--apagado); }
+   Tema escuro fixo: a cabine fica no escuro, e tela clara vira refletor. */
+:root{
+  --fundo:#0b1016; --caixa:#131b24; --caixa2:#18212c; --fundo2:#0f161e; --linha:#243040; --borda:#3a4757;
+  --texto:#e8eef6; --suave:#b9c6d6; --apagado:#8fa0b4;
+  --ok:#22c55e; --ok-fundo:#0d2a18; --ok-texto:#6ee7a0; --ok-borda:#1f6b3c; --ok-tinta:#06210f;
+  --erro-fundo:#2a1114; --erro-texto:#f8a5a5; --erro-borda:#7a2626;
+  --aviso:#f59e0b; --aviso-fundo:#2a1d07; --aviso-texto:#f7d9a3; --aviso-borda:#6b4a12;
+  --marca:#2563eb; --marca-texto:#a9c9ff; --vivo:#dc2626;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--fundo);color:var(--texto);
+  font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+a{color:var(--marca-texto)}
+button,select{font:inherit;color:inherit;cursor:pointer}
+button:disabled{opacity:.5;cursor:not-allowed}
+button:focus-visible,a:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #60a5fa;outline-offset:2px}
+h1,h2,h3,p{margin:0}
+[hidden]{display:none!important}
 
-  #trocaOrdem {
-    margin-left: auto;
-    background: var(--cartao); color: var(--texto);
-    border: 1px solid var(--borda); border-radius: 8px;
-    padding: 6px 10px; font-family: inherit; font-size: 14px;
-  }
+.tela{max-width:1440px;margin:0 auto;padding:max(16px,env(safe-area-inset-top)) clamp(14px,2.2vw,28px) 28px;
+  display:flex;flex-direction:column;gap:16px}
+.topo{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px}
+.topo .nome{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
+.topo h1{font-size:20px;font-weight:800;letter-spacing:-.01em}
+.topo .sub{font-size:15px;color:var(--suave);font-variant-numeric:tabular-nums}
+.pilulas{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto;align-items:center}
+.pilula{display:inline-flex;align-items:center;gap:8px;min-height:32px;padding:4px 12px;border-radius:999px;
+  background:var(--caixa);border:1px solid var(--linha);font-size:13px;color:var(--suave)}
+.pilula i{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
+.pilula.erro{background:var(--aviso-fundo);border-color:var(--aviso-borda);color:var(--aviso-texto)}
+.pilula.erro i{background:var(--aviso);border-radius:2px}
+.pilula.desligado i{background:#5b6b7e}
 
-  .momentos { list-style: none; margin: 0 0 12px; padding: 0; }
-  .momento {
-    display: flex; align-items: center; gap: 12px;
-    width: 100%; text-align: left;
-    background: var(--cartao); color: var(--texto);
-    border: 1px solid var(--borda); border-left: 4px solid transparent;
-    border-radius: 10px; padding: 13px 16px; margin-bottom: 7px;
-    font-family: inherit; font-size: 16px; cursor: pointer;
-    transition: filter .12s ease, transform .06s ease;
-  }
-  .momento:hover { filter: brightness(1.18); }
-  .momento:active { transform: scale(.995); }
-  .momento:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
-  .momento[disabled] { cursor: wait; filter: saturate(.4); }
-  .momento .ponto-cor {
-    width: 10px; height: 10px; border-radius: 50%; flex: none;
-  }
-  .momento .indice {
-    font-family: ui-monospace, monospace; font-size: 12px;
-    color: var(--apagado); min-width: 18px; flex: none;
-  }
-  .momento .rotulo { flex: 1; min-width: 0; }
-  .momento .marca-agora {
-    font-size: 11px; font-weight: 700; letter-spacing: .09em;
-    text-transform: uppercase; color: var(--ok); flex: none;
-  }
-  /* Passado = CONCLUIDO, nao bloqueado. Dois cuidados de proposito:
-     o apagamento e leve (a 45% lia como botao desabilitado), e passar o
-     mouse ou focar devolve a opacidade cheia — o item responde, logo da
-     para clicar. Voltar no culto e normal, e a tela nao pode sugerir o
-     contrario. */
-  .momento.passado { opacity: .6; }
-  .momento.passado:hover,
-  .momento.passado:focus-visible { opacity: 1; }
-  .momento .feito { color: var(--ok); font-weight: 700; font-size: 14px; }
-  .momento.atual {
-    border-left-color: var(--ok);
-    background: color-mix(in srgb, var(--ok) 10%, var(--cartao));
-    font-weight: 600;
-  }
+.bt{min-height:46px;padding:0 16px;border-radius:12px;border:1px solid var(--borda);background:var(--caixa2);
+  color:var(--texto);font-size:15px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;
+  text-align:center;text-decoration:none}
+.bt.perigo{border-color:var(--erro-borda);background:var(--erro-fundo);color:var(--erro-texto);font-weight:700}
+.bt.forte{background:var(--marca);border-color:transparent;color:#fff;font-weight:700}
+.bt.aviso{background:var(--aviso);border-color:transparent;color:#1f1300;font-weight:700}
+.bt.largo{width:100%}
 
-  .proximo {
-    width: 100%; min-height: 78px;
-    border: none; border-radius: 14px;
-    background: var(--ok); color: #04210f;
-    font-family: inherit; font-size: 20px; font-weight: 700;
-    cursor: pointer; padding: 14px 18px;
-    transition: filter .15s ease, transform .06s ease;
-  }
-  .proximo:hover { filter: brightness(1.1); }
-  .proximo:active { transform: scale(.985); }
-  .proximo:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
-  .proximo[disabled] { filter: saturate(.25) brightness(.65); cursor: default; }
-  .proximo small {
-    display: block; font-size: 12px; font-weight: 600;
-    opacity: .72; letter-spacing: .08em; text-transform: uppercase;
-    margin-bottom: 3px;
-  }
+.faixa{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;border-radius:14px;padding:12px 16px;font-size:15px}
+.faixa > span{flex:1 1 260px}
+.faixa.erro{background:var(--erro-fundo);border:1px solid var(--erro-borda);color:var(--erro-texto)}
+.faixa.aviso{background:var(--aviso-fundo);border:1px solid var(--aviso-borda);color:var(--aviso-texto)}
+.faixa.nota{background:#10213f;border:1px solid #284a86;color:var(--marca-texto)}
+.faixa b{color:#fff}
 
-  .secao {
-    font-size: 11px; letter-spacing: .11em; text-transform: uppercase;
-    color: var(--apagado); font-weight: 600; margin: 0 0 10px;
-  }
+.duas{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
+.principal{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;gap:16px}
+.lado{flex:1 1 340px;max-width:460px;min-width:0;display:flex;flex-direction:column;gap:14px}
+@media (max-width:820px){.lado{max-width:none}}
 
-  .botoes {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-    gap: 12px;
-  }
-  button.cue {
-    min-height: 104px;
-    border: none; border-radius: 14px;
-    color: #fff; font-size: 19px; font-weight: 600;
-    font-family: inherit;
-    cursor: pointer;
-    padding: 16px;
-    transition: transform .06s ease, filter .15s ease;
-    position: relative;
-  }
-  button.cue:hover { filter: brightness(1.12); }
-  button.cue:active { transform: scale(.975); }
-  button.cue:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
-  button.cue[disabled] { filter: saturate(.3) brightness(.7); cursor: wait; }
-  button.cue .rodando {
-    display: block; font-size: 13px; font-weight: 500;
-    opacity: .85; margin-top: 6px;
-  }
+.cartao{background:var(--caixa);border:1px solid var(--linha);border-radius:18px;padding:18px;
+  display:flex;flex-direction:column;gap:14px}
+.cartao h2{font-size:17px;font-weight:700}
+.cabeca{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px}
+.rotulo{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--apagado)}
+.miudo{font-size:13px;color:var(--apagado)}
+.linha{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 12px}
+.linha > span{font-size:15px;color:var(--suave)}
+.linha b{color:var(--texto)}
+.corte{border-top:1px solid var(--linha);padding-top:12px}
 
-  .registro { margin-top: 24px; }
-  .registro h2 {
-    font-size: 13px; text-transform: uppercase; letter-spacing: .08em;
-    color: var(--apagado); margin: 0 0 10px; font-weight: 600;
-  }
-  .entrada {
-    background: var(--cartao); border: 1px solid var(--borda);
-    border-left-width: 4px; border-radius: 10px;
-    padding: 12px 14px; margin-bottom: 8px;
-  }
-  .entrada.ok { border-left-color: var(--ok); }
-  .entrada.falhou { border-left-color: var(--erro); }
-  .entrada .titulo { font-weight: 600; margin-bottom: 7px; font-size: 15px; }
-  .entrada .titulo span { color: var(--apagado); font-weight: 400; font-size: 13px; }
-  .passo { font-size: 14px; display: flex; gap: 8px; padding: 2px 0; align-items: baseline; }
-  .passo .sistema { color: var(--apagado); min-width: 78px; flex: none; }
-  .passo.erro .texto { color: #fca5a5; }
-  .passo.pulado .texto { color: var(--pulado); }
+.agora{border-radius:20px;padding:22px;gap:18px}
+.agora .titulo{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 18px}
+.agora h2{font-size:clamp(40px,6vw,60px);font-weight:800;letter-spacing:-.03em;line-height:1}
+.agora .quando{font-size:16px;color:var(--suave);padding-bottom:6px}
+.fatos{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.fato{background:var(--caixa2);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.fato strong{font-size:20px;font-weight:700;overflow-wrap:anywhere}
+.fato span:last-child{font-size:14px;color:var(--suave)}
+.proximo{min-height:96px;width:100%;border:none;border-radius:18px;background:var(--ok);color:var(--ok-tinta);
+  padding:16px 22px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 24px;text-align:left}
+.proximo .a{display:flex;flex-direction:column;gap:2px}
+.proximo .a small{font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+.proximo .a b{font-size:clamp(26px,4vw,34px);font-weight:800;letter-spacing:-.02em;line-height:1.05}
+.proximo .b{font-size:15px;font-weight:600;max-width:400px}
+.proximo.fim{background:var(--caixa2);color:var(--suave);border:1px solid var(--borda)}
 
-  .vazio { color: var(--apagado); font-size: 15px; line-height: 1.6; }
-  code {
-    background: #0d1426; border: 1px solid var(--borda);
-    padding: 1px 6px; border-radius: 5px; font-size: 13px;
-  }
+.momentos{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:8px}
+.momento{min-height:64px;border-radius:14px;border:1px solid var(--borda);background:var(--caixa2);color:var(--texto);
+  padding:8px 12px;text-align:left;display:flex;flex-direction:column;gap:2px}
+.momento small{font-size:12px;color:var(--suave)}
+.momento b{font-size:16px;font-weight:700;overflow-wrap:anywhere}
+.momento.feito{background:var(--fundo2);border-color:var(--linha);color:var(--apagado)}
+.momento.feito small{color:var(--apagado)}
+.momento.atual{border:2px solid var(--ok);background:var(--ok-fundo)}
+.momento.atual small{color:var(--ok-texto);font-weight:700}
+.momento.serio{border-color:var(--erro-borda);background:var(--erro-fundo);color:var(--erro-texto)}
+.momento.serio small{color:var(--erro-texto)}
+
+.grade{display:grid;gap:8px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.g3{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}
+.escolha{min-height:50px;border-radius:12px;border:1px solid var(--borda);background:var(--caixa2);color:var(--texto);
+  font-size:14px;font-weight:600;padding:6px 8px;overflow-wrap:anywhere}
+.escolha[aria-pressed="true"]{border:2px solid var(--ok);background:var(--ok-fundo);font-weight:700}
+.selo{display:inline-flex;align-items:center;gap:8px;min-height:30px;padding:2px 12px;border-radius:999px;
+  font-size:13px;font-weight:800;letter-spacing:.04em}
+.selo.vivo{background:var(--vivo);color:#fff}
+.selo.vivo i{width:8px;height:8px;border-radius:50%;background:#fff}
+.selo.fora{background:var(--caixa2);color:var(--suave);border:1px solid var(--borda)}
+.par{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border:1px solid var(--borda);border-radius:12px;overflow:hidden}
+.par button{min-height:46px;border:none;background:var(--caixa2);color:var(--suave);font-size:15px;font-weight:600;padding:4px 8px}
+.par button[aria-pressed="true"]{background:var(--marca);color:#fff;font-weight:700}
+
+.rodape{display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden}
+.rodape summary{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:12px 16px;cursor:pointer;list-style:none;min-height:46px}
+.rodape summary::-webkit-details-marker{display:none}
+.rodape summary i{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
+.rodape summary i.ruim{background:var(--aviso);border-radius:2px}
+.rodape summary span{flex:1 1 260px;font-size:14px;color:var(--suave)}
+.rodape summary em{font-style:normal;font-size:14px;font-weight:600;color:var(--marca-texto)}
+.rodape ol{list-style:none;margin:0;padding:0 16px 14px;display:flex;flex-direction:column;gap:8px}
+.rodape li{font-size:14px;color:var(--suave);border-top:1px solid var(--linha);padding-top:8px}
+.rodape li.ruim{color:var(--aviso-texto)}
+
+.menu{position:relative}
+.menu > summary{list-style:none}
+.menu > summary::-webkit-details-marker{display:none}
+.menu .folha{position:absolute;right:0;top:calc(100% + 8px);z-index:20;width:min(340px,calc(100vw - 28px));
+  background:var(--caixa);border:1px solid var(--borda);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:6px;
+  box-shadow:0 18px 40px rgba(0,0,0,.5)}
+.menu .folha a,.menu .folha .item{display:flex;align-items:center;min-height:44px;padding:0 10px;border-radius:10px;
+  color:var(--texto);text-decoration:none;font-size:15px;font-weight:600}
+.menu .folha a:hover{background:var(--caixa2)}
+.menu .folha label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--apagado);padding:6px 10px}
+.menu .folha select{min-height:44px;border-radius:10px;border:1px solid var(--borda);background:var(--fundo);padding:0 10px;font-size:15px}
+.menu .folha .bloco{border-top:1px solid var(--linha);margin-top:4px;padding:10px 10px 4px;display:flex;flex-direction:column;gap:8px}
+.menu .pcs{font-size:13px;color:var(--suave);display:flex;flex-direction:column;gap:4px}
+.menu .pcs b{color:var(--texto)}
+
+dialog{border:1px solid var(--borda);border-radius:18px;background:var(--caixa);color:var(--texto);padding:22px;
+  width:min(460px,calc(100vw - 28px))}
+dialog::backdrop{background:rgba(3,6,10,.72)}
+dialog h2{font-size:22px;font-weight:800;margin-bottom:8px}
+dialog p{color:var(--suave);font-size:16px;margin-bottom:18px}
+dialog .botoes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.aviso-flutuante{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:40;
+  max-width:min(560px,calc(100vw - 24px));background:#0d2a18;border:1px solid var(--ok-borda);color:var(--ok-texto);
+  border-radius:14px;padding:12px 18px;font-size:15px;font-weight:600;box-shadow:0 12px 30px rgba(0,0,0,.5)}
+.aviso-flutuante.ruim{background:var(--erro-fundo);border-color:var(--erro-borda);color:var(--erro-texto)}
 </style>
 </head>
 <body>
+<div class="tela">
+  <header class="topo">
+    <div class="nome">
+      <h1>Ponte do Culto</h1>
+      <span class="sub" id="subtitulo">carregando…</span>
+    </div>
+    <div class="pilulas" id="pilulas"></div>
+    <details class="menu" id="menu">
+      <summary class="bt">Mais</summary>
+      <div class="folha" id="folha"></div>
+    </details>
+  </header>
 
-<header>
-  <h1>Ponte do Culto</h1>
-  <span class="relogio" id="relogio"></span>
-  <!-- Os caminhos para as outras telas ficam AQUI, no cabecalho, e nao
-       espalhados no meio dos botoes de culto. Quem esta operando precisa
-       de uma regiao onde nada dispara cue: clicar sem querer num link e
-       chato; clicar sem querer num momento do culto, nao. -->
-  <nav class="atalhos">
-    <a href="/chegada">Chegada</a>
-    <a href="/letras">Letras</a>
-    <a href="/youtube">Transmissão</a>
-    <a href="/cenas">Cenas de luz</a>
-    <a href="/luzes">Mesa técnica</a>
-    <a href="/baixar" title="O pacote para instalar a ponte em outro PC da igreja">Instalar em outro PC</a>
-  </nav>
-</header>
+  <div id="faixas" style="display:flex;flex-direction:column;gap:10px"></div>
 
-<div class="status" id="status"></div>
-<div class="aovivo" id="aovivo" hidden></div>
-
-<div class="ordem" id="ordem" hidden>
-  <div class="ordem-cabeca">
-    <span class="ordem-rotulo">Ordem do culto</span>
-    <span class="dica">toque em qualquer momento para ir direto — inclusive voltar</span>
-    <select id="trocaOrdem" aria-label="Trocar a ordem do culto"></select>
+  <div class="duas">
+    <main class="principal">
+      <section class="cartao agora" id="agora" aria-live="polite"></section>
+      <section id="ordem" style="display:flex;flex-direction:column;gap:10px"></section>
+      <details class="cartao rodape" id="historico"></details>
+    </main>
+    <aside class="lado">
+      <section class="cartao" id="cartao-transmissao" hidden></section>
+      <section class="cartao" id="cartao-luz" hidden></section>
+      <section class="cartao" id="cartao-telao" hidden></section>
+    </aside>
   </div>
-  <ol class="momentos" id="momentos"></ol>
-  <button class="proximo" id="proximo"></button>
 </div>
 
-<h2 class="secao" id="rotuloAvulsas" hidden>Fora da ordem</h2>
-<div class="botoes" id="botoes"></div>
-
-<div class="registro">
-  <h2>O que aconteceu</h2>
-  <div id="registro"><p class="vazio">Nada rodou ainda.</p></div>
-</div>
+<dialog id="dialogo" aria-labelledby="dialogo-titulo">
+  <h2 id="dialogo-titulo"></h2>
+  <p id="dialogo-texto"></p>
+  <div class="botoes">
+    <button type="button" class="bt" id="dialogo-nao">Cancelar</button>
+    <button type="button" class="bt forte" id="dialogo-sim">Confirmar</button>
+  </div>
+</dialog>
+<div class="aviso-flutuante" id="aviso" role="status" hidden></div>
 
 <script>
-const elBotoes   = document.getElementById('botoes');
-const elStatus   = document.getElementById('status');
-const elRegistro = document.getElementById('registro');
-const elRelogio  = document.getElementById('relogio');
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let D = null;            // o ultimo retrato
+let semContato = 0;      // quantas consultas seguidas falharam
+let ocupado = false;     // ha um pedido em curso
+const jaPintado = {};    // id do elemento -> html, para so mexer no que mudou
 
-function relogio() {
-  elRelogio.textContent = new Date().toLocaleTimeString('pt-BR');
+function pintar(id, html) {
+  if (jaPintado[id] === html) return;
+  jaPintado[id] = html;
+  $(id).innerHTML = html;
 }
-relogio();
-setInterval(relogio, 1000);
+function mostrar(id, sim) { $(id).hidden = !sim; }
 
-const elOrdem     = document.getElementById('ordem');
-const elMomentos  = document.getElementById('momentos');
-const elProximo   = document.getElementById('proximo');
-const elTroca     = document.getElementById('trocaOrdem');
-const elRotuloAv  = document.getElementById('rotuloAvulsas');
+/* Um botao de acao: o que ele pede vai escrito nele mesmo (data-acao), e o
+   que precisa de confirmacao leva tambem a pergunta. Um unico ouvinte, la
+   embaixo, cuida de todos. */
+function botao(rotulo, acao, opcoes) {
+  const o = opcoes || {};
+  const attrs = [
+    'type="button"',
+    'class="' + (o.classe || 'bt') + '"',
+    "data-acao='" + esc(JSON.stringify(acao)) + "'",
+  ];
+  if (o.confirmar) attrs.push("data-confirmar='" + esc(JSON.stringify(o.confirmar)) + "'");
+  if (o.apertado != null) attrs.push('aria-pressed="' + (o.apertado ? 'true' : 'false') + '"');
+  if (o.atual) attrs.push('aria-current="step"');
+  if (!podeAgir()) attrs.push('disabled');
+  return '<button ' + attrs.join(' ') + '>' + rotulo + '</button>';
+}
+function podeAgir() {
+  if (!D || ocupado || semContato > 2) return false;
+  if (D.local) return true;
+  return !!D.viva && !!(D.remoto && D.remoto.aceita);
+}
+function tempo(ms) {
+  if (ms == null) return '';
+  const min = Math.floor(ms / 60000);
+  return min < 60 ? min + ' min' : Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0');
+}
 
-let ORDEM = null;       // ultimo retrato recebido do servidor
-let TODAS_CUES = [];
-let ocupado = false;    // evita disparar dois pedidos do mesmo painel
+// ---------------------------------------------------------------- desenhar --
+function desenhar() {
+  const d = D;
+  const ordem = d.ordem || {momentos: []};
+  const momentos = ordem.momentos || [];
+  const atual = ordem.atual == null ? null : momentos[ordem.atual];
+  const proximo = momentos.find(m => m.id === ordem.proximo_id) || null;
 
-async function carregarTudo() {
-  try {
-    const [cues, ordens] = await Promise.all([
-      (await fetch('/api/cues')).json(),
-      (await fetch('/api/ordens')).json()
-    ]);
-    TODAS_CUES = cues;
+  $('subtitulo').textContent = [ordem.nome, d.hora].filter(Boolean).join(' · ') || 'sem ordem de culto';
 
-    elTroca.innerHTML = '';
-    for (const o of (ordens.disponiveis || [])) {
-      const op = document.createElement('option');
-      op.value = o.id;
-      op.textContent = o.nome + ' (' + o.quantos + ')';
-      elTroca.appendChild(op);
+  pintar('pilulas', (d.sistemas || []).map(s =>
+    '<span class="pilula ' + esc(s.estado) + '" title="' + esc(s.detalhe || '') + '"><i aria-hidden="true"></i>' +
+    esc(s.nome) + (s.estado === 'erro' ? ': sem resposta' : s.estado === 'desligado' ? ': desligado' : '') + '</span>').join(''));
+
+  desenharFaixas(d);
+  desenharMenu(d);
+
+  // AGORA
+  const tr = d.transmissao, tl = d.telao, lz = d.luz;
+  let html = '<div class="titulo"><div style="display:flex;flex-direction:column;gap:4px"><span class="rotulo">Agora</span><h2>' +
+    esc(atual ? atual.nome : 'Antes de começar') + '</h2></div>' +
+    (atual ? '<span class="quando">momento ' + (ordem.atual + 1) + ' de ' + momentos.length + '</span>' : '') + '</div>';
+  const fatos = [];
+  if (tr) fatos.push(['Na transmissão', tr.imagem || 'sem imagem', tr.no_ar ? 'no ar agora' : 'fora do ar']);
+  if (tl) fatos.push(['No telão', tl.preta ? 'Tela preta' : (tl.vazio ? 'Nada no telão' : (tl.nome || 'Apresentação')),
+    tl.preta ? 'o telão está escuro de propósito' : (tl.vazio || tl.slide == null ? '' : 'slide ' + tl.slide + ' de ' + tl.total)]);
+  if (lz) {
+    const cena = (lz.cenas || []).find(c => c.id === lz.cena);
+    const modo = (lz.modos || []).find(m => m.id === lz.modo);
+    fatos.push(['Na luz', lz.cena === 'apagar' ? 'Apagada' : (cena ? cena.nome : 'Cena montada à mão'),
+      lz.modo === 'parado' ? 'parada' : 'movimento ' + (modo ? modo.nome.toLowerCase() : lz.modo)]);
+  }
+  if (fatos.length) html += '<div class="fatos">' + fatos.map(f =>
+    '<div class="fato"><span class="rotulo">' + f[0] + '</span><strong>' + esc(f[1]) + '</strong><span>' + esc(f[2]) + '</span></div>').join('') + '</div>';
+  if (tr && tr.preparada && d.controles && d.controles.cortar) {
+    html += '<div class="faixa aviso"><span><b>' + esc(tr.preparada) + '</b> está pronta, mas ainda não entrou na transmissão.</span>' +
+      botao('Pôr no ar', {tipo: 'cortar'}, {classe: 'bt aviso'}) + '</div>';
+  }
+  if (proximo) {
+    const conf = proximo.confirmar ? {titulo: 'Ir para "' + proximo.nome + '"?', texto: proximo.resumo || 'Este momento pede confirmação.', sim: 'Sim, ir'} : null;
+    html += botao('<span class="a"><small>' + (atual ? 'Próximo' : 'Começar por') + '</small><b>' + esc(proximo.nome) + '</b></span>' +
+      '<span class="b">' + esc(proximo.resumo || '') + '</span>',
+      {tipo: 'ir', momento: proximo.id, versao: ordem.versao}, {classe: 'proximo', confirmar: conf});
+  } else if (momentos.length) {
+    html += '<button type="button" class="proximo fim" disabled><span class="a"><small>Fim</small><b>A ordem terminou</b></span></button>';
+  }
+  pintar('agora', html);
+
+  // ORDEM
+  let o = '';
+  if (momentos.length) {
+    o = '<div class="cabeca" style="justify-content:flex-start"><h2 class="rotulo">Ordem do culto</h2>' +
+      '<span class="miudo">toque num momento para ir direto a ele</span></div><div class="momentos">' +
+      momentos.map((m, i) => {
+        const eAtual = i === ordem.atual, feito = ordem.atual != null && i < ordem.atual;
+        const classe = 'momento' + (eAtual ? ' atual' : feito ? ' feito' : m.confirmar ? ' serio' : '');
+        const etiqueta = (i + 1) + (eAtual ? ' · agora' : feito ? ' · feito' : m.id === ordem.proximo_id ? ' · próximo' : m.confirmar ? ' · pede confirmação' : '');
+        const conf = (m.confirmar || feito) ? {
+          titulo: (feito ? 'Voltar para "' : 'Ir para "') + m.nome + '"?',
+          texto: m.resumo || '', sim: 'Sim, ir'} : null;
+        return botao('<small>' + etiqueta + '</small><b>' + esc(m.nome) + '</b>',
+          {tipo: 'ir', momento: m.id, versao: ordem.versao}, {classe: classe, confirmar: conf, atual: eAtual});
+      }).join('') + '</div>';
+  } else {
+    o = '<div class="faixa aviso"><span>Nenhuma ordem de culto carregada. ' +
+      (d.local ? 'Escolha uma em <b>Mais</b>, ou comece pela chegada.' : 'Isso se escolhe no PC da igreja.') + '</span></div>';
+  }
+  pintar('ordem', o);
+
+  // HISTORICO
+  const h = d.historico || [];
+  const ultimo = h[0];
+  const aberto = $('historico').open;
+  pintar('historico', '<summary>' +
+    (ultimo ? '<i aria-hidden="true" class="' + (ultimo.ok ? '' : 'ruim') + '"></i><span><b style="color:var(--texto)">' +
+      esc(ultimo.hora) + ' · ' + esc(ultimo.titulo) + '</b> — ' + esc(ultimo.detalhe) + (ultimo.origem === 'web' ? ' (pela web)' : '') + '</span>'
+      : '<span>Nada foi acionado ainda.</span>') +
+    (h.length > 1 ? '<em>Ver o que aconteceu</em>' : '') + '</summary>' +
+    (h.length > 1 ? '<ol>' + h.slice(1).map(e => '<li class="' + (e.ok ? '' : 'ruim') + '"><b style="color:var(--texto)">' +
+      esc(e.hora) + ' · ' + esc(e.titulo) + '</b> — ' + esc(e.detalhe) + (e.origem === 'web' ? ' (pela web)' : '') + '</li>').join('') + '</ol>' : ''));
+  $('historico').open = aberto;
+
+  desenharTransmissao(d);
+  desenharLuz(d);
+  desenharTelao(d);
+}
+
+function desenharFaixas(d) {
+  const f = [];
+  if (semContato > 2) {
+    f.push('<div class="faixa erro"><span><b>Perdi o contato com a ponte.</b> ' +
+      (d && d.local === false ? 'Confira a internet deste aparelho.' : 'A janela preta ainda está aberta no PC?') + '</span></div>');
+  }
+  if (d.erro) f.push('<div class="faixa erro"><span>' + esc(d.erro) + '</span></div>');
+  if (d.local === false && d.viva && d.remoto && !d.remoto.aceita) {
+    f.push('<div class="faixa aviso"><span><b>Só para acompanhar.</b> Os comandos pela web estão desligados no PC da igreja.</span></div>');
+  }
+  (d.sistemas || []).filter(s => s.estado === 'erro').forEach(s =>
+    f.push('<div class="faixa aviso"><span><b>' + esc(s.nome) + ':</b> ' + esc(s.detalhe) + '</span></div>'));
+  const at = d.atualizacao;
+  if (d.local && at) {
+    if (at.aplicando) f.push('<div class="faixa nota"><span><b>Atualizando.</b> A ponte vai sumir por alguns segundos e voltar sozinha.</span></div>');
+    else if (at.disponivel) f.push('<div class="faixa nota"><span><b>Há uma atualização da Ponte.</b> Leva menos de um minuto; a tela some e volta sozinha.</span>' +
+      '<button type="button" class="bt forte" id="bt-atualizar"' + (ocupado ? ' disabled' : '') + '>Atualizar agora</button></div>');
+  }
+  pintar('faixas', f.join(''));
+}
+
+function desenharMenu(d) {
+  const local = !!d.local;
+  let m = '';
+  m += '<a href="' + (local ? '/aqui' : '/chegada') + '">Chegada: preparar o culto</a>';
+  if (local) {
+    m += '<a href="/letras">Letras do dia</a><a href="/youtube">Transmissão no YouTube</a>' +
+      '<a href="/cenas">Montar uma cena de luz</a><a href="/estudio">Estúdio de luz: testar ideias</a>' +
+      '<a href="/baixar">Baixar o projeto para outro PC</a>';
+    if ((d.ordens || []).length) {
+      m += '<label>Ordem do culto de hoje<select id="troca-ordem">' + d.ordens.map(o =>
+        '<option value="' + esc(o.id) + '"' + (d.ordem && o.id === d.ordem.id ? ' selected' : '') + '>' + esc(o.nome) + '</option>').join('') + '</select></label>';
     }
-    elTroca.onchange = () => trocarOrdem(elTroca.value);
-
-    desenharOrdem(ordens.carregada);
-  } catch (e) {
-    elBotoes.innerHTML = '<p class="vazio">Perdi a conexao com a ponte. A janela preta ainda esta aberta?</p>';
+    m += '<div class="bloco"><span class="miudo">Painel na web</span><div class="par">' +
+      '<button type="button" data-remoto="1" aria-pressed="' + (d.remoto && d.remoto.aceita ? 'true' : 'false') + '">Aceita comandos</button>' +
+      '<button type="button" data-remoto="0" aria-pressed="' + (d.remoto && d.remoto.aceita ? 'false' : 'true') + '">Só mostra</button></div></div>';
+  } else {
+    m += '<a href="/instalar">Instalar a ponte num PC</a><a href="/sair">Sair</a>';
   }
+  const pcs = d.maquinas || [];
+  if (pcs.length) {
+    const la = d.atualizacao && d.atualizacao.la || d.versao_da_web;
+    m += '<div class="bloco"><span class="miudo">PCs da igreja</span><div class="pcs">' + pcs.map(p =>
+      '<span><b>' + esc(p.nome) + '</b> — ' + (p.viva ? 'ligado' : 'sem resposta') +
+      (p.versao ? (la && p.versao !== la ? ', precisa atualizar' : ', atualizado') : '') + '</span>').join('') + '</div></div>';
+  }
+  const aberto = $('menu').open;
+  pintar('folha', m);
+  $('menu').open = aberto;
 }
 
-function desenharOrdem(ordem) {
-  ORDEM = ordem;
-  const temOrdem = ordem && ordem.momentos && ordem.momentos.length;
-  elOrdem.hidden = !temOrdem;
-
-  if (temOrdem) {
-    if (elTroca.value !== ordem.id) elTroca.value = ordem.id;
-
-    elMomentos.innerHTML = '';
-    ordem.momentos.forEach((m, i) => {
-      const li = document.createElement('li');
-      const b = document.createElement('button');
-      b.className = 'momento'
-        + (i === ordem.atual ? ' atual' : '')
-        + (ordem.atual !== null && i < ordem.atual ? ' passado' : '');
-
-      const ponto = document.createElement('span');
-      ponto.className = 'ponto-cor';
-      ponto.style.background = m.cor;
-
-      const passou = ordem.atual !== null && i < ordem.atual;
-      const num = document.createElement('span');
-      // Visto no lugar do numero: "ja passamos por aqui", e nao "indisponivel".
-      num.className = 'indice' + (passou ? ' feito' : '');
-      num.textContent = passou ? '✓' : (i + 1);
-
-      const rot = document.createElement('span');
-      rot.className = 'rotulo';
-      rot.textContent = m.nome;
-
-      b.append(ponto, num, rot);
-      if (i === ordem.atual) {
-        const agora = document.createElement('span');
-        agora.className = 'marca-agora';
-        agora.textContent = 'agora';
-        b.appendChild(agora);
-      }
-      b.onclick = () => irPara(m);
-      li.appendChild(b);
-      elMomentos.appendChild(li);
-    });
-
-    // O botao diz PARA ONDE vai. "Proximo" sozinho nao informa nada, e num
-    // culto a diferenca entre avancar para o Ofertorio e para a Pregacao
-    // importa muito.
-    const proxId = ordem.proximo_id;
-    const prox = proxId && ordem.momentos.find(m => m.id === proxId);
-    if (prox) {
-      elProximo.disabled = false;
-      elProximo.innerHTML = '';
-      const r = document.createElement('small');
-      r.textContent = ordem.atual === null ? 'Começar por' : 'Próximo';
-      const n = document.createTextNode(prox.nome);
-      elProximo.append(r, n);
-      elProximo.onclick = () => irPara(prox);
-    } else {
-      elProximo.disabled = true;
-      elProximo.textContent = 'A ordem terminou';
-      elProximo.onclick = null;
-    }
+function desenharTransmissao(d) {
+  const t = d.transmissao, c = d.controles || {};
+  mostrar('cartao-transmissao', !!t);
+  if (!t) return;
+  let h = '<div class="cabeca"><h2>Transmissão</h2>' + (t.no_ar
+    ? '<span class="selo vivo"><i aria-hidden="true"></i>NO AR' + (t.tempo_ms != null ? ' · ' + tempo(t.tempo_ms) : '') + '</span>'
+    : '<span class="selo fora">Fora do ar</span>') + '</div>';
+  const y = t.youtube;
+  if (y) {
+    h += '<div style="display:flex;flex-direction:column;gap:6px"><span class="miudo">Quem pode assistir' +
+      (y.titulo ? ' · ' + esc(y.titulo) : '') + '</span><div class="par">' +
+      botao('Só quem tem o link', {tipo: 'visibilidade', valor: 'unlisted'}, {classe: '', apertado: !y.publica}) +
+      botao('Público', {tipo: 'visibilidade', valor: 'public'}, {classe: '', apertado: !!y.publica,
+        confirmar: y.publica ? null : {titulo: 'Abrir a transmissão ao público?', texto: 'Qualquer pessoa vai poder assistir e ela aparece no canal.', sim: 'Sim, abrir'}}) +
+      '</div></div>';
+  } else if (d.local) {
+    h += '<span class="miudo">Título, link e quem pode assistir ficam em <a href="/youtube">Transmissão no YouTube</a>.</span>';
   }
-
-  // Avulsas = as cues que NAO estao na ordem. Calculado, nunca configurado.
-  const naOrdem = new Set(temOrdem ? ordem.momentos.map(m => m.id) : []);
-  const avulsas = TODAS_CUES.filter(c => !naOrdem.has(c.id));
-  elRotuloAv.hidden = !(temOrdem && avulsas.length);
-  elBotoes.innerHTML = '';
-  if (!avulsas.length && !temOrdem) {
-    elBotoes.innerHTML = '<p class="vazio">Nenhuma cue no <code>config.yaml</code>.</p>';
-    return;
+  const botoes = [];
+  if (y && y.link) botoes.push('<button type="button" class="bt" data-copiar="' + esc(y.link) + '">Copiar o link</button>');
+  if (c.transmitir) {
+    botoes.push(t.no_ar
+      ? botao('Parar a transmissão', {tipo: 'transmitir', ligar: false}, {classe: 'bt perigo',
+          confirmar: {titulo: 'Parar a transmissão?', texto: 'Quem está assistindo pela internet deixa de ver o culto.', sim: 'Sim, parar', perigo: true}})
+      : botao('Iniciar a transmissão', {tipo: 'transmitir', ligar: true}, {classe: 'bt forte',
+          confirmar: {titulo: 'Iniciar a transmissão?', texto: 'O culto começa a ir para a internet agora.', sim: 'Sim, iniciar'}}));
   }
-  for (const cue of avulsas) {
-    const b = document.createElement('button');
-    b.className = 'cue';
-    b.style.background = cue.cor;
-    b.textContent = cue.nome;
-    b.onclick = () => rodar(cue, b);
-    elBotoes.appendChild(b);
+  if (botoes.length) h += '<div class="grade ' + (botoes.length > 1 ? 'g2' : '') + '">' + botoes.join('') + '</div>';
+  if (c.gravar) {
+    h += '<div class="linha corte"><span>Gravação <b>' + (t.gravando ? 'ligada' : 'desligada') + '</b></span>' + (t.gravando
+      ? botao('Parar de gravar', {tipo: 'gravar', ligar: false}, {confirmar: {titulo: 'Parar de gravar?', texto: 'O arquivo da gravação é fechado.', sim: 'Sim, parar', perigo: true}})
+      : botao('Começar a gravar', {tipo: 'gravar', ligar: true})) + '</div>';
   }
+  pintar('cartao-transmissao', h);
 }
 
-async function trocarOrdem(id) {
-  try {
-    const r = await fetch('/api/ordem/carregar/' + encodeURIComponent(id), { method: 'POST' });
-    const j = await r.json();
-    if (j.ordem) desenharOrdem(j.ordem);
-  } catch (e) { /* o poll de 3s corrige */ }
+function desenharLuz(d) {
+  const l = d.luz;
+  mostrar('cartao-luz', !!l);
+  if (!l) return;
+  let h = '<div class="cabeca"><h2>Luz</h2>' + (d.local ? '<a href="/cenas" style="font-size:14px;font-weight:600;padding:12px 4px">Montar uma cena</a>' : '') + '</div>';
+  if ((l.cenas || []).length) {
+    h += '<div class="grade g3">' + l.cenas.map(c =>
+      botao(esc(c.nome), {tipo: 'cena_luz', cena: c.id}, {classe: 'escolha', apertado: c.id === l.cena})).join('') + '</div>';
+  } else {
+    h += '<span class="miudo">Ainda não há cenas de luz salvas.</span>';
+  }
+  if ((l.modos || []).length) {
+    h += '<div style="display:flex;flex-direction:column;gap:6px"><span class="miudo">Movimento</span><div class="grade g3">' +
+      botao('Parado', {tipo: 'modo_luz', modo: 'parado'}, {classe: 'escolha', apertado: l.modo === 'parado'}) +
+      l.modos.map(m => '<span title="' + esc(m.descricao || '') + '" style="display:contents">' +
+        botao(esc(m.nome), {tipo: 'modo_luz', modo: m.id}, {classe: 'escolha', apertado: m.id === l.modo}) + '</span>').join('') + '</div></div>';
+  }
+  h += botao('Apagar todas as luzes', {tipo: 'apagar_luz'}, {classe: 'bt largo',
+    confirmar: {titulo: 'Apagar todas as luzes?', texto: 'O palco fica escuro até alguém escolher uma cena.', sim: 'Sim, apagar', perigo: true}});
+  pintar('cartao-luz', h);
 }
 
-async function irPara(momento) {
+function desenharTelao(d) {
+  const t = d.telao, c = d.controles || {}, recados = d.recados || [];
+  const tem = (t && c.tela_preta) || recados.length > 0;
+  mostrar('cartao-telao', !!tem);
+  if (!tem) return;
+  let h = '<h2>Telão e palco</h2>';
+  if (t && c.tela_preta) {
+    h += '<div class="linha"><span>Telão <b>' + (t.preta ? 'escuro' : 'mostrando') + '</b></span>' + (t.preta
+      ? botao('Voltar a mostrar', {tipo: 'tela_preta', ligar: false}, {classe: 'bt forte'})
+      : botao('Deixar a tela preta', {tipo: 'tela_preta', ligar: true})) + '</div>';
+  }
+  if (recados.length) {
+    h += '<div class="' + (t && c.tela_preta ? 'corte' : '') + '" style="display:flex;flex-direction:column;gap:6px">' +
+      '<span class="miudo">Recado para quem está no palco</span><div class="grade g2">' +
+      recados.map(r => botao(esc(r.nome), {tipo: 'recado', id: r.id})).join('') +
+      (d.tem_recado_limpar ? botao('Tirar o recado', {tipo: 'recado', id: 'recado_limpar'}) : '') + '</div></div>';
+  }
+  pintar('cartao-telao', h);
+}
+
+// ------------------------------------------------------------------- agir --
+let avisoRelogio = null;
+function avisar(texto, ruim) {
+  const a = $('aviso');
+  a.textContent = texto;
+  a.className = 'aviso-flutuante' + (ruim ? ' ruim' : '');
+  a.hidden = false;
+  clearTimeout(avisoRelogio);
+  avisoRelogio = setTimeout(() => { a.hidden = true; }, ruim ? 7000 : 3500);
+}
+
+function perguntar(c) {
+  return new Promise(resolver => {
+    const dlg = $('dialogo');
+    $('dialogo-titulo').textContent = c.titulo;
+    $('dialogo-texto').textContent = c.texto || '';
+    $('dialogo-sim').textContent = c.sim || 'Confirmar';
+    $('dialogo-sim').className = 'bt ' + (c.perigo ? 'perigo' : 'forte');
+    const fechar = resposta => { dlg.close(); $('dialogo-sim').onclick = $('dialogo-nao').onclick = dlg.oncancel = null; resolver(resposta); };
+    $('dialogo-sim').onclick = () => fechar(true);
+    $('dialogo-nao').onclick = () => fechar(false);
+    dlg.oncancel = e => { e.preventDefault(); fechar(false); };
+    dlg.showModal();
+    $('dialogo-nao').focus();
+  });
+}
+
+async function pedir(caminho, corpo) {
+  const r = await fetch(caminho, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(corpo || {})});
+  let j = {};
+  try { j = await r.json(); } catch (e) { /* resposta sem corpo */ }
+  if (r.status === 401) { location.href = '/entrar'; throw new Error('entre com a senha'); }
+  if (!r.ok) throw new Error(j.erro || ('erro ' + r.status));
+  return j;
+}
+
+async function agir(acao) {
   if (ocupado) return;
-  if (momento.confirmar && !confirm('Entrar em "' + momento.nome + '"?')) return;
-
-  ocupado = true;
-  elProximo.disabled = true;
-  document.querySelectorAll('.momento').forEach(b => b.disabled = true);
+  ocupado = true; redesenhar();
   try {
-    const r = await fetch('/api/ordem/ir/' + encodeURIComponent(momento.id), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      // A versao que ESTE painel viu. Se outro operador mexeu nesse meio
-      // tempo, o servidor recusa com 409 em vez de obedecer cego.
-      body: JSON.stringify({ versao: ORDEM ? ORDEM.versao : null })
-    });
-    const j = await r.json();
-    if (j.ordem) desenharOrdem(j.ordem);
-    if (r.ok) {
-      registrar(j);
-    } else if (j.ocupado) {
-      registrar({ nome: momento.nome, tudo_ok: false, passos: [
-        { sistema: 'Ponte', estado: 'erro', detalhe: 'outra cue ainda esta rodando' }] });
-    } else if (j.conflito) {
-      registrar({ nome: momento.nome, tudo_ok: false, passos: [
-        { sistema: 'Ponte', estado: 'erro', detalhe: 'alguem mudou a ordem; a tela foi atualizada' }] });
-    } else {
-      registrar({ nome: momento.nome, tudo_ok: false, passos: [
-        { sistema: 'Ponte', estado: 'erro', detalhe: j.erro || 'nao deu certo' }] });
+    const j = await pedir('/api/painel/acao', acao);
+    if (j.enviado) avisar('Pedido enviado para a igreja. Acompanhe na tela.');
+    else if (j.ok === false) avisar(j.titulo + ': ' + j.detalhe, true);
+    else avisar(j.titulo || 'Feito');
+  } catch (erro) {
+    avisar(erro.message, true);
+  }
+  ocupado = false;
+  await consultar();
+}
+
+function redesenhar() {
+  Object.keys(jaPintado).forEach(k => delete jaPintado[k]);
+  if (D) desenhar();
+}
+
+document.addEventListener('click', async evento => {
+  const alvo = evento.target.closest('button');
+  if (!alvo || alvo.disabled) return;
+  if (alvo.dataset.acao) {
+    if (alvo.dataset.confirmar && !(await perguntar(JSON.parse(alvo.dataset.confirmar)))) return;
+    agir(JSON.parse(alvo.dataset.acao));
+  } else if (alvo.dataset.copiar) {
+    try { await navigator.clipboard.writeText(alvo.dataset.copiar); avisar('Link copiado.'); }
+    catch (e) { avisar('Não consegui copiar. O link é: ' + alvo.dataset.copiar, true); }
+  } else if (alvo.dataset.remoto != null) {
+    const aceita = alvo.dataset.remoto === '1';
+    if (!aceita || await perguntar({titulo: 'Aceitar comandos pela web?', texto: 'Quem entrar no painel da web com a senha da equipe vai poder mudar o culto de fora da igreja.', sim: 'Sim, aceitar'})) {
+      try { await pedir('/api/painel/remoto', {aceita: aceita}); } catch (erro) { avisar(erro.message, true); }
+      consultar();
     }
-  } catch (e) {
-    registrar({ nome: momento.nome, tudo_ok: false, passos: [
-      { sistema: 'Ponte', estado: 'erro', detalhe: 'sem resposta do servidor' }] });
-  } finally {
-    ocupado = false;
-    document.querySelectorAll('.momento').forEach(b => b.disabled = false);
-    atualizarStatus();
-  }
-}
-
-async function rodar(cue, botao) {
-  if (cue.confirmar && !confirm('Rodar "' + cue.nome + '"?')) return;
-
-  const texto = botao.textContent;
-  botao.disabled = true;
-  botao.innerHTML = texto + '<span class="rodando">rodando...</span>';
-
-  try {
-    const r = await fetch('/api/cue/' + encodeURIComponent(cue.id), { method: 'POST' });
-    registrar(await r.json());
-  } catch (e) {
-    registrar({ nome: cue.nome, tudo_ok: false,
-      passos: [{ sistema: 'Ponte', estado: 'erro', detalhe: 'sem resposta do servidor' }] });
-  } finally {
-    botao.disabled = false;
-    botao.textContent = texto;
-    atualizarStatus();
-  }
-}
-
-function registrar(resultado) {
-  if (elRegistro.querySelector('.vazio')) elRegistro.innerHTML = '';
-
-  const div = document.createElement('div');
-  div.className = 'entrada ' + (resultado.tudo_ok ? 'ok' : 'falhou');
-
-  const titulo = document.createElement('div');
-  titulo.className = 'titulo';
-  titulo.textContent = resultado.nome + ' ';
-  const hora = document.createElement('span');
-  hora.textContent = new Date().toLocaleTimeString('pt-BR');
-  titulo.appendChild(hora);
-  div.appendChild(titulo);
-
-  for (const p of resultado.passos || []) {
-    const linha = document.createElement('div');
-    linha.className = 'passo ' + p.estado;
-    const sistema = document.createElement('span');
-    sistema.className = 'sistema';
-    sistema.textContent = p.sistema;
-    const texto = document.createElement('span');
-    texto.className = 'texto';
-    texto.textContent = (p.estado === 'ok' ? '' : p.estado + ' — ') + p.detalhe;
-    linha.append(sistema, texto);
-    div.appendChild(linha);
-  }
-
-  elRegistro.prepend(div);
-  while (elRegistro.children.length > 12) elRegistro.lastChild.remove();
-}
-
-async function atualizarStatus() {
-  try {
-    const sistemas = await (await fetch('/api/status')).json();
-    elStatus.innerHTML = '';
-    for (const s of sistemas) {
-      const pill = document.createElement('div');
-      pill.className = 'pill';
-      const ponto = document.createElement('span');
-      ponto.className = 'ponto ' + s.estado;
-      const nome = document.createElement('span');
-      nome.textContent = s.nome;
-      const detalhe = document.createElement('span');
-      detalhe.className = 'detalhe';
-      detalhe.textContent = s.detalhe;
-      pill.append(ponto, nome, detalhe);
-      // A pilula de Luzes leva para a mesa de teste. Sem este caminho a mesa
-      // existe e ninguem acha: quem precisa dela esta com a luz na frente,
-      // nao lendo manual.
-      if (s.nome === 'Luzes') {
-        const ir = document.createElement('a');
-        ir.href = '/luzes';
-        ir.textContent = 'mesa de teste →';
-        ir.style.cssText = 'margin-left:8px;color:var(--marca,#3b82f6);text-decoration:none;font-weight:600';
-        ir.title = 'descobrir canais e montar presets de luz';
-        pill.appendChild(ir);
-      }
-      elStatus.appendChild(pill);
-    }
-  } catch (e) {
-    elStatus.innerHTML = '<div class="pill"><span class="ponto erro"></span>Ponte fora do ar</div>';
-  }
-}
-
-const elAoVivo = document.getElementById('aovivo');
-
-function campo(rotulo, valor, apagado) {
-  const d = document.createElement('div');
-  d.className = 'campo';
-  const r = document.createElement('div');
-  r.className = 'rotulo';
-  r.textContent = rotulo;
-  const v = document.createElement('div');
-  v.className = 'valor' + (apagado ? ' apagado' : '');
-  v.textContent = valor;
-  d.append(r, v);
-  return d;
-}
-
-function marca(texto, classe) {
-  const s = document.createElement('span');
-  s.className = 'marca ' + classe;
-  s.textContent = texto;
-  return s;
-}
-
-async function atualizarAoVivo() {
-  let e;
-  try {
-    e = await (await fetch('/api/estado')).json();
-  } catch (err) {
-    elAoVivo.hidden = true;
-    return;
-  }
-
-  // Convergencia entre aparelhos: se outro operador avancou o culto pelo
-  // celular, este painel descobre aqui, sem ninguem recarregar nada. Nao
-  // redesenha no meio de um pedido nosso, para nao atropelar a resposta.
-  if (e.ordem && !ocupado && (!ORDEM || e.ordem.versao !== ORDEM.versao)) {
-    desenharOrdem(e.ordem);
-  }
-
-  // Sem nenhum dos dois respondendo, a barra some em vez de mentir
-  if (!e.holyrics && !e.obs) { elAoVivo.hidden = true; return; }
-  elAoVivo.hidden = false;
-  elAoVivo.innerHTML = '';
-
-  if (e.obs) {
-    const c = campo('No ar', e.obs.no_ar || '—');
-    if (e.obs.gravando)     c.appendChild(marca('gravando', 'gravando'));
-    if (e.obs.transmitindo) c.appendChild(marca('no ar', 'transmitindo'));
-    elAoVivo.appendChild(c);
-
-    if (e.obs.preview && e.obs.preview !== e.obs.no_ar) {
-      elAoVivo.appendChild(campo('Preparado', e.obs.preview));
+  } else if (alvo.id === 'bt-atualizar') {
+    if (await perguntar({titulo: 'Atualizar a Ponte agora?', texto: 'A ponte deste PC some por alguns segundos e volta sozinha. Não faça isso no meio de um momento do culto.', sim: 'Atualizar'})) {
+      try { await pedir('/api/painel/atualizar'); avisar('Atualizando. A tela volta sozinha.'); }
+      catch (erro) { avisar(erro.message, true); }
+      consultar();
     }
   }
+});
+document.addEventListener('change', async evento => {
+  if (evento.target.id !== 'troca-ordem') return;
+  const sel = evento.target, nome = sel.options[sel.selectedIndex].text;
+  if (await perguntar({titulo: 'Trocar para "' + nome + '"?', texto: 'A ordem do culto recomeça do primeiro momento.', sim: 'Trocar'})) agir({tipo: 'ordem', id: sel.value});
+  else redesenhar();
+});
+document.addEventListener('click', evento => {
+  const menu = $('menu');
+  if (menu.open && !menu.contains(evento.target)) menu.open = false;
+});
 
-  if (e.holyrics) {
-    const h = e.holyrics;
-    let c;
-    if (h.vazio) {
-      c = campo('Telão', 'nada no ar', true);
-    } else {
-      c = campo('Telão', h.nome || h.tipo || 'apresentação');
-      if (h.slide && h.total) {
-        const x = document.createElement('div');
-        x.className = 'extra';
-        x.textContent = 'slide ' + h.slide + ' de ' + h.total;
-        c.appendChild(x);
-      }
-    }
-    if (h.preta) c.appendChild(marca('tela preta', 'preta'));
-    elAoVivo.appendChild(c);
+// -------------------------------------------------------------- consultar --
+async function consultar() {
+  try {
+    const r = await fetch('/api/painel', {cache: 'no-store'});
+    if (r.status === 401) { location.href = '/entrar'; return; }
+    if (!r.ok) throw new Error('erro ' + r.status);
+    D = await r.json();
+    semContato = 0;
+  } catch (erro) {
+    semContato++;
+    if (!D) D = {ordem: {momentos: []}, sistemas: []};
   }
+  // Com um dialogo aberto ou alguem escolhendo no menu, a tela nao muda
+  // embaixo do dedo da pessoa.
+  if ($('dialogo').open || document.activeElement && document.activeElement.id === 'troca-ordem') return;
+  desenhar();
 }
-
-carregarTudo();
-atualizarStatus();
-atualizarAoVivo();
-setInterval(atualizarStatus, 15000);
-setInterval(atualizarAoVivo, 3000);
+consultar();
+setInterval(consultar, 2000);
 </script>
-
 </body>
 </html>

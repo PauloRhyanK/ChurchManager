@@ -188,5 +188,31 @@ document.addEventListener('input', ev => { if (ev.target.id === 'hora') F.hora =
 
 comecar();
 </script>
+<!-- ATUALIZACAO. Um aviso no pe da pagina quando a versao web tem um projeto
+     mais novo. Fica aqui, e nao no guia.js, porque a pagina do celular
+     (/chegada) usa o mesmo guia e la nao ha o que atualizar. -->
+<div id="faixa-atualizar" hidden style="position:fixed;left:12px;right:12px;bottom:12px;z-index:50;display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;background:#10213f;border:1px solid #284a86;color:#a9c9ff;border-radius:14px;padding:12px 16px;font-size:15px">
+  <span style="flex:1 1 240px"><b style="color:#fff">Há uma atualização da Ponte.</b> Leva menos de um minuto; a página some e volta sozinha.</span>
+  <button type="button" id="bt-atualizar-aqui" style="min-height:46px;padding:0 18px;border-radius:12px;border:none;background:#2563eb;color:#fff;font-weight:700">Atualizar agora</button>
+</div>
+<script>
+(function () {
+  var faixa = document.getElementById('faixa-atualizar'), bt = document.getElementById('bt-atualizar-aqui');
+  function olhar() {
+    fetch('/api/atualizacao', {cache: 'no-store'}).then(function (r) { return r.json(); }).then(function (a) {
+      faixa.hidden = !(a.disponivel || a.aplicando);
+      bt.disabled = !!a.aplicando;
+      bt.textContent = a.aplicando ? 'Atualizando…' : 'Atualizar agora';
+    }).catch(function () {});
+  }
+  bt.addEventListener('click', function () {
+    bt.disabled = true; bt.textContent = 'Atualizando…';
+    fetch('/api/painel/atualizar', {method: 'POST'}).then(function (r) { return r.json(); }).then(function (j) {
+      if (j.erro) { bt.disabled = false; bt.textContent = 'Atualizar agora'; faixa.firstElementChild.textContent = j.erro; }
+    }).catch(function () {});
+  });
+  olhar(); setInterval(olhar, 60000);
+})();
+</script>
 </body>
 </html>

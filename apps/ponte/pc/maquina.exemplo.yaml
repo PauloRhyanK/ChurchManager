@@ -23,3 +23,8 @@
 # ===========================================================================
 papel: holyrics
 nome: PC do Holyrics
+
+# ATUALIZAÇÃO. Ao ligar, este PC traz sozinho o projeto novo da versão web (menos o
+# PC do som, que só atualiza pelo botão, porque leva a luz). Para um PC nunca se
+# atualizar sozinho — o de quem DESENVOLVE o projeto, por exemplo — descomente:
+# atualizar: nunca

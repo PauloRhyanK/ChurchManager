@@ -140,7 +140,9 @@ Linha
 Write-Host ""
 
 Set-Location $PASTA
-& $python app.py
+# iniciar.py sobe o app.py e cuida dele: atualiza ao ligar, religa depois
+# do botao Atualizar, e volta para a versao anterior se a nova nao subir.
+& $python iniciar.py
 
 # --- Se chegou aqui, o Python saiu: ou alguem fechou, ou deu erro. A pausa
 #     existe para a mensagem acima ficar legivel, em vez de a janela sumir

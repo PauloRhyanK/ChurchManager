@@ -72,6 +72,9 @@ dela, `configurar-este-pc.bat` pergunta o papel da máquina e faz o resto. Detal
 - **No ar na VPS:** o espelho web com senha, em `https://ponte.igrejaparaiso.com.br`
   (contêiner `ponte-web`; ver [`docs/IMPLANTAR-NA-VPS.md`](docs/IMPLANTAR-NA-VPS.md)). A
   igreja ainda não foi ligada a ele.
+- **Feito e testado só localmente (12/11/2026):** o painel do culto novo, que é a mesma
+  tela no PC, no celular e em `ponte.igrejaparaiso.com.br/painel`, com comandos pela
+  web; a atualização automática dos PCs; a tela de montar cena redesenhada.
 - **Feito e testado só localmente:** instalador `configurar-este-pc`; o cofre da versão
   web e o envio da configuração pelo PC principal.
 - **Escrito e ainda não testado num Windows:** `instalar-do-zero.ps1`, o instalador de
@@ -81,4 +84,4 @@ dela, `configurar-este-pc.bat` pergunta o papel da máquina e faz o resto. Detal
   parado, porque cria um vídeo no canal.
 - **Ainda não feito:** ligar o PC do Holyrics à versão web (chave no `config.yaml`),
   instalação no notebook, troca da versão antiga no PC do som, troca automática de
-  principal, e o painel de momentos do culto na versão web.
+  principal.

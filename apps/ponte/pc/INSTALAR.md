@@ -38,6 +38,25 @@ notebook da transmissão, copie de `%APPDATA%\obs-studio\basic\`:
 
 O perfil tem a chave de transmissão do YouTube. A pasta `obs/` nunca entra no Git.
 
+## Atualizar os PCs
+
+Quando o projeto muda, **não é preciso reinstalar**. Cada PC pergunta à versão web, de
+10 em 10 minutos, se há projeto mais novo:
+
+- **Ao ligar o PC**, a ponte traz a versão nova antes de subir. O PC do som não faz
+  isso (ele leva a luz), e nenhum PC faz se um culto parece estar em andamento.
+- **Com o PC já ligado**, aparece a faixa "Há uma atualização da Ponte" no painel e na
+  página do PC, com o botão **Atualizar agora**. A ponte some por alguns segundos e
+  volta sozinha. Fora do culto, de preferência.
+- **O que é da igreja não é tocado:** `config.yaml`, `maquina.yaml`, `chegada.yaml`,
+  as cenas de luz, as credenciais e a pasta `obs/`.
+- **Se a versão nova não subir**, a ponte volta sozinha para a anterior, que fica
+  guardada em `_versao_anterior/`.
+- No menu **Mais** do painel há a lista dos PCs e quem ainda precisa atualizar.
+
+Isso só funciona em PCs abertos pelo atalho **Ponte do Culto** (o `iniciar-ponte.bat`).
+Um PC que nunca deve se atualizar sozinho leva `atualizar: nunca` no `maquina.yaml`.
+
 ## Passo a passo, sem o instalador
 
 ## 1. Python (uma vez por PC)

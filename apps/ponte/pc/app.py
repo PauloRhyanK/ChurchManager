@@ -6,8 +6,10 @@ cue correspondente contra OBS, Holyrics e luzes.
 Rode pelo INICIAR.bat. Para parar, feche a janela.
 """
 
+import collections
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -17,6 +19,7 @@ import time
 import yaml
 from flask import Flask, Response, jsonify, request, send_from_directory
 
+from ponte import atualizar as mod_atualizar
 from ponte import chegada as mod_chegada
 from ponte import cofre as mod_cofre
 from ponte import espelho as mod_espelho
@@ -24,6 +27,7 @@ from ponte import luzes as mod_luzes
 from ponte import mesa as mod_mesa
 from ponte import movimento as mod_movimento
 from ponte import seguidor as mod_seguidor
+from ponte import versao as mod_versao
 from ponte import youtube as mod_youtube
 from ponte.cues import executar
 from ponte.holyrics import ClienteHolyrics
@@ -574,6 +578,7 @@ def _ler_estado_obs():
         "preview": cenas.get("currentPreviewSceneName"),
         "gravando": bool(gravacao.get("outputActive")),
         "transmitindo": bool(transmissao.get("outputActive")),
+        "tempo_ms": transmissao.get("outputDuration") if transmissao.get("outputActive") else None,
     }
 
 
@@ -1586,11 +1591,17 @@ def _carregar_maquina():
 def _pedir_ao_principal(metodo, caminho, corpo=None, timeout=4.0, cru=False):
     """Fala com a maquina principal. Devolve (corpo, codigo_http)."""
     import urllib.error
+    import urllib.parse
     import urllib.request
     dados = json.dumps(corpo or {}).encode("utf-8") if metodo == "POST" else None
     pedido = urllib.request.Request(
         _maquina["principal"] + caminho, data=dados, method=metodo,
-        headers={"Content-Type": "application/json"})
+        headers={"Content-Type": "application/json",
+                 # A principal anota quem falou com ela: e assim que o painel
+                 # (e a versao web) sabem quais PCs estao vivos e em que versao.
+                 "X-Ponte-Maquina": urllib.parse.quote(_maquina["nome"]),
+                 "X-Ponte-Papel": _maquina["papel"],
+                 "X-Ponte-Versao": _atualizacao["aqui"] or ""})
     try:
         with urllib.request.urlopen(pedido, timeout=timeout) as resposta:
             bruto = resposta.read()
@@ -1651,6 +1662,11 @@ def _pedido_da_web(comando):
         _chegada.definir_culto(corpo.get("ordem"), corpo.get("hora"), corpo.get("presentes"))
     elif tipo == "recomecar":
         _chegada.recomecar()
+    elif tipo == "painel":
+        # O painel do culto, pela web. A lista do que pode ser pedido e a
+        # mesma do painel local (_acao_do_painel), e a chave "aceitar comandos
+        # pela web" e conferida la dentro.
+        _acao_do_painel(corpo, "web")
     else:
         print("  [espelho] pedido desconhecido ignorado: {!r}".format(tipo))
 
@@ -1667,7 +1683,8 @@ def _montar_espelho():
         print("[aviso] versao web ligada no config, mas sem chave: espelho desligado")
         return None
     return mod_espelho.Espelho(url, chave, _chegada.retrato, _pedido_da_web,
-                               nome=_maquina["nome"])
+                               nome=_maquina["nome"],
+                               extra=lambda: {"painel": _retrato_do_painel()})
 
 
 # -- o cofre na versao web ----------------------------------------------------
@@ -1716,6 +1733,7 @@ def aqui_retrato():
         "principal_ok": True, "chegada": None,
         "web": _espelho["valor"].retrato() if _espelho["valor"] else None,
         "cofre": _cofre["valor"].retrato() if _cofre["valor"] else None,
+        "atualizacao": _retrato_da_atualizacao(),
     }
     if _maquina["principal"] is None:
         corpo["chegada"] = _chegada.retrato()
@@ -1955,6 +1973,526 @@ def _retomar_ordem(config):
             _carregar_ordem(next(iter(_ordens_por_id)))
 
 
+# ---------------------------------------------------------------------------
+#  O PAINEL DO CULTO
+#
+#  Uma rota para LER (/api/painel) e uma para AGIR (/api/painel/acao). E o
+#  mesmo retrato e a mesma lista de acoes para a tela do PC, a do celular e a
+#  da versao web: a web recebe o retrato pelo espelho e devolve as acoes pela
+#  fila de pedidos. Por isso tudo aqui funciona SEM requisicao em curso (a
+#  acao que vem da web roda numa thread do espelho).
+#
+#  O QUE A TELA PODE PEDIR cabe na lista de _acao_do_painel. Nao ha rota
+#  generica "rode esta cue": o painel na internet nao pode virar um jeito de
+#  rodar qualquer coisa do config.
+# ---------------------------------------------------------------------------
+_historico = collections.deque(maxlen=40)
+_remoto = {"aceita": True}
+_luz_escolhida = {"cena": None}
+_maquinas_vistas = {}
+_yt_painel = {"em": 0.0, "dados": None, "pedir": True}
+_atualizacao = {"aqui": None, "la": None, "em": None, "erro": None, "aplicando": False}
+CAMINHO_REMOTO = os.path.join(RAIZ, "_remoto.json")
+
+# controle do painel -> (cue que liga, cue que desliga). Se a igreja nao tem
+# as duas no config, o controle simplesmente nao aparece.
+PARES = {
+    "gravar": ("gravar", "parar_gravacao"),
+    "transmitir": ("transmitir", "parar_transmissao"),
+    "tela_preta": ("tela_preta", "tela_volta"),
+}
+
+
+def _nome_de_cena(nome):
+    """'2. Louvor' -> 'Louvor'. Ou o apelido que a igreja deu em obs.apelidos."""
+    if not nome:
+        return None
+    apelidos = (_config.get("obs") or {}).get("apelidos") or {}
+    if nome in apelidos:
+        return str(apelidos[nome])
+    return re.sub(r"^\s*\d+\s*[.\-)]\s*", "", str(nome)) or str(nome)
+
+
+# Os nomes das cenas sao ids, sem acento (e o que as cues usam). Na tela, os
+# mais comuns voltam a ter acento; os outros, a igreja nomeia em luzes.nomes.
+_ACENTOS = {"pregacao": "Pregação", "celebracao": "Celebração", "oracao": "Oração",
+            "servico": "Serviço", "adoracao": "Adoração", "comunhao": "Comunhão",
+            "ofertorio": "Ofertório", "transmissao": "Transmissão"}
+
+
+def _nome_de_luz(nome):
+    nomes = (_config.get("luzes") or {}).get("nomes") or {}
+    chave = str(nome)
+    if chave in nomes:
+        return str(nomes[chave])
+    return _ACENTOS.get(chave) or chave.replace("_", " ").strip().capitalize()
+
+
+def _resumo_do_momento(cue):
+    """O que o momento faz, em palavras de gente. Sai dos proprios passos."""
+    if cue.get("descricao"):
+        return str(cue["descricao"])
+    frases = []
+    for passo in cue.get("passos") or []:
+        if not isinstance(passo, dict):
+            continue
+        frase = None
+        if "luzes" in passo:
+            alvo = str(passo["luzes"])
+            frase = "apaga a luz" if alvo == "apagar" else "luz de " + _nome_de_luz(alvo).lower()
+        elif "obs" in passo:
+            dados = passo["obs"] or {}
+            tipo = dados.get("requestType")
+            cena = (dados.get("requestData") or {}).get("sceneName")
+            if tipo in ("SetCurrentPreviewScene", "SetCurrentProgramScene") and cena:
+                frase = "prepara a imagem " + _nome_de_cena(cena)
+            else:
+                frase = {"StartStream": "inicia a transmissão", "StopStream": "para a transmissão",
+                         "StartRecord": "inicia a gravação", "StopRecord": "para a gravação"}.get(tipo)
+        elif "obs_fonte" in passo:
+            dados = passo["obs_fonte"] or {}
+            if "letra" in str(dados.get("fonte", "")).lower():
+                frase = ("mostra as letras na transmissão" if dados.get("visivel")
+                         else "tira as letras da transmissão")
+        elif "holyrics" in passo:
+            dados = passo["holyrics"] or {}
+            acao = dados.get("action")
+            if acao == "SetF10":
+                frase = ("deixa o telão preto" if (dados.get("payload") or {}).get("enable")
+                         else "mostra o telão")
+            elif acao == "CloseCurrentPresentation":
+                frase = "fecha o que está no telão"
+        if frase and frase not in frases:
+            frases.append(frase)
+    if not frases:
+        return ""
+    texto = ", ".join(frases)
+    return texto[0].upper() + texto[1:] + "."
+
+
+def _cena_de_luz_atual():
+    """O nome da cena que esta acesa, quando da para saber."""
+    cliente = _contexto.get("luzes")
+    if cliente is None:
+        return None
+    if hasattr(cliente, "retrato"):
+        try:
+            acesos = {int(c): int(v) for c, v in (cliente.retrato().get("canais") or {}).items()}
+        except Exception:
+            acesos = None
+        if acesos is not None:
+            if not acesos:
+                return "apagar"
+            for nome, canais in (_contexto.get("looks") or {}).items():
+                try:
+                    if {int(c): int(v) for c, v in (canais or {}).items() if int(v)} == acesos:
+                        return str(nome)
+                except (TypeError, ValueError):
+                    continue
+            return None
+    return _luz_escolhida["cena"]
+
+
+def _sistemas_do_painel():
+    """Quatro luzinhas, sem jargao e sem chamar ninguem na rede: sai do que a
+    thread de estado ja leu."""
+    with _tranca_estado:
+        obs, holyrics = _estado.get("obs"), _estado.get("holyrics")
+    itens = []
+
+    def por(nome, ligado, ok, falha):
+        if not ligado:
+            itens.append({"nome": nome, "estado": "desligado", "detalhe": "desligado neste PC"})
+        else:
+            itens.append({"nome": nome, "estado": "ok" if ok else "erro",
+                          "detalhe": "" if ok else falha})
+
+    por("Transmissão", _contexto.get("obs_saude") is not None, obs is not None,
+        "o OBS não responde. O notebook da transmissão está ligado, com o OBS aberto?")
+    por("Telão", _contexto.get("holyrics_saude") is not None, holyrics is not None,
+        "o Holyrics não responde. Ele está aberto neste PC?")
+    luz = _contexto.get("luzes")
+    if luz is not None and hasattr(luz, "retrato"):
+        visto = _luz_vista.get("em")
+        por("Luz", True, bool(visto and time.time() - visto < 12),
+            "o PC do som não está buscando a luz. Ele está ligado, com a ponte aberta?")
+    else:
+        por("Luz", luz is not None, True, "")
+    espelho = _espelho["valor"].retrato() if _espelho["valor"] else None
+    if espelho is not None:
+        por("Painel na web", True, espelho.get("ok") is not False,
+            "sem contato com a versão web. A internet caiu?")
+    return itens
+
+
+def _retrato_da_atualizacao():
+    a = _atualizacao
+    return {"aqui": a["aqui"], "la": a["la"], "erro": a["erro"], "aplicando": a["aplicando"],
+            "disponivel": bool(a["aqui"] and a["la"] and a["aqui"] != a["la"])}
+
+
+def _maquinas_do_painel():
+    agora = time.time()
+    lista = [{"nome": _maquina["nome"], "papel": _maquina["papel"],
+              "versao": _atualizacao["aqui"], "viva": True, "esta": True}]
+    for nome, m in sorted(_maquinas_vistas.items()):
+        lista.append({"nome": nome, "papel": m["papel"], "versao": m["versao"],
+                      "viva": agora - m["em"] < 30, "esta": False})
+    return lista
+
+
+def _retrato_do_painel():
+    with _tranca_estado:
+        obs, holyrics = _estado.get("obs"), _estado.get("holyrics")
+    with _tranca_ordem:
+        ordem = _retrato_da_ordem()
+    for momento in ordem["momentos"]:
+        momento["resumo"] = _resumo_do_momento(_cues_por_id.get(momento["id"]) or {})
+
+    transmissao = None
+    if obs is not None:
+        preparada = obs.get("preview") if obs.get("preview") != obs.get("no_ar") else None
+        transmissao = {
+            "imagem": _nome_de_cena(obs.get("no_ar")),
+            "preparada": _nome_de_cena(preparada),
+            "no_ar": bool(obs.get("transmitindo")),
+            "gravando": bool(obs.get("gravando")),
+            "tempo_ms": obs.get("tempo_ms"),
+            "youtube": _yt_painel["dados"],
+        }
+    telao = None
+    if holyrics is not None:
+        telao = {"vazio": bool(holyrics.get("vazio")), "nome": holyrics.get("nome") or "",
+                 "slide": holyrics.get("slide"), "total": holyrics.get("total"),
+                 "preta": holyrics.get("preta")}
+    luz = None
+    if _contexto.get("luzes") is not None:
+        motor = _contexto.get("movimento")
+        nomes = [str(n) for n in (_contexto.get("looks") or {}) if str(n) != "apagar"]
+        luz = {
+            "cena": _cena_de_luz_atual(),
+            "cenas": [{"id": n, "nome": _nome_de_luz(n)} for n in sorted(nomes)],
+            "modo": (motor.atual() if motor else None) or "parado",
+            # Os perigosos (estrobo) nao entram no painel do culto.
+            "modos": [{"id": m["id"], "nome": m["nome"], "descricao": m["descricao"]}
+                      for m in (motor.catalogo() if motor else []) if not m["perigoso"]],
+        }
+    controles = {nome: all(c in _cues_por_id for c in par) for nome, par in PARES.items()}
+    controles["cortar"] = _contexto.get("obs") is not None
+    recados = [{"id": c["id"], "nome": c.get("nome", c["id"])} for c in _cues_por_id.values()
+               if str(c["id"]).startswith("recado_") and c["id"] != "recado_limpar"]
+    return {
+        "maquina": _maquina["nome"],
+        "papel": _maquina["papel"],
+        "hora": time.strftime("%H:%M"),
+        "ordem": ordem,
+        "ordens": [{"id": o["id"], "nome": o["nome"]} for o in _ordens_por_id.values()],
+        "sistemas": _sistemas_do_painel(),
+        "transmissao": transmissao,
+        "telao": telao,
+        "luz": luz,
+        "controles": controles,
+        "recados": recados,
+        "tem_recado_limpar": "recado_limpar" in _cues_por_id,
+        "historico": list(_historico)[:12],
+        "remoto": dict(_remoto),
+        "atualizacao": _retrato_da_atualizacao(),
+        "maquinas": _maquinas_do_painel(),
+    }
+
+
+def _anotar(titulo, ok, detalhe, origem):
+    _historico.appendleft({"hora": time.strftime("%H:%M"), "titulo": titulo, "ok": bool(ok),
+                           "detalhe": detalhe, "origem": origem})
+
+
+def _o_que_falhou(passos):
+    falhas = [p for p in passos if p.get("estado") == "erro"]
+    if not falhas:
+        return "tudo certo"
+    return "{} de {} passos falharam: {}".format(
+        len(falhas), len(passos),
+        "; ".join("{} ({})".format(p.get("rotulo") or p.get("sistema") or "passo",
+                                   str(p.get("detalhe") or "")[:80]) for p in falhas[:3]))
+
+
+def _rodar_cue_do_painel(cue_id):
+    cue = _cues_por_id.get(cue_id)
+    if cue is None:
+        return {"erro": "este PC não tem essa ação configurada"}, 404
+    if not _tranca_de_cue.acquire(blocking=False):
+        return {"erro": "outra ação ainda está rodando. Espere um instante.", "ocupado": True}, 409
+    try:
+        passos = executar(cue, _contexto)
+    finally:
+        _tranca_de_cue.release()
+    ok = all(p["estado"] != "erro" for p in passos)
+    return {"ok": ok, "titulo": cue.get("nome", cue_id), "detalhe": _o_que_falhou(passos)}, 200
+
+
+def _luz_do_momento(cue):
+    for passo in cue.get("passos") or []:
+        if isinstance(passo, dict) and "luzes" in passo:
+            return str(passo["luzes"])
+    return None
+
+
+def _acao_do_painel(dados, origem):
+    """Executa UMA acao do painel. Devolve (corpo, codigo_http).
+
+    `origem` e "local" (alguem na rede da igreja) ou "web". Tudo que passa
+    por aqui fica anotado no historico, com a origem.
+    """
+    dados = dados if isinstance(dados, dict) else {}
+    tipo = str(dados.get("tipo") or "")
+    if origem == "web" and not _remoto["aceita"]:
+        _anotar("Pedido pela web recusado", False,
+                "os comandos pela web estão desligados neste PC", origem)
+        return {"erro": "os comandos pela web estão desligados na igreja"}, 403
+    titulo = tipo
+    try:
+        if tipo == "ir":
+            momento = str(dados.get("momento") or "")
+            with _tranca_ordem:
+                if momento not in _ordem["momentos"]:
+                    return {"erro": "esse momento não está na ordem de hoje"}, 404
+                indice = _ordem["momentos"].index(momento)
+            corpo, codigo = _transicionar(indice, dados.get("versao"))
+            cue = _cues_por_id.get(momento) or {}
+            titulo = cue.get("nome", momento)
+            if codigo != 200:
+                if corpo.get("conflito"):
+                    corpo["erro"] = "alguém mudou o momento agora há pouco. Confira a tela e toque de novo."
+                elif corpo.get("ocupado"):
+                    corpo["erro"] = "outra ação ainda está rodando. Espere um instante."
+                return corpo, codigo
+            _luz_escolhida["cena"] = _luz_do_momento(cue) or _luz_escolhida["cena"]
+            resultado = {"ok": corpo["tudo_ok"], "titulo": titulo,
+                         "detalhe": _o_que_falhou(corpo["passos"])}
+        elif tipo in PARES:
+            liga, desliga = PARES[tipo]
+            resultado, codigo = _rodar_cue_do_painel(liga if dados.get("ligar") else desliga)
+            if codigo != 200:
+                return resultado, codigo
+            titulo = resultado["titulo"]
+            if tipo == "transmitir":
+                _yt_painel["pedir"] = True
+        elif tipo == "recado":
+            alvo = str(dados.get("id") or "")
+            if not alvo.startswith("recado_"):
+                return {"erro": "recado desconhecido"}, 400
+            resultado, codigo = _rodar_cue_do_painel(alvo)
+            if codigo != 200:
+                return resultado, codigo
+            titulo = resultado["titulo"]
+        elif tipo in ("cena_luz", "apagar_luz"):
+            cliente = _contexto.get("luzes")
+            if cliente is None:
+                return {"erro": "a luz está desligada neste PC"}, 400
+            canais = {numero: 0 for numero in range(1, 513)}
+            nome = "apagar"
+            if tipo == "cena_luz":
+                nome = str(dados.get("cena") or "")
+                look = (_contexto.get("looks") or {}).get(nome)
+                if look is None:
+                    return {"erro": "essa cena de luz não existe mais"}, 404
+                for canal, valor in look.items():
+                    canais[int(canal)] = int(valor)
+            cliente.aplicar(canais)
+            _luz_escolhida["cena"] = nome
+            titulo = "Luz apagada" if tipo == "apagar_luz" else "Luz: " + _nome_de_luz(nome)
+            resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
+        elif tipo == "modo_luz":
+            motor = _contexto.get("movimento")
+            if motor is None:
+                return {"erro": "o movimento de luz não está disponível neste PC"}, 400
+            nome = str(dados.get("modo") or "parado")
+            if any(m["id"] == nome and m["perigoso"] for m in motor.catalogo()):
+                return {"erro": "esse movimento só pode ser ligado no estúdio de luz"}, 403
+            try:
+                escolhido = motor.escolher(None if nome == "parado" else nome)
+            except mod_movimento.ErroMovimento:
+                return {"erro": "esse movimento não existe"}, 404
+            cliente = _contexto.get("luzes")
+            if cliente is not None:
+                try:
+                    cliente.reenviar()
+                except Exception:
+                    pass
+            titulo = "Movimento da luz: " + (escolhido or "parado")
+            resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
+        elif tipo == "cortar":
+            cliente = _contexto.get("obs")
+            if cliente is None:
+                return {"erro": "a transmissão está desligada neste PC"}, 400
+            cliente.pedir("TriggerStudioModeTransition")
+            titulo = "Imagem preparada posta no ar"
+            resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
+        elif tipo == "visibilidade":
+            valor = str(dados.get("valor") or "")
+            if valor not in ("public", "unlisted"):
+                return {"erro": "visibilidade desconhecida"}, 400
+            feito = False
+            for canal in (_contexto.get("youtube") or {}).values():
+                cliente = canal["cliente"]
+                if not cliente.autorizado():
+                    continue
+                atual = cliente.transmissao("active") or cliente.transmissao("upcoming")
+                if atual:
+                    cliente.atualizar(atual, privacidade=valor)
+                    feito = True
+                    break
+            if not feito:
+                return {"erro": "não achei uma transmissão no YouTube para mudar. "
+                                "Ela já foi preparada?"}, 409
+            _yt_painel["pedir"] = True
+            titulo = ("Transmissão aberta ao público" if valor == "public"
+                      else "Transmissão só para quem tem o link")
+            resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
+        elif tipo == "ordem":
+            with _tranca_ordem:
+                if not _carregar_ordem(str(dados.get("id") or "")):
+                    return {"erro": "essa ordem de culto não existe"}, 404
+            _salvar_ponteiro()
+            titulo = "Ordem do culto: " + (_ordem["nome"] or "")
+            resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
+        else:
+            return {"erro": "o painel não sabe fazer isso"}, 400
+    except Exception as erro:
+        _anotar(titulo, False, str(erro)[:160], origem)
+        return {"erro": "não deu certo: " + str(erro)[:160]}, 502
+    _anotar(resultado["titulo"], resultado["ok"], resultado["detalhe"], origem)
+    return resultado, 200
+
+
+@app.before_request
+def _anotar_quem_falou():
+    """Uma maquina secundaria se apresenta em cada pedido (ver
+    _pedir_ao_principal). Guardar isso custa nada e responde 'o notebook esta
+    vivo? em que versao?' sem ninguem ir ate la."""
+    nome = request.headers.get("X-Ponte-Maquina")
+    if nome:
+        import urllib.parse
+        _maquinas_vistas[urllib.parse.unquote(nome)[:60]] = {
+            "papel": request.headers.get("X-Ponte-Papel", "")[:20],
+            "versao": request.headers.get("X-Ponte-Versao", "")[:20] or None,
+            "em": time.time()}
+    return None
+
+
+@app.get("/api/painel")
+def painel_retrato():
+    corpo = _retrato_do_painel()
+    corpo["local"] = True
+    return jsonify(corpo)
+
+
+@app.post("/api/painel/acao")
+def painel_acao():
+    corpo, codigo = _acao_do_painel(request.get_json(silent=True) or {}, "local")
+    return jsonify(corpo), codigo
+
+
+@app.post("/api/painel/remoto")
+def painel_remoto():
+    """Liga e desliga 'aceitar comandos pela web'. So existe AQUI, na rede da
+    igreja: a versao web nao tem como religar a si mesma."""
+    _remoto["aceita"] = bool((request.get_json(silent=True) or {}).get("aceita"))
+    try:
+        with open(CAMINHO_REMOTO, "w", encoding="utf-8") as arq:
+            json.dump(_remoto, arq)
+    except OSError:
+        pass
+    _anotar("Comandos pela web " + ("ligados" if _remoto["aceita"] else "desligados"),
+            True, "tudo certo", "local")
+    return jsonify(_remoto)
+
+
+# -- atualizacao ---------------------------------------------------------------
+
+def _endereco_de_atualizacao():
+    return ((_config.get("atualizacao") or {}).get("url")
+            or (_config.get("web") or {}).get("url") or mod_atualizar.ENDERECO_PADRAO)
+
+
+def _vigiar_atualizacao():
+    """De 10 em 10 minutos pergunta a versao web se ha projeto mais novo. So
+    PERGUNTA: quem decide trazer e uma pessoa, pelo botao."""
+    try:
+        _atualizacao["aqui"] = mod_versao.calcular(RAIZ)
+    except Exception as erro:
+        _atualizacao["erro"] = str(erro)[:120]
+        return
+    # Chegou ate aqui e ficou no ar: a versao nova, se era nova, presta.
+    threading.Timer(60.0, mod_atualizar.confirmar, args=(RAIZ,)).start()
+    time.sleep(15)
+    while True:
+        try:
+            _atualizacao["la"] = mod_atualizar.consultar(_endereco_de_atualizacao())["versao"]
+            _atualizacao["erro"] = None
+        except Exception as erro:
+            _atualizacao["erro"] = type(erro).__name__
+        _atualizacao["em"] = time.time()
+        time.sleep(600)
+
+
+@app.get("/api/atualizacao")
+def atualizacao_retrato():
+    return jsonify(_retrato_da_atualizacao())
+
+
+@app.post("/api/painel/atualizar")
+def painel_atualizar():
+    """Traz o projeto novo e religa a ponte. A ponte some por alguns segundos:
+    por isso e um botao, e nunca acontece sozinho com o PC ja ligado."""
+    if _atualizacao["aplicando"]:
+        return jsonify({"erro": "a atualização já está em andamento"}), 409
+    if not os.environ.get("PONTE_INICIADA_PELO_LANCADOR"):
+        return jsonify({"erro": "esta ponte foi aberta do jeito antigo e não sabe se religar. "
+                                "Feche a janela preta e abra pelo atalho Ponte do Culto."}), 409
+    if not _tranca_de_cue.acquire(blocking=False):
+        return jsonify({"erro": "uma ação do culto está rodando. Espere e tente de novo."}), 409
+    _tranca_de_cue.release()
+    _atualizacao["aplicando"] = True
+
+    def trabalhar():
+        try:
+            feito = mod_atualizar.aplicar(_endereco_de_atualizacao(), RAIZ)
+            print("  [atualizacao] {} -> {}. Religando a ponte...".format(feito["de"], feito["para"]))
+            time.sleep(1.0)
+            os._exit(42)       # o iniciar.py entende 42 como "suba de novo"
+        except Exception as erro:
+            _atualizacao["erro"] = str(erro)[:160]
+            _atualizacao["aplicando"] = False
+            _anotar("Atualização", False, str(erro)[:160], "local")
+
+    threading.Thread(target=trabalhar, daemon=True).start()
+    return jsonify({"ok": True})
+
+
+def _vigiar_youtube():
+    """O titulo, o link e quem pode assistir. O YouTube cobra por consulta,
+    entao isto roda de 2 em 2 minutos, ou logo depois de alguem mexer."""
+    while True:
+        if _yt_painel["pedir"] or time.time() - _yt_painel["em"] > 120:
+            _yt_painel["pedir"] = False
+            dados = None
+            try:
+                for cid, canal in (_contexto.get("youtube") or {}).items():
+                    retrato = _retrato_canal(cid, canal)
+                    if retrato.get("transmissao"):
+                        t = retrato["transmissao"]
+                        dados = {"titulo": t.get("titulo"), "link": t.get("link"),
+                                 "publica": t.get("privacidade") == "public",
+                                 "estado": t.get("estado")}
+                        break
+            except Exception:
+                dados = _yt_painel["dados"]
+            _yt_painel.update({"dados": dados, "em": time.time()})
+        time.sleep(5)
+
+
+
 def main():
     global _config, _contexto, _cues_por_id, _ordens_por_id, _chegada
 
@@ -1998,6 +2536,14 @@ def main():
     if _espelho["valor"] is not None:
         _espelho["valor"].comecar()
         print("  [espelho] ligado: entregando o estado para a versao web")
+    try:
+        with open(CAMINHO_REMOTO, encoding="utf-8") as arq:
+            _remoto["aceita"] = bool(json.load(arq).get("aceita", True))
+    except (OSError, ValueError):
+        pass
+    threading.Thread(target=_vigiar_atualizacao, daemon=True).start()
+    if _contexto.get("youtube"):
+        threading.Thread(target=_vigiar_youtube, daemon=True).start()
     _cofre["valor"] = _montar_cofre()
     if _cofre["valor"] is not None:
         _cofre["valor"].comecar()

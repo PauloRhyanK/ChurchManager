@@ -28,12 +28,15 @@ PAUSA_COM_ERRO = 10.0
 
 
 class Espelho:
-    def __init__(self, url, chave, retrato, executar, nome="", timeout=6.0):
+    def __init__(self, url, chave, retrato, executar, nome="", timeout=6.0, extra=None):
         self._url = str(url).rstrip("/") + "/api/espelho"
         self._chave = str(chave)
         self._retrato = retrato
         self._executar = executar
         self._nome = nome
+        # `extra` devolve mais coisas para ir junto (o retrato do painel do
+        # culto). Se falhar, o guia de chegada continua indo sozinho.
+        self._extra = extra
         self._timeout = timeout
         self._estado = {"ok": None, "em": None, "erro": None}
 
@@ -58,8 +61,13 @@ class Espelho:
             time.sleep(pausa)
 
     def _uma_volta(self):
-        corpo = json.dumps({"maquina": self._nome, "chegada": self._retrato()},
-                           ensure_ascii=False).encode("utf-8")
+        dados = {"maquina": self._nome, "chegada": self._retrato()}
+        if self._extra is not None:
+            try:
+                dados.update(self._extra())
+            except Exception as erro:
+                print("  [espelho] o retrato do painel falhou: {}".format(erro))
+        corpo = json.dumps(dados, ensure_ascii=False).encode("utf-8")
         pedido = urllib.request.Request(
             self._url, data=corpo, method="POST",
             headers={"Content-Type": "application/json", "X-Ponte-Chave": self._chave})
