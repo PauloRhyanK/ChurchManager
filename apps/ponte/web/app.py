@@ -444,6 +444,9 @@ def _do_papel(nome, papel):
         return papel == "holyrics"          # token do Holyrics, senha do OBS, chave da web
     if nome.startswith("obs/"):
         return papel in ("holyrics", "transmissao")   # tem a chave do YouTube
+    if nome.startswith("_") and nome.endswith(".json"):
+        # Credenciais do YouTube e o estado do culto: so a principal usa.
+        return papel == "holyrics"
     return True                              # cenas de luz, passos da chegada
 
 

@@ -116,12 +116,14 @@ if (Test-Path $doCofre) {
 # Num PC que ja tem a ponte, o que e DELE fica: o papel e os segredos.
 $jaTinha = Test-Path (Join-Path $DESTINO "app.py")
 if ($jaTinha) {
-    foreach ($dele in @("config.yaml", "maquina.yaml")) {
+    # Tambem os _*.json: credenciais do YouTube e o ponto onde o culto esta.
+    $deles = @("config.yaml", "maquina.yaml") + @(Get-ChildItem $DESTINO -Filter "_*.json" -File | ForEach-Object { $_.Name })
+    foreach ($dele in $deles) {
         if (Test-Path (Join-Path $DESTINO $dele)) {
             Remove-Item (Join-Path $origem $dele) -Force -ErrorAction SilentlyContinue
         }
     }
-    Aviso "este PC ja tinha a ponte: atualizei o projeto e mantive o config.yaml e o maquina.yaml dele."
+    Aviso "este PC ja tinha a ponte: atualizei o projeto e mantive a configuracao e o estado dele."
 }
 New-Item -ItemType Directory -Path $DESTINO -Force | Out-Null
 Copy-Item (Join-Path $origem "*") $DESTINO -Recurse -Force
@@ -129,6 +131,7 @@ Remove-Item $solt -Recurse -Force
 Ok "projeto em $DESTINO"
 
 if (Test-Path (Join-Path $DESTINO "config.yaml")) { Ok "configuracao da igreja no lugar" }
+if ($PAPEL -eq "holyrics" -and (Test-Path (Join-Path $DESTINO "_youtube_token.json"))) { Ok "credenciais do YouTube no lugar" }
 elseif ($PAPEL -eq "holyrics") {
     Aviso "o cofre da versao web ainda nao tem a configuracao da igreja."
     Aviso "O config.yaml sera criado do exemplo e alguem da equipe digita os segredos."

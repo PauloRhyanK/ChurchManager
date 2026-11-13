@@ -939,9 +939,11 @@ web:
   # O COFRE. Com a versão web ligada, esta máquina também guarda lá a
   # configuração da igreja: este config.yaml, o chegada.yaml, as cenas de luz
   # (looks_salvas.yaml, patch.yaml) e o que estiver na pasta obs/ (a
-  # exportação do OBS, copiada para lá à mão). É o que deixa o instalador
-  # montar outro PC já configurado se este quebrar. As credenciais do YouTube
-  # (_*.json) NÃO vão. Para não guardar nada fora da igreja: cofre: false
+  # exportação do OBS, copiada para lá à mão), mais os arquivos _*.json: as
+  # credenciais do YouTube e o estado do culto (ordem, marcas do louvor,
+  # progresso do guia). É o que deixa o instalador montar outro PC já
+  # configurado, e de onde este parou, se este quebrar.
+  # Para não guardar nada fora da igreja: cofre: false
   cofre: true
 
 

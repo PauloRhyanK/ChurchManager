@@ -40,8 +40,9 @@ Pedido do Paulo: um PC novo tem de sair configurado, mesmo com o principal morto
 
 - **`pc/ponte/cofre.py`** (novo). A máquina principal, com `web.ativo: true`, entrega à
   web a cada mudança: `config.yaml`, `chegada.yaml`, `looks_salvas.yaml`, `patch.yaml` e
-  tudo que estiver em `pc/obs/`. Os `_*.json` (credenciais do YouTube) **não vão**.
-  `cofre: false` no bloco `web` desliga.
+  tudo que estiver em `pc/obs/`, e os `_*.json` da raiz (credenciais do YouTube, ordem
+  do culto, marcas do louvor, progresso do guia). Ficam de fora só `_atualizou.json` e
+  `_obs_stream_anterior.json`. `cofre: false` no bloco `web` desliga.
 - **Web**: `POST /api/cofre` (chave da igreja), guardado num volume Docker
   (`/dados/cofre.json`, modo 600). `GET /api/cofre` só diz o que há, nunca o conteúdo.
 - **`pc/obs/`** é preenchida à mão: `obs/scenes/<coleção>.json` e

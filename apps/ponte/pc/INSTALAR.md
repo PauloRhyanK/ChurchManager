@@ -27,8 +27,10 @@ o caminho abaixo, passo a passo, continua valendo.
 ### O que o cofre guarda, e de onde vem
 
 O PC principal entrega sozinho, a cada mudança: `config.yaml`, `chegada.yaml`,
-`looks_salvas.yaml`, `patch.yaml` e tudo que estiver na pasta `obs/`. As credenciais
-do YouTube (`_*.json`) não vão: num PC novo, autorize de novo em `/youtube`.
+`looks_salvas.yaml`, `patch.yaml`, tudo que estiver na pasta `obs/` e os arquivos
+`_*.json`: as credenciais do YouTube (`_google_oauth.json`, `_youtube_token.json`) e o
+estado do culto (ordem, marcas do louvor, progresso do guia). Só o PC principal recebe
+os `_*.json`. Num PC que já tem a ponte, os que estão lá ficam.
 
 A pasta `obs/` é preenchida **à mão, uma vez**, e de novo quando as cenas mudarem. No
 notebook da transmissão, copie de `%APPDATA%\obs-studio\basic\`:

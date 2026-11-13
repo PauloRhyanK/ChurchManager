@@ -34,7 +34,7 @@ com `chmod 600`. **Nenhuma delas vai para o Git, para log ou para o chat.**
 ## O cofre
 
 A versão web também guarda a configuração da igreja (o `config.yaml` com os segredos,
-as cenas de luz, a exportação do OBS), que o PC principal entrega. Fica no volume
+as cenas de luz, a exportação do OBS, as credenciais do YouTube e o estado do culto), que o PC principal entrega. Fica no volume
 Docker `ponte_ponte-dados`, em `/dados/cofre.json` dentro do contêiner, legível só pelo
 usuário `ponte`. É o que o instalador de `/instalar` entrega a um PC novo.
 

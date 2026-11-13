@@ -14,10 +14,19 @@ O QUE VAI:
     config.yaml, chegada.yaml, looks_salvas.yaml, patch.yaml
     tudo que estiver na pasta obs/ (a exportacao do OBS: colecao de cenas e
     perfil, copiados para la a mao, uma vez)
+    os arquivos _*.json da raiz: as credenciais do YouTube (_google_oauth,
+    _youtube_token*) e o estado do culto (ordem, marcas do louvor, progresso
+    do guia, a chave "aceitar comandos pela web")
 
-O QUE NAO VAI, de proposito: os arquivos _*.json. Sao as credenciais do
-YouTube (quem as tem controla as transmissoes do canal) e estado desta
-maquina. Autorizar o YouTube de novo num PC novo leva um minuto, em /youtube.
+A primeira versao deixava os _*.json de fora, e o PC instalado pelo cofre
+nascia sem falar com o YouTube e com o culto do zero. O Paulo pediu que
+fossem (12/11/2026): um PC que assume no lugar do principal tem que assumir
+de verdade. ATENCAO ao que isso significa: quem tira o cofre da web leva as
+credenciais do canal do YouTube.
+
+O QUE NAO VAI: _atualizou.json (a marca de uma atualizacao em andamento
+NESTA maquina) e _obs_stream_anterior.json (copia de seguranca da chave de
+transmissao que estava NESTE OBS).
 
 SAO SEGREDOS. Saem daqui so por HTTPS, com a chave da web no cabecalho, e a
 web so os entrega a quem tem um codigo de instalacao (ver web/app.py).
@@ -32,6 +41,8 @@ import urllib.request
 
 FIXOS = ("config.yaml", "chegada.yaml", "looks_salvas.yaml", "patch.yaml")
 PASTA_OBS = "obs"
+# Estado que so faz sentido na maquina onde nasceu.
+SO_DAQUI = ("_atualizou.json", "_obs_stream_anterior.json")
 MAXIMO_POR_ARQUIVO = 4 * 1024 * 1024
 MAXIMO_NO_TOTAL = 8 * 1024 * 1024
 PAUSA = 60.0
@@ -57,6 +68,9 @@ class Cofre:
     def _lista(self):
         """[(nome no cofre, caminho no disco)], so do que existe e cabe."""
         achados = [(n, os.path.join(self._raiz, n)) for n in FIXOS]
+        for nome in sorted(os.listdir(self._raiz)):
+            if nome.startswith("_") and nome.endswith(".json") and nome not in SO_DAQUI:
+                achados.append((nome, os.path.join(self._raiz, nome)))
         base = os.path.join(self._raiz, PASTA_OBS)
         for pasta, _subpastas, arquivos in os.walk(base):
             for arquivo in sorted(arquivos):
