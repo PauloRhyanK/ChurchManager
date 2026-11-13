@@ -135,6 +135,41 @@ Write-Host "    Instalando o que a ponte precisa (precisa de internet, leva um m
 if ($LASTEXITCODE -ne 0) { Parar "o pip nao conseguiu instalar. Este PC esta com internet?" }
 Ok "dependencias instaladas"
 
+# --- 5b. A versao web -----------------------------------------------------
+# So o PC principal fala com a web. Se a chave veio do instalador da web, ela
+# entra sozinha; senao, pergunta. Quem escreve no config e o ligar-web.py,
+# que confere a chave com a web ANTES de gravar.
+$vindo = Join-Path $PASTA "_do_instalador"
+if ($PAPEL -eq "holyrics") {
+    $ligar = Join-Path $PASTA "ligar-web.py"
+    $arqChave = Join-Path $vindo "chave-web.txt"
+    & $venv $ligar --conferir
+    $jaLigado = ($LASTEXITCODE -eq 0)
+    $chave = ""
+    if (Test-Path $arqChave) { $chave = (Get-Content $arqChave -Raw).Trim() }
+    if ($jaLigado -and -not $chave) {
+        Ok "este PC ja esta ligado a versao web"
+    } else {
+        for ($vez = 1; $vez -le 3; $vez++) {
+            if (-not $chave) {
+                Write-Host ""
+                Write-Host "    Para o painel funcionar tambem pela internet, este PC precisa da" -ForegroundColor White
+                Write-Host "    CHAVE da versao web (uma frase de palavras com hifen, que fica na VPS)." -ForegroundColor White
+                $chave = (Read-Host "    Digite a chave [ENTER = deixar para depois]").Trim()
+            }
+            if (-not $chave) { Aviso "sem a chave: o painel so funciona dentro da igreja. Depois, de dois cliques em ligar-web.bat."; break }
+            $env:PONTE_CHAVE_NOVA = $chave
+            & $venv $ligar
+            $saida = $LASTEXITCODE
+            Remove-Item Env:\PONTE_CHAVE_NOVA -ErrorAction SilentlyContinue
+            $chave = ""
+            if ($saida -eq 0) { Ok "ligado a versao web"; break }
+            if ($saida -eq 3) { break }
+        }
+    }
+}
+if (Test-Path $vindo) { Remove-Item $vindo -Recurse -Force }
+
 # --- 6. Atalhos -----------------------------------------------------------
 $ws = New-Object -ComObject WScript.Shell
 $bat = Join-Path $PASTA "iniciar-ponte.bat"

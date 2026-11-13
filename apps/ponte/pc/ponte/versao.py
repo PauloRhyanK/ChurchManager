@@ -18,7 +18,8 @@ import os
 
 # O que e de cada igreja / de cada maquina. Uma atualizacao NUNCA troca estes.
 DA_IGREJA = ("config.yaml", "maquina.yaml", "chegada.yaml", "looks_salvas.yaml", "patch.yaml")
-PASTAS_FORA = ("__pycache__", ".venv", "venv", "obs", "_versao_anterior", ".git", "acervo")
+PASTAS_FORA = ("__pycache__", ".venv", "venv", "obs", "_versao_anterior", "_do_instalador",
+               ".git", "acervo")
 FINAIS_FORA = (".log", ".wav", ".mp3", ".m4a", ".pyc", ".pem", ".key")
 
 

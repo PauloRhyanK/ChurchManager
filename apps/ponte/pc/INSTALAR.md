@@ -24,6 +24,21 @@ Num PC que já tem a ponte ele só atualiza o projeto: o `config.yaml` e o
 **Ainda não foi testado num Windows de verdade** (escrito em 12/11/2026). Até ser,
 o caminho abaixo, passo a passo, continua valendo.
 
+### Ligar o PC principal à versão web
+
+O painel só funciona pela internet depois que o PC principal recebe a **chave** da
+versão web (uma frase de palavras com hífen, que fica na VPS).
+
+- **Instalando pelo instalador da web**, a chave vem junto e o PC já sai ligado. Ninguém
+  digita nada.
+- **Instalando pela rede da igreja** (`configurar-este-pc.bat`), o instalador pergunta a
+  chave. ENTER deixa para depois.
+- **Num PC já instalado**, dois cliques em **`ligar-web.bat`**: ele pergunta a chave.
+
+Nos três casos a chave é conferida com a versão web antes de ser gravada. Chave errada
+não é gravada. O que muda é só o bloco `web` do `config.yaml` (`ativo` e `chave`) e a
+linha `endereco_no_ar` do `chegada.yaml`.
+
 ### O que o cofre guarda, e de onde vem
 
 O PC principal entrega sozinho, a cada mudança: `config.yaml`, `chegada.yaml`,

@@ -582,6 +582,12 @@ def instalar_pacote():
     extras = {nome: base64.b64decode(conteudo)
               for nome, conteudo in (cofre.get("arquivos") or {}).items()
               if _NOME_OK.match(nome) and _do_papel(nome, papel)}
+    if papel == "holyrics":
+        # A chave da igreja vai junto, e o instalador liga o PC a web sozinho:
+        # quem instala nao digita nada. Quem chegou aqui ja provou, pelo
+        # codigo, que estava logado; e o config.yaml do cofre, quando existe,
+        # ja leva esta mesma chave. O instalador apaga o arquivo depois de usar.
+        extras["_do_instalador/chave-web.txt"] = CHAVE.encode("utf-8")
     resposta = send_file(_zip_pc(extras), mimetype="application/zip", as_attachment=True,
                          download_name="ponte-do-culto-pc.zip")
     resposta.headers["Cache-Control"] = "no-store"

@@ -188,9 +188,10 @@ checagem "o pan fica dentro do limite" (esperam 96–160; o modo "lento" do
 2. **Testar no Windows**, num dia sem culto, nesta ordem: `iniciar-ponte.bat` subindo
    pelo `iniciar.py`; o painel novo com OBS e Holyrics ligados; o botão Atualizar; o
    instalador de um arquivo num PC de teste.
-3. **Ligar a igreja à web**: no `config.yaml` do principal, bloco `web:` com
-   `ativo: true`, a `url` e a `chave` (o Paulo copia da VPS: nunca por chat nem por
-   arquivo versionado); no `chegada.yaml`, `endereco_no_ar: true`. Conferir que
+3. **Ligar a igreja à web**: dois cliques em `ligar-web.bat` na pasta da ponte do
+   principal. Ele pergunta a chave (o Paulo lê na VPS e digita: nunca por chat nem por
+   arquivo versionado), confere com a web e grava o bloco `web:` do `config.yaml` e o
+   `endereco_no_ar` do `chegada.yaml`. Fechar e abrir a ponte. Conferir que
    `/saude` passa a `"igreja": true` e que o painel abre em
    `https://ponte.igrejaparaiso.com.br/painel`.
 4. **Preencher `pc/obs/`** com a exportação do OBS do notebook, para o cofre.
