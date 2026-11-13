@@ -26,7 +26,12 @@
   --erro-fundo:#2a1114; --erro-texto:#f8a5a5; --erro-borda:#7a2626;
   --aviso:#f59e0b; --aviso-fundo:#2a1d07; --aviso-texto:#f7d9a3; --aviso-borda:#6b4a12;
   --marca:#2563eb; --marca-texto:#a9c9ff; --vivo:#dc2626;
+  /* A altura dos botoes. No PC, com mouse, 40 deixa o painel inteiro caber
+     numa tela sem rolar nem tirar o zoom (pedido do Paulo em 12/11, depois de
+     ver a primeira versao no ar). No dedo, 46. */
+  --alt:40px;
 }
+@media (pointer:coarse){ :root{--alt:46px} }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--fundo);color:var(--texto);
@@ -38,72 +43,74 @@ button:focus-visible,a:focus-visible,select:focus-visible,summary:focus-visible{
 h1,h2,h3,p{margin:0}
 [hidden]{display:none!important}
 
-.tela{max-width:1440px;margin:0 auto;padding:max(16px,env(safe-area-inset-top)) clamp(14px,2.2vw,28px) 28px;
-  display:flex;flex-direction:column;gap:16px}
+.tela{max-width:1440px;margin:0 auto;padding:max(10px,env(safe-area-inset-top)) clamp(12px,1.8vw,24px) 14px;
+  display:flex;flex-direction:column;gap:10px}
 .topo{display:flex;flex-wrap:wrap;align-items:center;gap:10px 18px}
 .topo .nome{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
-.topo h1{font-size:20px;font-weight:800;letter-spacing:-.01em}
-.topo .sub{font-size:15px;color:var(--suave);font-variant-numeric:tabular-nums}
+.topo h1{font-size:18px;font-weight:800;letter-spacing:-.01em}
+.topo .sub{font-size:14px;color:var(--suave);font-variant-numeric:tabular-nums}
 .pilulas{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto;align-items:center}
-.pilula{display:inline-flex;align-items:center;gap:8px;min-height:32px;padding:4px 12px;border-radius:999px;
-  background:var(--caixa);border:1px solid var(--linha);font-size:13px;color:var(--suave)}
+.pilula{display:inline-flex;align-items:center;gap:8px;min-height:28px;padding:2px 10px;border-radius:999px;
+  background:var(--caixa);border:1px solid var(--linha);font-size:12.5px;color:var(--suave)}
 .pilula i{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
 .pilula.erro{background:var(--aviso-fundo);border-color:var(--aviso-borda);color:var(--aviso-texto)}
 .pilula.erro i{background:var(--aviso);border-radius:2px}
 .pilula.desligado i{background:#5b6b7e}
 
-.bt{min-height:46px;padding:0 16px;border-radius:12px;border:1px solid var(--borda);background:var(--caixa2);
-  color:var(--texto);font-size:15px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;
+.bt{min-height:var(--alt);padding:0 14px;border-radius:11px;border:1px solid var(--borda);background:var(--caixa2);
+  color:var(--texto);font-size:14px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;
   text-align:center;text-decoration:none}
 .bt.perigo{border-color:var(--erro-borda);background:var(--erro-fundo);color:var(--erro-texto);font-weight:700}
 .bt.forte{background:var(--marca);border-color:transparent;color:#fff;font-weight:700}
 .bt.aviso{background:var(--aviso);border-color:transparent;color:#1f1300;font-weight:700}
 .bt.largo{width:100%}
 
-.faixa{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;border-radius:14px;padding:12px 16px;font-size:15px}
+.faixa{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;border-radius:12px;padding:7px 12px;font-size:14px}
 .faixa > span{flex:1 1 260px}
 .faixa.erro{background:var(--erro-fundo);border:1px solid var(--erro-borda);color:var(--erro-texto)}
 .faixa.aviso{background:var(--aviso-fundo);border:1px solid var(--aviso-borda);color:var(--aviso-texto)}
 .faixa.nota{background:#10213f;border:1px solid #284a86;color:var(--marca-texto)}
 .faixa b{color:#fff}
 
-.duas{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
-.principal{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;gap:16px}
-.lado{flex:1 1 340px;max-width:460px;min-width:0;display:flex;flex-direction:column;gap:14px}
+.duas{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start}
+.principal{flex:999 1 560px;min-width:0;display:flex;flex-direction:column;gap:10px}
+.lado{flex:1 1 340px;max-width:430px;min-width:0;display:flex;flex-direction:column;gap:10px}
 @media (max-width:820px){.lado{max-width:none}}
 
-.cartao{background:var(--caixa);border:1px solid var(--linha);border-radius:18px;padding:18px;
-  display:flex;flex-direction:column;gap:14px}
-.cartao h2{font-size:17px;font-weight:700}
+.cartao{background:var(--caixa);border:1px solid var(--linha);border-radius:16px;padding:12px 14px;
+  display:flex;flex-direction:column;gap:9px}
+.cartao h2{font-size:15.5px;font-weight:700}
 .cabeca{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 12px}
 .rotulo{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--apagado)}
-.miudo{font-size:13px;color:var(--apagado)}
+.miudo{font-size:12.5px;color:var(--apagado)}
+.umalinha{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .linha{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 12px}
-.linha > span{font-size:15px;color:var(--suave)}
+.linha > span{font-size:14px;color:var(--suave)}
 .linha b{color:var(--texto)}
-.corte{border-top:1px solid var(--linha);padding-top:12px}
+.corte{border-top:1px solid var(--linha);padding-top:9px}
 
-.agora{border-radius:20px;padding:22px;gap:18px}
+.agora{border-radius:18px;padding:14px 16px;gap:10px}
 .agora .titulo{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 18px}
-.agora h2{font-size:clamp(40px,6vw,60px);font-weight:800;letter-spacing:-.03em;line-height:1}
-.agora .quando{font-size:16px;color:var(--suave);padding-bottom:6px}
-.fatos{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
-.fato{background:var(--caixa2);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:3px;min-width:0}
-.fato strong{font-size:20px;font-weight:700;overflow-wrap:anywhere}
-.fato span:last-child{font-size:14px;color:var(--suave)}
-.proximo{min-height:96px;width:100%;border:none;border-radius:18px;background:var(--ok);color:var(--ok-tinta);
-  padding:16px 22px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 24px;text-align:left}
+.agora h2{font-size:clamp(32px,4.2vw,44px);font-weight:800;letter-spacing:-.03em;line-height:1}
+.agora .quando{font-size:14px;color:var(--suave);padding-bottom:4px}
+.fatos{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px}
+.fato{background:var(--caixa2);border-radius:12px;padding:8px 12px;display:flex;flex-direction:column;gap:1px;min-width:0}
+.fato .rotulo{font-size:11px}
+.fato strong{font-size:17px;font-weight:700;overflow-wrap:anywhere}
+.fato span:last-child{font-size:13px;color:var(--suave)}
+.proximo{min-height:70px;width:100%;border:none;border-radius:14px;background:var(--ok);color:var(--ok-tinta);
+  padding:10px 18px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 24px;text-align:left}
 .proximo .a{display:flex;flex-direction:column;gap:2px}
-.proximo .a small{font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
-.proximo .a b{font-size:clamp(26px,4vw,34px);font-weight:800;letter-spacing:-.02em;line-height:1.05}
-.proximo .b{font-size:15px;font-weight:600;max-width:400px}
+.proximo .a small{font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+.proximo .a b{font-size:clamp(22px,2.8vw,28px);font-weight:800;letter-spacing:-.02em;line-height:1.05}
+.proximo .b{font-size:13.5px;font-weight:600;max-width:420px}
 .proximo.fim{background:var(--caixa2);color:var(--suave);border:1px solid var(--borda)}
 
-.momentos{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:8px}
-.momento{min-height:64px;border-radius:14px;border:1px solid var(--borda);background:var(--caixa2);color:var(--texto);
-  padding:8px 12px;text-align:left;display:flex;flex-direction:column;gap:2px}
-.momento small{font-size:12px;color:var(--suave)}
-.momento b{font-size:16px;font-weight:700;overflow-wrap:anywhere}
+.momentos{display:grid;grid-template-columns:repeat(auto-fit,minmax(98px,1fr));gap:6px}
+.momento{min-height:calc(var(--alt) + 8px);border-radius:12px;border:1px solid var(--borda);background:var(--caixa2);color:var(--texto);
+  padding:5px 10px;text-align:left;display:flex;flex-direction:column;gap:0}
+.momento small{font-size:11px;color:var(--suave)}
+.momento b{font-size:14.5px;font-weight:700;overflow-wrap:anywhere}
 .momento.feito{background:var(--fundo2);border-color:var(--linha);color:var(--apagado)}
 .momento.feito small{color:var(--apagado)}
 .momento.atual{border:2px solid var(--ok);background:var(--ok-fundo)}
@@ -111,27 +118,27 @@ h1,h2,h3,p{margin:0}
 .momento.serio{border-color:var(--erro-borda);background:var(--erro-fundo);color:var(--erro-texto)}
 .momento.serio small{color:var(--erro-texto)}
 
-.grade{display:grid;gap:8px}
+.grade{display:grid;gap:6px}
 .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
-.g3{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}
-.escolha{min-height:50px;border-radius:12px;border:1px solid var(--borda);background:var(--caixa2);color:var(--texto);
-  font-size:14px;font-weight:600;padding:6px 8px;overflow-wrap:anywhere}
+.g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.escolha{min-height:var(--alt);border-radius:10px;border:1px solid var(--borda);background:var(--caixa2);color:var(--texto);
+  font-size:13.5px;font-weight:600;padding:3px 6px;overflow-wrap:anywhere}
 .escolha[aria-pressed="true"]{border:2px solid var(--ok);background:var(--ok-fundo);font-weight:700}
-.selo{display:inline-flex;align-items:center;gap:8px;min-height:30px;padding:2px 12px;border-radius:999px;
+.selo{display:inline-flex;align-items:center;gap:8px;min-height:26px;padding:1px 10px;border-radius:999px;
   font-size:13px;font-weight:800;letter-spacing:.04em}
 .selo.vivo{background:var(--vivo);color:#fff}
 .selo.vivo i{width:8px;height:8px;border-radius:50%;background:#fff}
 .selo.fora{background:var(--caixa2);color:var(--suave);border:1px solid var(--borda)}
 .par{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border:1px solid var(--borda);border-radius:12px;overflow:hidden}
-.par button{min-height:46px;border:none;background:var(--caixa2);color:var(--suave);font-size:15px;font-weight:600;padding:4px 8px}
+.par button{min-height:var(--alt);border:none;background:var(--caixa2);color:var(--suave);font-size:14px;font-weight:600;padding:4px 8px}
 .par button[aria-pressed="true"]{background:var(--marca);color:#fff;font-weight:700}
 
 .rodape{display:flex;flex-direction:column;gap:0;padding:0;overflow:hidden}
-.rodape summary{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:12px 16px;cursor:pointer;list-style:none;min-height:46px}
+.rodape summary{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:6px 14px;cursor:pointer;list-style:none;min-height:var(--alt)}
 .rodape summary::-webkit-details-marker{display:none}
 .rodape summary i{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
 .rodape summary i.ruim{background:var(--aviso);border-radius:2px}
-.rodape summary span{flex:1 1 260px;font-size:14px;color:var(--suave)}
+.rodape summary span{flex:1 1 260px;font-size:13.5px;color:var(--suave)}
 .rodape summary em{font-style:normal;font-size:14px;font-weight:600;color:var(--marca-texto)}
 .rodape ol{list-style:none;margin:0;padding:0 16px 14px;display:flex;flex-direction:column;gap:8px}
 .rodape li{font-size:14px;color:var(--suave);border-top:1px solid var(--linha);padding-top:8px}
@@ -139,6 +146,14 @@ h1,h2,h3,p{margin:0}
 
 .menu{position:relative}
 .menu > summary{list-style:none}
+/* O movimento da luz fica recolhido: o que esta ligado aparece na linha, e a
+   lista inteira so quando alguem vai trocar. */
+.dobra > summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:var(--alt);
+  padding:0 12px;border:1px solid var(--borda);border-radius:10px;background:var(--caixa2);cursor:pointer;font-size:14px;color:var(--suave)}
+.dobra > summary::-webkit-details-marker{display:none}
+.dobra > summary b{color:var(--texto)}
+.dobra > summary em{font-style:normal;font-weight:600;color:var(--marca-texto);font-size:13px}
+.dobra[open] > summary{margin-bottom:6px}
 .menu > summary::-webkit-details-marker{display:none}
 .menu .folha{position:absolute;right:0;top:calc(100% + 8px);z-index:20;width:min(340px,calc(100vw - 28px));
   background:var(--caixa);border:1px solid var(--borda);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:6px;
@@ -211,6 +226,7 @@ const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({'&':'&amp
 let D = null;            // o ultimo retrato
 let semContato = 0;      // quantas consultas seguidas falharam
 let ocupado = false;     // ha um pedido em curso
+let movimentoAberto = false;   // a lista de movimentos da luz esta aberta
 const jaPintado = {};    // id do elemento -> html, para so mexer no que mudou
 
 function pintar(id, html) {
@@ -367,6 +383,10 @@ function desenharMenu(d) {
       m += '<label>Ordem do culto de hoje<select id="troca-ordem">' + d.ordens.map(o =>
         '<option value="' + esc(o.id) + '"' + (d.ordem && o.id === d.ordem.id ? ' selected' : '') + '>' + esc(o.nome) + '</option>').join('') + '</select></label>';
     }
+    const at = d.atualizacao || {};
+    m += '<div class="bloco"><span class="miudo">Versão deste PC: ' + esc(at.aqui || '?') +
+      (at.erro ? ' · não consegui falar com a versão web' : at.disponivel ? ' · há uma mais nova' : at.la ? ' · é a mais nova' : '') + '</span>' +
+      '<button type="button" class="bt" id="bt-conferir">Procurar atualização</button></div>';
     m += '<div class="bloco"><span class="miudo">Painel na web</span><div class="par">' +
       '<button type="button" data-remoto="1" aria-pressed="' + (d.remoto && d.remoto.aceita ? 'true' : 'false') + '">Aceita comandos</button>' +
       '<button type="button" data-remoto="0" aria-pressed="' + (d.remoto && d.remoto.aceita ? 'false' : 'true') + '">Só mostra</button></div></div>';
@@ -394,9 +414,9 @@ function desenharTransmissao(d) {
     : '<span class="selo fora">Fora do ar</span>') + '</div>';
   const y = t.youtube;
   if (y) {
-    h += '<div style="display:flex;flex-direction:column;gap:6px"><span class="miudo">Quem pode assistir' +
+    h += '<div style="display:flex;flex-direction:column;gap:5px"><span class="miudo umalinha" title="' + esc(y.titulo || '') + '">Quem pode assistir' +
       (y.titulo ? ' · ' + esc(y.titulo) : '') + '</span><div class="par">' +
-      botao('Só quem tem o link', {tipo: 'visibilidade', valor: 'unlisted'}, {classe: '', apertado: !y.publica}) +
+      botao('Só com o link', {tipo: 'visibilidade', valor: 'unlisted'}, {classe: '', apertado: !y.publica}) +
       botao('Público', {tipo: 'visibilidade', valor: 'public'}, {classe: '', apertado: !!y.publica,
         confirmar: y.publica ? null : {titulo: 'Abrir a transmissão ao público?', texto: 'Qualquer pessoa vai poder assistir e ela aparece no canal.', sim: 'Sim, abrir'}}) +
       '</div></div>';
@@ -407,9 +427,9 @@ function desenharTransmissao(d) {
   if (y && y.link) botoes.push('<button type="button" class="bt" data-copiar="' + esc(y.link) + '">Copiar o link</button>');
   if (c.transmitir) {
     botoes.push(t.no_ar
-      ? botao('Parar a transmissão', {tipo: 'transmitir', ligar: false}, {classe: 'bt perigo',
+      ? botao('Parar transmissão', {tipo: 'transmitir', ligar: false}, {classe: 'bt perigo',
           confirmar: {titulo: 'Parar a transmissão?', texto: 'Quem está assistindo pela internet deixa de ver o culto.', sim: 'Sim, parar', perigo: true}})
-      : botao('Iniciar a transmissão', {tipo: 'transmitir', ligar: true}, {classe: 'bt forte',
+      : botao('Iniciar transmissão', {tipo: 'transmitir', ligar: true}, {classe: 'bt forte',
           confirmar: {titulo: 'Iniciar a transmissão?', texto: 'O culto começa a ir para a internet agora.', sim: 'Sim, iniciar'}}));
   }
   if (botoes.length) h += '<div class="grade ' + (botoes.length > 1 ? 'g2' : '') + '">' + botoes.join('') + '</div>';
@@ -425,7 +445,11 @@ function desenharLuz(d) {
   const l = d.luz;
   mostrar('cartao-luz', !!l);
   if (!l) return;
-  let h = '<div class="cabeca"><h2>Luz</h2>' + (d.local ? '<a href="/cenas" style="font-size:14px;font-weight:600;padding:12px 4px">Montar uma cena</a>' : '') + '</div>';
+  let h = '<div class="cabeca"><h2>Luz</h2><span style="display:flex;align-items:center;gap:12px">' +
+    (d.local ? '<a href="/cenas" style="font-size:13.5px;font-weight:600;padding:8px 2px">Montar uma cena</a>' : '') +
+    botao('Apagar tudo', {tipo: 'apagar_luz'}, {classe: 'bt',
+      confirmar: {titulo: 'Apagar todas as luzes?', texto: 'O palco fica escuro até alguém escolher uma cena.', sim: 'Sim, apagar', perigo: true}}) +
+    '</span></div>';
   if ((l.cenas || []).length) {
     h += '<div class="grade g3">' + l.cenas.map(c =>
       botao(esc(c.nome), {tipo: 'cena_luz', cena: c.id}, {classe: 'escolha', apertado: c.id === l.cena})).join('') + '</div>';
@@ -433,13 +457,14 @@ function desenharLuz(d) {
     h += '<span class="miudo">Ainda não há cenas de luz salvas.</span>';
   }
   if ((l.modos || []).length) {
-    h += '<div style="display:flex;flex-direction:column;gap:6px"><span class="miudo">Movimento</span><div class="grade g3">' +
+    const atual = l.modos.find(m => m.id === l.modo);
+    h += '<details class="dobra" id="dobra-movimento"' + (movimentoAberto ? ' open' : '') + '>' +
+      '<summary><span>Movimento: <b>' + esc(atual ? atual.nome : 'Parado') + '</b></span><em>' + (movimentoAberto ? 'fechar' : 'trocar') + '</em></summary>' +
+      '<div class="grade g3">' +
       botao('Parado', {tipo: 'modo_luz', modo: 'parado'}, {classe: 'escolha', apertado: l.modo === 'parado'}) +
       l.modos.map(m => '<span title="' + esc(m.descricao || '') + '" style="display:contents">' +
-        botao(esc(m.nome), {tipo: 'modo_luz', modo: m.id}, {classe: 'escolha', apertado: m.id === l.modo}) + '</span>').join('') + '</div></div>';
+        botao(esc(m.nome), {tipo: 'modo_luz', modo: m.id}, {classe: 'escolha', apertado: m.id === l.modo}) + '</span>').join('') + '</div></details>';
   }
-  h += botao('Apagar todas as luzes', {tipo: 'apagar_luz'}, {classe: 'bt largo',
-    confirmar: {titulo: 'Apagar todas as luzes?', texto: 'O palco fica escuro até alguém escolher uma cena.', sim: 'Sim, apagar', perigo: true}});
   pintar('cartao-luz', h);
 }
 
@@ -534,6 +559,12 @@ document.addEventListener('click', async evento => {
       try { await pedir('/api/painel/remoto', {aceita: aceita}); } catch (erro) { avisar(erro.message, true); }
       consultar();
     }
+  } else if (alvo.id === 'bt-conferir') {
+    try {
+      const a = await pedir('/api/atualizacao/conferir');
+      avisar(a.erro ? 'Não consegui falar com a versão web. Este PC está com internet?' : a.disponivel ? 'Há uma atualização. O botão está no alto da tela.' : 'Este PC já está na versão mais nova.', !!a.erro);
+    } catch (erro) { avisar(erro.message, true); }
+    consultar();
   } else if (alvo.id === 'bt-atualizar') {
     if (await perguntar({titulo: 'Atualizar a Ponte agora?', texto: 'A ponte deste PC some por alguns segundos e volta sozinha. Não faça isso no meio de um momento do culto.', sim: 'Atualizar'})) {
       try { await pedir('/api/painel/atualizar'); avisar('Atualizando. A tela volta sozinha.'); }
@@ -542,6 +573,13 @@ document.addEventListener('click', async evento => {
     }
   }
 });
+// A lista de movimentos lembra se estava aberta: a tela e redesenhada a cada
+// 2 segundos, e sem isto ela fecharia sozinha na mao de quem esta escolhendo.
+document.addEventListener('toggle', evento => {
+  if (evento.target.id !== 'dobra-movimento') return;
+  movimentoAberto = evento.target.open;
+  redesenhar();
+}, true);
 document.addEventListener('change', async evento => {
   if (evento.target.id !== 'troca-ordem') return;
   const sel = evento.target, nome = sel.options[sel.selectedIndex].text;

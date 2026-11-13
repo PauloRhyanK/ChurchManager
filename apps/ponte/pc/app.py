@@ -2510,9 +2510,27 @@ def _endereco_de_atualizacao():
             or (_config.get("web") or {}).get("url") or mod_atualizar.ENDERECO_PADRAO)
 
 
+def _perguntar_a_versao():
+    try:
+        _atualizacao["la"] = mod_atualizar.consultar(_endereco_de_atualizacao())["versao"]
+        _atualizacao["erro"] = None
+    except Exception as erro:
+        _atualizacao["erro"] = type(erro).__name__
+    _atualizacao["em"] = time.time()
+
+
+@app.post("/api/atualizacao/conferir")
+def atualizacao_conferir():
+    """O botao 'Procurar atualizacao' do menu Mais: pergunta agora, em vez de
+    esperar a proxima volta."""
+    _perguntar_a_versao()
+    return jsonify(_retrato_da_atualizacao())
+
+
 def _vigiar_atualizacao():
-    """De 10 em 10 minutos pergunta a versao web se ha projeto mais novo. So
-    PERGUNTA: quem decide trazer e uma pessoa, pelo botao."""
+    """De 2 em 2 minutos pergunta a versao web se ha projeto mais novo. So
+    PERGUNTA: quem decide trazer e uma pessoa, pelo botao. (Eram 10 minutos;
+    quem acabou de saber que saiu uma versao nao quer esperar tanto.)"""
     try:
         _atualizacao["aqui"] = mod_versao.calcular(RAIZ)
     except Exception as erro:
@@ -2522,13 +2540,8 @@ def _vigiar_atualizacao():
     threading.Timer(60.0, mod_atualizar.confirmar, args=(RAIZ,)).start()
     time.sleep(15)
     while True:
-        try:
-            _atualizacao["la"] = mod_atualizar.consultar(_endereco_de_atualizacao())["versao"]
-            _atualizacao["erro"] = None
-        except Exception as erro:
-            _atualizacao["erro"] = type(erro).__name__
-        _atualizacao["em"] = time.time()
-        time.sleep(600)
+        _perguntar_a_versao()
+        time.sleep(120)
 
 
 @app.get("/api/atualizacao")
