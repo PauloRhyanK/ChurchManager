@@ -231,16 +231,19 @@ passos:
     imagem: obs
     porque: "Imagem esticada é placa no USB errado. Áudio parado é o Reaper fechado ou o NDI Send desligado no PC do som."
 
+  # ANTES de o OBS transmitir, e nao depois. A chave do YouTube cria um video
+  # novo cada vez que o OBS comeca: sem preparar antes, nao ha o que
+  # configurar e o link muda a cada vez que alguem liga o OBS (visto em 12/11).
   - id: t_youtube
     ilha: transmissao
-    titulo: Título e chave do YouTube
-    frase: Acerte o título e deixe em teste.
-    apoio: Não listado, por enquanto.
+    titulo: Transmissão preparada no YouTube
+    frase: Prepare a transmissão de hoje.
+    apoio: Título e TESTE. O link já vale desde agora.
     link: { rotulo: Abrir a tela de transmissão, url: /youtube }
     como:
-      - "Ajuste o título do culto de hoje."
-      - "Deixe em TESTE (não listado) por enquanto."
-      - "Confira que a chave do canal certo está aplicada no OBS."
+      - "Na tela de transmissão, confira o título e clique em Preparar transmissão."
+      - "Deixe em TESTE (não listado). Ela entra no ar sozinha quando o OBS começar."
+      - "Copie o link dali: é o mesmo do começo ao fim do culto."
       - "Monetização: confira no YouTube Studio que está em Manual. Isso o painel não alcança."
 
   - id: t_transmitir

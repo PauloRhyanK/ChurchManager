@@ -20,7 +20,11 @@
 # ===========================================================================
 
 $ErrorActionPreference = "Stop"
-$PASTA    = "C:\Users\User\ponte-teste"
+# A pasta e ONDE ESTE ARQUIVO ESTA, nao um caminho escrito a mao. Estava
+# escrito "C:\Users\User\ponte-teste", que so existe no PC do Holyrics: o
+# mesmo pacote, baixado no notebook, procuraria o Python numa pasta que la
+# nao existe.
+$PASTA    = $PSScriptRoot
 $PORTA    = 8700
 $PAINEL   = "http://127.0.0.1:$PORTA"
 $HOLYRICS = "C:\Holyrics\Holyrics.exe"
@@ -56,9 +60,21 @@ Write-Host "    PONTE DO CULTO" -ForegroundColor Cyan
 Linha
 Write-Host ""
 
+# --- O papel desta maquina (maquina.yaml). So o PC do Holyrics abre o
+#     Holyrics: no notebook e no PC do som isso seria uma mensagem de erro
+#     sem sentido para quem esta ali.
+$PAPEL = "holyrics"
+$arqMaquina = Join-Path $PASTA "maquina.yaml"
+if (Test-Path $arqMaquina) {
+    $linha = Select-String -Path $arqMaquina -Pattern '^\s*papel\s*:\s*(\w+)' | Select-Object -First 1
+    if ($linha) { $PAPEL = $linha.Matches[0].Groups[1].Value }
+}
+
 # --- 1. Holyrics. Sem ele nao ha telao; e ele demora a abrir, entao sai
 #        primeiro e vai carregando enquanto a ponte sobe.
-if (Get-Process Holyrics -ErrorAction SilentlyContinue) {
+if ($PAPEL -ne "holyrics") {
+    Write-Host "    Este PC: $PAPEL. O Holyrics fica no PC principal." -ForegroundColor Gray
+} elseif (Get-Process Holyrics -ErrorAction SilentlyContinue) {
     Write-Host "    Holyrics: ja estava aberto." -ForegroundColor Gray
 } elseif (Test-Path $HOLYRICS) {
     Write-Host "    Holyrics: abrindo..." -ForegroundColor Gray
@@ -72,8 +88,19 @@ if (Get-Process Holyrics -ErrorAction SilentlyContinue) {
 
 # --- 2. Ja esta no ar? Entao nao sobe outra. Duas pontes na mesma porta
 #        dariam erro, e quem opera acharia que quebrou alguma coisa.
-if (Escutando) {
-    Write-Host "    A ponte JA ESTAVA no ar. Abrindo o guia..." -ForegroundColor Green
+#
+#        A TRAVA (mutex) e o que segura dois cliques QUASE JUNTOS. So olhar a
+#        porta nao basta: em 12/11 dois inicios com 2 segundos de diferenca
+#        passaram os dois pelo "ja esta no ar?" -- nenhum tinha subido ainda
+#        -- e ficaram duas pontes, uma delas pendurada sem porta. A trava e
+#        do Windows, vale entre janelas, e se solta sozinha se esta fechar.
+$trava = New-Object System.Threading.Mutex($false, "Global\PonteDoCulto-8700")
+$minha = $false
+try { $minha = $trava.WaitOne(0) } catch [System.Threading.AbandonedMutexException] { $minha = $true }
+
+if ((-not $minha) -or (Escutando)) {
+    Write-Host "    A ponte JA ESTA no ar ou subindo. Abrindo o guia..." -ForegroundColor Green
+    for ($i = 0; $i -lt 30 -and -not (Escutando); $i++) { Start-Sleep -Milliseconds 500 }
     & $ABRIR $PAINEL $CHROME
     Start-Sleep -Seconds 3
     exit 0

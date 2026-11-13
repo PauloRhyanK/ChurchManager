@@ -1,48 +1,42 @@
 # Instalar a ponte num PC da igreja
 
-O projeto é o mesmo em todo PC. Depois de instalado, o que diz "quem é esta máquina"
-é um arquivo pequeno, o `maquina.yaml`.
+O projeto é o mesmo em todo PC. O que muda é o **papel** da máquina, que o
+instalador pergunta.
 
-## 1. Pôr os arquivos
+## 1. Python (uma vez por PC)
 
-Baixe `ponte-do-culto-pc.zip` em `https://ponte.igrejaparaiso.com.br/baixar` (pede a
-senha da equipe) e extraia em `C:\ponte-do-culto`.
+Se o PC não tiver, o instalador avisa. Para instalar: [python.org/downloads](https://www.python.org/downloads/),
+Python 3.12 para Windows. **Na primeira tela, marque "Add python.exe to PATH"** e
+clique em Install Now.
 
-## 2. Python e dependências
+## 2. Baixar
 
-Precisa do Python 3.12. Na pasta extraída, no PowerShell:
+No PC novo, abra o painel do PC do Holyrics — `http://192.168.1.143:8700` — e clique
+em **Instalar em outro PC**. Extraia o zip em `C:\ponte-do-culto`.
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
+(De fora da igreja: `https://ponte.igrejaparaiso.com.br/baixar`, com a senha da equipe.)
 
-## 3. Os dois arquivos que são só desta máquina
+## 3. Configurar
 
-```powershell
-Copy-Item config.exemplo.yaml config.yaml
-Copy-Item maquina.exemplo.yaml maquina.yaml
-```
+Dentro da pasta extraída, dois cliques em **`configurar-este-pc.bat`**. Ele pergunta:
 
-- **`maquina.yaml`** — o papel (`holyrics`, `transmissao` ou `som`). Nas que não são a
-  principal, ponha também `principal: http://<IP do PC do Holyrics>:8700`.
-- **`config.yaml`** — só o PC principal precisa dos segredos (token do Holyrics, senha
-  do OBS, chave da web). Quem digita é uma pessoa da equipe, direto no arquivo:
-  **nunca por mensagem, foto ou print.** Nas secundárias, deixe `obs: ativo: false` e
-  `holyrics: ativo: false`.
+1. que PC é este (notebook da transmissão, PC do som, PC do Holyrics);
+2. o endereço do PC do Holyrics (ENTER aceita `192.168.1.143`).
 
-## 4. Abrir sozinho ao ligar
+E faz o resto: prepara o Python do projeto, cria o atalho na área de trabalho e o
+de abrir junto com o Windows, e liga a ponte.
 
-O `iniciar-ponte.bat` liga a ponte e abre a página deste PC. Para ele rodar no login,
-crie um atalho dele em `shell:startup`. Os caminhos dentro de `iniciar-ponte.ps1`
-(`$PASTA`, `$HOLYRICS`) precisam apontar para esta instalação.
+## O que muda em cada PC
 
-## 5. Conferir
+- **Notebook e PC do som** não guardam segredo nenhum. A ponte deles só mostra a
+  página do PC e conversa com o PC do Holyrics.
+- **PC do Holyrics** é o principal e precisa dos segredos (token do Holyrics, senha
+  do OBS) no `config.yaml`. **Quem digita é uma pessoa da equipe, direto no arquivo.
+  Nunca por mensagem, foto ou print.**
+- **PC do som** já roda a versão antiga, que leva a luz. O instalador **se recusa** a
+  instalar por cima: a troca é feita com calma, para a luz não cair.
 
-Abra `http://127.0.0.1:8700/aqui`. A página tem que dizer o nome certo da máquina.
-Numa secundária, "PC do Holyrics: conectado" tem que estar verde.
+## O PC do som não pode dormir nem perder a rede
 
-## O PC do som não pode dormir
-
-É ele que leva a luz até os refletores. Em **Configurações › Sistema › Energia**, ponha
-"Suspender" em **Nunca**. Em 12/11/2026 ele dormiu duas vezes no meio do culto.
+É ele que leva a luz até os refletores. Em 12/11/2026 ele saiu da rede duas vezes no
+meio do culto, e a suspensão já estava desligada — a causa está sendo investigada.

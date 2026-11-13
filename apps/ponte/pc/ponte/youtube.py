@@ -351,18 +351,109 @@ class ClienteYouTube:
             return {}
         return resposta.json()
 
+    def _lista(self, estado, quantas=25):
+        corpo = self._pedir("GET", API + "/liveBroadcasts", params={
+            "part": "id,snippet,status,contentDetails",
+            "broadcastStatus": estado,
+            "broadcastType": "all",
+            "maxResults": quantas,
+        })
+        return corpo.get("items") or []
+
+    @staticmethod
+    def _quando(transmissao):
+        s = transmissao.get("snippet") or {}
+        return s.get("actualStartTime") or s.get("scheduledStartTime") or s.get("publishedAt") or ""
+
     def transmissao(self, estado="active"):
         """A transmissao do canal: 'active' (no ar) ou 'upcoming' (agendada).
 
         Devolve None quando nao ha nenhuma — e isso NAO e erro: antes de o OBS
         entrar no ar, nao existe transmissao ativa para mexer.
+
+        A MAIS RECENTE, E NAO A PRIMEIRA DA LISTA. Pegava a primeira, e o
+        YouTube nao promete ordem nenhuma: com duas agendadas (uma esquecida da
+        semana passada e a de hoje), o painel podia mostrar e editar a errada,
+        e entregar o link dela.
         """
+        itens = self._lista(estado)
+        if not itens:
+            return None
+        return sorted(itens, key=self._quando, reverse=True)[0]
+
+    def ultima_concluida(self):
+        itens = self._lista("completed", quantas=5)
+        return sorted(itens, key=self._quando, reverse=True)[0] if itens else None
+
+    def preparar(self, titulo, id_stream, privacidade="unlisted", descricao=None):
+        """Cria a transmissao de hoje ANTES de o OBS comecar, presa a chave.
+
+        POR QUE ISTO EXISTE, medido no canal em 12/11: a chave "Culto" esta no
+        modo em que o YOUTUBE CRIA UM VIDEO NOVO CADA VEZ QUE O OBS COMECA A
+        TRANSMITIR. Duas consequencias, e eram as duas reclamacoes:
+
+          1. antes de o OBS comecar nao existe transmissao nenhuma, entao nao
+             ha o que configurar (titulo, visibilidade) com calma;
+          2. cada vez que o OBS comeca nasce um link novo. O link copiado num
+             teste morre quando se transmite de verdade — em 12/11 o culto foi
+             tI0o8rIfDCs e um teste depois virou 8WU_K7BfyYQ.
+
+        Criando antes e prendendo a chave, o YouTube usa ESTA transmissao
+        quando o OBS comecar (enableAutoStart), e o link e o mesmo do comeco
+        ao fim. enableAutoStop: quando o OBS para, ela termina sozinha, como
+        sempre terminou.
+
+        Nao cria duas: se ja ha uma agendada para esta chave, devolve ela.
+        """
+        if privacidade not in ("public", "unlisted", "private"):
+            raise ErroYouTube("visibilidade invalida: {!r}".format(privacidade))
+        titulo = str(titulo or "").strip()[:100]
+        if not titulo:
+            raise ErroYouTube("a transmissao precisa de um titulo")
+
+        for b in self._lista("upcoming"):
+            if (b.get("contentDetails") or {}).get("boundStreamId") == id_stream:
+                return b, False
+
+        agora = time.time() + 60
+        quando = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(agora))
+        snippet = {"title": titulo, "scheduledStartTime": quando}
+        if descricao:
+            snippet["description"] = str(descricao)[:5000]
+        nova = self._pedir("POST", API + "/liveBroadcasts",
+                           params={"part": "id,snippet,status,contentDetails"},
+                           json={
+                               "snippet": snippet,
+                               "status": {"privacyStatus": privacidade,
+                                          "selfDeclaredMadeForKids": False},
+                               "contentDetails": {
+                                   "enableAutoStart": True,
+                                   "enableAutoStop": True,
+                                   "enableDvr": True,
+                                   # Sem a "pre-visualizacao" do YouTube: com ela
+                                   # ligada, a transmissao fica em teste esperando
+                                   # alguem apertar "ao vivo" no Studio, e o
+                                   # enableAutoStart nao basta.
+                                   "monitorStream": {"enableMonitorStream": False},
+                               },
+                           })
+        try:
+            self._pedir("POST", API + "/liveBroadcasts/bind",
+                        params={"id": nova["id"], "part": "id,contentDetails",
+                                "streamId": id_stream})
+        except ErroYouTube:
+            # Sem a chave presa, a transmissao criada nao recebe o OBS: ficaria
+            # agendada para sempre, confundindo a proxima pessoa. Apaga.
+            try:
+                self._pedir("DELETE", API + "/liveBroadcasts", params={"id": nova["id"]})
+            except ErroYouTube:
+                pass
+            raise
+        return self._por_id(nova["id"]) or nova, True
+
+    def _por_id(self, id_transmissao):
         corpo = self._pedir("GET", API + "/liveBroadcasts", params={
-            "part": "id,snippet,status,contentDetails",
-            "broadcastStatus": estado,
-            "broadcastType": "all",
-            "maxResults": 5,
-        })
+            "part": "id,snippet,status,contentDetails", "id": id_transmissao})
         itens = corpo.get("items") or []
         return itens[0] if itens else None
 

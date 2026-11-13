@@ -1144,9 +1144,82 @@ def _retrato_canal(cid, canal):
                 "privacidade": (t.get("status") or {}).get("privacyStatus"),
                 "link": cliente.link(t),
                 "chave_presa": (t.get("contentDetails") or {}).get("boundStreamId"),
+                "entra_sozinha": bool((t.get("contentDetails") or {}).get("enableAutoStart")),
             }
             break
+    if "transmissao" not in corpo:
+        # Para o formulario de preparar: o titulo da ultima serve de modelo
+        # ("Sermao || Pr. Fulano"), e a pessoa so troca o que mudou.
+        try:
+            ultima = cliente.ultima_concluida()
+        except Exception:
+            ultima = None
+        if ultima:
+            corpo["ultima_titulo"] = (ultima.get("snippet") or {}).get("title") or ""
     return corpo
+
+
+def _chave_do_obs_no_youtube(cliente):
+    """Qual chave do YouTube o OBS esta usando. Devolve o id (nunca o valor).
+
+    Primeiro pergunta ao OBS. Se o OBS nao responde, usa a chave da ultima
+    transmissao do canal — que em 12/11 era a mesma ("Culto") em todas as
+    oito ultimas.
+    """
+    obs = _contexto.get("obs")
+    if obs is not None:
+        try:
+            atual = (obs.pedir("GetStreamServiceSettings")
+                     .get("streamServiceSettings") or {}).get("key")
+            if atual:
+                for k in cliente.chaves():
+                    if cliente.chave_de(k["id"])["chave"] == atual:
+                        return k["id"], "a chave que o OBS esta usando"
+        except Exception:
+            pass
+    ultima = cliente.ultima_concluida()
+    presa = ((ultima or {}).get("contentDetails") or {}).get("boundStreamId")
+    if presa:
+        return presa, "a chave da ultima transmissao (o OBS nao respondeu)"
+    return None, None
+
+
+@app.post("/api/youtube/<cid>/preparar")
+def youtube_preparar(cid):
+    """Cria a transmissao de hoje antes de o OBS comecar. Ver ClienteYouTube.preparar."""
+    canal, falha = _canal_yt(cid)
+    if falha:
+        return falha
+    corpo = request.get_json(silent=True) or {}
+    cliente = canal["cliente"]
+
+    # Com o OBS no ar, a chave ja esta presa a uma transmissao AO VIVO. Prender
+    # outra na mesma chave nesse momento e mexer no que o publico esta vendo.
+    obs = _contexto.get("obs")
+    if obs is not None:
+        try:
+            if obs.pedir("GetStreamStatus").get("outputActive"):
+                return jsonify({"erro": "o OBS esta transmitindo agora. Prepare a "
+                                        "proxima depois de parar esta."}), 409
+        except Exception:
+            pass
+
+    try:
+        id_stream, de_onde = _chave_do_obs_no_youtube(cliente)
+        if not id_stream:
+            return jsonify({"erro": "nao consegui saber qual chave o OBS usa"}), 409
+        ultima = cliente.ultima_concluida()
+        b, criada = cliente.preparar(
+            corpo.get("titulo"), id_stream,
+            privacidade=corpo.get("privacidade") or "unlisted",
+            descricao=((ultima or {}).get("snippet") or {}).get("description"))
+    except mod_youtube.ErroYouTube as erro:
+        return jsonify({"erro": str(erro)}), 400
+    print("  [youtube] transmissao {} ({}) presa a {}".format(
+        "criada" if criada else "ja existia", b.get("id"), de_onde))
+    retrato = _retrato_canal(cid, canal)
+    retrato["criada"] = criada
+    return jsonify(retrato)
 
 
 @app.get("/youtube")
@@ -1688,6 +1761,56 @@ def aqui_imagem():
     except Exception as erro:
         return jsonify({"erro": str(erro)}), 502
     resposta = Response(dados, mimetype=(tipo or "image/jpeg").split(";")[0], status=codigo)
+    resposta.headers["Cache-Control"] = "no-store"
+    return resposta
+
+
+# -- o pacote para instalar em outro PC --------------------------------------
+#
+# A versao web tem o seu /baixar, mas ela depende de VPS e de internet. Este
+# aqui entrega o MESMO pacote pela rede da igreja: o notebook abre o painel,
+# clica em "Instalar em outro PC" e recebe o projeto.
+#
+# E UMA LISTA DO QUE ENTRA, nao do que fica de fora — e a diferenca importa.
+# Esta pasta tem o token do Holyrics, a senha do OBS, as credenciais do
+# YouTube, um backup do OBS com a chave de transmissao e o acervo de letras.
+# Com lista de exclusao, o proximo arquivo sensivel que alguem criar aqui
+# viajaria junto sem ninguem perceber. Com lista de inclusao, arquivo novo so
+# viaja se alguem escrever o nome dele abaixo.
+PACOTE = (
+    "app.py", "requirements.txt", "INSTALAR.md",
+    "painel.html", "louvor.html", "luzes.html", "cenas.html", "youtube.html",
+    "chegada.html", "aqui.html", "letras.html", "guia.js", "guia.css",
+    "chegada.yaml", "looks_salvas.yaml", "patch.yaml",
+    "config.exemplo.yaml", "maquina.exemplo.yaml", "config.secundaria.yaml",
+    "configurar-este-pc.bat", "configurar-este-pc.ps1",
+    "iniciar-ponte.bat", "iniciar-ponte.ps1", "gerar_click.py",
+    "verificar.py", "verificar_obs.py", "descobrir_holyrics.py", "descobrir_luzes.py",
+)
+
+
+@app.get("/baixar")
+def baixar_pacote():
+    import io
+    import zipfile
+    memoria = io.BytesIO()
+    faltando = []
+    with zipfile.ZipFile(memoria, "w", zipfile.ZIP_DEFLATED) as pacote:
+        for nome in PACOTE:
+            caminho = os.path.join(RAIZ, nome)
+            if os.path.exists(caminho):
+                pacote.write(caminho, os.path.join("ponte-do-culto", nome))
+            else:
+                faltando.append(nome)
+        pasta = os.path.join(RAIZ, "ponte")
+        for nome in sorted(os.listdir(pasta)):
+            if nome.endswith(".py"):
+                pacote.write(os.path.join(pasta, nome), os.path.join("ponte-do-culto", "ponte", nome))
+    if faltando:
+        print("  [baixar] ficaram de fora por nao existirem aqui: {}".format(", ".join(faltando)))
+    memoria.seek(0)
+    resposta = Response(memoria.getvalue(), mimetype="application/zip")
+    resposta.headers["Content-Disposition"] = 'attachment; filename="ponte-do-culto-pc.zip"'
     resposta.headers["Cache-Control"] = "no-store"
     return resposta
 

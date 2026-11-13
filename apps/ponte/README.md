@@ -55,10 +55,23 @@ manual**; não existe ainda eleição automática.
 credenciais do YouTube, logs, áudio e o acervo de letras. O `.gitignore` cuida disso;
 os arquivos `.exemplo` mostram o formato.
 
+## Instalar num PC novo
+
+No painel do PC do Holyrics, **Instalar em outro PC** baixa a pasta `pc/` em zip. Dentro
+dela, `configurar-este-pc.bat` pergunta o papel da máquina e faz o resto. Detalhes em
+[`pc/INSTALAR.md`](pc/INSTALAR.md).
+
 ## Estado em 12/11/2026
 
-- **Pronto e testado localmente:** papéis, páginas por PC, guia pelo celular, espelho
-  web com senha, `/baixar`.
-- **Ainda não feito:** implantação na VPS (ver [`docs/IMPLANTAR-NA-VPS.md`](docs/IMPLANTAR-NA-VPS.md)),
-  instalação no notebook e no PC do som, troca automática de principal, e o painel de
-  momentos do culto na versão web (hoje a web tem só o guia de chegada).
+- **No ar no PC do Holyrics:** papéis, página por PC, guia pelo celular, letras por
+  caracteres, pacote de instalação pelo painel.
+- **No ar na VPS:** o espelho web com senha, em `https://ponte.igrejaparaiso.com.br`
+  (contêiner `ponte-web`; ver [`docs/IMPLANTAR-NA-VPS.md`](docs/IMPLANTAR-NA-VPS.md)). A
+  igreja ainda não foi ligada a ele.
+- **Feito e testado só localmente:** instalador `configurar-este-pc`.
+- **Feito, ainda não testado de verdade:** "Preparar transmissão" no YouTube, que cria
+  a transmissão antes do OBS começar, com link fixo. Precisa de um teste com o OBS
+  parado, porque cria um vídeo no canal.
+- **Ainda não feito:** ligar o PC do Holyrics à versão web (chave no `config.yaml`),
+  instalação no notebook, troca da versão antiga no PC do som, troca automática de
+  principal, e o painel de momentos do culto na versão web.

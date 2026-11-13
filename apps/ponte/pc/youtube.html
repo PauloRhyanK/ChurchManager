@@ -188,14 +188,45 @@ function desenharCanal(c){
 
   const t = c.transmissao;
   if (!t){
+    // PREPARAR ANTES. A chave "Culto" faz o YouTube criar um video novo cada
+    // vez que o OBS comeca, entao sem isto nao ha o que configurar antes do
+    // culto, e o link muda a cada vez que o OBS liga.
+    cx.appendChild(elemento('h2', null, 'Preparar a transmissão de hoje'));
     cx.appendChild(elemento('p','dica',
-      'Nenhuma transmissão ativa ou agendada neste canal. Crie uma no YouTube e recarregue.'));
+      'Cria a transmissão agora, presa à chave do OBS. Ela fica esperando e entra no ar sozinha quando o OBS começar — e o link já vale desde agora.'));
+    cx.appendChild(elemento('label','rot','Título'));
+    const nt = document.createElement('input');
+    nt.type = 'text'; nt.maxLength = 100; nt.value = c.ultima_titulo || '';
+    nt.placeholder = 'Título do culto || Pr. Nome';
+    cx.appendChild(nt);
+    if (c.ultima_titulo) cx.appendChild(elemento('p','dica','Veio do título da última transmissão. Troque o que mudou.'));
+    cx.appendChild(elemento('label','rot','Quem pode ver'));
+    const ch2 = elemento('div','chave');
+    let vis = 'unlisted';
+    const v1 = elemento('button','vivo','AO VIVO'), v2 = elemento('button','teste','TESTE');
+    const pintar2 = () => { v1.className = 'vivo' + (vis === 'public' ? ' sel' : ''); v2.className = 'teste' + (vis !== 'public' ? ' sel' : ''); };
+    v1.onclick = () => { vis = 'public'; pintar2(); };
+    v2.onclick = () => { vis = 'unlisted'; pintar2(); };
+    pintar2(); ch2.append(v1, v2); cx.appendChild(ch2);
+    const bar0 = elemento('div','barra');
+    const prep = elemento('button','verde','Preparar transmissão');
+    prep.onclick = async () => {
+      if (!nt.value.trim()){ avisar('ponha um título','erro'); nt.focus(); return; }
+      prep.disabled = true; prep.textContent = 'Preparando…';
+      try{
+        const r = await pedir('/api/youtube/' + c.id + '/preparar', {titulo: nt.value.trim(), privacidade: vis});
+        avisar(r.criada === false ? 'já havia uma preparada — mostrando ela' : 'transmissão preparada', 'bom');
+        await carregar();
+      } catch(e){ avisar(e.message,'erro'); prep.disabled = false; prep.textContent = 'Preparar transmissão'; }
+    };
+    bar0.appendChild(prep); cx.appendChild(bar0);
     return cx;
   }
 
   // --- título
   cx.appendChild(elemento('label','rot',
-    'Título ' + (t.estado === 'active' ? '(NO AR AGORA)' : '(agendada)')));
+    'Título ' + (t.estado === 'active' ? '(NO AR AGORA)'
+      : (t.entra_sozinha ? '(preparada — entra no ar sozinha quando o OBS começar)' : '(agendada)'))));
   const titulo = document.createElement('input');
   titulo.type = 'text'; titulo.value = t.titulo || ''; titulo.maxLength = 100;
   cx.appendChild(titulo);
