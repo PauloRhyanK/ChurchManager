@@ -203,18 +203,26 @@ grupos_de_luz:
     bases: [49, 65, 81, 97]   # C1, C2, C3, C4 — da frente para o fundo
     brilho: 0                 # o canal de brilho é o próprio inicial
     obturador: 1              # o estrobo, que só o modo marcado usa
+    paleta: [4, 5, 6, 7, 8]   # R G B W Âmbar — só o Estúdio de luz lê isto
 
   teto:
     bases: [113, 129, 145]    # T2+T3 · T1+T6 · T4+T5
     pan: 0
     tilt: 1
     obturador: 2
+    paleta: [3, 4, 5, 6]      # R G B W — só o Estúdio de luz lê isto
 
   barra:
     bases: [17, 33]           # B1-B4 · B5-B6
     # Sem canal de brilho: é RGBW direto, a cor É a intensidade. Então
     # modular quer dizer escalar os quatro juntos, preservando a proporção.
     cores: [0, 1, 2, 3]
+
+  # `paleta` diz ONDE ficam os canais de cor de cada refletor. Quem usa é só
+  # a tela /estudio (a animação "Trocar cores", e respirar/onda/batida no
+  # teto). Os modos do culto abaixo não olham para ela: tirar ou pôr estas
+  # linhas não muda nenhum deles. Sem `paleta`, o estúdio simplesmente não
+  # troca a cor daquele grupo — é o que acontece num PC com o config antigo.
 
 
 # ===========================================================================

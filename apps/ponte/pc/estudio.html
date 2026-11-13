@@ -1,0 +1,1194 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Estúdio de luz — Ponte do Culto</title>
+<style>
+/* ESTUDIO DE LUZ: o lugar de testar ideias de luz FORA do culto.
+
+   Tres decisoes que explicam a tela:
+
+   1. "Mostrar na igreja enquanto mexo" nasce DESLIGADO. Com ele desligado
+      esta pagina nao manda nada para a luz: da para montar uma ideia inteira
+      em casa, ou com a igreja cheia, sem encostar em nenhum refletor.
+
+   2. Daqui so saem numeros de 0 a 100 para a animacao. Quanto isso vale em
+      velocidade e em tamanho de verdade e decidido pela ponte, que tem os
+      limites (ver ponte/movimento.py). A tela nao consegue pedir mais.
+
+   3. "Piscar forte" nao e uma animacao daqui: chama o modo de estrobo que ja
+      existia, depois de uma confirmacao propria, e nunca liga sozinho — nem
+      ao abrir a tela, nem ao carregar uma ideia, nem ao desfazer.
+
+   As variaveis de cor sao as mesmas de guia.css, copiadas para a pagina nao
+   depender de outro arquivo. */
+:root{
+  --fundo:#0b1016; --caixa:#131b24; --caixa2:#18212c; --linha:#243040; --borda:#3a4757;
+  --texto:#e8eef6; --suave:#b9c6d6; --apagado:#8fa0b4;
+  --ok:#22c55e; --ok-fundo:#0d2a18; --ok-texto:#6ee7a0; --ok-borda:#1f6b3c;
+  --erro:#ef4444; --erro-fundo:#2a1114; --erro-texto:#f8a5a5; --erro-borda:#7a2626;
+  --aviso:#f59e0b; --aviso-fundo:#2a1d07; --aviso-texto:#f7d9a3; --aviso-borda:#6b4a12;
+  --marca:#3b82f6; --marca-forte:#2563eb; --marca-fundo:#10213f; --marca-texto:#a9c9ff; --marca-borda:#284a86;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--fundo);color:var(--texto);
+  font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  -webkit-tap-highlight-color:transparent}
+a{color:var(--marca-texto)} a:hover{color:#d3e3ff}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+button:disabled{cursor:not-allowed;opacity:.5}
+button:focus-visible,a:focus-visible,input:focus-visible,.quadro:focus-visible{outline:3px solid var(--marca);outline-offset:2px}
+h1,h2,p{margin:0}
+[hidden]{display:none!important}
+.so-leitor{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+.folha{min-height:100vh;padding:20px clamp(12px,2vw,28px) 24px;display:flex;flex-direction:column;gap:16px;
+  max-width:1560px;margin:0 auto}
+.topo{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px}
+.topo .titulo{display:flex;flex-direction:column;gap:2px}
+.topo .titulo a{font-size:14px;font-weight:600;padding:12px 0;min-height:44px;display:inline-flex;align-items:center}
+.topo h1{font-size:26px;font-weight:800;letter-spacing:-.02em}
+.topo .lema{font-size:14px;color:var(--suave);max-width:420px}
+.topo .acoes{display:flex;flex-wrap:wrap;gap:8px;margin-left:auto;align-items:center}
+
+.bt{min-height:44px;padding:0 16px;border-radius:12px;border:1px solid var(--borda);background:var(--caixa2);
+  font-size:14px;font-weight:600}
+.bt.perigo{border-color:var(--erro-borda);background:var(--erro-fundo);color:var(--erro-texto);font-weight:700}
+.bt.forte{border-color:transparent;background:var(--marca-forte);color:#fff;font-weight:700}
+.bt.verde{border-color:transparent;background:var(--ok);color:#06210f;font-weight:800}
+.vivo{display:inline-flex;align-items:center;gap:10px;min-height:44px;padding:0 14px;border-radius:12px;
+  background:var(--caixa2);border:1px solid var(--borda);color:var(--suave);font-size:14px;font-weight:600;cursor:pointer}
+.vivo.ligado{background:var(--ok-fundo);border-color:var(--ok-borda);color:var(--ok-texto)}
+.vivo.travado{opacity:.55;cursor:not-allowed}
+input[type=checkbox]{width:20px;height:20px;accent-color:var(--marca);flex:none}
+.vivo input{accent-color:var(--ok)}
+
+.faixa{border-radius:12px;padding:10px 14px;font-size:14.5px}
+.faixa:empty{display:none}
+.faixa.aviso{background:var(--aviso-fundo);border:1px solid var(--aviso-borda);color:var(--aviso-texto)}
+.faixa.erro{background:var(--erro-fundo);border:1px solid var(--erro-borda);color:var(--erro-texto)}
+.faixa.bom{background:var(--ok-fundo);border:1px solid var(--ok-borda);color:var(--ok-texto)}
+.faixa.nota{background:var(--caixa);border:1px solid var(--linha);color:var(--suave)}
+
+.colunas{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
+.painel{flex:1 1 400px;min-width:0;background:var(--caixa);border:1px solid var(--linha);border-radius:18px;
+  padding:18px;display:flex;flex-direction:column;gap:14px}
+.cabeca{display:flex;align-items:baseline;justify-content:space-between;gap:6px 12px;flex-wrap:wrap}
+h2{font-size:17px;font-weight:700}
+.dica{font-size:13px;color:var(--apagado)}
+.texto{font-size:14px;color:var(--suave)}
+.texto b{color:var(--texto)}
+
+/* 1. o palco */
+.atalhos{display:flex;flex-wrap:wrap;gap:6px}
+.pilula{min-height:44px;padding:0 14px;border-radius:999px;border:1px solid var(--borda);background:var(--caixa2);
+  font-size:14px;font-weight:600}
+.pilula[aria-pressed=true]{border-color:transparent;background:var(--marca-forte);color:#fff;font-weight:700}
+.palco{background:var(--fundo);border:1px solid var(--linha);border-radius:14px;padding:16px;
+  display:flex;flex-direction:column;gap:18px}
+.fileira{display:flex;flex-direction:column;gap:6px}
+.rotulo{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--apagado)}
+.grade{display:grid;gap:8px}
+.luz{min-height:48px;border-radius:10px;border:1px solid var(--borda);font-size:13px;font-weight:700;padding:4px 6px;
+  line-height:1.15}
+.luz.redonda{min-height:64px;border-radius:32px}
+.luz[aria-pressed=true]{border:3px solid #fff;outline:2px solid var(--ok);outline-offset:2px}
+.luz[aria-pressed=true]:focus-visible{outline:3px solid var(--marca)}
+.plateia{font-size:12px;color:var(--apagado);text-align:center;border-top:1px dashed var(--borda);padding-top:10px}
+
+/* 2. cor, forca e direcao */
+.bloco{display:flex;flex-direction:column;gap:8px}
+.bloco.linha{border-top:1px solid var(--linha);padding-top:14px}
+.cores{display:flex;flex-wrap:wrap;gap:8px}
+.cor{width:44px;height:44px;border-radius:12px;border:1px solid var(--borda);padding:0}
+.cor.nenhuma{border-style:dashed;border-color:#5b6b7e}
+.cor[aria-pressed=true]{border:3px solid #fff;outline:2px solid var(--ok);outline-offset:2px}
+.marca{display:inline-flex;align-items:center;gap:10px;min-height:44px;font-size:14px;color:var(--suave);cursor:pointer}
+.regua{display:flex;align-items:center;gap:12px;font-size:14px;color:var(--suave);min-height:44px}
+.regua .nome{width:84px;flex:none}
+.regua input[type=range]{flex:1;min-width:0;height:44px;accent-color:var(--marca);margin:0}
+.regua output{width:76px;flex:none;text-align:right;color:var(--texto);font-weight:600;font-variant-numeric:tabular-nums}
+.direcao{display:flex;flex-wrap:wrap;gap:14px;align-items:stretch}
+.quadro{position:relative;flex:1 1 220px;height:220px;background:var(--fundo);border:1px solid var(--borda);
+  border-radius:14px;overflow:hidden;touch-action:none;cursor:crosshair}
+.quadro[aria-disabled=true]{opacity:.45;cursor:not-allowed}
+.quadro .l{position:absolute;font-size:12px;color:var(--apagado);pointer-events:none}
+.quadro .l.e{left:8px;top:50%;transform:translateY(-140%)} .quadro .l.d{right:8px;top:50%;transform:translateY(-140%)}
+.quadro .l.c{left:0;right:0;top:8px;text-align:center} .quadro .l.b{left:0;right:0;bottom:8px;text-align:center}
+.quadro .v{position:absolute;left:50%;top:28px;bottom:28px;width:1px;background:var(--linha)}
+.quadro .h{position:absolute;top:50%;left:12px;right:12px;height:1px;background:var(--linha)}
+.bolinha{position:absolute;width:28px;height:28px;margin:-14px 0 0 -14px;border-radius:50%;border:3px solid #fff;
+  pointer-events:none}
+.bolinha.fora{width:16px;height:16px;margin:-8px 0 0 -8px;border:2px solid var(--apagado);opacity:.6}
+.pontos{flex:1 1 150px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;align-content:start}
+.ponto{min-height:44px;border-radius:10px;border:1px solid var(--borda);background:var(--caixa2);font-size:13px;font-weight:600}
+.ponto[aria-pressed=true]{border-color:transparent;background:var(--marca-forte);color:#fff}
+
+/* 3. animacao */
+.cartoes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.cartao{min-height:64px;border-radius:12px;border:1px solid var(--borda);background:var(--caixa2);padding:8px 12px;
+  text-align:left;display:flex;flex-direction:column;gap:2px;justify-content:center}
+.cartao .q{font-size:15px;font-weight:700}
+.cartao .p{font-size:12px;color:var(--suave)}
+.cartao[aria-pressed=true]{border:2px solid var(--ok);background:var(--ok-fundo)}
+.cartao[aria-pressed=true] .p{color:var(--ok-texto)}
+.cartao.risco{grid-column:1 / -1;border-color:var(--erro-borda);background:var(--erro-fundo);color:var(--erro-texto)}
+.cartao.risco .p{color:var(--erro-texto)}
+.cartao.risco[aria-pressed=true]{border:2px solid var(--erro);background:#4a1518;color:#fff}
+.tempo{display:flex;flex-wrap:wrap;align-items:center;gap:10px;border-top:1px solid var(--linha);padding-top:14px}
+.tempo .conta{flex:1 1 160px;display:flex;flex-direction:column;gap:2px}
+.tempo .numero{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+.tempo .bater{min-height:56px;padding:0 20px;border-radius:14px;border:none;background:var(--marca-forte);color:#fff;
+  font-size:15px;font-weight:700}
+
+/* ideias */
+.ideias{background:var(--caixa);border:1px solid var(--linha);border-radius:18px;padding:16px 18px;
+  display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px}
+.ideias .titulo{display:flex;flex-direction:column;gap:2px;flex:0 1 220px}
+.ideias .lista{display:flex;flex-wrap:wrap;gap:8px;flex:999 1 420px}
+.ideia{min-height:56px;padding:6px 14px;border-radius:12px;border:1px solid var(--borda);background:var(--caixa2);
+  font-size:14px;font-weight:600;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:6px;
+  max-width:220px;overflow-wrap:anywhere;text-align:left}
+.ideia[aria-pressed=true]{border:2px solid var(--ok);background:var(--ok-fundo);font-weight:700}
+.ideia .tiras{display:flex;gap:3px}
+.ideia .tiras i{width:14px;height:6px;border-radius:3px;border:1px solid rgba(255,255,255,.12)}
+.ideia.nova{border-style:dashed;border-color:#5b6b7e;background:var(--fundo);color:var(--suave);align-items:center}
+.ideias .salvar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ideias input[type=text]{width:200px;max-width:100%;height:52px;border-radius:12px;border:1px solid var(--borda);
+  background:var(--fundo);padding:0 14px;font-size:16px}
+.ideias .salvar .bt{min-height:52px}
+.ideias .salvar .bt.verde{padding:0 22px;font-size:16px}
+.ideias .obs{flex:1 1 100%}
+
+dialog{border:1px solid var(--borda);border-radius:18px;background:var(--caixa);color:var(--texto);
+  padding:22px;max-width:min(480px,calc(100vw - 24px));width:100%}
+dialog::backdrop{background:rgba(3,6,10,.72)}
+dialog h2{font-size:20px;margin-bottom:10px}
+dialog p{font-size:15.5px;color:var(--suave);margin-bottom:10px;white-space:pre-line}
+dialog .botoes{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;margin-top:16px}
+dialog .bt{min-height:48px;padding:0 20px;font-size:15px}
+
+@media (max-width:520px){
+  .topo .acoes{margin-left:0;width:100%}
+  .cartoes{grid-template-columns:1fr}
+  .cartao.risco{grid-column:auto}
+  .regua .nome{width:72px} .regua output{width:64px}
+  .ideias input[type=text]{width:100%}
+}
+@media (prefers-reduced-motion:reduce){ *{transition:none!important;animation:none!important} }
+</style>
+</head>
+<body>
+<div class="folha">
+
+  <header class="topo">
+    <div class="titulo">
+      <a href="/">Voltar ao painel</a>
+      <h1>Estúdio de luz</h1>
+    </div>
+    <p class="lema">Lugar de testar ideias. Nada daqui muda o culto até você salvar como cena.</p>
+    <div class="acoes">
+      <label class="vivo" id="rotVivo"><input type="checkbox" id="aoVivo">Mostrar na igreja enquanto mexo</label>
+      <button type="button" class="bt" id="btDesfazer" disabled>Desfazer</button>
+      <button type="button" class="bt perigo" id="btApagar">Apagar tudo</button>
+    </div>
+  </header>
+
+  <div class="faixa" id="situacao" role="status"></div>
+  <div class="faixa" id="recado" role="status" aria-live="polite"></div>
+
+  <div class="colunas">
+
+    <!-- 1. O PALCO: escolher em quais luzes mexer -->
+    <section class="painel" aria-labelledby="t1">
+      <div class="cabeca">
+        <h2 id="t1">1 · Em quais luzes</h2>
+        <span class="dica">toque para escolher; dá para escolher várias</span>
+      </div>
+      <div class="atalhos" id="atalhos"></div>
+      <div class="palco" id="palco"></div>
+      <p class="texto">Mexendo em: <b id="mexendo"></b></p>
+    </section>
+
+    <!-- 2. COR, FORCA E DIRECAO do que esta escolhido -->
+    <section class="painel" aria-labelledby="t2">
+      <h2 id="t2">2 · Cor, força e direção</h2>
+
+      <div class="bloco">
+        <span class="dica" id="rotCor">Cor</span>
+        <div class="cores" id="cores" role="group" aria-labelledby="rotCor"></div>
+        <label class="marca"><input type="checkbox" id="segunda">Alternar com uma segunda cor (uma sim, uma não)</label>
+        <div class="cores" id="cores2" role="group" aria-label="Segunda cor" hidden></div>
+      </div>
+
+      <label class="regua"><span class="nome">Força</span>
+        <input type="range" min="0" max="100" value="85" id="forca"><output id="forcaV">85%</output></label>
+
+      <div class="bloco linha">
+        <div class="cabeca">
+          <span class="dica" id="rotDir">Para onde o teto aponta</span>
+          <span class="dica">arraste a bolinha, ou use as setas do teclado</span>
+        </div>
+        <div class="direcao">
+          <div class="quadro" id="quadro" tabindex="0" role="group" aria-labelledby="rotDir" aria-describedby="dirTexto">
+            <span class="l c">gira para um lado</span>
+            <span class="l b">gira para o outro</span>
+            <span class="l e">esquerda</span>
+            <span class="l d">direita</span>
+            <span class="v" aria-hidden="true"></span>
+            <span class="h" aria-hidden="true"></span>
+            <span id="bolinhas" aria-hidden="true"></span>
+          </div>
+          <div class="pontos" id="pontos"></div>
+        </div>
+        <p class="dica" id="dirTexto" aria-live="polite"></p>
+        <p class="dica">No meio do quadro a luz aponta reto para baixo, no palco. Esquerda e direita foram medidas na igreja; o giro ainda não, então confira olhando a luz. Plateia e Púlpito ficam desligados até alguém medir esses dois pontos.</p>
+        <label class="marca"><input type="checkbox" id="espelhar">Espelhar: uma sim, uma não, faz o contrário da vizinha</label>
+      </div>
+    </section>
+
+    <!-- 3. ANIMACAO -->
+    <section class="painel" aria-labelledby="t3">
+      <div class="cabeca">
+        <h2 id="t3">3 · Animação</h2>
+        <span class="dica">o que as luzes escolhidas ficam fazendo</span>
+      </div>
+
+      <div class="cartoes" id="cartoes"></div>
+      <p class="texto" id="animando"></p>
+
+      <div class="bloco">
+        <label class="regua"><span class="nome">Velocidade</span>
+          <input type="range" min="0" max="100" value="35" id="velocidade"><output id="velocidadeV"></output></label>
+        <label class="regua"><span class="nome">Tamanho</span>
+          <input type="range" min="0" max="100" value="60" id="tamanho"><output id="tamanhoV"></output></label>
+        <label class="regua"><span class="nome">Atraso</span>
+          <input type="range" min="0" max="100" value="50" id="atraso"><output id="atrasoV"></output></label>
+        <span class="dica">Atraso no zero: todas juntas. Para cima: uma segue a outra.</span>
+        <span class="dica" id="ritmo"></span>
+      </div>
+
+      <div class="tempo">
+        <div class="conta">
+          <span class="dica">No tempo da música</span>
+          <span class="numero" id="bpm">toque no ritmo</span>
+        </div>
+        <button type="button" class="bt" id="btSoltar" hidden>Voltar para a velocidade</button>
+        <button type="button" class="bater" id="btBater">Bater o tempo</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- IDEIAS: guardar, comparar e, quando ficar bom, virar cena -->
+  <section class="ideias" aria-labelledby="t4">
+    <div class="titulo">
+      <h2 id="t4">Ideias guardadas</h2>
+      <span class="dica">toque para comparar uma com a outra</span>
+    </div>
+    <div class="lista" id="ideias"></div>
+    <div class="salvar">
+      <label for="nomeIdeia" class="dica">Nome</label>
+      <input id="nomeIdeia" type="text" maxlength="40" autocomplete="off">
+      <button type="button" class="bt" id="btTirar" hidden>Tirar esta ideia</button>
+      <button type="button" class="bt verde" id="btCena">Salvar como cena</button>
+    </div>
+    <p class="dica obs">As ideias ficam guardadas só neste navegador. A cena guarda a cor e a direção; o movimento você escolhe no painel.</p>
+  </section>
+</div>
+
+<dialog id="dlg" aria-labelledby="dlgT">
+  <h2 id="dlgT"></h2>
+  <p id="dlgP"></p>
+  <div class="botoes">
+    <button type="button" class="bt" id="dlgNao">Cancelar</button>
+    <button type="button" class="bt forte" id="dlgSim">Sim</button>
+  </div>
+</dialog>
+
+<script>
+// ---------------------------------------------------------------------------
+// AS LUZES. Os enderecos sao os do patch medido em 08/11/2026, os mesmos de
+// cenas.html. Cada endereco e UM botao no mapa, mesmo quando liga mais de um
+// refletor (T1 e T6 estao no mesmo endereco, em pontas opostas do teto).
+//   rgbw  : R G B W, sem brilho
+//   par9  : brilho, estrobo, programa, velocidade, R G B W Ambar
+//   cabeca: giro, inclinacao, obturador (255 = aberto), R G B W, (nada), reset
+// ---------------------------------------------------------------------------
+const LUZES = [
+  {base:49,  grupo:'cortina', tipo:'par9',   nome:'C1'},
+  {base:65,  grupo:'cortina', tipo:'par9',   nome:'C2'},
+  {base:81,  grupo:'cortina', tipo:'par9',   nome:'C3'},
+  {base:97,  grupo:'cortina', tipo:'par9',   nome:'C4'},
+  {base:113, grupo:'teto',    tipo:'cabeca', nome:'T2 e T3'},
+  {base:129, grupo:'teto',    tipo:'cabeca', nome:'T1 e T6'},
+  {base:145, grupo:'teto',    tipo:'cabeca', nome:'T4 e T5'},
+  {base:17,  grupo:'barra',   tipo:'rgbw',   nome:'B1 a B4'},
+  {base:33,  grupo:'barra',   tipo:'rgbw',   nome:'B5 e B6'},
+  {base:1,   grupo:'frente',  tipo:'rgbw',   nome:'Luz de frente'},
+];
+const GRUPOS = [
+  {id:'cortina', atalho:'Cortina', rotulo:'Cortina · fundo do palco', colunas:4, frase:'as 4 luzes da cortina'},
+  {id:'teto',    atalho:'Teto',    rotulo:'Teto · as que se mexem',   colunas:3, frase:'as 3 luzes do teto', redonda:true},
+  {id:'barra',   atalho:'Barra',   rotulo:'Barra',                    colunas:2, frase:'a barra inteira'},
+  {id:'frente',  atalho:'Frente',  rotulo:'Frente · rosto de quem está no palco', colunas:1, frase:'a luz de frente'},
+];
+const doGrupo = id => LUZES.filter(l => l.grupo === id).map(l => l.base);
+const LUZ = Object.fromEntries(LUZES.map(l => [l.base, l]));
+
+// rgbw = [R,G,B,W]; p9 = [R,G,B,W,Ambar] para a cortina. Valores de cenas.html.
+const PALETA = {
+  apagado: {nome:'Apagado',  css:'#0b1016', rgbw:[0,0,0,0],     p9:[0,0,0,0,0]},
+  branco:  {nome:'Branco',   css:'#f4f1e8', rgbw:[0,0,0,255],   p9:[0,0,0,255,0]},
+  ambar:   {nome:'Âmbar',    css:'#f5a524', rgbw:[255,80,0,0],  p9:[0,0,0,0,255]},
+  vermelho:{nome:'Vermelho', css:'#e23b3b', rgbw:[255,0,0,0],   p9:[255,0,0,0,0]},
+  rosa:    {nome:'Rosa',     css:'#e0457b', rgbw:[255,0,110,0], p9:[255,0,110,0,0]},
+  roxo:    {nome:'Roxo',     css:'#7c5cff', rgbw:[110,0,255,0], p9:[110,0,255,0,0]},
+  azul:    {nome:'Azul',     css:'#3f6ad8', rgbw:[0,0,255,0],   p9:[0,0,255,0,0]},
+  ciano:   {nome:'Ciano',    css:'#22b8cf', rgbw:[0,180,255,0], p9:[0,180,255,0,0]},
+  verde:   {nome:'Verde',    css:'#2fb86a', rgbw:[0,255,0,0],   p9:[0,255,0,0,0]},
+};
+const ORDEM_CORES = ['apagado','branco','ambar','vermelho','rosa','roxo','azul','ciano','verde'];
+
+// Direcao do teto. MEIO = 128/128, medido: aponta reto para baixo, no palco.
+// Para os lados (a inclinacao) foi medido: 64 = esquerda, 192 = direita.
+// O quadro de arrastar anda so dentro de 64-192 nos dois eixos; fora disso
+// existe um unico ponto, o Forro (255/255), tambem medido.
+const MIN = 64, MAX = 192, MEIO = 128;
+const PONTOS = [
+  {id:'palco',    nome:'Palco',    giro:128, lado:128},
+  {id:'forro',    nome:'Forro',    giro:255, lado:255},
+  {id:'esquerda', nome:'Esquerda', giro:128, lado:64},
+  {id:'direita',  nome:'Direita',  giro:128, lado:192},
+  {id:'plateia',  nome:'Plateia',  falta:'ainda não foi medido na igreja'},
+  {id:'pulpito',  nome:'Púlpito',  falta:'ainda não foi medido na igreja'},
+  {id:'abrir',    nome:'Abrir',    par:[96, 160]},
+  {id:'cruzar',   nome:'Cruzar',   par:[160, 96]},
+];
+
+const ANIMACOES = [
+  {id:'parado',       nome:'Parado',       frase:'fica como está'},
+  {id:'respirar',     nome:'Respirar',     frase:'a força sobe e desce devagar',      familia:'intensidade'},
+  {id:'onda',         nome:'Onda',         frase:'acende uma depois da outra',        familia:'intensidade'},
+  {id:'vai_e_vem',    nome:'Vai e vem',    frase:'balança de um lado para o outro',   familia:'direcao'},
+  {id:'circulo',      nome:'Círculo',      frase:'gira em volta do ponto escolhido',  familia:'direcao'},
+  {id:'varrer',       nome:'Varrer',       frase:'passa em linha reta, indo e voltando', familia:'direcao'},
+  {id:'batida',       nome:'Batida',       frase:'pulsa no tempo da música',          familia:'intensidade'},
+  {id:'trocar_cores', nome:'Trocar cores', frase:'passa pelas duas cores escolhidas', familia:'cores'},
+  {id:'piscar_forte', nome:'Piscar forte', frase:'pede confirmação: pode incomodar quem é sensível a luz piscando', risco:true},
+];
+const ANIM = Object.fromEntries(ANIMACOES.map(a => [a.id, a]));
+
+// O que a ponte disse que da para animar (GET /api/luz/estudio). Ate ela
+// responder vale este palpite, que e o patch da igreja.
+let PONTE = {
+  ligado:false, motor:false, busca:null, piscar_forte:null, respondeu:false,
+  animaveis:{}, limites:{periodo:{respirar:[10,2.5],onda:[4,.75],batida:[2,.55],circulo:[20,3.5],
+    vai_e_vem:[20,6.5],varrer:[20,6.5],trocar_cores:[12,1.5]}, bpm:[40,200]},
+};
+const BATIDAS = {respirar:4, onda:1, batida:1, circulo:8, vai_e_vem:8, varrer:8, trocar_cores:4};
+
+// ---------------------------------------------------------------------------
+// estado
+// ---------------------------------------------------------------------------
+function estadoInicial(){
+  const luz = {};
+  for (const l of LUZES){
+    luz[l.base] = {cor:'apagado', forca:85};
+    if (l.tipo === 'cabeca'){ luz[l.base].giro = MEIO; luz[l.base].lado = MEIO; }
+  }
+  return {luz, sel:doGrupo('teto'), cor:'azul', segunda:{ligada:false, cor:'roxo'}, espelhar:false,
+          anim:{tipo:'parado', luzes:[], velocidade:35, tamanho:60, atraso:50, bpm:null}};
+}
+let estado = estadoInicial();
+let piscando = false;            // "Piscar forte" ligado AGORA. Nunca e guardado.
+let ideiaAtiva = null;
+const historia = [];             // para o Desfazer
+let ultimaMarca = {quem:null, em:0};
+
+const $ = id => document.getElementById(id);
+const copia = o => JSON.parse(JSON.stringify(o));
+const limitar = (v, a, b) => Math.max(a, Math.min(b, v));
+const esc = (v, forca) => Math.round(v * forca / 100);
+
+// Guarda o estado de agora para o Desfazer. `quem` evita empilhar cem copias
+// enquanto alguem arrasta o mesmo controle.
+function marcar(quem){
+  const agora = Date.now();
+  if (quem && ultimaMarca.quem === quem && agora - ultimaMarca.em < 900){ ultimaMarca.em = agora; return; }
+  ultimaMarca = {quem:quem || null, em:agora};
+  historia.push(JSON.stringify(estado));
+  if (historia.length > 40) historia.shift();
+  $('btDesfazer').disabled = false;
+}
+
+// ---------------------------------------------------------------------------
+// estado -> o que vai para a luz. Igual a cenas.html: TODO canal de todo
+// refletor entra, inclusive os zeros — estrobo, programa automatico e reset
+// saem SEMPRE em 0 de qualquer coisa montada aqui.
+// ---------------------------------------------------------------------------
+function quadroDe(st){
+  const q = {};
+  for (const l of LUZES){
+    const s = st.luz[l.base], p = PALETA[s.cor] || PALETA.apagado, b = l.base;
+    if (l.tipo === 'rgbw'){
+      p.rgbw.forEach((v, i) => q[b + i] = esc(v, s.forca));
+    } else if (l.tipo === 'par9'){
+      q[b] = s.cor === 'apagado' ? 0 : Math.round(255 * s.forca / 100);
+      q[b + 1] = 0; q[b + 2] = 0; q[b + 3] = 0;
+      p.p9.forEach((v, i) => q[b + 4 + i] = v);
+    } else {
+      const acesa = s.cor !== 'apagado' && s.forca > 0;
+      q[b] = limitar(Math.round(s.giro), 0, 255); q[b + 1] = limitar(Math.round(s.lado), 0, 255);
+      q[b + 2] = acesa ? 255 : 0;
+      p.rgbw.forEach((v, i) => q[b + 3 + i] = esc(v, s.forca));
+      q[b + 7] = 0; q[b + 8] = 0;
+    }
+  }
+  return q;
+}
+
+function podeAnimar(base, familia){
+  const a = PONTE.animaveis[String(base)];
+  if (!PONTE.respondeu || !PONTE.motor){
+    const g = LUZ[base].grupo;
+    if (g === 'frente') return false;
+    return familia === 'direcao' ? g === 'teto' : true;
+  }
+  if (!a) return false;
+  if (familia === 'intensidade') return !!a.intensidade;
+  if (familia === 'direcao') return !!a.direcao;
+  return a.cores > 0;
+}
+
+// A animacao que vale: so com as luzes que PODEM fazer aquilo. A luz de
+// frente nunca entra — nem aqui, nem na ponte.
+function animacaoDe(st){
+  const a = st.anim, def = ANIM[a.tipo];
+  if (!def || !def.familia) return null;
+  const luzes = (a.luzes || []).filter(b => LUZ[b] && podeAnimar(b, def.familia));
+  if (!luzes.length) return null;
+  const e = {tipo:a.tipo, luzes, velocidade:a.velocidade, tamanho:a.tamanho, atraso:a.atraso, espelhar:!!st.espelhar};
+  if (a.bpm) e.bpm = a.bpm;
+  if (a.tipo === 'trocar_cores'){
+    // As duas cores ficam guardadas NA animacao (a.cores), tiradas na hora em
+    // que o cartao foi tocado: pintar outra luz depois nao muda a troca.
+    const par = a.cores || [];
+    if (par.length !== 2 || !par.every(n => PALETA[n] && n !== 'apagado') || par[0] === par[1]) return null;
+    const forca = st.luz[luzes[0]].forca;
+    e.cores = par.map(n => ({'4': PALETA[n].rgbw.map(v => esc(v, forca)), '5': PALETA[n].p9}));
+  }
+  return e;
+}
+const duasCores = st => st.segunda.ligada && st.cor !== 'apagado' && st.segunda.cor !== 'apagado' && st.cor !== st.segunda.cor;
+
+function periodoDe(a){
+  const [lento, rapido] = (PONTE.limites.periodo || {})[a.tipo] || [10, 3];
+  if (a.bpm){ let p = 60 / a.bpm * BATIDAS[a.tipo]; while (p < rapido) p *= 2; return p; }
+  return Math.max(rapido, lento * Math.pow(rapido / lento, a.velocidade / 100));
+}
+
+// ---------------------------------------------------------------------------
+// rede. Com "Mostrar na igreja" DESLIGADO, nada daqui para baixo e chamado
+// para escrever: so leituras (o que da para animar, as cenas que ja existem).
+// ---------------------------------------------------------------------------
+async function pedir(url, corpo){
+  const r = await fetch(url, corpo === undefined ? {} : {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(corpo)});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.erro || ('erro ' + r.status));
+  return j;
+}
+function recado(txt, tipo){ const a = $('recado'); a.textContent = txt || ''; a.className = 'faixa ' + (tipo || 'nota'); }
+
+const aoVivo = () => $('aoVivo').checked;
+let fila = null, enviando = false, deNovo = false;
+let jaFoi = {quadro:null, anim:null};
+
+function mandar(){
+  if (!aoVivo()) return;
+  clearTimeout(fila);
+  fila = setTimeout(mandarJa, 80);
+}
+async function mandarJa(){
+  if (!aoVivo()) return;
+  if (enviando){ deNovo = true; return; }
+  enviando = true;
+  try{
+    const q = JSON.stringify(quadroDe(estado));
+    if (q !== jaFoi.quadro){
+      await pedir('/api/luz/canais', {canais:JSON.parse(q), exclusivo:true});
+      jaFoi.quadro = q;
+    }
+    // O pisca forte so liga pelo proprio botao, com confirmacao. Enquanto
+    // ele esta ligado, mexer em cor ou direcao nao o desliga nem o religa.
+    if (!piscando){
+      const e = animacaoDe(estado), a = JSON.stringify(e);
+      if (a !== jaFoi.anim){
+        if (e) await pedir('/api/luz/estudio', e);
+        else await pedir('/api/luz/modo/parado', {});
+        jaFoi.anim = a;
+      }
+    }
+  } catch(erro){
+    jaFoi = {quadro:null, anim:null};
+    recado('Não consegui mandar para a luz: ' + erro.message, 'erro');
+  } finally {
+    enviando = false;
+    if (deNovo){ deNovo = false; mandar(); }
+  }
+}
+
+async function lerPonte(){
+  try{
+    const r = await pedir('/api/luz/estudio');
+    PONTE = Object.assign({}, PONTE, r, {respondeu:true});
+    if (!r.limites || !r.limites.periodo) PONTE.limites = {periodo:{}, bpm:[40,200]};
+  } catch(erro){
+    PONTE.respondeu = false; PONTE.ligado = false;
+  }
+  desenharSituacao();
+}
+
+function desenharSituacao(){
+  const s = $('situacao'), vivo = $('aoVivo');
+  let txt = '', tipo = 'aviso';
+  if (!PONTE.respondeu){
+    txt = 'Não consegui falar com a ponte. Dá para montar e guardar ideias, mas nada chega na igreja.';
+  } else if (!PONTE.ligado){
+    txt = 'As luzes estão desligadas neste computador. Dá para montar e guardar ideias, mas nada acende.';
+  } else if (!aoVivo()){
+    txt = 'Só nesta tela: a igreja não muda. Marque “Mostrar na igreja enquanto mexo” quando quiser ver na luz de verdade.';
+    tipo = 'nota';
+  } else if (PONTE.busca && !PONTE.busca.recente){
+    txt = 'O computador do som não está buscando a luz agora. O que você fizer aqui fica guardado e aparece quando ele voltar.';
+  } else if (PONTE.busca && !PONTE.busca.sabe_animar){
+    txt = 'O computador do som está numa versão antiga: cor, força e direção aparecem na igreja, mas as animações daqui ficam paradas lá até ele ser atualizado.';
+  } else {
+    txt = 'Mostrando na igreja: cada toque já muda a luz de verdade.'; tipo = 'bom';
+  }
+  s.textContent = txt; s.className = 'faixa ' + tipo;
+  const pode = PONTE.respondeu && PONTE.ligado;
+  vivo.disabled = !pode;
+  if (!pode && vivo.checked) vivo.checked = false;
+  $('rotVivo').className = 'vivo' + (vivo.checked ? ' ligado' : '') + (pode ? '' : ' travado');
+}
+
+// ---------------------------------------------------------------------------
+// dialogo proprio (no lugar de confirm)
+// ---------------------------------------------------------------------------
+function perguntar({titulo, texto, sim, perigo}){
+  return new Promise(resolver => {
+    const d = $('dlg');
+    $('dlgT').textContent = titulo; $('dlgP').textContent = texto;
+    $('dlgSim').textContent = sim || 'Sim';
+    $('dlgSim').className = 'bt ' + (perigo ? 'perigo' : 'forte');
+    const fim = resposta => {
+      $('dlgSim').onclick = $('dlgNao').onclick = d.oncancel = d.onclose = null;
+      if (d.open) d.close();
+      resolver(resposta);
+    };
+    $('dlgSim').onclick = () => fim(true);
+    $('dlgNao').onclick = () => fim(false);
+    d.oncancel = ev => { ev.preventDefault(); fim(false); };
+    if (d.showModal) d.showModal(); else d.setAttribute('open', '');
+    $('dlgNao').focus();      // o foco nasce no Cancelar, nunca no Sim
+  });
+}
+
+// ---------------------------------------------------------------------------
+// desenho
+// ---------------------------------------------------------------------------
+function hex(c){ const n = parseInt(c.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function misturar(a, b, t){ return a.map((v, i) => Math.round(v + (b[i] - v) * t)); }
+const FUNDO = hex('#0b1016');
+function corNaTela(nome, forca){
+  if (nome === 'apagado') return FUNDO;
+  return misturar(FUNDO, hex(PALETA[nome].css), .25 + .75 * limitar(forca, 0, 100) / 100);
+}
+function pintar(el, rgb){
+  el.style.background = 'rgb(' + rgb.join(',') + ')';
+  const brilho = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000;
+  el.style.color = brilho > 150 ? '#1a1a1a' : '#fff';
+}
+const mesmos = (a, b) => a.length === b.length && a.every(x => b.includes(x));
+const escolhidasDe = grupo => estado.sel.filter(b => LUZ[b].grupo === grupo);
+const ordenar = bases => LUZES.map(l => l.base).filter(b => bases.includes(b));
+
+function dizerLuzes(bases){
+  if (!bases.length) return 'nenhuma luz';
+  if (mesmos(bases, LUZES.map(l => l.base))) return 'todas as luzes';
+  for (const g of GRUPOS) if (mesmos(bases, doGrupo(g.id))) return g.frase;
+  return ordenar(bases).map(b => LUZ[b].nome).join(', ');
+}
+
+const botoesDeLuz = {};
+function montarPalco(){
+  const at = $('atalhos');
+  const todos = [{id:'todas', atalho:'Todas', bases:LUZES.map(l => l.base)}]
+    .concat(GRUPOS.map(g => ({id:g.id, atalho:g.atalho, bases:doGrupo(g.id)})));
+  for (const a of todos){
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'pilula'; b.textContent = a.atalho; b.dataset.bases = a.bases.join(',');
+    b.onclick = () => { marcar(); estado.sel = a.bases.slice(); desenhar(); };
+    at.appendChild(b);
+  }
+  const palco = $('palco');
+  for (const g of GRUPOS){
+    const f = document.createElement('div'); f.className = 'fileira';
+    const r = document.createElement('span'); r.className = 'rotulo'; r.textContent = g.rotulo; f.appendChild(r);
+    const grade = document.createElement('div'); grade.className = 'grade';
+    grade.style.gridTemplateColumns = 'repeat(' + g.colunas + ',minmax(0,1fr))';
+    for (const base of doGrupo(g.id)){
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'luz' + (g.redonda ? ' redonda' : ''); b.textContent = LUZ[base].nome;
+      b.onclick = () => {
+        marcar();
+        estado.sel = estado.sel.includes(base) ? estado.sel.filter(x => x !== base) : ordenar(estado.sel.concat(base));
+        desenhar();
+      };
+      botoesDeLuz[base] = b; grade.appendChild(b);
+    }
+    f.appendChild(grade); palco.appendChild(f);
+  }
+  const p = document.createElement('span'); p.className = 'plateia'; p.textContent = 'plateia deste lado'; palco.appendChild(p);
+}
+
+function botaoCor(nome, aoEscolher){
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'cor' + (nome === 'apagado' ? ' nenhuma' : '');
+  b.style.background = PALETA[nome].css; b.setAttribute('aria-label', PALETA[nome].nome); b.title = PALETA[nome].nome;
+  b.dataset.cor = nome; b.onclick = aoEscolher;
+  return b;
+}
+function montarCores(){
+  for (const n of ORDEM_CORES){
+    $('cores').appendChild(botaoCor(n, () => { marcar(); estado.cor = n; aplicarCor(); desenhar(); mandar(); }));
+    if (n !== 'apagado')
+      $('cores2').appendChild(botaoCor(n, () => { marcar(); estado.segunda.cor = n; aplicarCor(); desenhar(); mandar(); }));
+  }
+}
+// Pinta as luzes escolhidas. Com a segunda cor ligada, dentro de cada grupo
+// vai uma sim, uma nao.
+function aplicarCor(){
+  for (const g of GRUPOS){
+    escolhidasDe(g.id).forEach((base, i) => {
+      const s = estado.luz[base];
+      s.cor = (estado.segunda.ligada && i % 2 === 1) ? estado.segunda.cor : estado.cor;
+      if (s.cor !== 'apagado' && s.forca === 0) s.forca = 85;
+    });
+  }
+  // Se quem esta sendo pintado sao as proprias luzes da troca de cores, a
+  // troca acompanha as cores novas.
+  const a = estado.anim;
+  if (a.tipo === 'trocar_cores' && duasCores(estado) && a.luzes.every(b => estado.sel.includes(b)))
+    a.cores = [estado.cor, estado.segunda.cor];
+}
+
+function montarPontos(){
+  for (const p of PONTOS){
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'ponto'; b.textContent = p.nome; b.dataset.ponto = p.id;
+    if (p.falta){ b.disabled = true; b.title = p.nome + ': ' + p.falta; b.setAttribute('aria-label', p.nome + ' — ' + p.falta); }
+    b.onclick = () => {
+      const teto = escolhidasDe('teto');
+      if (!teto.length) return;
+      marcar();
+      teto.forEach((base, i) => {
+        const s = estado.luz[base];
+        if (p.par){ s.giro = MEIO; s.lado = p.par[i % 2]; }
+        else { s.giro = p.giro; s.lado = (estado.espelhar && i % 2 === 1 && p.lado <= MAX) ? 256 - p.lado : p.lado; }
+      });
+      desenhar(); mandar();
+    };
+    $('pontos').appendChild(b);
+  }
+}
+
+function montarCartoes(){
+  for (const a of ANIMACOES){
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'cartao' + (a.risco ? ' risco' : ''); b.dataset.anim = a.id;
+    b.innerHTML = '<span class="q"></span><span class="p"></span>';
+    b.querySelector('.q').textContent = a.nome;
+    b.onclick = () => escolherAnimacao(a.id);
+    $('cartoes').appendChild(b);
+  }
+}
+
+// Por que um cartao esta desligado, em uma frase. '' = pode usar.
+function porQueNao(a){
+  if (a.id === 'parado') return '';
+  if (a.risco){
+    if (!PONTE.piscar_forte) return 'não existe neste computador';
+    if (!aoVivo()) return 'só com “Mostrar na igreja” ligado';
+    return '';
+  }
+  if (a.id === 'trocar_cores' && estado.anim.tipo !== 'trocar_cores' && !duasCores(estado)) return 'marque a segunda cor para ter duas cores';
+  const sem = estado.sel.filter(b => LUZ[b].grupo !== 'frente');
+  if (!sem.length) return estado.sel.length ? 'a luz de frente não entra em animação' : 'escolha uma luz primeiro';
+  if (!sem.some(b => podeAnimar(b, a.familia)))
+    return a.familia === 'direcao' ? 'só as luzes do teto se mexem' : 'estas luzes não fazem isto neste computador';
+  return '';
+}
+
+async function escolherAnimacao(id){
+  const a = ANIM[id];
+  if (a.risco){
+    // PISCAR FORTE. Nunca chega aqui sem um toque de gente, e pergunta antes.
+    const ok = await perguntar({
+      titulo:'Ligar o pisca forte?',
+      texto:'Luz piscando forte pode provocar crise em quem tem epilepsia. Não use com gente no salão.\n\nEle vale para a cortina e o teto inteiros, não só para as luzes escolhidas. Para desligar, toque em Parado.',
+      sim:'Ligar mesmo assim', perigo:true});
+    if (!ok || !aoVivo() || !PONTE.piscar_forte) return;
+    try{
+      await pedir('/api/luz/modo/' + encodeURIComponent(PONTE.piscar_forte), {});
+      piscando = true; jaFoi.anim = null;
+      recado('Pisca forte ligado. Toque em Parado para desligar.', 'aviso');
+    } catch(erro){ recado('Não consegui ligar: ' + erro.message, 'erro'); }
+    desenhar();
+    return;
+  }
+  marcar();
+  const eraPisca = piscando;
+  piscando = false;
+  estado.anim.tipo = id;
+  if (id !== 'parado') estado.anim.luzes = estado.sel.filter(b => podeAnimar(b, a.familia));
+  if (id === 'trocar_cores' && duasCores(estado)) estado.anim.cores = [estado.cor, estado.segunda.cor];
+  desenhar();
+  if (eraPisca || id === 'parado'){
+    // Parado e o botao de abortar: vai na hora, sem esperar a fila.
+    jaFoi.anim = null;
+    if (aoVivo()){ clearTimeout(fila); await mandarJa(); }
+  } else mandar();
+}
+
+function palavra(v, nomes){ return nomes[Math.min(nomes.length - 1, Math.floor(v / (100 / nomes.length)))]; }
+
+function desenhar(){
+  // 1. palco
+  for (const l of LUZES){
+    const b = botoesDeLuz[l.base], s = estado.luz[l.base];
+    pintar(b, corNaTela(s.cor, s.forca));
+    b.setAttribute('aria-pressed', estado.sel.includes(l.base) ? 'true' : 'false');
+    b.setAttribute('aria-label', l.nome + ', ' + PALETA[s.cor].nome.toLowerCase());
+  }
+  for (const b of $('atalhos').children)
+    b.setAttribute('aria-pressed', mesmos(estado.sel, b.dataset.bases.split(',').map(Number)) ? 'true' : 'false');
+  $('mexendo').textContent = estado.sel.length ? dizerLuzes(estado.sel) : 'nenhuma luz — toque numa luz acima';
+
+  // 2. cor e forca
+  const primeiras = GRUPOS.map(g => escolhidasDe(g.id)[0]).filter(b => b !== undefined);
+  const segundas = GRUPOS.map(g => escolhidasDe(g.id)[1]).filter(b => b !== undefined);
+  const umaSo = bases => bases.length && bases.every(b => estado.luz[b].cor === estado.luz[bases[0]].cor)
+    ? estado.luz[bases[0]].cor : null;
+  const cor1 = umaSo(estado.segunda.ligada ? primeiras : estado.sel);
+  for (const b of $('cores').children) b.setAttribute('aria-pressed', b.dataset.cor === cor1 ? 'true' : 'false');
+  $('segunda').checked = estado.segunda.ligada;
+  $('cores2').hidden = !estado.segunda.ligada;
+  const cor2 = segundas.length ? umaSo(segundas) : estado.segunda.cor;
+  for (const b of $('cores2').children) b.setAttribute('aria-pressed', b.dataset.cor === cor2 ? 'true' : 'false');
+  const semLuz = !estado.sel.length;
+  for (const b of [...$('cores').children, ...$('cores2').children]) b.disabled = semLuz;
+  const forca = semLuz ? 0 : estado.luz[estado.sel[0]].forca;
+  $('forca').value = forca; $('forca').disabled = semLuz; $('forcaV').textContent = forca + '%';
+
+  // 2. direcao
+  const teto = escolhidasDe('teto');
+  $('quadro').setAttribute('aria-disabled', teto.length ? 'false' : 'true');
+  $('quadro').tabIndex = teto.length ? 0 : -1;
+  $('espelhar').checked = estado.espelhar;
+  for (const b of $('pontos').children){
+    const p = PONTOS.find(x => x.id === b.dataset.ponto);
+    if (p.falta) continue;
+    b.disabled = !teto.length || (p.par && teto.length < 2);
+    let la = teto.length > 0;
+    teto.forEach((base, i) => {
+      const s = estado.luz[base];
+      if (p.par) la = la && teto.length > 1 && s.giro === MEIO && s.lado === p.par[i % 2];
+      else la = la && s.giro === p.giro && (s.lado === p.lado || (estado.espelhar && i % 2 === 1 && s.lado === 256 - p.lado));
+    });
+    b.setAttribute('aria-pressed', la ? 'true' : 'false');
+  }
+  desenharBolinhas(0);
+  $('dirTexto').textContent = dizerDirecao(teto);
+
+  // 3. animacao
+  const tipo = piscando ? 'piscar_forte' : estado.anim.tipo;
+  for (const b of $('cartoes').children){
+    const a = ANIM[b.dataset.anim], motivo = porQueNao(a);
+    b.setAttribute('aria-pressed', a.id === tipo ? 'true' : 'false');
+    b.disabled = !!motivo && a.id !== tipo;
+    b.querySelector('.p').textContent = motivo && a.id !== tipo ? motivo : a.frase;
+  }
+  const def = ANIM[estado.anim.tipo], valendo = animacaoDe(estado);
+  let frase = '';
+  if (piscando) frase = 'Pisca forte ligado na cortina e no teto. Toque em Parado para desligar.';
+  else if (def.familia && valendo){
+    frase = 'Animando: ' + dizerLuzes(valendo.luzes) + '.';
+  } else if (def.familia) frase = 'Esta animação está sem luzes. Escolha as luzes e toque no cartão de novo.';
+  $('animando').textContent = frase;
+  let outras = $('btPassar');
+  const querPassar = def.familia && !piscando && estado.sel.some(b => podeAnimar(b, def.familia))
+    && !mesmos(estado.sel.filter(b => podeAnimar(b, def.familia)), estado.anim.luzes);
+  if (querPassar && !outras){
+    outras = document.createElement('button');
+    outras.type = 'button'; outras.id = 'btPassar'; outras.className = 'bt';
+    outras.textContent = 'Animar as luzes escolhidas agora';
+    outras.onclick = () => escolherAnimacao(estado.anim.tipo);
+    $('animando').after(outras);
+  } else if (!querPassar && outras) outras.remove();
+
+  const a = estado.anim, temAnim = !!def.familia;
+  $('velocidade').value = a.velocidade; $('tamanho').value = a.tamanho; $('atraso').value = a.atraso;
+  $('velocidadeV').textContent = a.bpm ? 'no tempo' : palavra(a.velocidade, ['bem devagar','devagar','médio','rápido']);
+  $('tamanhoV').textContent = palavra(a.tamanho, ['pequeno','médio','grande']);
+  $('atrasoV').textContent = a.atraso === 0 ? 'juntas' : palavra(a.atraso, ['quase juntas','em fila','uma vai, outra volta']);
+  $('tamanho').disabled = a.tipo === 'trocar_cores';
+  if (temAnim){
+    const p = periodoDe(a), n = p.toLocaleString('pt-BR', {maximumFractionDigits:1});
+    $('ritmo').textContent = a.tipo === 'trocar_cores' ? 'Fica ' + n + ' s em cada cor.' : 'Uma volta completa a cada ' + n + ' s.'
+      + (def.familia === 'direcao' ? ' A velocidade tem um limite para proteger os motores.' : '');
+  } else $('ritmo').textContent = '';
+  $('bpm').textContent = a.bpm ? a.bpm + ' batidas por minuto' : 'toque no ritmo';
+  $('btSoltar').hidden = !a.bpm;
+
+  desenharIdeias();
+  desenharSituacao();
+}
+
+function dizerDirecao(teto){
+  if (!teto.length) return 'Escolha uma luz do teto para apontar.';
+  const s = estado.luz[teto[0]];
+  if (s.giro > MAX || s.lado > MAX || s.giro < MIN || s.lado < MIN) return LUZ[teto[0]].nome + ': apontando para o forro.';
+  const lado = s.lado < MEIO - 6 ? 'para a esquerda' : s.lado > MEIO + 6 ? 'para a direita' : 'reto para baixo';
+  const giro = Math.abs(s.giro - MEIO) <= 6 ? '' : ', com giro';
+  return LUZ[teto[0]].nome + ': ' + lado + giro + '.';
+}
+
+// As bolinhas: uma por luz do teto. `t` (segundos) anima a previa.
+function desenharBolinhas(t){
+  const raiz = $('bolinhas'); raiz.textContent = '';
+  const e = previaLigada() ? animacaoDe(estado) : null;
+  const direcao = e && ANIM[e.tipo].familia === 'direcao';
+  for (const base of doGrupo('teto')){
+    const s = estado.luz[base], escolhida = estado.sel.includes(base);
+    let giro = s.giro, lado = s.lado;
+    if (giro > MAX || lado > MAX || giro < MIN || lado < MIN){ if (!direcao || !e.luzes.includes(base)) continue; }
+    if (direcao && e.luzes.includes(base)){
+      const i = e.luzes.filter(b => LUZ[b].grupo === 'teto').indexOf(base);
+      const fase = t / periodoDe(estado.anim) + .5 * e.atraso / 100 * i;
+      const raio = ({circulo:56, vai_e_vem:58, varrer:56})[e.tipo] * e.tamanho / 100;
+      const sinal = (e.espelhar && i % 2 === 1) ? -1 : 1, ang = 2 * Math.PI * fase;
+      giro = limitar(giro, MIN, MAX); lado = limitar(lado, MIN, MAX);
+      if (e.tipo === 'circulo'){ giro += raio * Math.cos(sinal * ang); lado += raio * Math.sin(sinal * ang); }
+      else if (e.tipo === 'vai_e_vem') giro += sinal * raio * Math.sin(ang);
+      else lado += sinal * raio * Math.sin(ang);
+      giro = limitar(giro, MIN, MAX); lado = limitar(lado, MIN, MAX);
+    }
+    const b = document.createElement('span');
+    b.className = 'bolinha' + (escolhida ? '' : ' fora');
+    b.style.left = (lado - MIN) / (MAX - MIN) * 100 + '%';
+    b.style.top = (giro - MIN) / (MAX - MIN) * 100 + '%';
+    b.style.background = 'rgb(' + corNaTela(s.cor === 'apagado' ? 'apagado' : s.cor, 100).join(',') + ')';
+    raiz.appendChild(b);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// previa na tela: o mapa e as bolinhas se mexem como a luz se mexeria. E so
+// desenho — nao manda nada. Respeita quem pediu menos movimento no aparelho.
+// ---------------------------------------------------------------------------
+const poucoMovimento = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+const previaLigada = () => !poucoMovimento && !piscando;
+const seno01 = f => (1 - Math.cos(2 * Math.PI * f)) / 2;
+const dente = (f, largura) => f >= largura ? 0 : (f / largura < .15 ? f / largura / .15 : Math.max(0, 1 - (f / largura - .15) / .85));
+function previa(agora){
+  requestAnimationFrame(previa);
+  if (!previaLigada()) return;
+  const e = animacaoDe(estado);
+  if (!e) return;
+  const t = agora / 1000, familia = ANIM[e.tipo].familia, periodo = periodoDe(estado.anim);
+  if (familia === 'direcao'){ desenharBolinhas(t); return; }
+  for (const g of GRUPOS){
+    e.luzes.filter(b => LUZ[b].grupo === g.id).forEach((base, i) => {
+      const s = estado.luz[base], fase = t / periodo + .5 * e.atraso / 100 * i;
+      if (s.cor === 'apagado') return;
+      if (familia === 'intensidade'){
+        const f = fase - Math.floor(fase), minimo = 1 - .8 * e.tamanho / 100;
+        const forma = e.tipo === 'respirar' ? seno01(f) : dente(f, e.tipo === 'onda' ? .45 : .25);
+        pintar(botoesDeLuz[base], corNaTela(s.cor, s.forca * (minimo + (1 - minimo) * forma)));
+      } else {
+        const pos = ((fase % 2) + 2) % 2, dentro = pos - Math.floor(pos);
+        const mistura = dentro < .6 ? 0 : seno01((dentro - .6) / .8);
+        const nomes = estado.anim.cores, de = nomes[Math.floor(pos) % 2], para = nomes[(Math.floor(pos) + 1) % 2];
+        pintar(botoesDeLuz[base], misturar(corNaTela(de, s.forca), corNaTela(para, s.forca), mistura));
+      }
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ideias guardadas (neste navegador) e "Salvar como cena"
+// ---------------------------------------------------------------------------
+const CHAVE = 'ponte.estudio.ideias';
+let IDEIAS = [];
+function lerIdeias(){
+  try{ const v = JSON.parse(localStorage.getItem(CHAVE) || '[]'); IDEIAS = Array.isArray(v) ? v.filter(i => i && i.nome && i.estado) : []; }
+  catch(erro){ IDEIAS = []; }
+}
+function gravarIdeias(){
+  try{ localStorage.setItem(CHAVE, JSON.stringify(IDEIAS)); return true; }
+  catch(erro){ recado('Este navegador não deixou guardar a ideia.', 'erro'); return false; }
+}
+// Confere uma ideia lida do navegador antes de usar: so entra o que esta
+// tela conhece. E o pisca forte nunca e guardado nem recuperado.
+function estadoSeguro(bruto){
+  const st = estadoInicial();
+  if (!bruto || typeof bruto !== 'object') return st;
+  for (const l of LUZES){
+    const de = (bruto.luz || {})[l.base], para = st.luz[l.base];
+    if (!de) continue;
+    if (PALETA[de.cor]) para.cor = de.cor;
+    if (Number.isFinite(de.forca)) para.forca = limitar(Math.round(de.forca), 0, 100);
+    if (l.tipo === 'cabeca'){
+      if (Number.isFinite(de.giro)) para.giro = limitar(Math.round(de.giro), 0, 255);
+      if (Number.isFinite(de.lado)) para.lado = limitar(Math.round(de.lado), 0, 255);
+    }
+  }
+  if (Array.isArray(bruto.sel)) st.sel = ordenar(bruto.sel.filter(b => LUZ[b]));
+  if (PALETA[bruto.cor]) st.cor = bruto.cor;
+  if (bruto.segunda){ st.segunda.ligada = bruto.segunda.ligada === true; if (PALETA[bruto.segunda.cor]) st.segunda.cor = bruto.segunda.cor; }
+  st.espelhar = bruto.espelhar === true;
+  const a = bruto.anim || {};
+  if (ANIM[a.tipo] && (ANIM[a.tipo].familia || a.tipo === 'parado')) st.anim.tipo = a.tipo;
+  if (Array.isArray(a.luzes)) st.anim.luzes = ordenar(a.luzes.filter(b => LUZ[b] && LUZ[b].grupo !== 'frente'));
+  for (const k of ['velocidade','tamanho','atraso']) if (Number.isFinite(a[k])) st.anim[k] = limitar(Math.round(a[k]), 0, 100);
+  if (Number.isFinite(a.bpm)) st.anim.bpm = limitar(Math.round(a.bpm), 40, 200);
+  if (Array.isArray(a.cores) && a.cores.length === 2 && a.cores.every(n => PALETA[n])) st.anim.cores = a.cores.slice();
+  return st;
+}
+
+function desenharIdeias(){
+  const raiz = $('ideias'); raiz.textContent = '';
+  IDEIAS.forEach((ideia, i) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'ideia'; b.setAttribute('aria-pressed', ideiaAtiva === i ? 'true' : 'false');
+    const tiras = document.createElement('span'); tiras.className = 'tiras'; tiras.setAttribute('aria-hidden', 'true');
+    const st = estadoSeguro(ideia.estado);
+    for (const g of GRUPOS){
+      const t = document.createElement('i'), s = st.luz[doGrupo(g.id)[0]];
+      t.style.background = 'rgb(' + corNaTela(s.cor, 100).join(',') + ')'; tiras.appendChild(t);
+    }
+    b.appendChild(tiras); b.appendChild(document.createTextNode(ideia.nome));
+    b.onclick = () => abrirIdeia(i);
+    raiz.appendChild(b);
+  });
+  const nova = document.createElement('button');
+  nova.type = 'button'; nova.className = 'ideia nova'; nova.textContent = 'Guardar esta ideia';
+  nova.onclick = guardarIdeia;
+  raiz.appendChild(nova);
+  $('btTirar').hidden = ideiaAtiva === null;
+}
+
+async function abrirIdeia(i){
+  marcar();
+  const eraPisca = piscando;
+  piscando = false;
+  estado = estadoSeguro(IDEIAS[i].estado);
+  ideiaAtiva = i; $('nomeIdeia').value = IDEIAS[i].nome;
+  if (eraPisca) jaFoi.anim = null;
+  desenhar(); mandar();
+  recado('Ideia “' + IDEIAS[i].nome + '” aberta.', 'bom');
+}
+
+async function guardarIdeia(){
+  const nome = $('nomeIdeia').value.trim();
+  if (!nome){ recado('Dê um nome à ideia antes de guardar.', 'aviso'); $('nomeIdeia').focus(); return; }
+  const ja = IDEIAS.findIndex(i => i.nome.toLowerCase() === nome.toLowerCase());
+  if (ja >= 0 && !(await perguntar({titulo:'Trocar a ideia “' + IDEIAS[ja].nome + '”?',
+      texto:'Já existe uma ideia com este nome. A de agora entra no lugar dela.', sim:'Trocar'}))) return;
+  const item = {nome, estado:copia(estado)};
+  if (ja >= 0){ IDEIAS[ja] = item; ideiaAtiva = ja; } else { IDEIAS.push(item); ideiaAtiva = IDEIAS.length - 1; }
+  if (gravarIdeias()) recado('Ideia “' + nome + '” guardada neste navegador.', 'bom');
+  desenhar();
+}
+
+async function tirarIdeia(){
+  if (ideiaAtiva === null) return;
+  const nome = IDEIAS[ideiaAtiva].nome;
+  if (!(await perguntar({titulo:'Tirar a ideia “' + nome + '”?', texto:'Ela some da lista deste navegador. A luz não muda.',
+      sim:'Tirar', perigo:true}))) return;
+  IDEIAS.splice(ideiaAtiva, 1); ideiaAtiva = null; gravarIdeias(); desenhar();
+  recado('Ideia “' + nome + '” tirada da lista.', 'bom');
+}
+
+const CENAS_DO_CULTO = ['abertura','louvor','pregacao','apagar'];
+async function salvarComoCena(){
+  const nome = $('nomeIdeia').value.trim();
+  if (!nome){ recado('Dê um nome à cena antes de salvar.', 'aviso'); $('nomeIdeia').focus(); return; }
+  let existentes = {};
+  try{ existentes = (await pedir('/api/luz/mesa')).looks_salvas || {}; }
+  catch(erro){ recado('Não consegui falar com a ponte: ' + erro.message, 'erro'); return; }
+  let texto = 'A cena guarda a cor e a direção de todas as luzes como estão nesta tela. O movimento não vai junto: ele é escolhido no painel.';
+  if (nome in existentes) texto += '\n\nJá existe uma cena com este nome. A de agora entra no lugar dela.';
+  const doCulto = CENAS_DO_CULTO.includes(nome);
+  if (doCulto) texto += '\n\nAtenção: os botões do culto usam a cena “' + nome + '”. Salvar aqui muda o que eles acendem no próximo culto.';
+  if (!(await perguntar({titulo:'Salvar a cena “' + nome + '”?', texto, sim:'Salvar cena', perigo:doCulto}))) return;
+  try{
+    await pedir('/api/luz/look', {nome, canais:quadroDe(estado)});
+    recado('Cena “' + nome + '” salva. Ela já aparece nas cenas de luz; o movimento você escolhe no painel.', 'bom');
+  } catch(erro){ recado('Não consegui salvar: ' + erro.message, 'erro'); }
+}
+
+// ---------------------------------------------------------------------------
+// controles
+// ---------------------------------------------------------------------------
+$('aoVivo').onchange = async () => {
+  const caixa = $('aoVivo');
+  if (caixa.checked){
+    caixa.checked = false; desenharSituacao();
+    const ok = await perguntar({titulo:'Mostrar na igreja?',
+      texto:'A luz da igreja vai ficar igual ao que está nesta tela, e cada toque passa a mudar a luz de verdade.\n\nSe estiver no meio de um culto ou de um ensaio, não ligue.',
+      sim:'Mostrar na igreja'});
+    if (!ok) return;
+    caixa.checked = true; jaFoi = {quadro:null, anim:null};
+    await lerPonte(); desenhar(); mandar();
+  } else {
+    // Ao desligar, a animacao daqui PARA na igreja: deixar cabeca girando sem
+    // ninguem olhando para o controle seria pior. A cor e a direcao ficam.
+    const eraPisca = piscando; piscando = false;
+    try{ if (jaFoi.anim !== null && jaFoi.anim !== 'null' || eraPisca) await pedir('/api/luz/modo/parado', {}); }
+    catch(erro){ recado('Não consegui parar a animação na igreja: ' + erro.message, 'erro'); }
+    jaFoi = {quadro:null, anim:null};
+    desenhar();
+    recado('A igreja fica como está, parada. O que você mexer agora fica só nesta tela.', 'nota');
+  }
+};
+
+$('btDesfazer').onclick = async () => {
+  if (!historia.length) return;
+  const eraPisca = piscando; piscando = false;
+  estado = estadoSeguro(JSON.parse(historia.pop()));
+  ultimaMarca = {quem:null, em:0}; ideiaAtiva = null;
+  $('btDesfazer').disabled = !historia.length;
+  if (eraPisca) jaFoi.anim = null;
+  desenhar(); mandar();
+};
+
+$('btApagar').onclick = async () => {
+  marcar();
+  const sel = estado.sel;
+  piscando = false;
+  estado = estadoInicial(); estado.sel = sel; ideiaAtiva = null;
+  desenhar();
+  if (aoVivo()){
+    // Apagar e abortar: vai na hora e para tudo, sem perguntar.
+    clearTimeout(fila); jaFoi = {quadro:null, anim:null};
+    try{
+      await pedir('/api/luz/modo/parado', {});
+      await pedir('/api/luz/apagar', {});
+      jaFoi = {quadro:JSON.stringify(quadroDe(estado)), anim:'null'};
+      await pedir('/api/luz/canais', {canais:quadroDe(estado), exclusivo:true});
+      recado('Tudo apagado, aqui e na igreja. Desfazer traz de volta.', 'bom');
+    } catch(erro){ recado('Não consegui apagar na igreja: ' + erro.message, 'erro'); }
+  } else recado('Tudo apagado nesta tela. Desfazer traz de volta.', 'nota');
+};
+
+$('segunda').onchange = () => { marcar(); estado.segunda.ligada = $('segunda').checked; aplicarCor(); desenhar(); mandar(); };
+$('espelhar').onchange = () => {
+  marcar(); estado.espelhar = $('espelhar').checked;
+  // Na direcao parada, espelhar vira a inclinacao de uma sim, uma nao.
+  escolhidasDe('teto').forEach((base, i) => {
+    const s = estado.luz[base];
+    if (i % 2 === 1 && s.lado >= MIN && s.lado <= MAX) s.lado = 256 - s.lado;
+  });
+  desenhar(); mandar();
+};
+$('forca').oninput = () => {
+  marcar('forca');
+  const v = Number($('forca').value);
+  for (const b of estado.sel) estado.luz[b].forca = v;
+  desenhar(); mandar();
+};
+for (const k of ['velocidade','tamanho','atraso']){
+  $(k).oninput = () => {
+    marcar(k); estado.anim[k] = Number($(k).value);
+    if (k === 'velocidade') estado.anim.bpm = null;      // mexeu na velocidade: sai do tempo batido
+    desenhar(); mandar();
+  };
+}
+
+// o quadro de arrastar
+function apontar(lado, giro, quem){
+  const teto = escolhidasDe('teto');
+  if (!teto.length) return;
+  marcar(quem);
+  lado = limitar(Math.round(lado), MIN, MAX); giro = limitar(Math.round(giro), MIN, MAX);
+  teto.forEach((base, i) => {
+    const s = estado.luz[base];
+    s.giro = giro; s.lado = (estado.espelhar && i % 2 === 1) ? 256 - lado : lado;
+  });
+  desenhar(); mandar();
+}
+(function(){
+  const q = $('quadro');
+  let arrastando = false;
+  const daqui = ev => {
+    const r = q.getBoundingClientRect();
+    apontar(MIN + (ev.clientX - r.left) / r.width * (MAX - MIN), MIN + (ev.clientY - r.top) / r.height * (MAX - MIN), 'quadro');
+  };
+  q.addEventListener('pointerdown', ev => {
+    if (!escolhidasDe('teto').length) return;
+    arrastando = true; q.setPointerCapture(ev.pointerId); daqui(ev); ev.preventDefault();
+  });
+  q.addEventListener('pointermove', ev => { if (arrastando) daqui(ev); });
+  const soltar = () => { arrastando = false; };
+  q.addEventListener('pointerup', soltar); q.addEventListener('pointercancel', soltar);
+  q.addEventListener('keydown', ev => {
+    const passos = {ArrowLeft:[-4,0], ArrowRight:[4,0], ArrowUp:[0,-4], ArrowDown:[0,4]}[ev.key];
+    const teto = escolhidasDe('teto');
+    if (!passos || !teto.length) return;
+    ev.preventDefault();
+    const s = estado.luz[teto[0]];
+    apontar(limitar(s.lado, MIN, MAX) + passos[0], limitar(s.giro, MIN, MAX) + passos[1], 'teclas');
+  });
+})();
+
+// bater o tempo: a media dos ultimos toques vira batidas por minuto
+let toques = [];
+$('btBater').onclick = () => {
+  const agora = performance.now();
+  if (toques.length && agora - toques[toques.length - 1] > 2500) toques = [];
+  toques.push(agora);
+  if (toques.length > 8) toques.shift();
+  if (toques.length < 3){ $('bpm').textContent = 'continue tocando…'; return; }
+  const media = (toques[toques.length - 1] - toques[0]) / (toques.length - 1);
+  const [lo, hi] = PONTE.limites.bpm || [40, 200];
+  marcar('bater');
+  estado.anim.bpm = limitar(Math.round(60000 / media), lo, hi);
+  desenhar(); mandar();
+};
+$('btSoltar').onclick = () => { marcar(); estado.anim.bpm = null; toques = []; desenhar(); mandar(); };
+
+// Fechar a aba com o pisca forte ligado nao pode deixa-lo piscando sozinho.
+addEventListener('pagehide', () => {
+  if (piscando && navigator.sendBeacon) navigator.sendBeacon('/api/luz/modo/parado');
+});
+
+$('btTirar').onclick = tirarIdeia;
+$('btCena').onclick = salvarComoCena;
+$('nomeIdeia').oninput = () => { if (ideiaAtiva !== null && $('nomeIdeia').value.trim() !== IDEIAS[ideiaAtiva].nome){ ideiaAtiva = null; desenharIdeias(); } };
+
+// ---------------------------------------------------------------------------
+montarPalco(); montarCores(); montarPontos(); montarCartoes();
+lerIdeias();
+desenhar();
+lerPonte().then(desenhar);
+setInterval(() => { if (aoVivo() && !document.hidden) lerPonte(); }, 5000);
+requestAnimationFrame(previa);
+</script>
+</body>
+</html>

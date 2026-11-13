@@ -1014,6 +1014,7 @@ def luz_quadro():
     motor = _contexto.get("movimento")
     corpo = cliente.retrato()
     corpo["modo"] = (motor.atual() if motor else None) or "parado"
+    _estudio_no_quadro(corpo, motor)    # so acrescenta algo com o estudio em uso
     return jsonify(corpo)
 
 
@@ -1089,6 +1090,98 @@ def luz_remover_look(nome):
     except mod_mesa.ErroMesa:
         pass
     return jsonify({"removido": True})
+
+
+# -- Estudio de luz ----------------------------------------------------------
+#
+# A tela /estudio e para testar ideias FORA do culto: cor e direcao por luz,
+# e uma animacao com velocidade, tamanho e atraso. Tudo aqui e isolado:
+#
+#   - nenhuma cue, momento ou botao do painel chama estas rotas;
+#   - a cor e a direcao continuam indo por /api/luz/canais, como em /cenas;
+#   - a animacao vai para o motor (ponte/movimento.py), que confere e LIMITA
+#     tudo de novo — daqui so saem numeros de 0 a 100;
+#   - "Parado" no painel (/api/luz/modo/parado) desliga tambem o que o estudio
+#     tiver deixado rodando.
+#
+# E O PC DO SOM? Ele calcula o movimento la, e pode estar numa versao antiga.
+# Por isso a animacao NAO vai no campo "modo" do quadro: vai numa chave nova,
+# "estudio", que a versao antiga ignora. Para ela o modo segue "parado" e a
+# luz fica quieta, na cor certa. Ver ponte/seguidor.py.
+_estudio_visto = {"em": None, "sabe": False}
+
+
+def _estudio_no_quadro(corpo, motor):
+    """Chamado por /api/luz/quadro. Sem estudio em uso, NAO muda o quadro."""
+    quem = request.remote_addr or ""
+    if quem not in ("127.0.0.1", "::1"):
+        _estudio_visto["em"] = time.time()
+        _estudio_visto["sabe"] = request.args.get("sabe") == "estudio"
+    espec = motor.estudio() if motor else None
+    if espec is not None:
+        corpo["estudio"] = espec
+
+
+@app.get("/estudio")
+def pagina_estudio():
+    return send_from_directory(RAIZ, "estudio.html")
+
+
+def _retrato_do_estudio(motor):
+    cliente = _contexto.get("luzes")
+    # Quem leva a luz ate os refletores? Com driver agente e o PC do som, e a
+    # tela precisa saber se ele entende animacao do estudio.
+    busca = None
+    if cliente is not None and hasattr(cliente, "retrato"):
+        recente = (_estudio_visto["em"] is not None
+                   and time.time() - _estudio_visto["em"] < 10)
+        busca = {"recente": recente, "sabe_animar": bool(recente and _estudio_visto["sabe"])}
+    perigoso = next((m for m in (motor.catalogo() if motor else []) if m["perigoso"]), None)
+    return {
+        "ligado": cliente is not None,
+        "motor": motor is not None,
+        "busca": busca,
+        "animaveis": motor.capacidades_estudio() if motor else {},
+        "limites": motor.limites_estudio() if motor else {},
+        "animacao": motor.estudio() if motor else None,
+        "detalhe": motor.estudio_detalhe() if motor else None,
+        "modo_do_culto": (motor.atual() if motor else None) or "parado",
+        "piscar_forte": perigoso["id"] if perigoso else None,
+    }
+
+
+@app.get("/api/luz/estudio")
+def luz_estudio():
+    return jsonify(_retrato_do_estudio(_contexto.get("movimento")))
+
+
+@app.post("/api/luz/estudio")
+def luz_estudio_animar():
+    """Liga, troca ou para a animacao do estudio. {"tipo": "parado"} para.
+
+    O corpo traz o tipo, as luzes e tres numeros de 0 a 100. O que esses
+    numeros viram (periodo, raio, cerca de pan/tilt) e decidido pelo motor.
+    O estrobo NAO passa por aqui: tipo desconhecido e recusado.
+    """
+    motor = _contexto.get("movimento")
+    if motor is None:
+        return jsonify({"erro": "o motor de movimento nao carregou"}), 400
+    if _contexto.get("luzes") is None:
+        return jsonify({"erro": "as luzes estao desligadas neste computador"}), 400
+    corpo = request.get_json(silent=True)
+    if not isinstance(corpo, dict):
+        return jsonify({"erro": "a animacao veio num formato estranho"}), 400
+    try:
+        motor.definir_estudio(corpo)
+    except mod_movimento.ErroMovimento as erro:
+        return jsonify({"erro": str(erro)}), 400
+
+    # Mesmo motivo do /api/luz/modo: parar tem que valer na hora.
+    try:
+        _contexto["luzes"].reenviar()
+    except Exception:
+        pass
+    return jsonify(_retrato_do_estudio(motor))
 
 
 # -- YouTube -----------------------------------------------------------------
@@ -1801,6 +1894,7 @@ PACOTE = (
     "app.py", "requirements.txt", "INSTALAR.md",
     "painel.html", "louvor.html", "luzes.html", "cenas.html", "youtube.html",
     "chegada.html", "aqui.html", "letras.html", "guia.js", "guia.css",
+    "estudio.html",
     "chegada.yaml", "looks_salvas.yaml", "patch.yaml",
     "config.exemplo.yaml", "maquina.exemplo.yaml", "config.secundaria.yaml",
     "configurar-este-pc.bat", "configurar-este-pc.ps1",

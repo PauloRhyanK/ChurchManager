@@ -157,7 +157,10 @@ class Seguidor:
                 return
 
     def _buscar(self):
-        requisicao = urllib.request.Request(self._url, method="GET")
+        # "sabe=estudio" so AVISA a outra ponte de que este seguidor entende
+        # a chave "estudio" do quadro, para a tela de la poder dizer se a
+        # animacao vai aparecer na igreja. Uma ponte antiga ignora o aviso.
+        requisicao = urllib.request.Request(self._url + "?sabe=estudio", method="GET")
         with urllib.request.urlopen(requisicao, timeout=self._timeout) as resposta:
             return json.loads(resposta.read().decode("utf-8"))
 
@@ -165,7 +168,13 @@ class Seguidor:
         if "erro" in corpo:
             raise RuntimeError(corpo["erro"])
 
-        assinatura = (corpo.get("versao"), corpo.get("modo"))
+        # A animacao do Estudio de luz viaja numa chave A PARTE, e nao no
+        # "modo". De proposito: um seguidor antigo so le versao, canais e
+        # modo — e nesse caso o modo diz "parado", que ele entende. Ele fica
+        # com a luz certa e parada, em vez de receber um nome que nao conhece.
+        estudio = corpo.get("estudio")
+        assinatura = (corpo.get("versao"), corpo.get("modo"),
+                      json.dumps(estudio, sort_keys=True) if estudio is not None else None)
         if assinatura == self._visto:
             return      # nada mudou; o caso comum, e sai barato
 
@@ -215,7 +224,17 @@ class Seguidor:
         # mexer no painel outra vez.
         self._cliente.aplicar(quadro)
 
-        if self._movimento is not None:
+        if self._movimento is not None and estudio is not None:
+            # A especificacao que chega e conferida de novo AQUI, pelo motor
+            # desta maquina: velocidade, raio e cerca de pan/tilt saem das
+            # tabelas locais, nunca do fio. Se nao der para entender, PARADO.
+            try:
+                if self._movimento.definir_estudio(estudio) is None:
+                    self._movimento.escolher(corpo.get("modo") or "parado")
+            except Exception as erro:
+                self._movimento.escolher("parado")
+                self._aviso("[seguidor] animacao do estudio recusada: {}".format(erro))
+        elif self._movimento is not None:
             try:
                 self._movimento.escolher(corpo.get("modo") or "parado")
             except Exception as erro:
