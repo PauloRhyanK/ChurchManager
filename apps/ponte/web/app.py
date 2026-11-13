@@ -61,7 +61,7 @@ PASTA_PC = os.path.normpath(os.path.join(AQUI, "..", "pc"))
 PASTA_DADOS = os.environ.get("PONTE_DADOS", "/dados")
 ARQ_COFRE = os.path.join(PASTA_DADOS, "cofre.json")
 
-SENHA = os.environ.get("PONTE_SENHA", "")
+SENHA = os.environ.get("PONTE_SENHA", "").strip()
 CHAVE = os.environ.get("PONTE_CHAVE", "")
 if len(SENHA) < 8 or len(CHAVE) < 24:
     raise SystemExit(
@@ -156,16 +156,77 @@ def _porteiro():
 
 # -- entrar ------------------------------------------------------------------
 
+# A tela de entrar. Sozinha num arquivo so (sem depender do guia.css): e a
+# unica pagina que qualquer pessoa da internet ve, e tem que abrir inteira
+# mesmo se o resto falhar.
+#
+# O que ela cuida, porque ja deu problema (12/11/2026): o teclado do celular
+# poe um espaco depois da palavra que completa, e a senha "certa" era
+# recusada. O espaco das pontas e tirado aqui, antes de enviar, e de novo no
+# servidor. Tambem: sem maiuscula automatica, sem corretor, e um botao para
+# ver o que foi digitado.
 PAGINA_ENTRAR = """<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Entrar — Ponte do Culto</title><link rel="stylesheet" href="/guia.css"></head>
-<body><form class="tela" method="post" action="/entrar" style="max-width:520px;justify-content:center">
-<div><h1 class="ola">Ponte do Culto</h1><div class="sub">Igreja Paraíso</div></div>
+<title>Entrar — Ponte do Culto</title>
+<style>
+:root{--fundo:#0b1016;--caixa:#131b24;--linha:#243040;--borda:#3a4757;--texto:#e8eef6;--suave:#b9c6d6;--apagado:#8fa0b4;
+  --marca:#2563eb;--erro-fundo:#2a1114;--erro-borda:#7a2626;--erro-texto:#f8a5a5}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--fundo);color:var(--texto);
+  font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  display:flex;align-items:center;justify-content:center;
+  padding:max(20px,env(safe-area-inset-top)) 16px max(20px,env(safe-area-inset-bottom))}
+main{width:100%;max-width:420px;display:flex;flex-direction:column;gap:20px}
+h1{margin:0;font-size:clamp(30px,8vw,40px);font-weight:800;letter-spacing:-.03em;line-height:1.05}
+.sub{margin:6px 0 0;color:var(--suave);font-size:16px}
+form{background:var(--caixa);border:1px solid var(--linha);border-radius:20px;padding:22px;display:flex;flex-direction:column;gap:14px}
+label{font-size:14px;font-weight:600;color:var(--suave)}
+.campo{position:relative;display:flex}
+input{flex:1;min-width:0;height:56px;border-radius:14px;border:1px solid var(--borda);background:var(--fundo);color:var(--texto);
+  padding:0 96px 0 16px;font:inherit;font-size:18px}
+input:focus-visible,button:focus-visible{outline:3px solid #60a5fa;outline-offset:2px}
+.ver{position:absolute;right:6px;top:6px;height:44px;min-width:80px;padding:0 12px;border-radius:10px;border:1px solid var(--borda);
+  background:var(--caixa);color:var(--suave);font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.entrar{height:56px;border-radius:14px;border:none;background:var(--marca);color:#fff;font:inherit;font-size:17px;font-weight:700;cursor:pointer}
+.entrar:disabled{opacity:.6;cursor:wait}
+.faixa{border-radius:12px;padding:10px 14px;font-size:15px;background:var(--erro-fundo);border:1px solid var(--erro-borda);color:var(--erro-texto)}
+.dica{margin:0;font-size:13px;color:var(--apagado)}
+.pe{margin:0;text-align:center;font-size:13px;color:var(--apagado)}
+</style></head>
+<body><main>
+<div><h1>Ponte do Culto</h1><p class="sub">Igreja Paraíso · equipe de multimídia</p></div>
+<form method="post" action="/entrar" id="f" autocomplete="on">
 __AVISO__
-<div class="pergunta"><label for="senha">Senha da equipe</label>
-<input class="campo" style="width:100%" id="senha" name="senha" type="password" autocomplete="current-password" autofocus></div>
-<button class="bt forte largo" type="submit">Entrar</button>
-</form></body></html>"""
+<label for="senha">Senha da equipe</label>
+<div class="campo">
+<input id="senha" name="senha" type="password" autocomplete="current-password" autocapitalize="none"
+  autocorrect="off" spellcheck="false" enterkeyhint="go" required autofocus>
+<button type="button" class="ver" id="ver" aria-pressed="false" aria-controls="senha">Mostrar</button>
+</div>
+<p class="dica">Maiúsculas e minúsculas contam. Espaço no começo ou no fim é ignorado.</p>
+<button class="entrar" type="submit" id="entrar">Entrar</button>
+</form>
+<p class="pe">Não sabe a senha? Peça a quem coordena a equipe.</p>
+</main>
+<script>
+(function () {
+  var campo = document.getElementById('senha'), ver = document.getElementById('ver'), botao = document.getElementById('entrar');
+  ver.addEventListener('click', function () {
+    var aberta = campo.type === 'text';
+    campo.type = aberta ? 'password' : 'text';
+    ver.textContent = aberta ? 'Mostrar' : 'Esconder';
+    ver.setAttribute('aria-pressed', aberta ? 'false' : 'true');
+    campo.focus();
+  });
+  document.getElementById('f').addEventListener('submit', function (evento) {
+    campo.value = campo.value.trim();
+    if (!campo.value) { evento.preventDefault(); campo.focus(); return; }
+    botao.disabled = true; botao.textContent = 'Entrando…';
+  });
+})();
+</script>
+</body></html>"""
 
 
 @app.get("/entrar")
@@ -179,9 +240,12 @@ def entrar():
 def entrar_enviar():
     ip = _ip()
     if _bloqueado(ip):
-        aviso = '<div class="faixa erro">Muitas tentativas. Espere um minuto.</div>'
+        aviso = '<div class="faixa" role="alert">Muitas tentativas seguidas. Espere um minuto e tente de novo.</div>'
         return PAGINA_ENTRAR.replace("__AVISO__", aviso), 429
-    if hmac.compare_digest(request.form.get("senha", ""), SENHA):
+    # O espaco das pontas nao faz parte da senha: e o que o teclado do
+    # celular poe sozinho depois de completar uma palavra.
+    digitada = request.form.get("senha", "").strip()
+    if hmac.compare_digest(digitada.encode("utf-8"), SENHA.encode("utf-8")):
         with _tranca:
             _tentativas.pop(ip, None)
         session.permanent = True
@@ -191,7 +255,8 @@ def entrar_enviar():
     # custar caro.
     _errou(ip)
     time.sleep(1.0)
-    aviso = '<div class="faixa erro">Senha errada.</div>'
+    aviso = ('<div class="faixa" role="alert">Senha errada. Confira maiúsculas e minúsculas; '
+             'o botão Mostrar deixa ver o que foi digitado.</div>')
     return PAGINA_ENTRAR.replace("__AVISO__", aviso), 401
 
 
