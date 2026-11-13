@@ -9,6 +9,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 RUN useradd --system --no-create-home --shell /usr/sbin/nologin ponte
 
+# O cofre (a configuracao da igreja) mora aqui, num volume. A pasta nasce do
+# usuario `ponte` para o volume herdar o dono na primeira vez.
+RUN mkdir /dados && chown ponte:ponte /dados && chmod 700 /dados
+
 WORKDIR /srv/ponte
 COPY web/requirements.txt web/requirements.txt
 RUN pip install --no-cache-dir -r web/requirements.txt

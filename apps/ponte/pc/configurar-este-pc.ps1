@@ -14,6 +14,9 @@
 #  um acento em UTF-8 vira lixo — ja quebrou o iniciar-ponte.ps1 uma vez.
 # ===========================================================================
 
+# -Papel vem do instalador do zero (instalar-do-zero.ps1), que ja perguntou.
+param([string]$Papel = "")
+
 $ErrorActionPreference = "Stop"
 $PASTA = $PSScriptRoot
 $Host.UI.RawUI.WindowTitle = "Ponte do Culto - configurar este PC"
@@ -65,7 +68,9 @@ Write-Host "    Que PC e este?" -ForegroundColor White
 Write-Host "      1  Notebook da transmissao (OBS)"
 Write-Host "      2  PC do som (Reaper / mesa X32)"
 Write-Host "      3  PC do Holyrics (o principal)"
-$escolha = Read-Host "    Digite 1, 2 ou 3"
+$daLinha = @{ "transmissao" = "1"; "som" = "2"; "holyrics" = "3" }[$Papel]
+if ($daLinha) { $escolha = $daLinha; Write-Host "    (ja escolhido no instalador: $Papel)" -ForegroundColor Gray }
+else { $escolha = Read-Host "    Digite 1, 2 ou 3" }
 switch ($escolha.Trim()) {
     "1" { $PAPEL = "transmissao"; $NOME = "Notebook da transmissao" }
     "2" { $PAPEL = "som";         $NOME = "PC do som" }

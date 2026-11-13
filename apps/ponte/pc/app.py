@@ -18,6 +18,7 @@ import yaml
 from flask import Flask, Response, jsonify, request, send_from_directory
 
 from ponte import chegada as mod_chegada
+from ponte import cofre as mod_cofre
 from ponte import espelho as mod_espelho
 from ponte import luzes as mod_luzes
 from ponte import mesa as mod_mesa
@@ -1669,6 +1670,24 @@ def _montar_espelho():
                                nome=_maquina["nome"])
 
 
+# -- o cofre na versao web ----------------------------------------------------
+_cofre = {"valor": None}
+
+
+def _montar_cofre():
+    """So a principal guarda, e so se a versao web estiver ligada. `cofre:
+    false` no bloco `web` do config desliga, para quem nao quer a
+    configuracao fora da igreja."""
+    conf = _config.get("web") or {}
+    url = os.environ.get("PONTE_WEB_URL") or (conf.get("url") if conf.get("ativo") else None)
+    chave = os.environ.get("PONTE_WEB_CHAVE") or conf.get("chave")
+    if not url or not chave or str(chave).startswith("COLE-AQUI"):
+        return None
+    if _maquina["principal"] is not None or conf.get("cofre") is False:
+        return None
+    return mod_cofre.Cofre(url, chave, RAIZ, nome=_maquina["nome"])
+
+
 @app.get("/aqui")
 def pagina_aqui():
     """A pagina DESTE PC: a que abre sozinha quando ele liga."""
@@ -1696,6 +1715,7 @@ def aqui_retrato():
                         or "http://{}:{}".format(_ip_da_rede(), _porta["valor"]),
         "principal_ok": True, "chegada": None,
         "web": _espelho["valor"].retrato() if _espelho["valor"] else None,
+        "cofre": _cofre["valor"].retrato() if _cofre["valor"] else None,
     }
     if _maquina["principal"] is None:
         corpo["chegada"] = _chegada.retrato()
@@ -1978,6 +1998,10 @@ def main():
     if _espelho["valor"] is not None:
         _espelho["valor"].comecar()
         print("  [espelho] ligado: entregando o estado para a versao web")
+    _cofre["valor"] = _montar_cofre()
+    if _cofre["valor"] is not None:
+        _cofre["valor"].comecar()
+        print("  [cofre] ligado: guardando a configuracao na versao web")
 
     app.run(host=host, port=porta, threaded=True, debug=False)
 

@@ -57,7 +57,11 @@ os arquivos `.exemplo` mostram o formato.
 
 ## Instalar num PC novo
 
-No painel do PC do Holyrics, **Instalar em outro PC** baixa a pasta `pc/` em zip. Dentro
+O jeito de um arquivo só: abrir `https://ponte.igrejaparaiso.com.br/instalar` no PC
+novo, baixar o instalador e dar dois cliques. Ele traz o projeto e a configuração da
+igreja guardada no cofre da versão web.
+
+Sem internet, ou sem o cofre: no painel do PC do Holyrics, **Instalar em outro PC** baixa a pasta `pc/` em zip. Dentro
 dela, `configurar-este-pc.bat` pergunta o papel da máquina e faz o resto. Detalhes em
 [`pc/INSTALAR.md`](pc/INSTALAR.md).
 
@@ -68,7 +72,10 @@ dela, `configurar-este-pc.bat` pergunta o papel da máquina e faz o resto. Detal
 - **No ar na VPS:** o espelho web com senha, em `https://ponte.igrejaparaiso.com.br`
   (contêiner `ponte-web`; ver [`docs/IMPLANTAR-NA-VPS.md`](docs/IMPLANTAR-NA-VPS.md)). A
   igreja ainda não foi ligada a ele.
-- **Feito e testado só localmente:** instalador `configurar-este-pc`.
+- **Feito e testado só localmente:** instalador `configurar-este-pc`; o cofre da versão
+  web e o envio da configuração pelo PC principal.
+- **Escrito e ainda não testado num Windows:** `instalar-do-zero.ps1`, o instalador de
+  um arquivo só que a versão web entrega em `/instalar`.
 - **Feito, ainda não testado de verdade:** "Preparar transmissão" no YouTube, que cria
   a transmissão antes do OBS começar, com link fixo. Precisa de um teste com o OBS
   parado, porque cria um vídeo no canal.

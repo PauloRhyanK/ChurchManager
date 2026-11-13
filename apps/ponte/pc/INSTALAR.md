@@ -3,6 +3,43 @@
 O projeto é o mesmo em todo PC. O que muda é o **papel** da máquina, que o
 instalador pergunta.
 
+## O jeito mais curto: um arquivo só
+
+No PC que vai ser instalado, abra `https://ponte.igrejaparaiso.com.br/instalar`, entre
+com a senha da equipe e clique em **Baixar o instalador**. Dois cliques no
+`instalar-ponte.bat` e ele:
+
+1. pergunta que PC é este;
+2. baixa o projeto e a configuração da igreja guardada no cofre da versão web;
+3. instala o que faltar (Python; o OBS, no notebook da transmissão);
+4. põe a coleção de cenas e o perfil do OBS no lugar, se ainda não existirem;
+5. cria os atalhos e liga a ponte.
+
+O instalador **vale por 30 minutos**. Não mande o arquivo por mensagem: quem o tiver,
+nesse prazo, recebe os segredos da igreja. Se vencer, baixe outro.
+
+Num PC que já tem a ponte ele só atualiza o projeto: o `config.yaml` e o
+`maquina.yaml` que estão lá ficam como estão.
+
+**Ainda não foi testado num Windows de verdade** (escrito em 12/11/2026). Até ser,
+o caminho abaixo, passo a passo, continua valendo.
+
+### O que o cofre guarda, e de onde vem
+
+O PC principal entrega sozinho, a cada mudança: `config.yaml`, `chegada.yaml`,
+`looks_salvas.yaml`, `patch.yaml` e tudo que estiver na pasta `obs/`. As credenciais
+do YouTube (`_*.json`) não vão: num PC novo, autorize de novo em `/youtube`.
+
+A pasta `obs/` é preenchida **à mão, uma vez**, e de novo quando as cenas mudarem. No
+notebook da transmissão, copie de `%APPDATA%\obs-studio\basic\`:
+
+- `scenes\<coleção>.json` para `obs\scenes\` na pasta da ponte **do PC principal**;
+- `profiles\<perfil>\` (a pasta inteira) para `obs\profiles\`.
+
+O perfil tem a chave de transmissão do YouTube. A pasta `obs/` nunca entra no Git.
+
+## Passo a passo, sem o instalador
+
 ## 1. Python (uma vez por PC)
 
 Se o PC não tiver, o instalador avisa. Para instalar: [python.org/downloads](https://www.python.org/downloads/),

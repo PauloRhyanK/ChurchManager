@@ -31,6 +31,21 @@ Não defina `PONTE_HTTP`: ela existe só para teste local sem HTTPS.
 Guarde as três num arquivo fora do repositório, por exemplo `/etc/ponte-web.env`
 com `chmod 600`. **Nenhuma delas vai para o Git, para log ou para o chat.**
 
+## O cofre
+
+A versão web também guarda a configuração da igreja (o `config.yaml` com os segredos,
+as cenas de luz, a exportação do OBS), que o PC principal entrega. Fica no volume
+Docker `ponte_ponte-dados`, em `/dados/cofre.json` dentro do contêiner, legível só pelo
+usuário `ponte`. É o que o instalador de `/instalar` entrega a um PC novo.
+
+- **Entra na rotina de backup** da VPS: a pasta do volume é
+  `/var/lib/docker/volumes/ponte_ponte-dados/_data`.
+- **Quem pode tirar segredo daqui:** quem está logado com a senha da equipe gera um
+  instalador com um código que vale 30 minutos. A senha da equipe passou a proteger os
+  segredos da igreja, não só a tela: precisa ser forte.
+- **Para esvaziar:** `docker exec ponte-web rm /dados/cofre.json`. O PC principal
+  entrega de novo na próxima mudança, a menos que esteja com `cofre: false` no config.
+
 ## Como a VPS está montada (conferido em 12/11/2026)
 
 Todos os sites da VPS são contêineres Docker na rede `proxy-network`, atrás do

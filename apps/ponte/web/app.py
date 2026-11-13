@@ -16,6 +16,13 @@ O QUE ELA SERVE:
   /chegada   o guia do voluntario — os MESMOS arquivos da pasta ../pc
   /baixar    a versao para instalar nos PCs (a pasta ../pc, em .zip)
   /saude     para monitoramento: {"ok": true, "igreja": true|false}
+  /instalar  gera o instalador de um PC novo (um .bat com codigo temporario)
+
+O COFRE: o PC principal entrega aqui a configuracao da igreja (config.yaml,
+cenas de luz, a exportacao do OBS). E o que permite montar um PC novo do
+zero, ja configurado, mesmo que o principal tenha morrido. Sao SEGREDOS, e
+por isso so saem daqui para quem apresenta um codigo de instalacao, que so
+quem esta logado consegue gerar e que vale por pouco tempo.
 
 SEGURANCA — este painel fica na internet, entao:
   * tudo pede senha (PONTE_SENHA), menos /saude e a tela de entrar;
@@ -30,10 +37,13 @@ memoria. Com dois processos, um receberia o retrato e o outro responderia a
 tela com o retrato velho.
 """
 
+import base64
 import collections
 import hmac
 import io
+import json
 import os
+import re
 import secrets
 import threading
 import time
@@ -45,6 +55,10 @@ from flask import (Flask, jsonify, redirect, request, send_file,
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 PASTA_PC = os.path.normpath(os.path.join(AQUI, "..", "pc"))
+# Onde o cofre mora. Fora do repositorio e fora da imagem: no conteiner e um
+# volume, para sobreviver a reinicio e a atualizacao.
+PASTA_DADOS = os.environ.get("PONTE_DADOS", "/dados")
+ARQ_COFRE = os.path.join(PASTA_DADOS, "cofre.json")
 
 SENHA = os.environ.get("PONTE_SENHA", "")
 CHAVE = os.environ.get("PONTE_CHAVE", "")
@@ -65,13 +79,43 @@ app.config.update(
     # desliga isso, e existe so para testar em http://127.0.0.1.
     SESSION_COOKIE_SECURE=os.environ.get("PONTE_HTTP") != "1",
     PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
-    MAX_CONTENT_LENGTH=2 * 1024 * 1024,
+    # 12 MB: a exportacao do OBS vai dentro do cofre, em base64.
+    MAX_CONTENT_LENGTH=12 * 1024 * 1024,
 )
 
 _tranca = threading.Lock()
 _igreja = {"chegada": None, "em": 0.0, "maquina": ""}
 _fila = collections.deque(maxlen=50)
 _tentativas = {}          # ip -> [quantas erradas, ate quando esta bloqueado]
+_codigos = {}             # codigo de instalacao -> [vale ate, usos que restam]
+
+VALIDADE_CODIGO = 30 * 60   # segundos
+USOS_CODIGO = 5             # a instalacao pode falhar no meio e ser repetida
+PAPEIS = ("holyrics", "transmissao", "som")
+
+
+def _ip():
+    """O endereco de quem esta do outro lado, para o limite de tentativas.
+
+    Ha UM proxy na frente (o Nginx Proxy Manager), e ele ACRESCENTA o
+    endereco real no FIM do X-Forwarded-For. O comeco do cabecalho e o que o
+    visitante quiser escrever: a primeira versao lia o comeco, e bastava
+    mandar um valor diferente a cada tentativa para nunca ser bloqueado.
+    """
+    partes = [p.strip() for p in request.headers.get("X-Forwarded-For", "").split(",") if p.strip()]
+    return partes[-1] if partes else (request.remote_addr or "?")
+
+
+def _bloqueado(ip):
+    with _tranca:
+        return time.time() < _tentativas.get(ip, [0, 0.0])[1]
+
+
+def _errou(ip):
+    """Cinco erradas seguidas travam aquele endereco por um minuto."""
+    with _tranca:
+        erradas = _tentativas.get(ip, [0, 0.0])[0] + 1
+        _tentativas[ip] = [0, time.time() + 60] if erradas >= 5 else [erradas, 0.0]
 
 
 def _igreja_viva():
@@ -84,7 +128,10 @@ def _logado():
 
 @app.before_request
 def _porteiro():
-    livre = ("/entrar", "/saude", "/api/espelho", "/guia.css")
+    # /api/cofre e /api/instalar/pacote conferem a propria credencial (chave e
+    # codigo); /instalar.ps1 e so o roteiro, sem segredo nenhum.
+    livre = ("/entrar", "/saude", "/api/espelho", "/guia.css",
+             "/api/cofre", "/api/instalar/pacote", "/instalar.ps1")
     if request.path in livre or _logado():
         return None
     if request.path.startswith("/api/"):
@@ -115,11 +162,8 @@ def entrar():
 
 @app.post("/entrar")
 def entrar_enviar():
-    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "?").split(",")[0].strip()
-    agora = time.time()
-    with _tranca:
-        erradas, ate = _tentativas.get(ip, [0, 0.0])
-    if agora < ate:
+    ip = _ip()
+    if _bloqueado(ip):
         aviso = '<div class="faixa erro">Muitas tentativas. Espere um minuto.</div>'
         return PAGINA_ENTRAR.replace("__AVISO__", aviso), 429
     if hmac.compare_digest(request.form.get("senha", ""), SENHA):
@@ -128,11 +172,9 @@ def entrar_enviar():
         session.permanent = True
         session["ok"] = True
         return redirect("/chegada")
-    # Cinco erradas seguidas travam aquele endereco por um minuto: a senha e
-    # uma so, compartilhada pela equipe, entao adivinhar tem que custar caro.
-    erradas += 1
-    with _tranca:
-        _tentativas[ip] = [0, agora + 60] if erradas >= 5 else [erradas, 0.0]
+    # A senha e uma so, compartilhada pela equipe, entao adivinhar tem que
+    # custar caro.
+    _errou(ip)
     time.sleep(1.0)
     aviso = '<div class="faixa erro">Senha errada.</div>'
     return PAGINA_ENTRAR.replace("__AVISO__", aviso), 401
@@ -262,30 +304,209 @@ def saude():
 
 # -- a versao para instalar nos PCs -------------------------------------------
 
-@app.get("/baixar")
-def baixar():
-    """A pasta pc/ inteira, em .zip. E o que se instala em cada PC da igreja.
+def _zip_pc(extras=None):
+    """A pasta pc/ inteira, em .zip, mais os arquivos do cofre que couberem.
 
-    Nao leva segredo nenhum: config.yaml e maquina.yaml nao existem no
-    repositorio, so os .exemplo. Cada PC preenche os seus.
+    Do disco nao sai segredo nenhum: config.yaml e maquina.yaml nao existem
+    no repositorio, so os .exemplo. O que e segredo so entra por `extras`, e
+    quem decide os extras e a rota que conferiu o codigo de instalacao.
     """
     memoria = io.BytesIO()
     with zipfile.ZipFile(memoria, "w", zipfile.ZIP_DEFLATED) as pacote:
-        for pasta, _subpastas, arquivos in os.walk(PASTA_PC):
-            if "__pycache__" in pasta or ".venv" in pasta:
-                continue
+        for pasta, subpastas, arquivos in os.walk(PASTA_PC):
+            # Segunda tranca, alem do .gitignore: nada que seja segredo ou
+            # estado DE UMA maquina viaja para outra, mesmo que alguem um
+            # dia rode a ponte de dentro desta pasta e deixe arquivo aqui.
+            subpastas[:] = [d for d in subpastas if d not in ("__pycache__", ".venv", "obs")]
             for nome in arquivos:
-                # Segunda tranca, alem do .gitignore: nada que seja segredo ou
-                # estado DE UMA maquina viaja para outra, mesmo que alguem um
-                # dia rode a ponte de dentro desta pasta e deixe arquivo aqui.
                 if nome in ("config.yaml", "maquina.yaml") or nome.endswith((".log", ".wav")) \
                         or (nome.startswith("_") and nome.endswith(".json")):
                     continue
                 caminho = os.path.join(pasta, nome)
                 pacote.write(caminho, os.path.join("ponte-do-culto", os.path.relpath(caminho, PASTA_PC)))
+        nomes = set(pacote.namelist())
+        for nome, conteudo in (extras or {}).items():
+            destino = "ponte-do-culto/" + nome
+            if destino in nomes:
+                # A copia da igreja vence a do repositorio (cenas de luz e
+                # passos da chegada mudam la, no dia a dia). O zip nao deixa
+                # trocar um arquivo ja escrito, entao a do cofre vai com
+                # outro nome e o instalador poe no lugar.
+                destino = "ponte-do-culto/_do_cofre/" + nome
+            pacote.writestr(destino, conteudo)
     memoria.seek(0)
-    return send_file(memoria, mimetype="application/zip", as_attachment=True,
+    return memoria
+
+
+@app.get("/baixar")
+def baixar():
+    """So o projeto, sem configuracao: para atualizar um PC ja instalado."""
+    return send_file(_zip_pc(), mimetype="application/zip", as_attachment=True,
                      download_name="ponte-do-culto-pc.zip")
+
+
+# -- o cofre ------------------------------------------------------------------
+
+# Nomes que o cofre aceita: sem "..", sem barra no comeco, no maximo tres
+# pastas (obs/profiles/<nome>/arquivo). O nome vira caminho no PC que instalar; um nome malicioso
+# escreveria fora da pasta da ponte.
+_NOME_OK = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_. ()\-]{0,80}(/[A-Za-z0-9_][A-Za-z0-9_. ()\-]{0,80}){0,3}$")
+
+
+def _ler_cofre():
+    try:
+        with open(ARQ_COFRE, encoding="utf-8") as arq:
+            return json.load(arq)
+    except (OSError, ValueError):
+        return None
+
+
+def _do_papel(nome, papel):
+    """O que cada papel recebe. Segredo so vai para quem precisa dele."""
+    if nome == "config.yaml":
+        return papel == "holyrics"          # token do Holyrics, senha do OBS, chave da web
+    if nome.startswith("obs/"):
+        return papel in ("holyrics", "transmissao")   # tem a chave do YouTube
+    return True                              # cenas de luz, passos da chegada
+
+
+@app.post("/api/cofre")
+def cofre_guardar():
+    """O PC principal entrega a configuracao da igreja. Substitui a anterior."""
+    if not hmac.compare_digest(request.headers.get("X-Ponte-Chave", ""), CHAVE):
+        return jsonify({"erro": "chave errada"}), 403
+    dados = request.get_json(silent=True) or {}
+    arquivos = dados.get("arquivos")
+    if not isinstance(arquivos, dict) or not arquivos or len(arquivos) > 60:
+        return jsonify({"erro": "cofre invalido"}), 400
+    for nome, conteudo in arquivos.items():
+        if not isinstance(nome, str) or not _NOME_OK.match(nome) or not isinstance(conteudo, str):
+            return jsonify({"erro": "nome de arquivo recusado"}), 400
+        try:
+            base64.b64decode(conteudo, validate=True)
+        except ValueError:
+            return jsonify({"erro": "conteudo invalido"}), 400
+    registro = {"em": time.time(), "maquina": str(dados.get("maquina") or "")[:80],
+                "arquivos": arquivos}
+    try:
+        os.makedirs(PASTA_DADOS, exist_ok=True)
+        provisorio = ARQ_COFRE + ".novo"
+        # 0600 desde a criacao: o arquivo nunca existe legivel por outros.
+        with os.fdopen(os.open(provisorio, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600),
+                       "w", encoding="utf-8") as arq:
+            json.dump(registro, arq)
+        os.replace(provisorio, ARQ_COFRE)
+    except OSError as erro:
+        return jsonify({"erro": "nao consegui guardar: " + type(erro).__name__}), 500
+    return jsonify({"ok": True, "arquivos": len(arquivos)})
+
+
+@app.get("/api/cofre")
+def cofre_estado():
+    """So o que ha no cofre e de quando. O conteudo nunca sai por aqui."""
+    # A rota esta na lista livre por causa do POST da igreja (que confere a
+    # chave); o GET e de quem esta logado.
+    if not _logado():
+        return jsonify({"erro": "entre com a senha", "entrar": True}), 401
+    cofre = _ler_cofre()
+    if not cofre:
+        return jsonify({"tem": False})
+    return jsonify({"tem": True, "em": cofre.get("em"), "maquina": cofre.get("maquina"),
+                    "arquivos": sorted(cofre.get("arquivos") or {})})
+
+
+# -- instalar um PC do zero ---------------------------------------------------
+
+PAGINA_INSTALAR = """<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Instalar num PC — Ponte do Culto</title><link rel="stylesheet" href="/guia.css"></head>
+<body><div class="tela" style="max-width:720px">
+<div><h1 class="ola">Instalar num PC</h1>
+<div class="sub">Baixe o instalador <b>no PC que vai ser instalado</b> e dê dois cliques nele.</div></div>
+__COFRE__
+<a class="bt forte largo" href="/baixar/instalador">Baixar o instalador</a>
+<div class="sub" style="font-size:16px">O instalador vale por 30 minutos e serve para este PC.
+Ele pergunta que PC é este, instala o que faltar e traz a configuração da igreja.
+<b>Não mande o arquivo por mensagem</b>: quem tiver o arquivo, dentro desse prazo, recebe os segredos da igreja.</div>
+<a class="leve" href="/chegada">Voltar</a>
+</div></body></html>"""
+
+
+@app.get("/instalar")
+def instalar():
+    cofre = _ler_cofre()
+    if cofre:
+        quando = time.strftime("%d/%m/%Y %H:%M", time.localtime(cofre.get("em") or 0))
+        faixa = ('<div class="faixa aviso">Configuração da igreja guardada em <b>{}</b> ({} arquivos).</div>'
+                 .format(quando, len(cofre.get("arquivos") or {})))
+    else:
+        faixa = ('<div class="faixa erro">A igreja ainda não entregou a configuração. O instalador '
+                 'instala o projeto, mas o PC principal vai precisar dos segredos digitados à mão.</div>')
+    return PAGINA_INSTALAR.replace("__COFRE__", faixa)
+
+
+@app.get("/baixar/instalador")
+def baixar_instalador():
+    """Um .bat pequeno com um codigo temporario dentro. Toda a logica esta no
+    /instalar.ps1, que ele busca daqui: assim o roteiro se atualiza sem
+    ninguem precisar baixar o .bat de novo."""
+    agora = time.time()
+    codigo = secrets.token_urlsafe(24)
+    with _tranca:
+        for velho in [c for c, (ate, _usos) in _codigos.items() if ate < agora]:
+            del _codigos[velho]
+        _codigos[codigo] = [agora + VALIDADE_CODIGO, USOS_CODIGO]
+    endereco = ("http://" if os.environ.get("PONTE_HTTP") == "1" else "https://") + request.host
+    linhas = [
+        "@echo off",
+        "rem Ponte do Culto - instalador deste PC. Vale por 30 minutos.",
+        "rem NAO MANDE ESTE ARQUIVO POR MENSAGEM: ele da acesso aos segredos da igreja.",
+        'set "PONTE_URL={}"'.format(endereco),
+        'set "PONTE_CODIGO={}"'.format(codigo),
+        'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; '
+        "iex ((New-Object Net.WebClient).DownloadString($env:PONTE_URL + '/instalar.ps1'))\"",
+        "if errorlevel 1 pause",
+        "",
+    ]
+    return send_file(io.BytesIO("\r\n".join(linhas).encode("ascii")), mimetype="application/octet-stream",
+                     as_attachment=True, download_name="instalar-ponte.bat")
+
+
+@app.get("/instalar.ps1")
+def instalar_ps1():
+    resposta = send_from_directory(PASTA_PC, "instalar-do-zero.ps1", mimetype="text/plain")
+    resposta.headers["Cache-Control"] = "no-store"
+    return resposta
+
+
+@app.get("/api/instalar/pacote")
+def instalar_pacote():
+    """O projeto + a configuracao do papel pedido. A credencial e o codigo."""
+    ip = _ip()
+    if _bloqueado(ip):
+        return jsonify({"erro": "muitas tentativas; espere um minuto"}), 429
+    papel = request.args.get("papel", "")
+    if papel not in PAPEIS:
+        return jsonify({"erro": "papel desconhecido"}), 400
+    codigo = request.headers.get("X-Ponte-Codigo", "")
+    agora = time.time()
+    with _tranca:
+        registro = _codigos.get(codigo)
+        valido = bool(codigo) and registro is not None and registro[0] >= agora and registro[1] > 0
+        if valido:
+            registro[1] -= 1
+    if not valido:
+        _errou(ip)
+        return jsonify({"erro": "codigo de instalacao invalido ou vencido. Baixe o instalador de novo."}), 403
+    cofre = _ler_cofre() or {}
+    extras = {nome: base64.b64decode(conteudo)
+              for nome, conteudo in (cofre.get("arquivos") or {}).items()
+              if _NOME_OK.match(nome) and _do_papel(nome, papel)}
+    resposta = send_file(_zip_pc(extras), mimetype="application/zip", as_attachment=True,
+                         download_name="ponte-do-culto-pc.zip")
+    resposta.headers["Cache-Control"] = "no-store"
+    resposta.headers["X-Ponte-Cofre"] = str(len(extras))
+    return resposta
 
 
 if __name__ == "__main__":

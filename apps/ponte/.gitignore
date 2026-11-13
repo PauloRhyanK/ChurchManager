@@ -16,6 +16,10 @@ _*.json
 .env
 .env.*
 
+# exportacao do OBS (colecao de cenas e perfil): tem a chave de transmissao.
+# Vai para o cofre da versao web, nunca para o repositorio.
+pc/obs/
+
 # estado e logs de execucao
 *.log
 __pycache__/
