@@ -1,0 +1,6 @@
+# O que cada canal DMX e, em portugues. Escrito pela mesa de teste.
+#
+# Isto nao muda o comportamento de nada — serve para quem esta montando uma
+# look saber que o canal 7 e o par da esquerda e nao ter que adivinhar.
+# Um canal pode ter mais de um refletor; e so escrever isso no texto.
+canais: {}

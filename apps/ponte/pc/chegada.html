@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Chegada — Ponte do Culto</title>
+<link rel="stylesheet" href="/guia.css">
+</head>
+<body>
+<!-- O GUIA PELO ENDERECO: o que o voluntario abre no celular.
+     Tres telas, e so: "onde voce esta?", a pergunta da vez, e "agora na
+     igreja". A versao anterior era uma lista com todos os passos abertos; o
+     Paulo pediu o contrario — a pessoa se localiza primeiro, e depois ve uma
+     coisa por vez. -->
+<div class="tela" id="app"></div>
+<script src="/guia.js"></script>
+<script>
+let tela = 'inicio';
+let minha = null;                       // a funcao que ESTE aparelho escolheu
+try { minha = localStorage.getItem('guia-ilha'); } catch (x) {}
+const pedida = new URLSearchParams(location.search).get('ilha');
+if (pedida) { minha = pedida; tela = 'passo'; }
+
+G.extra = () => [tela, minha];
+
+G.aoVoltar = () => {
+  const lista = passosDas([minha]), i = lista.indexOf(passoDaVez(lista));
+  if (tela === 'passo' && i > 0) G.fixo = lista[i - 1].id;
+  else { tela = 'inicio'; G.fixo = null; }
+  redesenhar(true);
+};
+
+function estadoDa(il) {
+  if (il.falhando) return ['nao', il.falhando === 1 ? '1 com problema' : il.falhando + ' com problema'];
+  if (il.feitos >= il.total) return ['sim', 'pronto'];
+  return ['', 'faltam ' + (il.total - il.feitos)];
+}
+
+G.render = () => {
+  const app = $('app'), c = ch();
+  if (!c) {
+    app.className = 'tela';
+    app.innerHTML = `<h1 class="ola">Olá, voluntário.</h1>
+      <div class="faixa erro">${e(G.d.erro || 'Sem contato com a ponte.')}</div>`;
+    return;
+  }
+  if (minha && !c.ilhas.some(i => i.id === minha)) { minha = null; tela = 'inicio'; }
+  const aviso = (G.semContato ? '<div class="faixa erro">Sem contato com a ponte. O que está na tela pode estar velho.</div>' : '')
+              + (G.d.principal_ok === false ? `<div class="faixa erro">${e(G.d.erro || 'Sem contato com a igreja. O que está na tela pode estar velho.')}</div>` : '')
+              + (c.erro_do_roteiro ? `<div class="faixa erro">${e(c.erro_do_roteiro)}</div>` : '');
+
+  if (tela === 'passo' && minha) {
+    const lista = passosDas([minha]), p = passoDaVez(lista);
+    app.className = 'tela';
+    if (p) { app.innerHTML = aviso + htmlPasso(p, lista); return; }
+    app.innerHTML = aviso + `<div class="w-meio"><div class="pilula sim"><i></i><span>${lista.length} de ${lista.length}</span></div>
+        <h1 class="frase">Tudo pronto na ${e(ilhaDe(minha).nome)}.</h1></div>
+      <div class="w-pe"><button class="bt forte" data-ir="igreja">Agora na igreja</button>
+        <a class="bt" href="/">Painel do culto</a>
+        <button class="leve cinza" data-ir="inicio">Início</button></div>`;
+    return;
+  }
+
+  if (tela === 'igreja') {
+    app.className = 'tela';
+    app.innerHTML = aviso + `<div style="display:flex;align-items:baseline;gap:12px">
+        <h1 class="ola" style="flex:1;font-size:clamp(26px,4.4vw,48px)">Agora na igreja</h1>
+        <button class="leve" data-ir="inicio">Início</button></div>
+      ${htmlPecas(pecas())}
+      <div class="cresce"></div>
+      <a class="bt forte largo" href="/">Ir para o painel do culto</a>`;
+    return;
+  }
+
+  const culto = c.culto
+    ? `${e((c.ordem && c.ordem.nome) || '')} · começa às ${e(c.culto.hora)}<span data-faltam></span>`
+    : 'O culto de hoje ainda não foi definido no PC do Holyrics.';
+  app.className = 'tela';
+  app.innerHTML = aviso + `<div><h1 class="ola">Olá, voluntário.</h1><div class="sub">${culto}</div></div>
+    <div class="pergunta"><div class="q">Onde você está?</div>
+      <div class="linhas">${c.ilhas.map(il => { const [cls, txt] = estadoDa(il);
+        return `<button class="lin ${il.id === minha ? 'sel' : ''}" data-ilha="${e(il.id)}"><span class="x">${e(il.nome)}</span><small class="${cls}">${e(txt)}</small></button>`; }).join('')}
+      </div></div>
+    <div class="cresce"></div>
+    ${minha ? `<button class="bt forte largo" data-ir="passo">Começar na ${e(ilhaDe(minha).nome)}</button>` : ''}
+    <button class="leve" data-ir="igreja">Só quero ver como está tudo</button>`;
+};
+
+document.addEventListener('click', ev => {
+  const alvo = ev.target.closest('button');
+  if (!alvo) return;
+  if (alvo.dataset.ilha) {
+    minha = alvo.dataset.ilha;
+    try { localStorage.setItem('guia-ilha', minha); } catch (x) {}
+    redesenhar(true);
+  } else if (alvo.dataset.ir) {
+    tela = alvo.dataset.ir; G.fixo = null; G.como = false;
+    redesenhar(true);
+  }
+});
+
+comecar();
+</script>
+</body>
+</html>

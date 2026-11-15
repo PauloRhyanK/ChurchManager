@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Letras do dia — Ponte do Culto</title>
+<style>
+/* LETRAS DO DIA.
+   Nasceu do "Separador de Slides Holyrics" que a equipe ja usava. A logica de
+   agrupar em slides, os comentarios // e o (2x) sao os mesmos. O que mudou:
+
+   1. A REGUA E CARACTERE, NAO PALAVRA. "3 a 5 palavras por linha" deixava
+      passar "MISERICORDIA INFINITAMENTE MARAVILHOSA" (3 palavras, 38 letras)
+      e quebrava "EU SEI QUE TU ES" (5 palavras, 16 letras). O que estoura o
+      telao e a largura, e largura se mede em letra.
+   2. Musica que ja esta no acervo entra na lista do dia daqui, com um clique.
+
+   Sem fonte da internet de proposito: a tela tem que abrir igual no dia em
+   que a internet da igreja cair. */
+:root{
+  --fundo:#0b1016; --caixa:#131b24; --caixa2:#18212c; --linha:#243040;
+  --texto:#e8eef6; --suave:#b9c6d6; --apagado:#8fa0b4;
+  --ok:#22c55e; --ok-fundo:#0d2a18; --ok-texto:#6ee7a0;
+  --erro-fundo:#2a1114; --erro-texto:#f8a5a5;
+  --aviso:#f59e0b; --aviso-texto:#f5c46b; --marca:#3b82f6; --marca-fundo:#10213f; --marca-texto:#a9c9ff;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--fundo);color:var(--texto);
+  font:15.5px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+a{color:var(--marca-texto)}
+button,input,textarea{font:inherit;color:inherit}
+.folha{max-width:1240px;margin:0 auto;padding:max(16px,env(safe-area-inset-top)) 14px 40px;display:grid;gap:16px}
+.topo{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.topo .marca{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--apagado);font-weight:700}
+.topo h1{margin:2px 0 0;font-size:clamp(24px,5vw,30px);letter-spacing:-.02em}
+.topo nav{margin-left:auto;display:flex;gap:14px;font-size:14px;flex-wrap:wrap}
+.topo nav a{text-decoration:none;padding:8px 0}
+
+.opcoes{display:flex;flex-wrap:wrap;gap:10px 20px;align-items:center;background:var(--caixa);
+  border:1px solid var(--linha);border-radius:12px;padding:12px 14px}
+.opcoes label{display:inline-flex;align-items:center;gap:8px;font-size:14.5px;color:var(--suave)}
+.opcoes input[type=number]{width:64px;min-height:40px;border-radius:8px;border:1px solid #3a4757;
+  background:var(--fundo);padding:0 8px;font:600 15px var(--mono)}
+.opcoes input[type=checkbox]{width:20px;height:20px;accent-color:var(--marca)}
+
+.colunas{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}
+.painel{display:flex;flex-direction:column;gap:6px;min-width:0}
+.cab{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-height:44px}
+.cab h2{margin:0;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--apagado);flex:1}
+textarea{width:100%;min-height:340px;resize:vertical;border-radius:12px;border:1px solid #3a4757;
+  background:var(--caixa);padding:12px;font:400 13.5px/1.6 var(--mono)}
+textarea:focus-visible,input:focus-visible,button:focus-visible{outline:2px solid var(--marca);outline-offset:2px}
+.bt{min-height:44px;padding:0 14px;border-radius:10px;border:1px solid #3a4757;background:var(--caixa2);
+  font-weight:700;font-size:14.5px;cursor:pointer}
+.bt.forte{background:var(--marca);border-color:transparent;color:#fff}
+.bt:disabled{opacity:.55;cursor:wait}
+.aviso{font-size:13.5px;color:var(--ok-texto)}
+.como{font-size:13.5px;color:var(--apagado)}
+
+.previa-cab{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.previa-cab h2{margin:0;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--apagado)}
+.conta{font:500 13.5px var(--mono);color:var(--apagado)}
+.conta.ruim{color:var(--aviso-texto)}
+.grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-top:8px}
+.slide{position:relative;aspect-ratio:16/9;background:#05070b;border:1px solid #262a36;border-radius:8px;
+  display:flex;flex-direction:column;justify-content:center;padding:18px 10px 20px;overflow:hidden}
+.slide.ruim{border:2px solid var(--aviso)}
+.slide .n{position:absolute;top:5px;left:8px;font:500 11px var(--mono);color:#8a90a2}
+.slide .lin{display:flex;justify-content:center;align-items:baseline;gap:6px;
+  font:700 13.5px/1.25 "Arial Narrow",Arial,sans-serif;letter-spacing:.02em;color:#f5f6fa;text-align:center}
+.slide .lin small{font:400 10.5px var(--mono);color:#6f7689;flex:none}
+.slide .lin.longa{color:var(--aviso-texto)} .slide .lin.longa small{color:var(--aviso-texto)}
+.slide .cm{position:absolute;bottom:4px;left:8px;right:8px;font:400 10.5px/1.3 var(--mono);color:#d6a650;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vazio{color:var(--apagado);font-size:14.5px;padding:14px 0}
+
+.acervo{background:var(--caixa);border:1px solid var(--linha);border-radius:14px;padding:14px;display:grid;gap:12px;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.acervo h2{margin:0 0 6px;font-size:15px}
+.acervo p{margin:0 0 8px;font-size:13.5px;color:var(--apagado)}
+.acervo input[type=search]{width:100%;min-height:46px;border-radius:10px;border:1px solid #3a4757;background:var(--fundo);padding:0 12px}
+.item{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #1d2733}
+.item div{flex:1;min-width:0}
+.item b{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item small{color:var(--apagado)}
+.item .na{color:var(--ok-texto);font-size:13.5px;font-weight:600;flex:none}
+.erro{color:var(--erro-texto);font-size:14px}
+</style>
+</head>
+<body>
+<div class="folha">
+  <div class="topo">
+    <div>
+      <div class="marca">Ponte do Culto</div>
+      <h1>Letras do dia</h1>
+    </div>
+    <nav><a href="/chegada">Chegada</a><a href="/">Painel do culto</a><a href="/louvor">Louvor</a></nav>
+  </div>
+
+  <section class="acervo">
+    <div>
+      <h2>1 · A música já está no acervo?</h2>
+      <p>Procure pelo título. Se estiver, ponha na lista do dia e pronto — não precisa formatar nada.</p>
+      <input type="search" id="busca" placeholder="Bondade de Deus" aria-label="Procurar música no acervo do Holyrics">
+      <div id="achadas"></div>
+    </div>
+    <div>
+      <h2>Lista do dia no Holyrics</h2>
+      <p>O que o Holyrics tem na lista de músicas agora.</p>
+      <div id="lista"><div class="vazio">carregando…</div></div>
+    </div>
+  </section>
+
+  <div>
+    <h2 style="margin:6px 2px 8px;font-size:15px">2 · Música nova: formate e cole no Holyrics</h2>
+    <div class="opcoes" role="group" aria-label="Opções">
+      <label for="maxC">Máx. caracteres por linha <input id="maxC" type="number" min="12" max="60" value="28"></label>
+      <label for="maxLines">Máx. linhas por slide <input id="maxLines" type="number" min="2" max="4" value="3"></label>
+      <label for="maxCom">Largura do comentário <input id="maxCom" type="number" min="15" max="80" value="36"></label>
+      <label for="upper"><input id="upper" type="checkbox" checked> Maiúsculas</label>
+      <label for="expand"><input id="expand" type="checkbox" checked> Expandir (2x), (4x)…</label>
+    </div>
+  </div>
+
+  <div class="colunas">
+    <div class="painel">
+      <div class="cab"><h2>Letra como chegou</h2><button class="bt" id="limpar" type="button">Limpar</button></div>
+      <textarea id="entrada" spellcheck="false" aria-label="Letra como chegou"></textarea>
+      <div class="como">Linha em branco separa os slides. <code>//</code> é recado para quem canta. <code>(2x)</code> repete a linha.</div>
+    </div>
+    <div class="painel">
+      <div class="cab"><h2>Pronto para o Holyrics</h2><span class="aviso" id="aviso" aria-live="polite"></span>
+        <button class="bt forte" id="copiar" type="button">Copiar texto</button></div>
+      <textarea id="saida" spellcheck="false" aria-label="Texto formatado"></textarea>
+      <div class="como">No Holyrics: <b>F2</b> para criar a música, <b>Ctrl+V</b> para colar, salvar. Pode ajustar à mão aqui antes de copiar.</div>
+    </div>
+  </div>
+
+  <section>
+    <div class="previa-cab"><h2>Como fica no telão</h2><span class="conta" id="conta"></span></div>
+    <div class="grade" id="grade"></div>
+  </section>
+</div>
+
+<script>
+// ---- Núcleo: transforma letra colada em slides do Holyrics ----
+const FUNC = new Set(['e','o','a','os','as','de','do','da','dos','das','em','no','na','nos','nas','que','para','pra','com','por','pelo','pela','um','uma','me','te','se','ao','meu','minha','teu','tua','seu','sua','nosso','nossa','sobre','porque','pois','mas','nesse','neste','nessa','nesta','quando','onde','como']);
+const WEAK_END = new Set(['o','a','os','as','de','do','da','dos','das','em','no','na','nos','nas','um','uma','ao','e','que','para','pra','com','por','pelo','pela','meu','minha','teu','tua','seu','sua','nosso','nossa','me','te','se']);
+const norm = w => w.toLowerCase().replace(/[^\p{L}]/gu, '');
+
+// A QUEBRA POR CARACTERES.
+// Programacao dinamica sobre as palavras: escolhe o conjunto de quebras de
+// menor custo. O custo de cada linha:
+//   +1            por existir (prefere menos linhas)
+//   +ate 3        quanto mais curta que o limite (prefere linhas parelhas,
+//                 em vez de uma cheia e um toco de uma palavra)
+//   +2,5          se termina em palavrinha solta ("...na casa de")
+//   -1,5          se termina em pontuacao (quebra onde a frase respira)
+//   -0,5          se a proxima comeca com palavrinha ("e", "que", "pra")
+// Linha acima do limite nao e opcao — exceto uma palavra sozinha maior que o
+// limite, que nao tem como quebrar e fica marcada na previa.
+function splitPhrase(words, maxC) {
+  const n = words.length;
+  const comp = (i, j) => { let t = j - i - 1; for (let k = i; k < j; k++) t += words[k].length; return t; };
+  if (comp(0, n) <= maxC) return [words];
+  const best = new Array(n + 1).fill(Infinity), prev = new Array(n + 1).fill(-1);
+  best[0] = 0;
+  for (let j = 1; j <= n; j++) {
+    for (let i = j - 1; i >= 0; i--) {
+      const L = comp(i, j);
+      if (L > maxC && j - i > 1) break;
+      if (best[i] === Infinity) continue;
+      let c = 1;
+      if (L > maxC) c += 40;
+      else { const folga = (maxC - L) / maxC; c += folga * folga * 3; }
+      if (j < n) {
+        const last = words[j - 1];
+        if (/[,;:.!?]$/.test(last)) c -= 1.5;
+        else {
+          if (WEAK_END.has(norm(last))) c += 2.5;
+          if (FUNC.has(norm(words[j]))) c -= 0.5;
+        }
+      }
+      if (best[i] + c < best[j]) { best[j] = best[i] + c; prev[j] = i; }
+    }
+  }
+  const out = [];
+  for (let j = n; j > 0; j = prev[j]) out.unshift(words.slice(prev[j], j));
+  return out;
+}
+
+function wrapComment(text, maxC) {
+  text = text.trim();
+  if (text.length <= maxC) return ['//' + text];
+  const out = []; let cur = '';
+  for (const w of text.split(/\s+/)) {
+    if (cur && (cur + ' ' + w).length > maxC) { out.push('//' + cur); cur = w; }
+    else cur = cur ? cur + ' ' + w : w;
+  }
+  if (cur) out.push('//' + cur);
+  return out;
+}
+
+function formatLyrics(input, opt) {
+  const o = Object.assign({ maxC: 28, maxLines: 3, upper: true, expand: true, maxCom: 36 }, opt);
+  // 1) itens: comentário, letra ou quebra
+  const items = [];
+  for (let raw of input.replace(/\r/g, '').split('\n')) {
+    raw = raw.trim();
+    if (!raw) { items.push({ t: 'break' }); continue; }
+    let lyric = raw, comments = [];
+    const idx = raw.indexOf('//');
+    if (idx >= 0) {
+      lyric = raw.slice(0, idx).trim();
+      comments = [raw.slice(idx + 2)];
+    }
+    if (lyric) {
+      let times = 1;
+      const m = lyric.match(/\s*\(?\s*(\d+)\s*[xX]\s*\)?\s*$/);
+      if (o.expand && m && m.index > 0) { times = Math.min(+m[1], 12); lyric = lyric.slice(0, m.index).trim(); }
+      for (let k = 0; k < times; k++) items.push({ t: 'lyric', text: lyric, repFirst: times > 1 && k === 0, repLast: times > 1 && k === times - 1 });
+    }
+    for (const c of comments) items.push({ t: 'comment', text: c });
+  }
+
+  // 2) agrupamento em slides
+  const slides = [];
+  let pre = [], pending = [], sectionStart = 0, carry = null;
+  const up = s => o.upper ? s.toLocaleUpperCase('pt-BR') : s;
+  const emit = lines => {
+    if (carry !== null) { if (lines.length < o.maxLines) lines = [carry, ...lines]; else slides.push({ pre: pre.splice(0), lines: [carry], post: [] }); carry = null; }
+    slides.push({ pre, lines, post: [] }); pre = [];
+  };
+  const last = () => slides[slides.length - 1];
+  const canAppend = () => slides.length > sectionStart && last().lines.length < o.maxLines && !last().post.length;
+  const flush = () => {
+    if (pending.length === 1 && canAppend()) last().lines.push(pending[0]);
+    else if (pending.length) emit(pending);
+    else if (carry !== null) emit([]);
+    pending = [];
+  };
+
+  for (const it of items) {
+    if (it.t === 'break') { flush(); sectionStart = slides.length; continue; }
+    if (it.t === 'comment') {
+      flush();
+      const lines = wrapComment(it.text, o.maxCom);
+      if (slides.length) last().post.push(...lines); else pre.push(...lines);
+      sectionStart = slides.length;
+      continue;
+    }
+    if (it.repFirst) { if (pending.length === 1 && !canAppend()) carry = pending.pop(); else flush(); }
+    const chunks = splitPhrase(it.text.split(/\s+/), o.maxC).map(w => up(w.join(' ')));
+    const k = chunks.length;
+    if (k === 1) {
+      pending.push(chunks[0]);
+      if (pending.length === 2) { emit(pending); pending = []; }
+      if (it.repLast) flush();
+      continue;
+    }
+    if (pending.length === 1 && k + 1 <= o.maxLines) { emit([pending[0], ...chunks]); pending = []; continue; }
+    flush();
+    if (k <= o.maxLines) { emit(chunks); if (it.repLast) flush(); continue; }
+    const m = Math.ceil(k / o.maxLines);
+    let start = 0;
+    for (let s = 0; s < m; s++) {
+      const size = Math.floor(k / m) + (s < k % m ? 1 : 0);
+      emit(chunks.slice(start, start + size)); start += size;
+    }
+    if (it.repLast) flush();
+  }
+  flush();
+  if (pre.length) { if (slides.length) last().post.push(...pre); else slides.push({ pre, lines: [], post: [] }); }
+
+  const text = slides.map(s => [...s.pre, ...s.lines, ...s.post].join('\n')).join('\n\n');
+  return { slides, text };
+}
+
+const EXEMPLO = `//Exemplo — apague e cole sua música
+//Solo feminino - entrada suave, só teclado
+O Senhor é o meu pastor e nada me faltará
+Em verdes pastos me faz repousar
+Junto às águas tranquilas me conduz
+//Todos: uníssono
+Ainda que eu ande pelo vale escuro
+Não temerei, pois tu estás comigo
+//Todos: div. de vozes
+Santo, santo
+Santo és, Senhor (2x)
+Bondade e misericórdia me seguirão
+Habitarei na tua casa pra sempre`;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const num = (id, d) => { const v = parseInt($(id).value, 10); return Number.isFinite(v) ? v : d; };
+const opcoes = () => ({ maxC: Math.max(8, num('maxC', 28)), maxLines: num('maxLines', 3), maxCom: num('maxCom', 36),
+                        upper: $('upper').checked, expand: $('expand').checked });
+
+function formatar() {
+  const opt = opcoes();
+  $('saida').value = formatLyrics($('entrada').value, opt).text;
+  previa($('saida').value, opt);
+  try { localStorage.setItem('letras-rascunho', $('entrada').value); localStorage.setItem('letras-maxC', String(opt.maxC)); } catch (x) {}
+}
+
+// A previa le o texto DA DIREITA, nao o resultado do formatador: quem ajusta
+// a mao antes de copiar ve a contagem do que realmente vai colar.
+function previa(texto, opt) {
+  const grade = $('grade'); grade.textContent = '';
+  const blocos = texto.split(/\n\s*\n/).map(b => b.split('\n').filter(l => l.trim())).filter(b => b.length);
+  if (!blocos.length) { $('conta').textContent = ''; grade.innerHTML = '<div class="vazio">Cole uma letra acima para ver os slides.</div>'; return; }
+  let ruins = 0, html = '';
+  blocos.forEach((b, i) => {
+    const letra = b.filter(l => !l.trim().startsWith('//'));
+    const recados = b.filter(l => l.trim().startsWith('//'));
+    const longa = letra.some(l => l.trim().length > opt.maxC);
+    const ruim = longa || letra.length > opt.maxLines || !letra.length;
+    if (ruim) ruins++;
+    html += `<div class="slide ${ruim ? 'ruim' : ''}"><span class="n">${String(i + 1).padStart(2, '0')}${letra.length > opt.maxLines ? ' · ' + letra.length + ' linhas' : ''}</span>`
+      + letra.map(l => { const t = l.trim(); return `<div class="lin ${t.length > opt.maxC ? 'longa' : ''}"><span>${esc(t)}</span><small>${t.length}</small></div>`; }).join('')
+      + (recados.length ? `<div class="cm">${esc(recados.join('  '))}</div>` : '') + '</div>';
+  });
+  grade.innerHTML = html;
+  const c = $('conta');
+  c.textContent = blocos.length + (blocos.length === 1 ? ' slide' : ' slides') + (ruins ? ' · ' + ruins + ' para olhar (em laranja)' : ' · todos dentro do limite');
+  c.className = 'conta' + (ruins ? ' ruim' : '');
+}
+
+$('saida').addEventListener('input', () => previa($('saida').value, opcoes()));
+$('entrada').addEventListener('input', formatar);
+['maxC', 'maxLines', 'maxCom', 'upper', 'expand'].forEach(id => $(id).addEventListener('input', formatar));
+$('limpar').addEventListener('click', () => { $('entrada').value = ''; formatar(); $('entrada').focus(); });
+$('copiar').addEventListener('click', () => {
+  const dizer = msg => { $('aviso').textContent = msg; setTimeout(() => $('aviso').textContent = '', 3000); };
+  const naMao = () => { $('saida').focus(); $('saida').select(); dizer('Texto selecionado — use Ctrl+C'); };
+  // Pelo celular (http, sem https) o navegador nao libera a area de
+  // transferencia: cai no "selecionei, copie voce".
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText($('saida').value).then(() => dizer('Copiado'), naMao);
+  else naMao();
+});
+
+let rascunho = null;
+try { rascunho = localStorage.getItem('letras-rascunho'); const m = parseInt(localStorage.getItem('letras-maxC'), 10); if (m) $('maxC').value = m; } catch (x) {}
+$('entrada').value = rascunho && rascunho.trim() ? rascunho : EXEMPLO;
+formatar();
+
+// ---- Acervo e lista do dia ----
+let naLista = new Set(), espera = null;
+
+async function lerLista() {
+  try {
+    const r = await fetch('/api/letras/lista', {cache: 'no-store'});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.erro || r.status);
+    mostrarLista(j.musicas || []);
+  } catch (x) { $('lista').innerHTML = `<div class="erro">Não consegui ler a lista do Holyrics: ${esc(x.message)}</div>`; }
+}
+function mostrarLista(musicas) {
+  naLista = new Set(musicas.map(m => m.id));
+  $('lista').innerHTML = musicas.length
+    ? musicas.map((m, i) => `<div class="item"><div><b>${i + 1}. ${esc(m.titulo)}</b></div></div>`).join('')
+    : '<div class="vazio">A lista está vazia.</div>';
+  document.querySelectorAll('#achadas [data-id]').forEach(marcarSeNaLista);
+}
+function marcarSeNaLista(linha) {
+  if (!naLista.has(linha.dataset.id)) return;
+  const b = linha.querySelector('button');
+  if (b) b.outerHTML = '<span class="na">na lista</span>';
+}
+
+$('busca').addEventListener('input', () => {
+  clearTimeout(espera);
+  espera = setTimeout(async () => {
+    const q = $('busca').value.trim();
+    if (q.length < 2) { $('achadas').innerHTML = ''; return; }
+    try {
+      const r = await fetch('/api/letras/acervo?q=' + encodeURIComponent(q));
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.erro || r.status);
+      $('achadas').innerHTML = j.musicas.length
+        ? j.musicas.map(m => `<div class="item" data-id="${esc(m.id)}"><div><b>${esc(m.titulo)}</b>${m.artista ? `<small>${esc(m.artista)}</small>` : ''}</div>
+            <button class="bt" data-por="${esc(m.id)}">Pôr na lista do dia</button></div>`).join('')
+        : `<div class="vazio">Nenhuma música com esse título entre as ${j.total} do acervo. É nova: formate abaixo.</div>`;
+      document.querySelectorAll('#achadas [data-id]').forEach(marcarSeNaLista);
+    } catch (x) { $('achadas').innerHTML = `<div class="erro">Não consegui procurar: ${esc(x.message)}</div>`; }
+  }, 250);
+});
+
+$('achadas').addEventListener('click', async ev => {
+  const b = ev.target.closest('button[data-por]');
+  if (!b) return;
+  b.disabled = true; b.textContent = 'Pondo…';
+  try {
+    const r = await fetch('/api/letras/lista/' + encodeURIComponent(b.dataset.por), {method: 'POST'});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.erro || r.status);
+    mostrarLista(j.musicas || []);
+  } catch (x) { b.disabled = false; b.textContent = 'Não deu — tentar de novo'; }
+});
+
+lerLista();
+</script>
+</body>
+</html>

@@ -1,0 +1,139 @@
+/* O GUIA — estilo comum a /aqui (a pagina de cada PC) e /chegada (o celular).
+
+   A REGRA QUE DESENHOU ISTO: uma tela, uma frase, um botao. A primeira versao
+   era uma lista com o manual inteiro dentro de cada passo, e o Paulo disse o
+   obvio: "tem texto demais". Quem chega para o culto nao quer ler — quer
+   saber onde esta e o que fazer agora. O "como" e o "por que" continuam
+   existindo, atras de um link, para quem precisa.
+
+   Tudo em unidades que crescem com a tela (clamp): a mesma tela serve no
+   celular na mao e no monitor do PC visto a dois metros. */
+:root{
+  --fundo:#0b1016; --caixa:#131b24; --caixa2:#18212c; --linha:#243040;
+  --texto:#e8eef6; --suave:#b9c6d6; --apagado:#8fa0b4;
+  --ok:#22c55e; --ok-fundo:#0d2a18; --ok-texto:#6ee7a0; --ok-borda:#1f6b3c;
+  --erro:#ef4444; --erro-fundo:#2a1114; --erro-texto:#f8a5a5; --erro-borda:#7a2626;
+  --aviso:#f59e0b; --aviso-fundo:#2a1d07; --aviso-texto:#f7d9a3; --aviso-borda:#6b4a12;
+  --marca:#3b82f6; --marca-fundo:#10213f; --marca-texto:#a9c9ff; --marca-borda:#284a86;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--fundo);color:var(--texto);
+  font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  -webkit-tap-highlight-color:transparent}
+a{color:var(--marca-texto)}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid var(--marca);outline-offset:2px}
+
+.tela{min-height:100vh;min-height:100dvh;max-width:1240px;margin:0 auto;display:flex;flex-direction:column;
+  gap:clamp(14px,2.4vh,26px);
+  padding:max(clamp(18px,4vw,48px),env(safe-area-inset-top)) clamp(16px,4.5vw,60px) max(clamp(18px,3vw,36px),env(safe-area-inset-bottom))}
+.cresce{flex:1}
+.ola{margin:0;font-size:clamp(32px,6.2vw,72px);font-weight:800;letter-spacing:-.03em;line-height:1.02}
+.sub{font-size:clamp(16px,2.2vw,25px);color:var(--suave);margin-top:.35em}
+.sub b{color:var(--texto)}
+.rotulo{font-size:clamp(12px,1.2vw,14px);letter-spacing:.1em;text-transform:uppercase;color:var(--apagado);font-weight:700}
+.duas{display:flex;gap:clamp(18px,4vw,48px);align-items:flex-start;flex-wrap:wrap}
+.duas > .principal{flex:999 1 420px;min-width:0;display:flex;flex-direction:column;gap:clamp(14px,2.4vh,24px)}
+.duas > .lado{flex:1 1 300px;max-width:400px;display:flex;flex-direction:column;gap:12px}
+@media (max-width:760px){ .duas > .lado{max-width:none} }
+
+.faixa{border-radius:14px;padding:12px 16px;font-size:15.5px}
+.faixa.erro{background:var(--erro-fundo);border:1px solid var(--erro-borda);color:var(--erro-texto)}
+.faixa.aviso{background:var(--aviso-fundo);border:1px solid var(--aviso-borda);color:var(--aviso-texto)}
+.faixa b{color:#fff}
+
+/* botoes */
+.bt{min-height:clamp(52px,7vh,68px);padding:0 clamp(18px,2.6vw,34px);border-radius:16px;border:1px solid #3a4757;
+  background:var(--caixa2);font-weight:700;font-size:clamp(16px,1.9vw,20px);
+  display:inline-flex;align-items:center;justify-content:center;text-decoration:none;color:var(--texto)}
+.bt.forte{background:var(--marca);border-color:transparent;color:#fff}
+.bt.feito{background:var(--ok);border-color:transparent;color:#06210f}
+.bt.largo{width:100%}
+.bt:disabled{opacity:.55;cursor:wait}
+.leve{background:none;border:none;color:var(--marca-texto);font-size:clamp(15px,1.6vw,17px);
+  text-decoration:underline;padding:10px 4px;min-height:44px}
+.leve.cinza{color:var(--apagado)}
+
+/* escolhas do formulario */
+.pergunta{display:flex;flex-direction:column;gap:10px}
+.pergunta > label,.pergunta > .q{font-size:clamp(17px,1.9vw,20px);font-weight:700}
+.opcoes{display:flex;gap:10px;flex-wrap:wrap}
+.op{min-height:60px;padding:0 clamp(16px,2.2vw,26px);border-radius:14px;border:1px solid var(--linha);
+  background:var(--caixa);color:var(--suave);font-weight:600;font-size:clamp(16px,1.8vw,18px)}
+.op.sel{border:2px solid var(--marca);background:var(--marca-fundo);color:var(--texto);font-weight:700}
+.op.veio{border:2px solid var(--ok);background:var(--ok-fundo);color:#bdf0d0;font-weight:700}
+.campo{width:160px;min-height:60px;border-radius:14px;border:1px solid #3a4757;background:var(--caixa);
+  font-weight:700;font-size:24px;padding:0 18px}
+
+/* a pergunta da vez */
+.w-topo{display:flex;align-items:center;gap:14px;font-size:clamp(14px,1.5vw,16px);color:var(--apagado)}
+.w-topo b{color:var(--texto);font-weight:700}
+.seg{flex:1;display:flex;gap:5px;min-width:60px}
+.seg i{flex:1;height:8px;border-radius:4px;background:#1d2733}
+.seg i.f{background:var(--ok)} .seg i.a{background:var(--marca)} .seg i.r{background:var(--erro)}
+.w-meio{flex:1;display:flex;flex-direction:column;justify-content:center;gap:clamp(12px,2.2vh,24px);
+  padding:clamp(4px,2vh,24px) 0}
+.w-meio > .leve{align-self:flex-start}
+.centro .w-meio{align-items:center;text-align:center}
+.centro .w-meio > .leve{align-self:center}
+.frase{margin:0;font-size:clamp(30px,5.6vw,64px);font-weight:800;letter-spacing:-.03em;line-height:1.06;max-width:18ch}
+.centro .frase{max-width:20ch}
+.apoio{font-size:clamp(16px,2.1vw,23px);color:var(--suave);max-width:34ch;margin:0}
+.pilula{display:inline-flex;align-items:center;gap:10px;padding:8px 16px;border-radius:999px;
+  font-size:clamp(14px,1.6vw,17px);font-weight:600;align-self:flex-start;background:#1d2733;color:var(--suave)}
+.centro .pilula{align-self:center}
+.pilula i{width:11px;height:11px;border-radius:50%;background:#5b6b80;flex:none}
+.pilula.sim{background:var(--ok-fundo);color:var(--ok-texto)} .pilula.sim i{background:var(--ok)}
+.pilula.nao{background:var(--erro-fundo);color:var(--erro-texto)} .pilula.nao i{background:var(--erro)}
+.caixa{border-radius:14px;padding:12px 16px;font-size:clamp(15px,1.6vw,17px);text-align:left;max-width:60ch}
+.caixa.falhar{background:var(--aviso-fundo);color:var(--aviso-texto);border:1px solid var(--aviso-borda)}
+.caixa.res-ok{background:var(--ok-fundo);color:var(--ok-texto)}
+.caixa.res-nao{background:var(--erro-fundo);color:var(--erro-texto)}
+.caixa.como{background:var(--caixa);border:1px solid var(--linha);color:var(--suave)}
+.caixa.como ol{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:6px}
+.caixa.como p{margin:10px 0 0;color:#c9dbfa}
+.caixa b.t{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;margin-bottom:3px;opacity:.85}
+.foto{width:100%;max-width:560px;border-radius:12px;overflow:hidden;background:#05070b;border:1px solid var(--linha);
+  min-height:110px;display:grid;place-items:center;color:var(--apagado);font-size:14px;text-align:center}
+.foto img{display:block;width:100%;height:auto}
+.desenho{width:100%;max-width:420px}
+.w-pe{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.w-pe .bt{flex:1 1 200px}
+.w-pe .leve{flex:0 0 auto}
+
+/* agora na igreja */
+.pecas{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.peca{background:var(--caixa);border:1px solid var(--linha);border-radius:16px;padding:14px 16px;min-width:0}
+.peca .e{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700;color:var(--apagado)}
+.peca .e i{width:10px;height:10px;border-radius:50%;background:#5b6b80;flex:none}
+.peca .n{font-size:clamp(18px,2vw,23px);font-weight:800;margin-top:6px}
+.peca .d{font-size:14px;color:var(--apagado);margin-top:2px}
+.peca.sim{border-color:var(--ok-borda)} .peca.sim .e{color:var(--ok-texto)} .peca.sim .e i{background:var(--ok)}
+.peca.meio{border-color:var(--aviso-borda)} .peca.meio .e{color:#f5c46b} .peca.meio .e i{background:var(--aviso)}
+.peca.nao{background:var(--erro-fundo);border-color:var(--erro-borda)} .peca.nao .e{color:var(--erro-texto)}
+.peca.nao .e i{background:var(--erro)} .peca.nao .d{color:#ffd0d0}
+.pecas.fila{grid-template-columns:1fr}
+.pecas.fila .peca{display:flex;align-items:center;gap:12px;padding:12px 14px}
+.pecas.fila .peca .n{margin:0;flex:1;font-size:17px;font-weight:600;order:1}
+.pecas.fila .peca .e{order:2} .pecas.fila .peca .d{display:none}
+
+/* endereco para o celular */
+.endereco{background:var(--marca-fundo);border:1px solid var(--marca-borda);border-radius:18px;padding:clamp(16px,2.4vw,26px)}
+.endereco .l{font-size:clamp(15px,1.7vw,20px);color:#c9dbfa}
+.endereco .u{font-size:clamp(22px,4.4vw,50px);font-weight:800;letter-spacing:-.02em;color:#fff;line-height:1.15;word-break:break-all}
+.endereco.pequeno .u{font-size:clamp(19px,2.2vw,25px)}
+.endereco .s{font-size:14.5px;color:var(--marca-texto);margin-top:4px}
+
+/* escolher onde esta / marcar na mao */
+.linhas{display:flex;flex-direction:column;gap:10px}
+.lin{min-height:clamp(64px,9vh,78px);border-radius:16px;border:1px solid var(--linha);background:var(--caixa);
+  font-weight:700;font-size:clamp(18px,2.2vw,22px);text-align:left;padding:0 18px;display:flex;align-items:center;gap:14px;width:100%}
+.lin span.x{flex:1;min-width:0}
+.lin small{font-weight:500;font-size:14.5px;color:var(--apagado);flex:none}
+.lin.sel{border:2px solid var(--marca);background:var(--marca-fundo)}
+.lin small.sim{color:var(--ok-texto)} .lin small.nao{color:var(--erro-texto)} .lin small.meio{color:#f5c46b}
+.lin .q{width:32px;height:32px;border-radius:9px;border:2px solid #5b6b80;flex:none;display:grid;place-items:center;font-size:20px;color:#06210f}
+.lin.ok{border-color:var(--ok-borda);background:var(--ok-fundo)}
+.lin.ok .q{background:var(--ok);border-color:var(--ok)}

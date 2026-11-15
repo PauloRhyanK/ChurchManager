@@ -1,0 +1,36 @@
+# ===========================================================================
+#  CONFIGURAÇÃO DE UMA MÁQUINA SECUNDÁRIA (notebook da transmissão, PC do som)
+#
+#  Tudo desligado DE PROPÓSITO. Numa secundária a ponte não fala com o OBS,
+#  com o Holyrics nem com a luz: quem faz isso é o PC do Holyrics, o
+#  principal. Aqui ela só serve a página deste PC e conversa com a principal
+#  (o endereço dela fica no maquina.yaml).
+#
+#  Por isso este arquivo NÃO TEM SEGREDO NENHUM, e pode ser copiado de um PC
+#  para outro à vontade. O instalador (configurar-este-pc.bat) o usa como
+#  config.yaml.
+#
+#  A exceção é o PC do som, que leva a luz até os refletores: ele precisa do
+#  bloco `seguidor` ligado. O instalador cuida disso quando o papel é "som".
+# ===========================================================================
+
+servidor:
+  # 127.0.0.1: a página deste PC só abre nele mesmo. Assim o Windows não
+  # pergunta sobre firewall, e ninguém na rede controla o culto por aqui.
+  host: 127.0.0.1
+  porta: 8700
+
+obs:
+  ativo: false
+
+holyrics:
+  ativo: false
+
+luzes:
+  driver: nenhum
+
+youtube:
+  ativo: false
+
+web:
+  ativo: false

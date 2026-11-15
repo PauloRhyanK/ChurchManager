@@ -1,0 +1,18 @@
+# Nada que seja segredo, estado de uma maquina ou lixo de execucao entra na imagem.
+**/config.yaml
+**/maquina.yaml
+**/_*.json
+**/*.pem
+**/*.key
+**/.env
+**/.env.*
+**/*.log
+**/__pycache__
+**/*.pyc
+**/.venv
+**/venv
+**/*.wav
+**/*.mp3
+**/*.m4a
+**/acervo
+docs
