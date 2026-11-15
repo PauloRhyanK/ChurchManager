@@ -16,6 +16,8 @@ interface JwtPayload {
   sub: string;
   tenantId: string;
   role?: string;
+  /** Tokens do painel não têm `aud`; qualquer `aud` (ex.: `contributor`) é recusado. */
+  aud?: unknown;
 }
 
 @Injectable()
@@ -36,6 +38,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload): Promise<AuthUser> {
+    if (payload.aud !== undefined || typeof payload.sub !== 'string') {
+      throw new UnauthorizedException();
+    }
     const user = await this.prisma.adminUser.findUnique({
       where: { id: payload.sub },
       include: { tenant: true },

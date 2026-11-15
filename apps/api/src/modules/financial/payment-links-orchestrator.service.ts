@@ -1,6 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, Tenant } from '@prisma/client';
 import { normalizeCpf } from '../../common/cpf';
+import { maskEmail } from '../../common/mask-email';
 import {
   PAYMENT_LINK_SOURCE_COTAS,
   PaymentLinksGenerationService,
@@ -52,7 +58,12 @@ interface PublicCotasInput {
   name?: string;
   successUrl?: string;
   autoRedirect?: boolean;
+  /** Só com `cpf_custom`: gera o link mesmo que o CPF já tenha assinatura ativa. */
+  confirmAdditional?: boolean;
 }
+
+/** Código do 409 quando o CPF já tem assinatura ativa (contrato público de `/links`). */
+export const HAS_ACTIVE_CONTRIBUTION = 'HAS_ACTIVE_CONTRIBUTION';
 
 interface EventAutoInput {
   eventId: string;
@@ -63,6 +74,8 @@ interface EventAutoInput {
 
 @Injectable()
 export class PaymentLinksOrchestratorService {
+  private readonly logger = new Logger(PaymentLinksOrchestratorService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly generation: PaymentLinksGenerationService,
@@ -72,11 +85,85 @@ export class PaymentLinksOrchestratorService {
     const mode = input.reuseMode ?? 'preset_global';
     const resolved = await this.resolvePublicCotasData(tenant, input, mode);
 
+    if (resolved.reuseMode === 'cpf_custom' && resolved.cpf) {
+      if (input.confirmAdditional !== true) {
+        await this.assertNoActiveContribution(tenant.id, resolved.cpf);
+      }
+    }
+
     const reuseKey = this.buildReuseKey(tenant.id, resolved, {
       mode: resolved.reuseMode,
       presetKey: input.presetKey ?? null,
     });
-    return this.createOrReuse(tenant, resolved, reuseKey);
+    const result = await this.createOrReuse(tenant, resolved, reuseKey);
+
+    if (resolved.reuseMode === 'cpf_custom' && resolved.cpf) {
+      await this.deactivateOtherCpfLinks(tenant, resolved.cpf, result.id);
+    }
+    return result;
+  }
+
+  /**
+   * 409 `HAS_ACTIVE_CONTRIBUTION` quando o perfil do pagador (tenant + CPF) tem
+   * assinatura `ACTIVE`. O corpo leva só o e-mail mascarado.
+   */
+  private async assertNoActiveContribution(tenantId: string, cpf: string) {
+    const profile = await this.prisma.financialPayerProfile.findUnique({
+      where: { tenantId_cpf: { tenantId, cpf } },
+      select: {
+        email: true,
+        subscriptions: {
+          where: { status: 'ACTIVE' },
+          select: { id: true },
+          take: 1,
+        },
+      },
+    });
+    if (profile && profile.subscriptions.length > 0) {
+      throw new ConflictException({
+        code: HAS_ACTIVE_CONTRIBUTION,
+        emailHint: maskEmail(profile.email),
+      });
+    }
+  }
+
+  /**
+   * Desativa (banco + Asaas) os outros links `CPF_CUSTOM` ativos do CPF, para
+   * que só o último gerado continue a aceitar pagamentos. Falha no Asaas só vai
+   * para o log. Assinaturas já criadas pelos links antigos não são afetadas.
+   */
+  private async deactivateOtherCpfLinks(
+    tenant: Tenant,
+    cpf: string,
+    keepProviderLinkId: string,
+  ) {
+    const others = await this.prisma.financialPaymentLink.findMany({
+      where: {
+        tenantId: tenant.id,
+        mode: toPrismaLinkMode('cpf_custom'),
+        cpf,
+        active: true,
+        providerLinkId: { not: keepProviderLinkId },
+      },
+      select: { id: true, providerLinkId: true },
+    });
+    if (others.length === 0) {
+      return;
+    }
+    await this.prisma.financialPaymentLink.updateMany({
+      where: { id: { in: others.map((o) => o.id) } },
+      data: { active: false },
+    });
+    for (const link of others) {
+      try {
+        await this.generation.remove(tenant, link.providerLinkId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Falha ao remover link ${link.providerLinkId} no Asaas (tenant ${tenant.slug}); desativado só no banco: ${message}`,
+        );
+      }
+    }
   }
 
   private async resolvePublicCotasData(
@@ -242,6 +329,23 @@ export class PaymentLinksOrchestratorService {
       autoRedirect: data.successUrl ? data.autoRedirect : null,
       active: true,
     };
+
+    if (existing) {
+      // Mesmo reuseKey de um link desativado (ex.: o CPF trocou de valor e voltou):
+      // reaproveita a linha com o novo link do Asaas — `reuseKey` é único por tenant.
+      const { tenantId: _t, reuseKey: _r, ...updateData } = persistData;
+      await this.prisma.financialPaymentLink.update({
+        where: { id: existing.id },
+        data: { ...updateData, createdAt: new Date() },
+      });
+      return {
+        ...created,
+        metadata: {
+          ...created.metadata,
+          reused: false,
+        },
+      };
+    }
 
     try {
       await this.prisma.financialPaymentLink.create({ data: persistData });

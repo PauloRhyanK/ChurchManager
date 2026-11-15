@@ -14,6 +14,7 @@ import { AsaasWebhookController } from './asaas-webhook.controller';
 import { AsaasWebhookService } from './asaas-webhook.service';
 import { AsaasSubscriptionDurationSyncService } from './asaas-subscription-duration-sync.service';
 import { CotasOverviewService } from './cotas-overview.service';
+import { ContributorAccessService } from './contributor-access.service';
 import { TenantsMeCotasController } from './tenants-me-cotas.controller';
 import { TenantsMeLinkPresetsController } from './tenants-me-link-presets.controller';
 import { TenantsMeEventsPaymentLinksController } from './tenants-me-events-payment-links.controller';
@@ -42,6 +43,7 @@ import { TenantsMeEventsPaymentLinksController } from './tenants-me-events-payme
     AsaasWebhookService,
     AsaasSubscriptionDurationSyncService,
     CotasOverviewService,
+    ContributorAccessService,
   ],
   exports: [AsaasClient, PayerProfilesService],
 })

@@ -136,4 +136,19 @@ export class PaymentLinksGenerationService {
       );
     }
   }
+
+  /**
+   * Remove o link no Asaas (o link deixa de aceitar pagamentos; assinaturas já
+   * criadas por ele continuam). Lança erro se o Asaas falhar — quem chama decide
+   * se tolera.
+   */
+  async remove(tenant: Tenant, providerLinkId: string): Promise<void> {
+    if (!tenant.asaasApiKey) {
+      throw new ServiceUnavailableException(
+        'Pagamentos não estão configurados para esta igreja',
+      );
+    }
+    const apiKey = this.credentials.getDecryptedApiKey(tenant.asaasApiKey);
+    await this.asaas.deletePaymentLink({ apiKey, linkId: providerLinkId });
+  }
 }
