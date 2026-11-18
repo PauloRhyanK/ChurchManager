@@ -1,7 +1,27 @@
 import type { EventReportDto } from "@/features/events/api/tenant-events-api";
 import { formatMoneyCents, orderStatusLabel } from "@/features/events/lib/format";
 
-function downloadCsv(filename: string, rows: string[][]) {
+/** Texto vindo de pessoas vai para uma janela com a origem do painel: escapar sempre. */
+export function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export function printHtml(html: string) {
+  const win = window.open("", "_blank");
+  if (!win) return false;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  win.print();
+  return true;
+}
+
+export function downloadCsv(filename: string, rows: string[][]) {
   const csv = rows
     .map((row) =>
       row
@@ -52,7 +72,7 @@ export function exportReportPdf(report: EventReportDto) {
   const ticketRows = report.ticketTypes
     .map(
       (row) =>
-        `<tr><td>${row.name}</td><td>${formatMoneyCents(row.priceCents)}</td><td>${row.quantitySold}</td><td>${formatMoneyCents(row.revenueCents)}</td></tr>`,
+        `<tr><td>${escapeHtml(row.name)}</td><td>${formatMoneyCents(row.priceCents)}</td><td>${row.quantitySold}</td><td>${formatMoneyCents(row.revenueCents)}</td></tr>`,
     )
     .join("");
   const orderRows = report.ordersSummary
@@ -62,10 +82,10 @@ export function exportReportPdf(report: EventReportDto) {
     )
     .join("");
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — ${report.event.title}</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Relatório — ${escapeHtml(report.event.title)}</title>
 <style>body{font-family:sans-serif;padding:24px;color:#111}h1{font-size:20px}table{border-collapse:collapse;width:100%;margin:16px 0}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f5}</style>
 </head><body>
-<h1>${report.event.title}</h1>
+<h1>${escapeHtml(report.event.title)}</h1>
 <p>Data do evento: ${report.event.date}</p>
 <h2>Resumo</h2>
 <ul>
@@ -79,10 +99,5 @@ export function exportReportPdf(report: EventReportDto) {
 <table><thead><tr><th>Tipo</th><th>Preço</th><th>Vendidos</th><th>Receita</th></tr></thead><tbody>${ticketRows}</tbody></table>
 </body></html>`;
 
-  const win = window.open("", "_blank");
-  if (!win) return;
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  win.print();
+  printHtml(html);
 }

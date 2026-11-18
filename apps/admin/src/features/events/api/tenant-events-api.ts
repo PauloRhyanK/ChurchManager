@@ -156,3 +156,31 @@ export async function fetchEventReport(eventId: string) {
   );
   return data;
 }
+
+export interface EventParticipantDto {
+  id: string;
+  holderName: string;
+  ticketTypeName: string;
+  publicCode: string;
+  status: string;
+  checkedInAt: string | null;
+  createdAt: string;
+  orderId: string;
+  orderStatus: string;
+  buyerName: string | null;
+  buyerEmail: string | null;
+  buyerPhone: string | null;
+  fields: { label: string; value: string }[];
+}
+
+export interface EventParticipantsDto {
+  event: { id: string; title: string; date: string };
+  items: EventParticipantDto[];
+}
+
+export async function fetchEventParticipants(eventId: string) {
+  const { data } = await api.get<EventParticipantsDto>(
+    `/admin/tenants/me/events-dashboard/${eventId}/participants`,
+  );
+  return data;
+}
