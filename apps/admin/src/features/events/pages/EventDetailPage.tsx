@@ -21,6 +21,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
@@ -41,6 +42,7 @@ import { TicketTypeWizardDialog } from "@/features/events/components/TicketTypeW
 import { fetchEventRegistrations } from "@/features/events/api/tenant-event-registrations-api";
 import {
   fetchEvent,
+  fetchEventParticipants,
   fetchEventReport,
   fetchPublicSiteUrl,
   updateEvent,
@@ -64,6 +66,10 @@ import {
   exportReportPdf,
   exportReportSpreadsheet,
 } from "@/features/events/lib/event-report-export";
+import {
+  exportParticipantsPdf,
+  exportParticipantsSpreadsheet,
+} from "@/features/events/lib/event-participants-export";
 import { usePermissions } from "@/features/access/hooks/use-permissions";
 import { getApiErrorMessage } from "@/lib/api";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -86,6 +92,9 @@ export function EventDetailPage() {
   const canCreatePaymentLinks = canEdit && can("FINANCIAL", "EDIT");
   // As inscrições têm módulo próprio na API.
   const canViewRegistrations = can("EVENT_REGISTRATIONS", "VIEW");
+  // A lista de participantes traz contactos dos compradores: exige ver ingressos.
+  const canViewTickets = can("EVENT_TICKETS", "VIEW");
+  const [exportingParticipants, setExportingParticipants] = useState(false);
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const [paymentLinkTicket, setPaymentLinkTicket] = useState<EventTicketTypeDto | null>(null);
   const [editingTicket, setEditingTicket] = useState<EventTicketTypeDto | null>(null);
@@ -111,6 +120,34 @@ export function EventDetailPage() {
     queryFn: () => fetchEventRegistrations(id),
     enabled: Boolean(id) && canViewRegistrations,
   });
+
+  async function handleExportParticipants(kind: "pdf" | "planilha") {
+    setExportingParticipants(true);
+    try {
+      const [participants, freeRegistrations] = await Promise.all([
+        queryClient.fetchQuery({
+          queryKey: ["event-participants", id],
+          queryFn: () => fetchEventParticipants(id),
+          staleTime: 0,
+        }),
+        canViewRegistrations
+          ? queryClient.fetchQuery({
+              queryKey: ["event-registrations", id],
+              queryFn: () => fetchEventRegistrations(id),
+            })
+          : Promise.resolve([]),
+      ]);
+      if (kind === "planilha") {
+        exportParticipantsSpreadsheet(participants, freeRegistrations);
+      } else if (!exportParticipantsPdf(participants, freeRegistrations)) {
+        toast.error("Permita janelas pop-up neste site para gerar o PDF.");
+      }
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setExportingParticipants(false);
+    }
+  }
 
   const reportQuery = useQuery({
     queryKey: ["event-report", id],
@@ -295,6 +332,25 @@ export function EventDetailPage() {
                 <Download className="mr-2 h-4 w-4" />
                 Exportar PDF
               </DropdownMenuItem>
+              {canViewTickets && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => handleExportParticipants("pdf")}
+                    disabled={exportingParticipants}
+                  >
+                    <Users className="mr-2 h-4 w-4" />
+                    Lista de participantes (PDF)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => handleExportParticipants("planilha")}
+                    disabled={exportingParticipants}
+                  >
+                    <FileSpreadsheet className="mr-2 h-4 w-4" />
+                    Lista de participantes (planilha)
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

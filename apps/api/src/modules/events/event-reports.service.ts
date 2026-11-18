@@ -185,4 +185,67 @@ export class EventReportsService {
       })),
     };
   }
+
+  /**
+   * Lista de participantes com ingresso: um item por bilhete emitido, com o
+   * comprador e as respostas do formulário do pedido. Serve a exportação.
+   */
+  async getEventParticipants(tenantId: string, eventId: string) {
+    const event = await this.prisma.event.findFirst({
+      where: { id: eventId, tenantId },
+      select: { id: true, title: true, date: true },
+    });
+    if (!event) {
+      throw new NotFoundException('Evento não encontrado');
+    }
+
+    const tickets = await this.prisma.eventTicket.findMany({
+      where: { tenantId, order: { eventId } },
+      orderBy: [{ holderName: 'asc' }, { createdAt: 'asc' }],
+      select: {
+        id: true,
+        holderName: true,
+        publicCode: true,
+        status: true,
+        checkedInAt: true,
+        createdAt: true,
+        ticketType: { select: { name: true } },
+        order: {
+          select: {
+            id: true,
+            status: true,
+            payer: { select: { name: true, email: true, phone: true } },
+            fieldValues: {
+              select: {
+                value: true,
+                field: { select: { label: true, type: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      event: { id: event.id, title: event.title, date: formatDateOnly(event.date) },
+      items: tickets.map((row) => ({
+        id: row.id,
+        holderName: row.holderName,
+        ticketTypeName: row.ticketType.name,
+        publicCode: row.publicCode,
+        status: row.status,
+        checkedInAt: row.checkedInAt,
+        createdAt: row.createdAt,
+        orderId: row.order.id,
+        orderStatus: row.order.status,
+        buyerName: row.order.payer?.name ?? null,
+        buyerEmail: row.order.payer?.email ?? null,
+        buyerPhone: row.order.payer?.phone ?? null,
+        // Aceites de termos não são dados da pessoa.
+        fields: row.order.fieldValues
+          .filter((fv) => fv.field.type !== 'TERMS')
+          .map((fv) => ({ label: fv.field.label, value: fv.value })),
+      })),
+    };
+  }
 }

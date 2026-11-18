@@ -28,4 +28,14 @@ export class TenantsMeEventsDashboardController {
   ) {
     return this.reports.getEventReport(user.tenantId, eventId);
   }
+
+  /** Portadores de ingresso com dados de contacto: exige ver ingressos. */
+  @Get(':eventId/participants')
+  @RequirePermission(PermissionModule.EVENT_TICKETS, PermissionLevel.VIEW)
+  async eventParticipants(
+    @CurrentUser() user: AuthUser,
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+  ) {
+    return this.reports.getEventParticipants(user.tenantId, eventId);
+  }
 }
