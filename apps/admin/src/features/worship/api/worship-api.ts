@@ -1,4 +1,5 @@
 import { api } from "@/lib/api";
+import type { PublicSlide, SlideStyle } from "@/features/sermons/lib/slides";
 import type { Pending, SongStatus, WorshipRow } from "../lib/document";
 
 export interface SongAudio {
@@ -174,7 +175,7 @@ export interface ServicePlan {
   worshipStartsAt: string | null;
   songs: ServiceSong[];
   /** Palavra enviada para este culto (nulo = nenhuma). */
-  sermon: { title: string; preacherName: string; estimatedMinutes: number } | null;
+  sermon: { title: string; preacherName: string; estimatedMinutes: number; slideCount: number } | null;
   updatedAt: string;
 }
 
@@ -192,6 +193,19 @@ export async function fetchServices(): Promise<ServiceSummary[]> {
 
 export async function fetchService(id: string): Promise<ServicePlan> {
   return (await api.get<ServicePlan>(`${SERVICES}/${id}`)).data;
+}
+
+/** Prévia da palavra do culto (só a parte pública dos slides). `mySermonId` só vem para o autor. */
+export interface ServiceSermonPreview {
+  title: string;
+  preacherName: string;
+  slideStyle: SlideStyle;
+  slides: PublicSlide[];
+  mySermonId: string | null;
+}
+
+export async function getServiceSermon(serviceId: string): Promise<ServiceSermonPreview> {
+  return (await api.get<ServiceSermonPreview>(`${SERVICES}/${serviceId}/sermon`)).data;
 }
 
 export async function createService(input: {

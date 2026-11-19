@@ -2,6 +2,7 @@ import { BookOpen, ChevronRight, Music, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { MomentKind, ServiceMoment, ServicePlan } from "../../api/worship-api";
+import { SermonPreviewDialog } from "./SermonPreviewDialog";
 import { SortableList } from "./SortableList";
 
 export interface MomentDraft {
@@ -94,6 +95,7 @@ export function MomentsTab({ service, canEdit, saving, onSave, onOpenWorship }: 
   const firstWorship = service.moments.find((m) => m.kind === "WORSHIP")?.id;
   const firstSermon = service.moments.find((m) => m.kind === "SERMON")?.id;
   const sermon = service.sermon;
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   return (
     <div className="flex flex-col gap-4">
@@ -141,13 +143,15 @@ export function MomentsTab({ service, canEdit, saving, onSave, onOpenWorship }: 
                 </button>
               )}
               {moment.id === firstSermon && sermon && (
-                <span
+                <button
+                  type="button"
                   title={`Palavra de ${sermon.preacherName}`}
-                  className="inline-flex min-w-0 max-w-[40%] flex-none items-center gap-1.5 rounded-lg bg-purple-100 px-3 py-1.5 text-sm font-semibold text-purple-700"
+                  onClick={() => setPreviewOpen(true)}
+                  className="inline-flex min-w-0 max-w-[40%] flex-none items-center gap-1.5 rounded-lg bg-purple-100 px-3 py-1.5 text-sm font-semibold text-purple-700 hover:bg-purple-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <BookOpen className="h-4 w-4 flex-none" aria-hidden="true" />
                   <span className="truncate">{sermon.title}</span>
-                </span>
+                </button>
               )}
               {canEdit && (
                 <Button
@@ -183,6 +187,7 @@ export function MomentsTab({ service, canEdit, saving, onSave, onOpenWorship }: 
           {items.length} {items.length === 1 ? "momento" : "momentos"} · termina às {service.endsAt}
         </span>
       </div>
+      {sermon && <SermonPreviewDialog serviceId={service.id} open={previewOpen} onOpenChange={setPreviewOpen} />}
     </div>
   );
 }

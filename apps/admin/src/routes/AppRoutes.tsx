@@ -16,6 +16,7 @@ import NewSongPage from "@/features/worship/pages/NewSongPage";
 import SongEditorPage from "@/features/worship/pages/SongEditorPage";
 import ServicePlanPage from "@/features/worship/pages/ServicePlanPage";
 import SermonsListPage from "@/features/sermons/pages/SermonsListPage";
+import SermonSlidesPage from "@/features/sermons/pages/SermonSlidesPage";
 import UsersListPage from "@/features/access/pages/UsersListPage";
 import InviteUserPage from "@/features/access/pages/InviteUserPage";
 import PermissionGroupsPage from "@/features/access/pages/PermissionGroupsPage";
@@ -93,6 +94,8 @@ export function AppRoutes() {
         <Route element={<PermissionRoute module="SERMONS" />}>
           <Route path="/palavras" element={<SermonsListPage />} />
           <Route path="/palavras/:id" element={<SermonEditorRoutePage />} />
+          {/* Conferência dos slides: com o menu, como a lista (o editor fica sem ele). */}
+          <Route path="/palavras/:id/slides" element={<SermonSlidesPage />} />
         </Route>
         {/* O site é gerido na aba Site de Igreja; /site fica como atalho. */}
         <Route path="/site" element={<Navigate to="/igreja?aba=site" replace />} />

@@ -10,7 +10,16 @@ vi.mock("../api/sermons-api", () => api);
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("sonner", () => ({ toast }));
 
-function renderDialog(over: { document?: SermonDoc; title?: string; ensureSaved?: () => Promise<boolean>; style?: "MINIMAL" | "BACKGROUND" } = {}) {
+function renderDialog(
+  over: {
+    document?: SermonDoc;
+    title?: string;
+    ensureSaved?: () => Promise<boolean>;
+    style?: "MINIMAL" | "BACKGROUND";
+    notice?: string;
+    mode?: "VERSES" | "VERSES_AND_POINTS";
+  } = {},
+) {
   const onGenerated = vi.fn();
   const onOpenChange = vi.fn();
   const ensureSaved = over.ensureSaved ?? vi.fn().mockResolvedValue(true);
@@ -25,6 +34,8 @@ function renderDialog(over: { document?: SermonDoc; title?: string; ensureSaved?
         initialStyle={over.style ?? "MINIMAL"}
         ensureSaved={ensureSaved}
         onGenerated={onGenerated}
+        notice={over.notice}
+        initialMode={over.mode}
       />
     </QueryClientProvider>,
   );
@@ -33,6 +44,17 @@ function renderDialog(over: { document?: SermonDoc; title?: string; ensureSaved?
 
 describe("GenerateSlidesDialog", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("Gerar de novo: mostra o aviso e começa no modo atual", () => {
+    renderDialog({ notice: "Trocar o que mostrar refaz a sequência do zero.", mode: "VERSES" });
+    expect(screen.getByText("Trocar o que mostrar refaz a sequência do zero.")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Só versículos/ })).toBeChecked();
+  });
+
+  it("sem aviso, o texto não aparece", () => {
+    renderDialog();
+    expect(screen.queryByText(/refaz a sequência/)).not.toBeInTheDocument();
+  });
 
   it("mostra as contagens e deixa Slides completos desligado com em breve", () => {
     renderDialog();

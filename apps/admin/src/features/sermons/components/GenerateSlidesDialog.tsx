@@ -39,6 +39,10 @@ interface GenerateSlidesDialogProps {
   ensureSaved(): Promise<boolean>;
   /** Chamado com a palavra devolvida pelo servidor, já com os slides. */
   onGenerated(sermon: Sermon): void;
+  /** Modo marcado ao abrir (padrão: Versículos e pontos). */
+  initialMode?: Exclude<SlideMode, "FULL">;
+  /** Aviso acima dos botões (ex.: ao gerar de novo). */
+  notice?: string;
 }
 
 export function GenerateSlidesDialog({
@@ -50,17 +54,19 @@ export function GenerateSlidesDialog({
   initialStyle,
   ensureSaved,
   onGenerated,
+  initialMode = "VERSES_AND_POINTS",
+  notice,
 }: GenerateSlidesDialogProps) {
-  const [mode, setMode] = useState<Choice>("VERSES_AND_POINTS");
+  const [mode, setMode] = useState<Choice>(initialMode);
   const [style, setStyle] = useState<SlideStyle>(initialStyle);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setMode("VERSES_AND_POINTS");
+      setMode(initialMode);
       setStyle(initialStyle);
     }
-  }, [open, initialStyle]);
+  }, [open, initialStyle, initialMode]);
 
   const counts = useMemo(() => (open ? countSlides(title, document) : { VERSES: 0, VERSES_AND_POINTS: 0 }), [open, title, document]);
   const chosen = mode === "FULL" ? 0 : counts[mode];
@@ -154,6 +160,8 @@ export function GenerateSlidesDialog({
         {chosen === 0 && mode !== "FULL" && (
           <p className="text-sm text-muted-foreground">Escreva um versículo ou um ponto para montar os slides.</p>
         )}
+
+        {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
 
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>

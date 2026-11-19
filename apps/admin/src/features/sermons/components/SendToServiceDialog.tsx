@@ -46,6 +46,8 @@ interface SendToServiceDialogProps {
   ensureSaved(): Promise<boolean>;
   /** Chamado depois de enviar ou cancelar, com a palavra devolvida pelo servidor. */
   onChanged(sermon: Sermon, action: "sent" | "cancelled"): void;
+  /** Texto sob o título do diálogo (padrão: o título da palavra). */
+  subtitle?: string;
 }
 
 export function SendToServiceDialog({
@@ -56,6 +58,7 @@ export function SendToServiceDialog({
   delivery,
   ensureSaved,
   onChanged,
+  subtitle,
 }: SendToServiceDialogProps) {
   const queryClient = useQueryClient();
   const [choice, setChoice] = useState("");
@@ -164,7 +167,7 @@ export function SendToServiceDialog({
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Enviar para um culto</DialogTitle>
-            <DialogDescription>{sermonTitle.trim() || "Sem título"}</DialogDescription>
+            <DialogDescription>{subtitle ?? (sermonTitle.trim() || "Sem título")}</DialogDescription>
           </DialogHeader>
 
           <RadioGroup aria-label="Qual culto" value={choice} onValueChange={setChoice} className="max-h-[50vh] gap-2 overflow-y-auto">

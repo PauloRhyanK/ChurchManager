@@ -1,9 +1,14 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import type { ServicePlan } from "../../api/worship-api";
 import { MomentsTab } from "./MomentsTab";
 
-const SERMON = { title: "A luz do mundo", preacherName: "Pr. João", estimatedMinutes: 28 };
+const api = vi.hoisted(() => ({ getServiceSermon: vi.fn() }));
+vi.mock("../../api/worship-api", () => api);
+
+const SERMON = { title: "A luz do mundo", preacherName: "Pr. João", estimatedMinutes: 28, slideCount: 2 };
 
 function plan(over: Partial<ServicePlan>): ServicePlan {
   return {
@@ -27,7 +32,13 @@ function plan(over: Partial<ServicePlan>): ServicePlan {
 
 function renderTab(service: ServicePlan) {
   const onSave = vi.fn();
-  render(<MomentsTab service={service} canEdit saving={false} onSave={onSave} onOpenWorship={vi.fn()} />);
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <MomentsTab service={service} canEdit saving={false} onSave={onSave} onOpenWorship={vi.fn()} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
   return { onSave };
 }
 
@@ -41,6 +52,23 @@ describe("MomentsTab: palavra do culto", () => {
       "min· palavra estimada em 28",
     );
     expect(screen.queryByText(/não tem o momento Palavra/)).not.toBeInTheDocument();
+  });
+
+  it("a etiqueta da palavra é um botão que busca e mostra os slides", async () => {
+    api.getServiceSermon.mockResolvedValue({
+      title: "A luz do mundo",
+      preacherName: "Pr. João",
+      slideStyle: "MINIMAL",
+      slides: [{ kind: "VERSE", text: "Eu sou a luz do mundo", reference: "João 8:12" }],
+      mySermonId: null,
+    });
+    renderTab(plan({ sermon: SERMON }));
+    expect(api.getServiceSermon).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /A luz do mundo/ }));
+    const dialog = await screen.findByRole("dialog", { name: "A luz do mundo" });
+    expect(await within(dialog).findAllByTestId("slide-card")).toHaveLength(1);
+    expect(api.getServiceSermon).toHaveBeenCalledWith("c1");
+    expect(within(dialog).queryByRole("link", { name: "Abrir a palavra" })).not.toBeInTheDocument();
   });
 
   it("palavra vazia não mostra a estimativa", () => {

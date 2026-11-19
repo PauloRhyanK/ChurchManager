@@ -28,7 +28,7 @@ function conflict() {
 }
 
 function renderDialog(
-  over: { delivery?: unknown; ensureSaved?: () => Promise<boolean>; client?: QueryClient } = {},
+  over: { delivery?: unknown; ensureSaved?: () => Promise<boolean>; client?: QueryClient; subtitle?: string } = {},
 ) {
   const onChanged = vi.fn();
   const onOpenChange = vi.fn();
@@ -44,6 +44,7 @@ function renderDialog(
         delivery={(over.delivery ?? null) as never}
         ensureSaved={ensureSaved}
         onChanged={onChanged}
+        subtitle={over.subtitle}
       />
     </QueryClientProvider>,
   );
@@ -58,6 +59,14 @@ beforeEach(() => {
 });
 
 describe("SendToServiceDialog", () => {
+  it("subtítulo: o título por padrão, ou o texto passado", async () => {
+    renderDialog();
+    expect(await screen.findByText("A luz do mundo")).toBeInTheDocument();
+    cleanup();
+    renderDialog({ subtitle: "A luz do mundo · 6 slides" });
+    expect(await screen.findByText("A luz do mundo · 6 slides")).toBeInTheDocument();
+  });
+
   it("lista os cultos com data, nome e situação", async () => {
     renderDialog();
     expect(screen.getByText("Enviar para um culto")).toBeInTheDocument();
