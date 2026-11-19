@@ -35,6 +35,32 @@ export function detectImageType(buf: Buffer): DetectedImageType | null {
   return null;
 }
 
+export const MAX_AUDIO_BYTES = 90 * 1024 * 1024;
+export const AUDIO_TOO_LARGE_MESSAGE = 'O áudio excede o limite de 90 MB.';
+export const AUDIO_FORMAT_MESSAGE = 'Formato não aceito. Envie um áudio MP3, WAV, M4A, OGG ou FLAC.';
+
+export interface DetectedAudioType {
+  mime: string;
+  extension: string;
+}
+
+/** Detecta MP3, WAV, M4A/AAC, OGG e FLAC pela assinatura dos primeiros bytes. */
+export function detectAudioType(buf: Buffer): DetectedAudioType | null {
+  if (buf.length < 12) return null;
+  const ascii = (from: number, to: number) => buf.subarray(from, to).toString('latin1');
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WAVE') return { mime: 'audio/wav', extension: '.wav' };
+  if (ascii(0, 4) === 'OggS') return { mime: 'audio/ogg', extension: '.ogg' };
+  if (ascii(0, 4) === 'fLaC') return { mime: 'audio/flac', extension: '.flac' };
+  if (ascii(4, 8) === 'ftyp') return { mime: 'audio/mp4', extension: '.m4a' };
+  if (ascii(0, 3) === 'ID3') return { mime: 'audio/mpeg', extension: '.mp3' };
+  // Quadro MPEG sem etiqueta ID3: 11 bits de sincronismo, versão e camada válidas
+  // (AAC cru/ADTS tem a camada zerada e fica de fora; AAC entra como M4A).
+  if (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0 && (buf[1] & 0x18) !== 0x08 && (buf[1] & 0x06) !== 0x00) {
+    return { mime: 'audio/mpeg', extension: '.mp3' };
+  }
+  return null;
+}
+
 @Injectable()
 export class StorageService {
   private readonly logger = new Logger(StorageService.name);
@@ -73,16 +99,43 @@ export class StorageService {
       throw new BadRequestException('Formato não aceito. Envie uma imagem JPEG, PNG, WebP ou GIF.');
     }
 
-    const config = this.readConfig();
     const key = `${folder}/${randomUUID()}${type.extension}`;
+    const url = await this.putObject(key, fileBuffer, type.mime, 'Não foi possível enviar a imagem. Tente novamente em instantes.');
+    this.logger.log(`Imagem enviada: ${key}`);
+    return url;
+  }
 
+  /**
+   * Valida e envia um áudio-guia para o R2. Mesmas regras da imagem: o tipo vem
+   * dos bytes, nunca do nome nem do mimetype do cliente.
+   */
+  async uploadAudio(fileBuffer: Buffer | undefined, folder: string): Promise<{ url: string; sizeBytes: number }> {
+    if (!fileBuffer || fileBuffer.length === 0) {
+      throw new BadRequestException('Arquivo não enviado.');
+    }
+    if (fileBuffer.length > MAX_AUDIO_BYTES) {
+      throw new PayloadTooLargeException(AUDIO_TOO_LARGE_MESSAGE);
+    }
+    const type = detectAudioType(fileBuffer);
+    if (!type) {
+      throw new BadRequestException(AUDIO_FORMAT_MESSAGE);
+    }
+    const key = `${folder}/${randomUUID()}${type.extension}`;
+    const url = await this.putObject(key, fileBuffer, type.mime, 'Não foi possível enviar o áudio. Tente novamente em instantes.');
+    this.logger.log(`Áudio enviado: ${key}`);
+    return { url, sizeBytes: fileBuffer.length };
+  }
+
+  /** Grava no R2 e devolve o URL público. Detalhes internos só vão para o log. */
+  private async putObject(key: string, body: Buffer, contentType: string, failMessage: string): Promise<string> {
+    const config = this.readConfig();
     try {
       await this.s3Client.send(
         new PutObjectCommand({
           Bucket: config.bucket,
           Key: key,
-          Body: fileBuffer,
-          ContentType: type.mime,
+          Body: body,
+          ContentType: contentType,
         }),
       );
     } catch (error) {
@@ -103,10 +156,8 @@ export class StorageService {
           requestId: e?.$metadata?.requestId,
         })}`,
       );
-      throw new InternalServerErrorException('Não foi possível enviar a imagem. Tente novamente em instantes.');
+      throw new InternalServerErrorException(failMessage);
     }
-
-    this.logger.log(`Imagem enviada: ${key}`);
     return `${config.publicBaseUrl}/${key}`;
   }
 
@@ -120,7 +171,7 @@ export class StorageService {
       'R2_PUBLIC_URL',
     ].filter((name) => !process.env[name]?.trim());
     if (missing.length > 0) {
-      this.logger.error(`Armazenamento de imagens sem configuração. Variáveis ausentes: ${missing.join(', ')}`);
+      this.logger.error(`Armazenamento de arquivos sem configuração. Variáveis ausentes: ${missing.join(', ')}`);
       throw new ServiceUnavailableException('Armazenamento de imagens indisponível.');
     }
     return {
