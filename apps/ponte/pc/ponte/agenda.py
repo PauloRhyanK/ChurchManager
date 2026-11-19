@@ -72,6 +72,12 @@ def calcular(inicio, momentos, atual, entradas, agora):
     saida = [{"id": m["id"], "hora": None, "minutos": m.get("minutos"), "resta_s": None}
              for m in momentos]
     vazio = {"inicio": None, "momentos": saida, "atraso_s": None, "estado": None, "texto": None}
+    # Quanto falta do momento atual nao depende da hora do culto: so de
+    # quando o operador entrou nele e de quantos minutos ele tem.
+    if atual is not None and 0 <= atual < len(momentos):
+        entrada, minutos = entradas.get(momentos[atual]["id"]), momentos[atual].get("minutos")
+        if entrada is not None and minutos is not None:
+            saida[atual]["resta_s"] = int(round(minutos * 60 - (agora - entrada)))
     comeco = _inicio_de_hoje(inicio, agora) if inicio else None
     if comeco is None:
         return vazio
@@ -112,8 +118,6 @@ def calcular(inicio, momentos, atual, entradas, agora):
         momento = momentos[atual]
         entrada = entradas.get(momento["id"])
         minutos = momento.get("minutos")
-        if entrada is not None and minutos is not None:
-            saida[atual]["resta_s"] = int(round(minutos * 60 - (agora - entrada)))
         if planejado[atual] is not None:
             if entrada is not None:
                 atraso = entrada - planejado[atual]

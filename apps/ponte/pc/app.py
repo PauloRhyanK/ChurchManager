@@ -24,6 +24,7 @@ from ponte import condutor as mod_condutor
 from ponte import obs_imagem as mod_obs_imagem
 from ponte import obs_ouvinte as mod_obs_ouvinte
 from ponte import painel_ao_vivo as mod_ao_vivo
+from ponte import palavra as mod_palavra
 from ponte import relogio as mod_relogio
 from ponte import repertorio as mod_repertorio
 from ponte import saude_envio as mod_saude_envio
@@ -354,6 +355,10 @@ def _carregar_ordem(ordem_id, atual=None):
         "versao": _ordem["versao"] + 1,
         "entradas": {},
     })
+    # Trocar ou recomecar a ordem e comecar outro culto: o link do celular do
+    # pregador valia so para o anterior.
+    if _pecas.get("palavra") is not None:
+        _pecas["palavra"].encerrar_link()
     return True
 
 
@@ -1823,6 +1828,13 @@ def _pedido_da_web(comando):
         # mesma do painel local (_acao_do_painel), e a chave "aceitar comandos
         # pela web" e conferida la dentro.
         _acao_do_painel(corpo, "web")
+    elif tipo == "pregador":
+        # O toque do pregador pelo celular, vindo pela internet. Nao passa
+        # pela chave "aceita comandos": o link dele e uma autorizacao a parte,
+        # dada neste culto, e o codigo e conferido de novo aqui.
+        if _ao_vivo["valor"] is not None:
+            _ao_vivo["valor"].pregador_passar(
+                str(corpo.get("codigo") or ""), corpo.get("para"), corpo.get("visto"))
     else:
         print("  [espelho] pedido desconhecido ignorado: {!r}".format(tipo))
 
@@ -1981,7 +1993,7 @@ def aqui_imagem():
 # viaja se alguem escrever o nome dele abaixo.
 PACOTE = (
     "app.py", "requirements.txt", "INSTALAR.md",
-    "painel.html", "ao-vivo.html", "ao-vivo.css", "ao-vivo.js", "louvor.html", "luzes.html", "cenas.html", "youtube.html",
+    "painel.html", "ao-vivo.html", "ao-vivo.css", "ao-vivo.js", "pregador.html", "louvor.html", "luzes.html", "cenas.html", "youtube.html",
     "chegada.html", "aqui.html", "letras.html", "guia.js", "guia.css",
     "estudio.html",
     "chegada.yaml", "looks_salvas.yaml", "patch.yaml",
@@ -1990,7 +2002,7 @@ PACOTE = (
     "iniciar-ponte.bat", "iniciar-ponte.ps1", "iniciar.py", "instalar-do-zero.ps1",
     "ligar-web.py", "ligar-web.bat",
     "gerar_click.py",
-    "verificar.py", "verificar_obs.py", "descobrir_holyrics.py", "descobrir_luzes.py",
+    "verificar.py", "verificar_obs.py", "verificar_palavra.py", "descobrir_holyrics.py", "descobrir_luzes.py",
 )
 
 
@@ -2189,6 +2201,7 @@ _pecas = {
     "luz_escolhida": lambda cena: _escolher_luz(cena),
     "reler_obs": lambda: _pedir_estado_ja(),
     "anotar": lambda titulo, ok, detalhe, origem: _anotar(titulo, ok, detalhe, origem),
+    "ordem_agora": lambda: _ordem_agora(),
 }
 _maquinas_vistas = {}
 _yt_painel = {"em": 0.0, "dados": None, "pedir": True}
@@ -2727,6 +2740,69 @@ def relogio_avisar():
 
 
 CAMINHO_LOUVOR = os.path.join(RAIZ, "_louvor_atual.json")
+# A palavra de hoje, no formato que o modulo Palavras do ChurchManager propos
+# (ver ponte/palavra.py). Enquanto a rota de la nao existe, e este arquivo.
+CAMINHO_PALAVRA = os.path.join(RAIZ, "_palavra_do_dia.json")
+
+
+def _ordem_agora():
+    with _tranca_ordem:
+        return _retrato_da_ordem()
+
+
+# -- o celular do pregador ----------------------------------------------------
+#
+# Uma pagina que so sabe passar os slides da palavra, aberta por um link que
+# vale so naquele culto. Aqui e o caminho pelo Wi-Fi da igreja: o celular fala
+# direto com este PC, sem atraso e sem internet. O caminho pela internet passa
+# pela versao web, que entrega o toque na fila de pedidos (tipo "pregador").
+
+def _pregador(codigo):
+    ao_vivo = _ao_vivo["valor"]
+    return ao_vivo.pregador_retrato(codigo) if ao_vivo is not None else None
+
+
+@app.get("/pregador/<codigo>")
+def pagina_pregador(codigo):
+    if _pregador(codigo) is None:
+        return Response("Este link não vale mais. Peça outro à equipe de multimídia.",
+                        status=404, mimetype="text/plain; charset=utf-8")
+    return send_from_directory(RAIZ, "pregador.html")
+
+
+@app.get("/api/pregador/<codigo>")
+def pregador_retrato(codigo):
+    retrato = _pregador(codigo)
+    if retrato is None:
+        return jsonify({"erro": "este link não vale mais. Peça outro à equipe."}), 404
+    retrato["local"] = True
+    return jsonify(retrato)
+
+
+@app.post("/api/pregador/<codigo>")
+def pregador_passar(codigo):
+    if _ao_vivo["valor"] is None:
+        return jsonify({"erro": "este PC não conduz a palavra"}), 400
+    corpo = request.get_json(silent=True) or {}
+    resultado, status = _ao_vivo["valor"].pregador_passar(codigo, corpo.get("para"), corpo.get("visto"))
+    return jsonify(resultado), status
+
+
+@app.get("/api/painel/pregador")
+def painel_pregador():
+    """Os enderecos do link do pregador, para o operador mostrar ou copiar.
+    So existe AQUI: o codigo nunca viaja para a versao web por esta rota."""
+    palavra = _pecas.get("palavra")
+    codigo = palavra.codigo() if palavra is not None else None
+    if codigo is None:
+        return jsonify({"ativo": False})
+    web = (_config.get("web") or {})
+    return jsonify({
+        "ativo": True,
+        "local": "http://{}:{}/pregador/{}".format(_ip_da_rede(), _porta["valor"], codigo),
+        "web": ("{}/pregador/{}".format(str(web.get("url")).rstrip("/"), codigo)
+                if _espelho["valor"] is not None and web.get("url") else None),
+    })
 
 
 def _guardar_louvor(musica_id):
@@ -2831,6 +2907,10 @@ def _montar_ao_vivo():
         ao_vivo.luz_da_parte, lambda titulo, ok, detalhe: _anotar(titulo, ok, detalhe, "local"),
         lembrado=_lembrar_se_ainda_e_louvor(ao_vivo), guardar=_guardar_louvor)
     _pecas["condutor"].comecar()
+    telao = mod_palavra.TelaoDaPalavra(lambda: _contexto.get("holyrics"), lambda: _config)
+    _pecas["palavra"] = mod_palavra.Palavra(
+        mod_palavra.FontePalavraLocal(CAMINHO_PALAVRA).palavra, telao.mostrar, telao.tirar,
+        lambda titulo, ok, detalhe: _anotar(titulo, ok, detalhe, "local"))
 
     if _contexto.get("obs") is not None:
         if SIMULAR:
@@ -3014,6 +3094,10 @@ def main():
     _espelho["valor"] = _montar_espelho()
     if _espelho["valor"] is not None:
         _espelho["valor"].comecar()
+        # Enquanto houver link de pregador valendo, um segundo pedido fica
+        # pendurado na web para o toque dele chegar na hora, e nao em ate 2 s.
+        _espelho["valor"].comecar_espera_longa(
+            lambda: _pecas.get("palavra") is not None and _pecas["palavra"].tem_link())
         print("  [espelho] ligado: entregando o estado para a versao web")
     # O vigia do retorno na TV: so no PC principal, e so se o chegada.yaml
     # diz onde esta o script que fala com a TV.

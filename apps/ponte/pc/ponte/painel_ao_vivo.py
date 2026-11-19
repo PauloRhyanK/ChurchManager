@@ -25,6 +25,7 @@ ACOES = (
     "louvor_assumir", "louvor_devolver", "louvor_segurar", "louvor_slide", "louvor_parte",
     "louvor_repetir_refrao", "louvor_musica", "louvor_comecou", "louvor_acertar",
     "imagem",
+    "palavra_slide", "palavra_assumir", "palavra_tirar", "pregador_link",
 )
 ACOES_DA_WEB = ("cena_transmissao", "clima")
 
@@ -279,17 +280,75 @@ class PainelAoVivo:
             louvor["no_momento"] = ordem.get("atual_id") in self.momentos_do_louvor()
         base["louvor"] = louvor
         repertorio = self._dep("repertorio")
-        base["conteudo_versao"] = repertorio.versao() if repertorio is not None else None
+        base["conteudo_versao"] = self._versao_do_conteudo()
         imagem = self._dep("imagem")
         base["imagem"] = {"disponivel": imagem is not None, "ativa": bool(imagem and imagem.ativo)}
-        base["palavra"] = None     # etapa C: espera o modulo Palavras
+        base["palavra"] = self._palavra(ordem, base["agenda"])
         return base
 
+    def _momentos_da_palavra(self):
+        config = self._dep("config") or {}
+        momentos = (config.get("painel") or {}).get("momento_da_palavra") or ["pregacao"]
+        if not isinstance(momentos, (list, tuple)):
+            momentos = [momentos]
+        return [str(m) for m in momentos]
+
+    def _palavra(self, ordem, agenda):
+        palavra = self._dep("palavra")
+        if palavra is None:
+            return None
+        retrato = palavra.retrato()
+        retrato["no_momento"] = ordem.get("atual_id") in self._momentos_da_palavra()
+        # Quanto tempo da palavra ja passou, para o operador e para o celular
+        # do pregador: sai do momento atual da ordem, quando ele e o da palavra.
+        retrato["passou_s"] = retrato["de_minutos"] = None
+        if retrato["no_momento"]:
+            for momento in (agenda or {}).get("momentos") or []:
+                if momento["id"] == ordem.get("atual_id") and momento.get("resta_s") is not None:
+                    retrato["de_minutos"] = momento["minutos"]
+                    retrato["passou_s"] = momento["minutos"] * 60 - momento["resta_s"]
+        return retrato
+
+    def _versao_do_conteudo(self):
+        repertorio, palavra = self._dep("repertorio"), self._dep("palavra")
+        partes = [repertorio.versao() if repertorio is not None else ""]
+        dela = palavra.conteudo() if palavra is not None else None
+        if dela:
+            partes.append(dela["versao"])
+        versao = "-".join(p for p in partes if p)
+        return versao or None
+
     def conteudo(self):
-        repertorio = self._dep("repertorio")
-        if repertorio is None:
-            return {"versao": None, "musicas": []}
-        return {"versao": repertorio.versao(), "musicas": repertorio.musicas()}
+        repertorio, palavra = self._dep("repertorio"), self._dep("palavra")
+        dela = palavra.conteudo() if palavra is not None else None
+        return {"versao": self._versao_do_conteudo(),
+                "musicas": repertorio.musicas() if repertorio is not None else [],
+                "palavra": dela["slides"] if dela else []}
+
+    # -- o celular do pregador -------------------------------------------------
+
+    def pregador_retrato(self, codigo):
+        """O que a pagina do pregador mostra. None se o codigo nao vale."""
+        palavra = self._dep("palavra")
+        if palavra is None or not palavra.confere(codigo):
+            return None
+        ordem = self._dep("ordem_agora") or {}
+        retrato = self._palavra(ordem, self._agenda(ordem))
+        retrato.pop("link", None)
+        dela = palavra.conteudo()
+        retrato["slides"] = dela["slides"] if dela else []
+        retrato["agora"] = self._agora()
+        return retrato
+
+    def pregador_passar(self, codigo, para, visto):
+        """O toque do pregador. So anda para frente e para tras."""
+        palavra = self._dep("palavra")
+        if palavra is None or not palavra.confere(codigo):
+            return {"erro": "este link não vale mais. Peça outro à equipe."}, 404
+        if para not in ("proximo", "anterior"):
+            return {"erro": "o celular do pregador só passa os slides"}, 400
+        from .palavra import PREGADOR
+        return palavra.ir(para, visto, PREGADOR)
 
     # -- viradas de estado, para o "Aconteceu agora" ---------------------------
 
@@ -374,6 +433,26 @@ class PainelAoVivo:
             imagem.ativo = bool(dados.get("mostrar"))
             return {"ok": True, "detalhe": "tudo certo",
                     "titulo": "Imagem da transmissão " + ("ligada" if imagem.ativo else "desligada")}, 200
+
+        if tipo in ("palavra_slide", "palavra_assumir", "palavra_tirar", "pregador_link"):
+            palavra = self._dep("palavra")
+            if palavra is None:
+                return {"erro": "a palavra não está disponível neste PC"}, 400
+            if tipo == "palavra_slide":
+                corpo, codigo = palavra.ir(dados.get("para"), dados.get("visto"), quem)
+                corpo["silencioso"] = bool(corpo.get("ok"))
+                return corpo, codigo
+            if tipo == "palavra_assumir":
+                return palavra.assumir(quem)
+            if tipo == "palavra_tirar":
+                return palavra.tirar(quem)
+            if dados.get("acao") == "encerrar":
+                palavra.encerrar_link()
+                return {"ok": True, "titulo": "Acesso do pregador encerrado", "detalhe": "tudo certo"}, 200
+            if dados.get("acao") == "gerar":
+                palavra.gerar_link()
+                return {"ok": True, "titulo": "Link do pregador criado", "detalhe": "vale só neste culto"}, 200
+            return {"erro": "o painel não sabe fazer isso"}, 400
 
         condutor = self._dep("condutor")
         if condutor is None:

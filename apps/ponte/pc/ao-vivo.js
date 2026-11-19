@@ -260,6 +260,10 @@ function desenharEquipamentos(d) {
 function desenharCentro(d) {
   const l = d.louvor;
   const noLouvor = l && l.ativo && (l.no_momento || l.musica);
+  const p = d.palavra;
+  // A palavra ocupa o centro no momento dela, ou enquanto um slide dela esta
+  // no telao (para ninguem perder o "Tirar do telao" ao trocar de momento).
+  if (p && p.ativa && p.total && !(l && l.musica) && (p.no_momento || p.visivel)) { pintar('centro', htmlPalavra(d)); return; }
   if (!noLouvor) { pintar('centro', htmlMomento(d)); return; }
   if (!l.musica) { pintar('centro', htmlEscolherMusica(d)); return; }
   pintar('centro', l.letra === 'na_mao' ? htmlManual(d) : htmlSozinho(d));
@@ -406,6 +410,57 @@ function htmlManual(d) {
       botao('← Anterior', {tipo: 'louvor_slide', para: 'anterior', visto: l.slide}, {desligado: !l.slide}) +
       botao('Próximo slide <span class="tecla">Espaço</span>', {tipo: 'louvor_slide', para: 'proximo', visto: l.slide},
         {classe: 'bt forte', desligado: l.slide + 1 >= l.total_slides}) + '</div>';
+  }
+  return h;
+}
+
+function htmlPalavra(d) {
+  const p = d.palavra, slides = (C && C.palavra) || [], pode = podeConduzir();
+  const atual = p.slide != null ? slides[p.slide] : null;
+  const seguinte = slides[p.slide == null ? 0 : p.slide + 1];
+  const visto = p.slide == null ? -1 : p.slide;
+  const eu = meuNome();
+  let tempo = '';
+  if (p.passou_s != null && p.de_minutos) tempo = ' · ' + Math.max(0, Math.floor(p.passou_s / 60)) + ' de ' + p.de_minutos + ' min';
+  let selo;
+  if (!p.quem) selo = '<span class="selo">Ninguém passou ainda</span>';
+  else if (p.quem_e_o_pregador) selo = '<span class="selo verde">O pregador está passando</span>';
+  else selo = '<span class="selo ambar">' + (eu && p.quem === eu ? 'Você está passando' : esc(p.quem) + ' está passando') + '</span>';
+  let h = '<div class="cabeca"><div class="empilha"><span class="rotulo">Palavra' + tempo + (p.pregador ? ' · ' + esc(p.pregador) : '') + '</span>' +
+    '<span class="grande">' + esc(p.titulo) + '</span></div><div class="linha">' + selo +
+    (pode && !(eu && p.quem === eu) ? botao('Assumir', {tipo: 'palavra_assumir'}, {classe: 'bt claro'}) : '') + '</div></div>';
+  if (p.passou_s != null && p.de_minutos) {
+    const pct = Math.max(0, Math.min(100, 100 * p.passou_s / (p.de_minutos * 60)));
+    h += '<div class="barra-tempo' + (pct >= 100 ? ' passou' : '') + '"><div style="width:' + pct.toFixed(1) + '%"></div></div>';
+  }
+  const noTelao = atual && p.visivel;
+  h += '<div class="slides-agora"><div class="no-telao"><span class="rotulo">' + (noTelao ? 'No telão · ' + (p.slide + 1) + ' de ' + p.total : 'Fora do telão') + '</span>' +
+    (noTelao ? '<span class="letra' + (atual.tipo === 'VERSE' ? ' versiculo' : '') + '">' + esc(atual.texto || atual.referencia) + '</span>' +
+      (atual.referencia && atual.texto ? '<span class="referencia">' + esc(atual.referencia) + '</span>' : '')
+      : '<span class="letra fraca">' + (atual ? 'O slide ' + (p.slide + 1) + ' está guardado. "Próximo" traz de volta.' : 'Nenhum slide da palavra foi ao telão ainda.') + '</span>') +
+    (p.erro ? '<span class="falha">Abra no Holyrics: ' + esc((atual && (atual.referencia || atual.texto)) || '') + '</span>' : '') + '</div>' +
+    '<div class="ao-lado"><div class="a-seguir"><span class="rotulo">A seguir</span><span class="letra">' +
+    (seguinte ? esc(seguinte.referencia && seguinte.tipo === 'VERSE' ? seguinte.referencia : seguinte.texto) : 'fim dos slides') + '</span></div>';
+  const mic = ((d.transmissao && d.transmissao.audios) || []).filter(a => a.palavra);
+  if (mic.length) h += '<div class="caixa"><span class="rotulo">Microfone</span>' + mic.map(htmlAudio).join('') + '</div>';
+  h += '</div></div>';
+  h += '<div class="lista-palavra" id="lista-palavra">' + slides.map((s, i) => {
+    const classe = 'item-palavra' + (i === p.slide ? ' atual' : p.slide != null && i < p.slide ? ' passado' : '');
+    const corpo = '<span class="n">' + (i + 1) + '</span><span class="tipo">' + esc(s.rotulo) + '</span>' +
+      '<span class="cresce texto">' + esc(s.tipo === 'VERSE' && s.referencia ? s.referencia : s.texto) + '</span>';
+    return pode ? '<button type="button" class="' + classe + '" aria-pressed="' + (i === p.slide ? 'true' : 'false') + '"' +
+      ' data-a="' + esc(JSON.stringify({tipo: 'palavra_slide', para: i})) + '">' + corpo + '</button>'
+      : '<div class="' + classe + '">' + corpo + '</div>';
+  }).join('') + '</div>';
+  if (pode) {
+    h += '<div class="passar">' +
+      botao('← Anterior', {tipo: 'palavra_slide', para: 'anterior', visto: visto}, {desligado: p.slide == null || (p.slide === 0 && p.visivel)}) +
+      botao('Tirar do telão', {tipo: 'palavra_tirar'}, {desligado: !noTelao}) +
+      botao('Próximo <span class="tecla">Espaço</span>', {tipo: 'palavra_slide', para: 'proximo', visto: visto},
+        {classe: 'bt forte', desligado: p.visivel && p.slide + 1 >= p.total}) + '</div>';
+    h += '<div class="linha"><span class="miudo cresce">' + (p.link ? 'O celular do pregador está liberado para este culto.' : 'O pregador pode passar os slides pelo celular.') + '</span>' +
+      '<button type="button" class="bt pequeno" id="bt-pregador">Celular do pregador</button>' +
+      (p.link ? botao('Encerrar o acesso', {tipo: 'pregador_link', acao: 'encerrar'}, {classe: 'bt pequeno fantasma'}) : '') + '</div>';
   }
   return h;
 }
@@ -731,9 +786,9 @@ async function agir(acao) {
   if (ocupado) return;
   // As acoes do louvor levam o nome do aparelho: e o que deixa a tela dizer
   // a todos quem esta no comando.
-  const doLouvor = /^louvor_(assumir|devolver|segurar|slide|parte|repetir_refrao)$/.test(acao.tipo);
+  const doLouvor = /^(louvor_(assumir|devolver|segurar|slide|parte|repetir_refrao)|palavra_(slide|assumir|tirar))$/.test(acao.tipo);
   if (doLouvor) acao = Object.assign({quem: await garantirNome()}, acao);
-  const rapida = acao.tipo === 'louvor_slide' || acao.tipo === 'louvor_parte';
+  const rapida = acao.tipo === 'louvor_slide' || acao.tipo === 'louvor_parte' || acao.tipo === 'palavra_slide';
   if (!rapida) { ocupado = true; redesenhar(); }
   try {
     const j = await pedir('/api/painel/acao', acao);
@@ -760,6 +815,20 @@ document.addEventListener('click', async evento => {
   if (!alvo || alvo.disabled) return;
   if (alvo.id === 'bt-recados') { recadosAbertos = !recadosAbertos; redesenhar(); return; }
   if (alvo.id === 'bt-ensaio') { ensaio.tocando() ? som.pause() : som.play().catch(e => avisar('Não consegui tocar o áudio: ' + e.message, true)); return; }
+  if (alvo.id === 'bt-pregador') {
+    // O endereco do link vem de uma rota que so existe na igreja: o codigo
+    // nunca passa pelo retrato, que viaja para a web.
+    try {
+      if (!(D.palavra && D.palavra.link)) await pedir('/api/painel/acao', {tipo: 'pregador_link', acao: 'gerar'});
+      const link = await (await fetch('/api/painel/pregador', {cache: 'no-store'})).json();
+      if (!link.ativo) throw new Error('não consegui criar o link');
+      await perguntar({titulo: 'Celular do pregador', sim: 'Pronto', campo: link.local,
+        texto: 'Com o celular no Wi-Fi da igreja, abra o endereço abaixo. Vale só neste culto.' +
+          (link.web ? ' Fora do Wi-Fi, pela internet: ' + link.web : '')});
+    } catch (e) { avisar(e.message, true); }
+    consultar();
+    return;
+  }
   if (alvo.id === 'bt-nome') {
     const nome = await perguntar({titulo: 'Como chamar este aparelho?', texto: 'O painel mostra a todos quem está passando a letra.',
       sim: 'Pronto', campo: meuNome() || ''});
@@ -810,13 +879,17 @@ document.addEventListener('change', async evento => {
 // texto ou num botao em foco, o espaco continua sendo o que sempre foi.
 document.addEventListener('keydown', evento => {
   if (evento.code !== 'Space' || evento.repeat || $('dialogo').open) return;
-  const l = D && D.louvor;
-  if (!l || !l.musica || l.letra !== 'na_mao' || !podeConduzir() || !$('grade-slides')) return;
+  const l = D && D.louvor, p = D && D.palavra;
+  const naPalavra = !!$('lista-palavra') && p && p.ativa;
+  const noLouvor = !!$('grade-slides') && l && l.musica && l.letra === 'na_mao';
+  if (!podeConduzir() || !(naPalavra || noLouvor)) return;
   const foco = document.activeElement;
   if (foco && /^(INPUT|SELECT|TEXTAREA|SUMMARY)$/.test(foco.tagName)) return;
   evento.preventDefault();
   if (foco && foco.tagName === 'BUTTON') foco.blur();
-  if (l.slide + 1 < l.total_slides) agir({tipo: 'louvor_slide', para: 'proximo', visto: l.slide});
+  if (naPalavra) {
+    if (!(p.visivel && p.slide + 1 >= p.total)) agir({tipo: 'palavra_slide', para: 'proximo', visto: p.slide == null ? -1 : p.slide});
+  } else if (l.slide + 1 < l.total_slides) agir({tipo: 'louvor_slide', para: 'proximo', visto: l.slide});
 });
 
 // -------------------------------------------------------------- consultar --

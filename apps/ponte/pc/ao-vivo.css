@@ -204,6 +204,21 @@ h1, h2, h3, p { margin: 0; }
 .passar .bt { min-height: 72px; border-radius: 14px; font-size: 16px; flex: 1; }
 .passar .bt.forte { flex: 2; font-size: 18px; }
 
+/* a palavra */
+.no-telao .letra.versiculo { font-weight: 500; font-size: clamp(15px, 1.6vw, 20px); line-height: 1.4; }
+.no-telao .referencia { margin-top: 10px; font-size: 13px; font-weight: 700; color: var(--suave); }
+.lista-palavra { background: var(--fundo); border: 1px solid var(--borda); border-radius: 14px; padding: 8px;
+  display: flex; flex-direction: column; gap: 2px; max-height: 38vh; overflow: auto; }
+.item-palavra { display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 0 12px; border: none; border-radius: 10px;
+  background: transparent; text-align: left; width: 100%; font-weight: 500; }
+.item-palavra .n { width: 20px; font-weight: 600; color: var(--suave); flex: none; }
+.item-palavra .tipo { width: 76px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--suave); flex: none; }
+.item-palavra .texto { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-palavra.passado { color: var(--suave); }
+.item-palavra.atual { background: var(--roxo-fundo); font-weight: 700; }
+.item-palavra.atual .n, .item-palavra.atual .tipo { color: var(--roxo-claro); }
+button.item-palavra:hover:not(.atual) { background: var(--botao); }
+
 /* musicas do dia */
 .musica { flex: 1 1 130px; display: flex; flex-direction: column; gap: 2px; min-height: 56px; justify-content: center; padding: 6px 14px;
   border: 1px solid var(--borda); border-radius: 10px; background: var(--fundo); text-align: left; }

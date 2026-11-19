@@ -52,6 +52,32 @@ class Espelho:
     def retrato(self):
         return dict(self._estado)
 
+    def comecar_espera_longa(self, ativo):
+        """Um segundo pedido de SAIDA, que fica pendurado na web ate 20 s e
+        volta no instante em que um toque do pregador chega la.
+
+        Continua sendo a igreja ligando para a web. So roda enquanto `ativo()`
+        for verdade (ha link de pregador valendo); fora disso nao custa nada.
+        Uma web antiga responde 404: o laco espera e tenta mais tarde.
+        """
+        def laco():
+            url = self._url + "/pedidos"
+            while True:
+                try:
+                    if not ativo():
+                        time.sleep(2.0)
+                        continue
+                    pedido = urllib.request.Request(
+                        url, data=b"{}", method="POST",
+                        headers={"Content-Type": "application/json", "X-Ponte-Chave": self._chave})
+                    with urllib.request.urlopen(pedido, timeout=30.0) as resposta:
+                        dados = json.loads(resposta.read().decode("utf-8"))
+                    for comando in dados.get("comandos") or []:
+                        threading.Thread(target=self._rodar, args=(comando,), daemon=True).start()
+                except Exception:
+                    time.sleep(PAUSA_COM_ERRO)
+        threading.Thread(target=laco, daemon=True).start()
+
     def _laco(self):
         while True:
             pausa = PAUSA

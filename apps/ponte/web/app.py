@@ -39,6 +39,7 @@ tela com o retrato velho.
 
 import base64
 import collections
+import hashlib
 import hmac
 import importlib.util
 import io
@@ -153,6 +154,11 @@ def _porteiro():
              # atualizacao nao levam segredo nenhum, e os PCs secundarios, que
              # nao guardam chave, precisam alcanca-los.
              "/api/versao", "/api/atualizacao/pacote")
+    # O celular do pregador entra SEM a senha da equipe: quem autoriza e o
+    # codigo do link, conferido em cada rota contra o resumo que a igreja
+    # mandou. /api/espelho/pedidos confere a chave da igreja, como /api/espelho.
+    if request.path.startswith(("/pregador/", "/api/pregador/")) or request.path == "/api/espelho/pedidos":
+        return None
     if request.path in livre or _logado():
         return None
     if request.path.startswith("/api/"):
@@ -462,6 +468,97 @@ def atualizacao_pacote():
     """So o projeto. E o que um PC busca para se atualizar."""
     return send_file(_zip_pc(), mimetype="application/zip", as_attachment=True,
                      download_name="ponte-do-culto-pc.zip")
+
+
+# -- o celular do pregador ------------------------------------------------------
+#
+# A igreja entrega, junto do retrato, o RESUMO (SHA-256) do codigo do link e a
+# validade. Aqui so se confere: o codigo que o celular apresenta tem esse
+# resumo? A web nunca chama a igreja: o toque entra na fila e a igreja busca.
+
+_chegou_toque = threading.Condition(_tranca)
+
+
+def _link_do_pregador(codigo):
+    """True se o codigo confere com o que a igreja anunciou e ainda vale."""
+    with _tranca:
+        if not _igreja_viva():
+            return False
+        link = ((_igreja["painel"] or {}).get("palavra") or {}).get("link") or {}
+    resumo, expira = link.get("resumo"), link.get("expira_em")
+    if not resumo or not isinstance(expira, (int, float)) or time.time() >= expira:
+        return False
+    return hmac.compare_digest(hashlib.sha256(str(codigo).encode("utf-8")).hexdigest(), str(resumo))
+
+
+def _porteiro_do_pregador(codigo):
+    """None se pode passar; senao a resposta de recusa. Cinco codigos errados
+    do mesmo endereco travam por um minuto, como no login."""
+    ip = _ip()
+    if _bloqueado(ip):
+        return jsonify({"erro": "muitas tentativas. Espere um minuto."}), 429
+    if not _link_do_pregador(codigo):
+        _errou(ip)
+        return jsonify({"erro": "este link não vale mais, ou a igreja está sem internet. "
+                                "Peça outro à equipe."}), 404
+    return None
+
+
+@app.get("/pregador/<codigo>")
+def pagina_pregador(codigo):
+    if _porteiro_do_pregador(codigo) is not None:
+        return Response("Este link não vale mais, ou a igreja está sem internet. "
+                        "Peça outro à equipe de multimídia.",
+                        status=404, mimetype="text/plain; charset=utf-8")
+    return send_from_directory(PASTA_PC, "pregador.html")
+
+
+@app.get("/api/pregador/<codigo>")
+def pregador_retrato(codigo):
+    recusa = _porteiro_do_pregador(codigo)
+    if recusa is not None:
+        return recusa
+    with _tranca:
+        retrato = dict((_igreja["painel"] or {}).get("palavra") or {})
+        slides = (_igreja["conteudo"] or {}).get("palavra") or []
+        agora = (_igreja["painel"] or {}).get("agora")
+    retrato.pop("link", None)
+    retrato.update({"slides": slides, "agora": agora, "local": False})
+    return jsonify(retrato)
+
+
+@app.post("/api/pregador/<codigo>")
+def pregador_passar(codigo):
+    recusa = _porteiro_do_pregador(codigo)
+    if recusa is not None:
+        return recusa
+    dados = request.get_json(silent=True) or {}
+    if dados.get("para") not in ("proximo", "anterior"):
+        return jsonify({"erro": "o celular do pregador só passa os slides"}), 400
+    with _chegou_toque:
+        _fila.append({"tipo": "pregador", "passo": None, "em": time.time(),
+                      "corpo": {"codigo": codigo, "para": dados["para"], "visto": dados.get("visto")}})
+        _chegou_toque.notify_all()
+    return jsonify({"ok": True, "enviado": True})
+
+
+@app.post("/api/espelho/pedidos")
+def espelho_pedidos():
+    """A igreja pendurada esperando o toque do pregador (ate 20 s). So entrega
+    pedidos do tipo "pregador"; os outros continuam indo pela volta normal."""
+    if not hmac.compare_digest(request.headers.get("X-Ponte-Chave", ""), CHAVE):
+        return jsonify({"erro": "chave errada"}), 403
+    limite = time.time() + 20.0
+    with _chegou_toque:
+        while True:
+            agora = time.time()
+            dele = [c for c in _fila if c["tipo"] == "pregador" and agora - c["em"] <= 60]
+            if dele or agora >= limite:
+                for comando in [c for c in _fila if c["tipo"] == "pregador"]:
+                    _fila.remove(comando)
+                break
+            _chegou_toque.wait(timeout=limite - agora)
+    return jsonify({"comandos": [{k: c[k] for k in ("tipo", "passo", "corpo")} for c in dele]})
 
 
 # -- a igreja ligando ---------------------------------------------------------

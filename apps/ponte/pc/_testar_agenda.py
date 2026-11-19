@@ -59,6 +59,7 @@ print("\nQuando falta dado")
 r = agenda.calcular(None, momentos(), 2, {"louvor": hoje(19, 7)}, hoje(19, 8))
 conferir("sem a hora do culto: sem horarios e sem atraso",
          all(m["hora"] is None for m in r["momentos"]) and r["texto"] is None and r["atraso_s"] is None)
+conferir("mas 'quanto falta' do momento atual continua valendo", r["momentos"][2]["resta_s"] == 16 * 60, r["momentos"][2])
 r = agenda.calcular("25:99", momentos(), None, {}, hoje(19, 0))
 conferir("hora invalida nao estoura", r["texto"] is None)
 ids = ["abertura", "batismo", "louvor"]
