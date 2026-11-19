@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarDays, LayoutTemplate, Loader2, MoreHorizontal, Music, Plus, Radio } from "lucide-react";
 import { useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import {
@@ -138,6 +138,12 @@ export default function ServicePlanPage() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <h1 className="text-2xl font-bold tracking-tight">Roteiro</h1>
           <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" className="gap-2">
+              <Link to="/cultos/roteiro/modelos">
+                <LayoutTemplate className="h-4 w-4" />
+                Modelos de culto
+              </Link>
+            </Button>
             {canManagePonte && (
               <Button variant="outline" className="gap-2" onClick={() => setPonteOpen(true)}>
                 <Radio className="h-4 w-4" />
