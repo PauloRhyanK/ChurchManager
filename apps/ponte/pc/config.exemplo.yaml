@@ -1049,3 +1049,34 @@ web:
 # lista, todas.
 #
 #   cenas_do_painel: ["1. Abertura", "2. Louvor", "3. Pregação", "4. Ofertório"]
+#
+# A PALAVRA. Os slides do sermão vêm do ChurchManager (quando a rota de lá
+# existir) ou do arquivo `_palavra_do_dia.json` desta pasta, no mesmo formato:
+#
+#   {"sermon": {"title": "...", "preacherName": "...", "estimatedMinutes": 40,
+#     "slides": [{"kind": "TITLE", "text": "..."},
+#                {"kind": "VERSE", "text": "...", "reference": "João 8:12"},
+#                {"kind": "POINT", "text": "1. ..."}]}}
+#
+# Versículo vai ao Holyrics SÓ PELA REFERÊNCIA: quem exibe é ele, com a Bíblia
+# e o tema que a igreja já usa. As três ações abaixo são as de fábrica; os
+# nomes mudam entre versões do Holyrics e cada uma precisa de permissão no
+# token. Confira com `python verificar_palavra.py` antes de usar num culto.
+#
+# palavra:
+#   versiculo: { acao: ShowVerse, campo: references }
+#   texto:     { acao: ShowQuickPresentation, campo: text }
+#   tirar:     { acao: CloseCurrentPresentation }
+#
+# Em que momentos o centro do painel é a palavra (dentro de `painel:`):
+#
+#   momento_da_palavra: [pregacao]
+#
+# DE ONDE VÊM AS MÚSICAS. De fábrica, deste arquivo (`louvores`) e das marcas
+# feitas na tela /louvor. Para ler as músicas montadas no ChurchManager:
+#
+# repertorio:
+#   fonte: cultos
+#   url: https://api.igrejaparaiso.com.br
+#   slug: igreja-paraiso
+#   chave: "COLE-AQUI-A-CHAVE-DA-INTEGRACAO"     # segredo: só neste arquivo

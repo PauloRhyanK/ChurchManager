@@ -323,7 +323,7 @@ A cada volta, se `letra == sozinho` e não está `segurando`: acha o slide do se
 
 ## Palavra (etapa C)
 
-Especificada para o desenho ficar inteiro; não é construída agora, porque os slides vêm do módulo Palavras, que ainda não tem especificação.
+**Construída em 19/11/2026**, depois das etapas A e B, na branch `claude/ponte-palavra-etapa-c`. O formato dos slides é o que o módulo Palavras propôs para a Ponte (`TITLE`, `VERSE`, `POINT`, `SUMMARY`, sem tempo por slide). Diferenças em relação ao texto abaixo: o endereço do celular aparece para copiar, sem QR code; a medida `holyrics_versiculo` no guia de chegada não foi feita (o conferidor é o `verificar_palavra.py`); e um versículo dividido em dois slides pelo ChurchManager é pedido ao Holyrics uma vez só, pela referência.
 
 ### Quem passa os slides
 

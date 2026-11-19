@@ -304,9 +304,76 @@ dentro do teste).
     segundos a luz "Internet" fica vermelha e o "Aconteceu agora" anota; o resto do
     painel continua.
 
+### 13. Palavra, celular do pregador e músicas do ChurchManager (19/11/2026, depois da seção 12)
+
+A seção 12 diz que isto "não foi construído". Foi, em seguida, na branch
+`claude/ponte-palavra-etapa-c`.
+
+**O que mudou**
+
+- **`ponte/palavra.py`** (novo): os slides do sermão no formato que o módulo Palavras
+  propôs (`TITLE`, `VERSE`, `POINT`, `SUMMARY`), quem está passando, e o link do
+  pregador. Hoje a palavra vem de `_palavra_do_dia.json` na pasta da ponte (formato no
+  fim do `config.exemplo.yaml`); sem o arquivo, não há palavra e nada muda na tela.
+- **No painel**, no momento `pregacao` (ou nos de `painel.momento_da_palavra`), o centro
+  vira a palavra: slide no telão, o próximo, a lista, Anterior / Tirar do telão /
+  Próximo (barra de espaço), e quem está passando. Ações novas, só locais:
+  `palavra_slide`, `palavra_assumir`, `palavra_tirar`, `pregador_link`.
+- **Versículo vai ao Holyrics só pela referência** (`ShowVerse` com `references`); título
+  e ponto vão como texto (`ShowQuickPresentation` com `text`); tirar é
+  `CloseCurrentPresentation`. Os nomes são configuráveis no bloco `palavra`.
+  **Eu não tenho como confirmar os dois primeiros nomes nem o formato do pedido**: saíram
+  do que lembro da documentação do API Server, não de um teste.
+- **`verificar_palavra.py`** (novo, no `PACOTE`): diz, para cada ação, "liberada",
+  "falta liberar", "não existe" ou "token errado". Sem `--mostrar` manda o pedido vazio,
+  para nada aparecer no telão; com `--mostrar` exibe um versículo e um texto de teste.
+- **Sem permissão ou com o nome errado**, a lista segue: o painel marca o slide com
+  "Abra no Holyrics: João 8:12" e o operador abre à mão.
+- **Celular do pregador** (`pregador.html`, novo, no `PACOTE`): o operador toca em
+  "Celular do pregador", a ponte sorteia um código e mostra o endereço
+  (`http://<ip>:8700/pregador/<código>`). A página só tem Anterior e Próximo. O link
+  morre em 6 horas, em "Encerrar o acesso", quando outro é gerado, ou quando a ordem do
+  culto é trocada. **Não desenhei o QR code**: a tela mostra o endereço para copiar.
+- **Pela internet**: a igreja manda à web só o resumo (SHA-256) do código. A web abre
+  `/pregador/<código>` sem a senha da equipe se o resumo confere; o toque entra na fila
+  com o tipo `pregador`, e a igreja confere o código de novo antes de passar. Enquanto
+  há link valendo, a ponte mantém um segundo pedido de saída pendurado
+  (`POST /api/espelho/pedidos`, até 20 s) para o toque chegar na hora. A chave "Só
+  mostra" não corta o pregador.
+- **Músicas do ChurchManager** (`FonteCultos`, no fim de `ponte/repertorio.py`): liga com
+  `repertorio: { fonte: cultos, url, slug, chave }` no config. **A rota de lá ainda não
+  existe**; foi escrito contra o formato da especificação do módulo Cultos e testado só
+  com ele. Guarda a última resposta em `_culto_do_dia.json` para o caso de a internet
+  cair. O id da música no Holyrics é procurado pelo título (`GetSongs`), o que também
+  não foi testado.
+- A agenda passou a dizer quanto falta do momento atual mesmo sem a hora do culto.
+
+**Testes novos:** `_testar_palavra.py` (ponta a ponta do toque do pregador, pelo Wi-Fi e
+pela web, dentro do teste) e mais casos em `_testar_repertorio.py`.
+
+**O que só dá para conferir aí**
+
+1. `python verificar_palavra.py`, fora do culto. Se disser "não existe", abrir a lista
+   de ações do API Server do Holyrics, achar a que mostra versículo pela referência e a
+   que mostra um texto livre, e escrever os nomes no bloco `palavra` do config. Se disser
+   "falta liberar", marcar as permissões no token.
+2. `python verificar_palavra.py --mostrar`, com o telão à vista: o versículo aparece com
+   a Bíblia e o tema certos? O texto aparece legível? "Tirar" limpa o telão?
+3. **Um versículo que o ChurchManager dividiu em dois slides** tem a mesma referência
+   nos dois: a ponte pede uma vez e o Holyrics mostra o versículo inteiro. Conferir se é
+   isso que o pregador espera, ou se ele precisa do versículo em pedaços (aí a referência
+   não basta).
+4. **O celular do pregador no Wi-Fi da igreja**: abrir o endereço num celular, passar os
+   slides, ver o painel dizer "O pregador está passando". O celular tem que estar na
+   mesma rede do PC do Holyrics.
+5. **Pela internet**, com a igreja ligada à web e o celular no 4G: quanto demora entre o
+   toque e o telão? Se passar de um segundo, anotar.
+6. Duas pessoas ao mesmo tempo: pregador e operador tocando em Próximo no mesmo instante
+   não podem pular dois slides.
+
 ## O que NÃO foi testado
 
-Do painel do culto ao vivo (seção 12): nada rodou contra OBS, Holyrics, YouTube ou
+Do painel do culto ao vivo (seções 12 e 13): nada rodou contra OBS, Holyrics, YouTube ou
 refletor de verdade, nem em Windows. O que foi visto no Mac: os testes novos, a tela
 no navegador em tela larga e em 375 px contra os simuladores, a versão web local
 recebendo o retrato pelo espelho, e o painel antigo funcionando contra o código novo.

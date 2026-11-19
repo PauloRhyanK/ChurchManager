@@ -149,6 +149,66 @@ conferir("louvor_do_dia escolhe e ordena", [m["id"] for m in fonte.musicas()] ==
 fonte = repertorio.FonteLocal({}, lambda: 1 / 0, ler_slides, lambda: TABELA)
 conferir("config sem louvores e marcas ilegiveis: lista vazia", fonte.musicas() == [])
 
+print("\nA fonte Cultos (pelo contrato; a rota de la ainda nao existe)")
+RESPOSTA = {
+    "service": {"id": "s1", "date": "2026-11-22", "startTime": "19:00", "name": "Domingo à noite",
+                "moments": [{"name": "Louvor", "kind": "WORSHIP", "startsAt": "19:05", "durationMinutes": 17}]},
+    "songs": [{
+        "id": "c1", "title": "Luz da Manhã", "status": "READY", "musicalKey": "Sol", "bpm": 72,
+        "audio": {"url": "https://exemplo/audio/x.mp3", "fileName": "luz.mp3", "durationSeconds": 252.4, "sizeBytes": 1},
+        "parts": [{"index": 0, "kind": "VERSE", "name": "Verso 1", "mood": "WORSHIP", "time": 14.2, "firstSlide": 0, "slideCount": 1},
+                  {"index": 1, "kind": "CHORUS", "name": "Refrão", "mood": "CELEBRATION", "time": 40.0, "firstSlide": 1, "slideCount": 1}],
+        "slides": [{"index": 0, "part": 0, "time": 14.2, "lines": ["ANTES DO SOL NASCER", "TUA VOZ ME CHAMOU"],
+                    "cues": [{"target": "VOCAL", "text": "solo, voz masculina"}]},
+                   {"index": 1, "part": 1, "time": 40.0, "lines": ["ÉS A LUZ DA MANHÃ"], "cues": []}],
+        "holyricsText": "..."},
+        {"id": "c2", "title": "Canto Novo", "status": "NEEDS_TIMING", "audio": None,
+         "parts": [{"index": 0, "kind": "VERSE", "name": "Verso 1", "mood": None, "time": None, "firstSlide": 0, "slideCount": 1}],
+         "slides": [{"index": 0, "part": 0, "time": None, "lines": ["CANTAI"], "cues": []}]}],
+    "sermon": {"title": "Luz que não se apaga", "preacherName": "Pr. Fulano",
+               "slides": [{"index": 0, "kind": "VERSE", "text": "Eu sou a luz", "reference": "João 8:12"}]},
+}
+m = repertorio.musica_do_cultos(RESPOSTA["songs"][0], TABELA, lambda titulo: "999" if titulo == "Luz da Manhã" else None)
+conferir("musica READY com todos os tempos e pronta", m["pronta"] and m["duracao"] == 252.4 and m["titulo"] == "Luz da Manhã")
+conferir("o clima vira a chave da ponte, com a luz desta igreja",
+         [p["clima"] for p in m["partes"]] == ["adoracao", "celebracao"] and m["partes"][1]["luz"] == {"cena": "celebracao", "modo": "animado"})
+conferir("o tipo da parte vem do kind", [p["tipo"] for p in m["partes"]] == ["verso", "refrao"])
+conferir("as instrucoes vem com destinatario em portugues", m["slides"][0]["instrucoes"] == [{"para": "Voz", "texto": "solo, voz masculina"}])
+conferir("a letra vem pronta, sem depender do Holyrics", m["tem_letra"] and m["slides"][0]["linhas"][0] == "ANTES DO SOL NASCER")
+conferir("o id do Holyrics e achado pelo titulo", m["holyrics_id"] == "999")
+m2 = repertorio.musica_do_cultos(RESPOSTA["songs"][1], TABELA, lambda titulo: 1 / 0)
+conferir("musica sem tempo: a mao, e a busca no Holyrics pode falhar sem derrubar", m2["pronta"] is False and m2["holyrics_id"] is None)
+conferir("lixo nao estoura", repertorio.musica_do_cultos(None, TABELA)["slides"] == [])
+
+import tempfile   # noqa: E402
+
+guardado = os.path.join(tempfile.mkdtemp(), "_culto_do_dia.json")
+rede = {"ok": True, "pedidos": 0}
+
+
+def buscar():
+    rede["pedidos"] += 1
+    if not rede["ok"]:
+        raise RuntimeError("sem internet, chave segredo-da-igreja recusada")
+    return RESPOSTA
+
+
+fonte = repertorio.FonteCultos("https://api.exemplo/", "igreja", "segredo-da-igreja", guardado, lambda: TABELA, buscar=buscar)
+conferir("o endereco segue o contrato", fonte._endereco == "https://api.exemplo/public/tenants/igreja/worship/services/next")
+conferir("antes de buscar: lista vazia, sem estourar", fonte.musicas() == [] and fonte.palavra() is None)
+fonte.atualizar()
+conferir("depois de buscar: as musicas do culto", [x["id"] for x in fonte.musicas()] == ["c1", "c2"] and len(fonte.versao()) == 12)
+conferir("ler nao volta a rede", fonte.musicas() and rede["pedidos"] == 1)
+conferir("a palavra do culto vem junto", fonte.palavra()["slides"][0]["referencia"] == "João 8:12")
+conferir("e o culto, para os horarios", fonte.culto()["startTime"] == "19:00")
+rede["ok"] = False
+fonte.atualizar()
+conferir("a internet caiu: continua com o que tinha", [x["id"] for x in fonte.musicas()] == ["c1", "c2"] and fonte.erro)
+conferir("a chave nunca aparece na mensagem de erro", "segredo-da-igreja" not in fonte.erro, fonte.erro)
+nova = repertorio.FonteCultos("https://api.exemplo", "igreja", "segredo-da-igreja", guardado, lambda: TABELA, buscar=buscar)
+nova.atualizar()
+conferir("ponte reiniciada sem internet: vale o que ficou no disco", [x["id"] for x in nova.musicas()] == ["c1", "c2"])
+
 print("\n" + "-" * 58)
 print("FALHAS: {}".format(len(FALHAS)))
 sys.exit(1 if FALHAS else 0)

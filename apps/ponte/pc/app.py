@@ -2843,6 +2843,43 @@ def _slides_do_holyrics(identificador):
     return (dados or {}).get("slides") or None
 
 
+_musicas_do_holyrics = {"em": 0.0, "por_titulo": {}}
+
+
+def _achar_no_holyrics(titulo):
+    """O id, no Holyrics, da musica que tem este titulo. None se nao achar.
+
+    As musicas do ChurchManager nao trazem o id do Holyrics, e e por ele que a
+    letra vai ao telao. A lista do Holyrics e lida uma vez a cada 10 minutos.
+    NAO TESTADO NA IGREJA: supoe que GetSongs devolve [{id, title}] e que o
+    token tem permissao para ela.
+    """
+    cliente = _contexto.get("holyrics_saude")
+    if cliente is None:
+        return None
+    if time.time() - _musicas_do_holyrics["em"] > 600:
+        _musicas_do_holyrics["em"] = time.time()
+        corpo = cliente.pedir("GetSongs")
+        lista = corpo.get("data") if isinstance(corpo, dict) else corpo
+        _musicas_do_holyrics["por_titulo"] = {
+            _sem_acento(str(m.get("title") or "")).strip().lower(): m.get("id")
+            for m in (lista or []) if isinstance(m, dict) and m.get("id")}
+    return _musicas_do_holyrics["por_titulo"].get(_sem_acento(titulo).strip().lower())
+
+
+def _fonte_da_palavra(fonte_cultos):
+    """O arquivo local vale primeiro (e o que a equipe consegue corrigir a
+    mao na hora); sem ele, a palavra que veio do ChurchManager."""
+    local = mod_palavra.FontePalavraLocal(CAMINHO_PALAVRA).palavra
+
+    def palavra():
+        dela = local()
+        if dela is None and fonte_cultos is not None:
+            dela = fonte_cultos.palavra()
+        return dela
+    return palavra
+
+
 def _musica_no_telao(musica):
     cliente = _contexto.get("holyrics")
     if cliente is None:
@@ -2900,8 +2937,20 @@ def _montar_ao_vivo():
         str(conf_relogio.get("fonte") or "navegador"), conf_relogio.get("adiantar_ms") or 0)
     _pecas["medidor"] = mod_obs_ouvinte.Medidor()
     ao_vivo = mod_ao_vivo.PainelAoVivo(_pecas)
-    _pecas["repertorio"] = mod_repertorio.FonteLocal(
-        _config, _ler_marcas, _slides_do_holyrics, ao_vivo.tabela)
+    conf_rep = _config.get("repertorio") or {}
+    fonte_cultos = None
+    if conf_rep.get("fonte") == "cultos" and conf_rep.get("url") and conf_rep.get("slug"):
+        # As musicas montadas no ChurchManager. A rota de la ainda nao existe
+        # (19/11/2026); ver o fim de ponte/repertorio.py.
+        fonte_cultos = mod_repertorio.FonteCultos(
+            conf_rep["url"], conf_rep["slug"], conf_rep.get("chave"),
+            os.path.join(RAIZ, "_culto_do_dia.json"), ao_vivo.tabela, _achar_no_holyrics)
+        fonte_cultos.comecar()
+        _pecas["repertorio"] = fonte_cultos
+        print("  [louvor] musicas vindas do ChurchManager")
+    else:
+        _pecas["repertorio"] = mod_repertorio.FonteLocal(
+            _config, _ler_marcas, _slides_do_holyrics, ao_vivo.tabela)
     _pecas["condutor"] = mod_condutor.Condutor(
         _pecas["relogio"], _pecas["repertorio"].musicas, _musica_no_telao, _slide_no_telao,
         ao_vivo.luz_da_parte, lambda titulo, ok, detalhe: _anotar(titulo, ok, detalhe, "local"),
@@ -2909,7 +2958,7 @@ def _montar_ao_vivo():
     _pecas["condutor"].comecar()
     telao = mod_palavra.TelaoDaPalavra(lambda: _contexto.get("holyrics"), lambda: _config)
     _pecas["palavra"] = mod_palavra.Palavra(
-        mod_palavra.FontePalavraLocal(CAMINHO_PALAVRA).palavra, telao.mostrar, telao.tirar,
+        _fonte_da_palavra(fonte_cultos), telao.mostrar, telao.tirar,
         lambda titulo, ok, detalhe: _anotar(titulo, ok, detalhe, "local"))
 
     if _contexto.get("obs") is not None:

@@ -260,3 +260,168 @@ class FonteLocal:
     def versao(self):
         self.musicas()
         return self._versao
+
+
+# ---------------------------------------------------------------------------
+#  A FONTE CULTOS: as musicas montadas no ChurchManager
+#
+#  Le o culto pronto para executar, no formato fixado na especificacao do
+#  modulo Cultos ("Contrato para a Ponte"). A ROTA DE LA AINDA NAO EXISTE
+#  (19/11/2026): isto foi escrito contra o formato, e testado so com ele.
+#
+#  A igreja liga para fora, como sempre; se a internet cair, vale a ultima
+#  resposta guardada em disco (_culto_do_dia.json).
+# ---------------------------------------------------------------------------
+
+CLIMA_DO_CULTOS = {"CONTEMPLATIVE": "contemplativo", "WORSHIP": "adoracao", "BUILD": "crescendo",
+                   "CELEBRATION": "celebracao", "EXPLOSION": "explosao"}
+TIPO_DO_CULTOS = {"INTRO": "intro", "VERSE": "verso", "PRE_CHORUS": "pre_refrao", "CHORUS": "refrao",
+                  "BRIDGE": "ponte", "INSTRUMENTAL": "instrumental", "ENDING": "final"}
+PARA_QUEM = {"ALL": "Todos", "VOCAL": "Voz", "KEYS": "Teclado", "ACOUSTIC_GUITAR": "Violão",
+             "ELECTRIC_GUITAR": "Guitarra", "BASS": "Baixo", "DRUMS": "Bateria"}
+
+
+def musica_do_cultos(song, tabela, achar_no_holyrics=None):
+    """Uma musica do contrato do Cultos -> o formato da ponte."""
+    song = song if isinstance(song, dict) else {}
+    climas = {item["id"]: item for item in tabela or []}
+    partes = []
+    for crua in song.get("parts") or []:
+        if not isinstance(crua, dict):
+            continue
+        clima = CLIMA_DO_CULTOS.get(str(crua.get("mood") or ""))
+        item = climas.get(clima)
+        partes.append({
+            "nome": str(crua.get("name") or "parte"),
+            "tipo": TIPO_DO_CULTOS.get(str(crua.get("kind") or ""), "outra"),
+            "clima": clima,
+            "luz": {"cena": item["cena"], "modo": item["modo"]} if item else None,
+            "tempo": _numero(crua.get("time")),
+            "primeiro_slide": _inteiro(crua.get("firstSlide")) or 0,
+            "quantos": max(1, _inteiro(crua.get("slideCount")) or 1),
+        })
+    slides = []
+    for crua in song.get("slides") or []:
+        if not isinstance(crua, dict):
+            continue
+        indice = _inteiro(crua.get("index"))
+        slides.append({
+            # O slide N do ChurchManager e o slide N da musica no Holyrics, DESDE
+            # QUE a letra de la tenha sido colada no Holyrics pelo botao "Letra
+            # para o Holyrics". E a combinacao que precisa ser conferida.
+            "indice": indice if indice is not None else len(slides),
+            "parte": _inteiro(crua.get("part")) or 0,
+            "tempo": _numero(crua.get("time")),
+            "tempo_estimado": False,
+            "linhas": [str(linha) for linha in (crua.get("lines") or [])],
+            "instrucoes": [{"para": PARA_QUEM.get(str(c.get("target") or ""), "Banda"), "texto": str(c.get("text") or "")}
+                           for c in (crua.get("cues") or []) if isinstance(c, dict) and c.get("text")],
+        })
+    audio = song.get("audio") if isinstance(song.get("audio"), dict) else {}
+    titulo = str(song.get("title") or "")
+    holyrics_id = None
+    if achar_no_holyrics is not None and titulo:
+        try:
+            holyrics_id = achar_no_holyrics(titulo)
+        except Exception:
+            holyrics_id = None
+    pronta = (song.get("status") == "READY" and bool(slides) and bool(partes)
+              and all(s["tempo"] is not None for s in slides) and all(p["tempo"] is not None for p in partes))
+    return {
+        "id": str(song.get("id") or ""), "titulo": titulo, "pronta": pronta,
+        "holyrics_id": str(holyrics_id) if holyrics_id else None,
+        "audio": None, "audio_url": audio.get("url"),
+        "duracao": _numero(audio.get("durationSeconds")),
+        "total_slides": len(slides), "tem_letra": any(s["linhas"] for s in slides),
+        "partes": partes, "slides": slides,
+    }
+
+
+class FonteCultos:
+    """As musicas (e a palavra) do proximo culto, lidas do ChurchManager."""
+
+    RELER = 300.0
+
+    def __init__(self, url, slug, chave, caminho, tabela, achar_no_holyrics=None, buscar=None,
+                 agora=time.monotonic):
+        self._endereco = "{}/public/tenants/{}/worship/services/next".format(str(url).rstrip("/"), slug)
+        self._chave = str(chave or "")
+        self._caminho = caminho
+        self._tabela = tabela
+        self._achar = achar_no_holyrics
+        self._buscar = buscar or self._pela_rede
+        self._agora = agora
+        self._resposta = None
+        self._musicas = None
+        self._versao = ""
+        self._lido_em = None
+        self.erro = None
+
+    def _pela_rede(self):
+        import requests
+        resposta = requests.get(self._endereco, headers={"x-ponte-key": self._chave}, timeout=8)
+        if resposta.status_code != 200:
+            raise RuntimeError("o ChurchManager respondeu {}".format(resposta.status_code))
+        return resposta.json()
+
+    def atualizar(self):
+        """Busca de novo. Se falhar, fica com o que ja tinha (ou com o disco)."""
+        try:
+            resposta = self._buscar()
+            if not isinstance(resposta, dict):
+                raise RuntimeError("resposta inesperada")
+            self.erro = None
+            try:
+                with open(self._caminho, "w", encoding="utf-8") as arquivo:
+                    json.dump(resposta, arquivo, ensure_ascii=False)
+            except OSError:
+                pass
+        except Exception as erro:
+            # A chave nunca aparece numa mensagem: so o tipo e o texto do erro.
+            self.erro = (type(erro).__name__ + ": " + str(erro)[:120]).replace(self._chave or "\0", "***")
+            resposta = self._resposta
+            if resposta is None:
+                try:
+                    with open(self._caminho, "r", encoding="utf-8-sig") as arquivo:
+                        resposta = json.load(arquivo)
+                except (OSError, ValueError):
+                    resposta = None
+        self._lido_em = self._agora()
+        if resposta is not None and resposta is not self._resposta:
+            self._resposta = resposta
+            self._musicas = None
+
+    def comecar(self):
+        """Uma thread que rele de 5 em 5 minutos. As leituras nunca esperam a rede."""
+        import threading
+
+        def laco():
+            while True:
+                self.atualizar()
+                time.sleep(self.RELER)
+        threading.Thread(target=laco, daemon=True).start()
+
+    def recarregar(self):
+        self._musicas = None
+
+    def musicas(self):
+        if self._musicas is None:
+            tabela = self._tabela()
+            cruas = (self._resposta or {}).get("songs") or []
+            self._musicas = [musica_do_cultos(s, tabela, self._achar) for s in cruas if isinstance(s, dict)]
+            self._versao = hashlib.sha1(
+                json.dumps(self._musicas, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:12]
+        return self._musicas
+
+    def versao(self):
+        self.musicas()
+        return self._versao
+
+    def palavra(self):
+        """O sermao do culto, no formato de ponte/palavra.py (ou None)."""
+        from .palavra import normalizar
+        resposta = self._resposta or {}
+        return normalizar(resposta.get("sermon") or (resposta.get("service") or {}).get("sermon"))
+
+    def culto(self):
+        return (self._resposta or {}).get("service")
