@@ -10,14 +10,14 @@ export function formatBase(summary: Pick<SermonSummary, "baseReference" | "point
 }
 
 /** "dom 22/11" a partir de 'AAAA-MM-DD', sem deslocamento de fuso (lê como UTC). */
-function formatDay(date: string): string {
+export function formatDay(date: string): string {
   const [y, m, d] = date.split("-").map(Number);
   const weekday = WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
   return `${weekday} ${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}`;
 }
 
 /** "19h" ou "19h30". */
-function formatHour(startTime: string): string {
+export function formatHour(startTime: string): string {
   const [h, min] = startTime.split(":").map(Number);
   return min === 0 ? `${h}h` : `${h}h${String(min).padStart(2, "0")}`;
 }
