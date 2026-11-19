@@ -52,15 +52,16 @@ function renderDialog(initial?: Omit<VerseAttrs, "id">) {
   const onRemove = vi.fn();
   const onOpenChange = vi.fn();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
+  const tree = (value?: Omit<VerseAttrs, "id">) => (
     <QueryClientProvider client={client}>
-      <VerseDialog open onOpenChange={onOpenChange} initial={initial} onSubmit={onSubmit} onRemove={initial ? onRemove : undefined} />
-    </QueryClientProvider>,
+      <VerseDialog open onOpenChange={onOpenChange} initial={value} onSubmit={onSubmit} onRemove={value ? onRemove : undefined} />
+    </QueryClientProvider>
   );
-  return { onSubmit, onRemove, onOpenChange };
+  const { rerender } = render(tree(initial));
+  return { onSubmit, onRemove, onOpenChange, rerenderWith: (value?: Omit<VerseAttrs, "id">) => rerender(tree(value)) };
 }
 
-const search = () => screen.findByRole("textbox", { name: "Referência ou palavras do versículo" });
+const search = () => screen.findByRole("combobox", { name: "Referência ou palavras do versículo" });
 const reference = () => screen.findByRole("textbox", { name: "Referência" });
 const text = () => screen.getByRole("textbox", { name: "Texto" });
 
@@ -83,9 +84,13 @@ describe("VerseDialog — busca", () => {
     expect(field).toHaveAttribute("placeholder", "João 3:16 ou um trecho");
     await waitFor(() => expect(field).toHaveFocus());
     expect(screen.queryByRole("textbox", { name: "Referência" })).not.toBeInTheDocument();
-    expect(await screen.findByText("Bíblia Livre")).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Tradução" })).not.toBeInTheDocument();
-    expect(screen.getByText("BLIVRE · CC BY 3.0 BR")).toBeInTheDocument();
+    const credit = await screen.findByText("BLIVRE · CC BY 3.0 BR");
+    expect(credit).toHaveAttribute("title", BLIVRE.attribution);
+    expect(screen.queryByText("Bíblia Livre")).not.toBeInTheDocument();
+    expect(credit.parentElement).toHaveTextContent(/^BLIVRE · CC BY 3\.0 BR$/);
+    expect(field).toHaveAttribute("aria-autocomplete", "list");
+    expect(field).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByText("Enter insere")).toBeInTheDocument();
   });
 
@@ -198,7 +203,25 @@ describe("VerseDialog — busca", () => {
     expect(select).toHaveValue("BLIVRE");
     fireEvent.change(select, { target: { value: "KJA" } });
     await waitFor(() => expect(api.searchBible).toHaveBeenCalledWith("mt 5 14", "KJA"));
-    expect(screen.getByText("KJA · Uso permitido")).toBeInTheDocument();
+    expect(screen.getByText("Uso permitido")).toHaveAttribute("title", KJA.attribution);
+    expect(screen.queryByText("CC BY 3.0 BR")).not.toBeInTheDocument();
+  });
+
+  it("aria-expanded acompanha a lista de resultados", async () => {
+    renderDialog();
+    const field = await typeSearch("mt 5 14");
+    expect(field).toHaveAttribute("aria-expanded", "false");
+    await screen.findByRole("listbox");
+    expect(field).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("Enter logo depois de digitar, antes da espera, não insere nada", async () => {
+    const { onSubmit, onOpenChange } = renderDialog();
+    const field = await typeSearch("mt 5 14");
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(api.searchBible).not.toHaveBeenCalled();
   });
 });
 
@@ -207,7 +230,7 @@ describe("VerseDialog — digitar à mão", () => {
     api.listBibleTranslations.mockResolvedValue([]);
     renderDialog();
     expect(await reference()).toHaveAttribute("placeholder", "João 3:16");
-    expect(screen.queryByRole("textbox", { name: "Referência ou palavras do versículo" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Referência ou palavras do versículo" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Voltar para a busca" })).not.toBeInTheDocument();
   });
 
@@ -289,6 +312,15 @@ describe("VerseDialog — alterar", () => {
     expect(await screen.findAllByRole("option")).toHaveLength(3);
     fireEvent.click(screen.getByRole("button", { name: "Remover" }));
     expect(onRemove).toHaveBeenCalled();
+  });
+
+  it("novo objeto initial com o mesmo conteúdo não apaga o que foi digitado", async () => {
+    const { rerenderWith } = renderDialog(MANUAL);
+    fireEvent.change(await reference(), { target: { value: "Salmos 23:2" } });
+    fireEvent.change(text(), { target: { value: "Ele me faz repousar." } });
+    rerenderWith({ ...MANUAL, verses: [{ ...MANUAL.verses[0] }] });
+    expect(await reference()).toHaveValue("Salmos 23:2");
+    expect(text()).toHaveValue("Ele me faz repousar.");
   });
 
   it("salvar à mão um bloco da Bíblia grava-o como manual", async () => {

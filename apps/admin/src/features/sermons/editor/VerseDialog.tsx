@@ -67,16 +67,20 @@ export function VerseDialog({ open, onOpenChange, initial, onSubmit, onRemove, r
   const [text, setText] = useState(joinedText(initial));
   const activeRef = useRef<HTMLLIElement>(null);
 
+  // Reinicia só quando o conteúdo de `initial` muda, não quando o objeto é outro com o mesmo conteúdo.
+  const initialReference = initial?.reference ?? "";
+  const initialTranslation = initial?.translation ?? null;
+  const initialText = joinedText(initial);
   useEffect(() => {
     if (!open) return;
-    const bible = fromBible(initial);
-    setManualChosen(initial !== undefined && !bible);
-    setQuery(bible ? initial!.reference : "");
-    setDebounced(bible ? initial!.reference : "");
-    setChosenCode(initial?.translation ?? null);
-    setReference(initial?.reference ?? "");
-    setText(joinedText(initial));
-  }, [open, initial]);
+    const bible = editing && initialTranslation !== null;
+    setManualChosen(editing && !bible);
+    setQuery(bible ? initialReference : "");
+    setDebounced(bible ? initialReference : "");
+    setChosenCode(initialTranslation);
+    setReference(initialReference);
+    setText(initialText);
+  }, [open, editing, initialReference, initialTranslation, initialText]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(query.trim()), SEARCH_DELAY_MS);
@@ -215,6 +219,9 @@ export function VerseDialog({ open, onOpenChange, initial, onSubmit, onRemove, r
             <div className="relative">
               <BookOpen aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" style={{ color: BLOCK_COLORS.verse.dot }} />
               <Input
+                role="combobox"
+                aria-expanded={hits.length > 0}
+                aria-autocomplete="list"
                 aria-label="Referência ou palavras do versículo"
                 aria-controls={hits.length ? listId : undefined}
                 aria-activedescendant={hits.length ? `${listId}-${active}` : undefined}
@@ -260,22 +267,24 @@ export function VerseDialog({ open, onOpenChange, initial, onSubmit, onRemove, r
             <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-3 text-xs text-muted-foreground">
               <div className="flex min-w-0 items-center gap-2">
                 {list.length > 1 ? (
-                  <select
-                    aria-label="Tradução"
-                    value={translation?.code ?? ""}
-                    onChange={(e) => setChosenCode(e.target.value)}
-                    className="h-8 rounded-md border border-input bg-background px-2 text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    {list.map((t) => (
-                      <option key={t.code} value={t.code}>
-                        {t.shortName}
-                      </option>
-                    ))}
-                  </select>
+                  <>
+                    <select
+                      aria-label="Tradução"
+                      value={translation?.code ?? ""}
+                      onChange={(e) => setChosenCode(e.target.value)}
+                      className="h-8 rounded-md border border-input bg-background px-2 text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      {list.map((t) => (
+                        <option key={t.code} value={t.code}>
+                          {t.shortName}
+                        </option>
+                      ))}
+                    </select>
+                    {translation && <span title={translation.attribution}>{translation.license}</span>}
+                  </>
                 ) : (
-                  translation && <span className="font-medium text-foreground">{translation.name}</span>
+                  translation && <span title={translation.attribution}>{`${translation.shortName} · ${translation.license}`}</span>
                 )}
-                {translation && <span title={translation.attribution}>{`${translation.shortName} · ${translation.license}`}</span>}
               </div>
               <div className="flex items-center gap-3">
                 <Button type="button" variant="link" className="h-auto px-0 text-xs" onClick={() => setManualChosen(true)}>
