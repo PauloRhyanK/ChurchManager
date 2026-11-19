@@ -6,6 +6,7 @@ import { SermonDeliveryService, type DeliverySummary } from '../sermons/sermon-d
 import {
   CreateServiceDto,
   CreateTemplateDto,
+  UpdateTemplateDto,
   MOMENT_KINDS,
   SetMomentsDto,
   SetSongsDto,
@@ -107,30 +108,53 @@ export class WorshipServicesService {
       where: { tenantId },
       orderBy: { name: 'asc' },
     });
+    // O Culto padrão embutido (id null) só existe enquanto a igreja não tem modelo
+    // próprio: assim nunca falta um modelo para criar culto, e nada é gravado numa leitura.
+    if (saved.length === 0) return { items: [{ id: null, ...DEFAULT_TEMPLATE }] };
     return {
-      items: [
-        { id: null, ...DEFAULT_TEMPLATE },
-        ...saved.map((t) => ({ id: t.id, name: t.name, startTime: t.startTime, moments: templateMoments(t) })),
-      ],
+      items: saved.map((t) => ({ id: t.id, name: t.name, startTime: t.startTime, moments: templateMoments(t) })),
     };
   }
 
+  /** Cria um modelo a partir de um culto (`fromServiceId`) ou do zero (`moments`). */
   async createTemplate(tenantId: string, dto: CreateTemplateDto) {
-    const service = await this.find(tenantId, dto.fromServiceId);
-    const moments: TemplateMoment[] = service.moments.map((m) => ({
-      name: m.name,
-      kind: m.kind,
-      durationMinutes: m.durationMinutes,
-    }));
+    if (dto.fromServiceId && dto.moments) {
+      throw new BadRequestException('Informe o culto de origem ou os momentos do modelo, não os dois.');
+    }
+    let startTime = dto.startTime ?? DEFAULT_TEMPLATE.startTime;
+    let moments: TemplateMoment[];
+    if (dto.fromServiceId) {
+      const service = await this.find(tenantId, dto.fromServiceId);
+      startTime = dto.startTime ?? service.startTime;
+      moments = service.moments.map((m) => ({ name: m.name, kind: m.kind, durationMinutes: m.durationMinutes }));
+    } else if (dto.moments) {
+      moments = dto.moments.map((m) => ({ name: m.name, kind: m.kind, durationMinutes: m.durationMinutes }));
+    } else {
+      throw new BadRequestException('Informe os momentos do modelo ou o culto de origem.');
+    }
     const template = await this.prisma.worshipServiceTemplate.create({
-      data: {
-        tenantId,
-        name: dto.name,
-        startTime: service.startTime,
-        moments: moments as unknown as Prisma.InputJsonValue,
-      },
+      data: { tenantId, name: dto.name, startTime, moments: moments as unknown as Prisma.InputJsonValue },
     });
     return { id: template.id, name: template.name, startTime: template.startTime, moments };
+  }
+
+  /** Muda nome, horário e momentos do modelo. Cultos já criados a partir dele não mudam: são cópias. */
+  async updateTemplate(tenantId: string, id: string, dto: UpdateTemplateDto) {
+    const template = await this.prisma.worshipServiceTemplate.findFirst({ where: { id, tenantId } });
+    if (!template) throw new NotFoundException('Modelo não encontrado');
+    const data: Prisma.WorshipServiceTemplateUpdateInput = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.startTime !== undefined) data.startTime = dto.startTime;
+    if (dto.moments !== undefined) {
+      const moments: TemplateMoment[] = dto.moments.map((m) => ({
+        name: m.name,
+        kind: m.kind,
+        durationMinutes: m.durationMinutes,
+      }));
+      data.moments = moments as unknown as Prisma.InputJsonValue;
+    }
+    const updated = await this.prisma.worshipServiceTemplate.update({ where: { id: template.id }, data });
+    return { id: updated.id, name: updated.name, startTime: updated.startTime, moments: templateMoments(updated) };
   }
 
   async removeTemplate(tenantId: string, id: string) {

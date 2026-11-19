@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMinSize,
   ArrayMaxSize,
   IsArray,
   IsIn,
@@ -80,11 +81,61 @@ export class SetSongsDto {
   songIds!: string[];
 }
 
+/** Um momento de modelo: sem id, porque o modelo guarda a lista inteira. */
+export class TemplateMomentDto {
+  @RequiredText()
+  @MaxLength(120)
+  name!: string;
+
+  @IsIn(MOMENT_KINDS, { message: 'tipo de momento inválido' })
+  kind!: MomentKind;
+
+  @IsInt()
+  @Min(1)
+  @Max(600)
+  durationMinutes!: number;
+}
+
+/**
+ * Criar modelo: a partir de um culto (`fromServiceId`) OU do zero (`moments`,
+ * com `startTime` opcional). Mandar os dois, ou nenhum, é recusado no serviço.
+ */
 export class CreateTemplateDto {
   @RequiredText()
   @MaxLength(120)
   name!: string;
 
+  @IsOptional()
   @IsUUID()
-  fromServiceId!: string;
+  fromServiceId?: string;
+
+  @IsOptional()
+  @Matches(TIME_RE, { message: 'startTime deve estar no formato HH:MM' })
+  startTime?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1, { message: 'o modelo precisa de pelo menos um momento' })
+  @ArrayMaxSize(40)
+  @ValidateNested({ each: true })
+  @Type(() => TemplateMomentDto)
+  moments?: TemplateMomentDto[];
+}
+
+export class UpdateTemplateDto {
+  @RequiredText({ partial: true })
+  @MaxLength(120)
+  name?: string;
+
+  @IsOptional()
+  @Matches(TIME_RE, { message: 'startTime deve estar no formato HH:MM' })
+  startTime?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMinSize(1, { message: 'o modelo precisa de pelo menos um momento' })
+  @ArrayMaxSize(40)
+  @ValidateNested({ each: true })
+  @Type(() => TemplateMomentDto)
+  moments?: TemplateMomentDto[];
 }

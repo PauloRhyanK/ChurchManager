@@ -223,6 +223,33 @@ export async function saveServiceAsTemplate(serviceId: string, name: string): Pr
   return (await api.post<ServiceTemplate>(TEMPLATES, { name, fromServiceId: serviceId })).data;
 }
 
+export interface TemplateBody {
+  name: string;
+  startTime: string;
+  moments: TemplateMoment[];
+}
+
+/** Só os campos que a API aceita, montados um a um. */
+function templateBody(input: TemplateBody): TemplateBody {
+  return {
+    name: input.name,
+    startTime: input.startTime,
+    moments: input.moments.map((m) => ({ name: m.name, kind: m.kind, durationMinutes: m.durationMinutes })),
+  };
+}
+
+export async function createTemplate(input: TemplateBody): Promise<ServiceTemplate> {
+  return (await api.post<ServiceTemplate>(TEMPLATES, templateBody(input))).data;
+}
+
+export async function updateTemplate(id: string, input: TemplateBody): Promise<ServiceTemplate> {
+  return (await api.put<ServiceTemplate>(`${TEMPLATES}/${id}`, templateBody(input))).data;
+}
+
+export async function deleteTemplate(id: string): Promise<void> {
+  await api.delete(`${TEMPLATES}/${id}`);
+}
+
 export async function fetchServices(): Promise<ServiceSummary[]> {
   return (await api.get<{ items: ServiceSummary[] }>(SERVICES)).data.items;
 }
