@@ -19,6 +19,7 @@ const api = vi.hoisted(() => ({
   cancelDelivery: vi.fn(),
   generateSlides: vi.fn(),
   saveSlides: vi.fn(),
+  listBibleTranslations: vi.fn(),
 }));
 vi.mock("../api/sermons-api", () => api);
 const perms = vi.hoisted(() => ({ canEdit: true }));
@@ -109,6 +110,16 @@ describe("SermonEditorPage", () => {
   const back = () => fireEvent.click(screen.getByRole("button", { name: "Voltar para Palavras" }));
   const listInvalidated = (spy: ReturnType<typeof vi.spyOn>) =>
     spy.mock.calls.some(([filters]) => JSON.stringify((filters as { queryKey?: unknown })?.queryKey) === '["sermons","list"]');
+
+  it("Exportar abre o diálogo com o título que está na tela", async () => {
+    api.getSermon.mockResolvedValue(sermon);
+    api.listBibleTranslations.mockResolvedValue([]);
+    renderPage();
+    fireEvent.change(await screen.findByLabelText("Título da palavra"), { target: { value: "Título novo" } });
+    fireEvent.click(screen.getByRole("button", { name: "Exportar" }));
+    expect(await screen.findByRole("heading", { name: "Exportar" })).toBeInTheDocument();
+    expect(screen.getByText("Gere os slides primeiro.")).toBeInTheDocument();
+  });
 
   it("título apagado (ou só espaços) salva como Sem título", async () => {
     api.getSermon.mockResolvedValue(sermon);

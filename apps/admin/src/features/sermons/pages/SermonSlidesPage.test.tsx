@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   previewDelivery: vi.fn(),
   sendSermon: vi.fn(),
   cancelDelivery: vi.fn(),
+  listBibleTranslations: vi.fn(),
 }));
 vi.mock("../api/sermons-api", () => api);
 const perms = vi.hoisted(() => ({ canEdit: true }));
@@ -102,9 +103,30 @@ beforeEach(() => {
   perms.canEdit = true;
   api.getSermon.mockResolvedValue(sermon());
   api.listServiceOptions.mockResolvedValue([]);
+  api.listBibleTranslations.mockResolvedValue([]);
 });
 
 describe("SermonSlidesPage", () => {
+  it("Exportar abre o diálogo com os slides que a pessoa vê", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Exportar" }));
+    expect(await screen.findByRole("heading", { name: "Exportar" })).toBeInTheDocument();
+    expect(screen.getByText("3 slides, no visual escolhido")).toBeInTheDocument();
+  });
+
+  it("Exportar espera a fila e não abre se o salvamento falhou", async () => {
+    const failing = deferred<unknown>();
+    api.saveSlides.mockReturnValueOnce(failing.promise);
+    renderPage();
+    fireEvent.click(await screen.findByRole("checkbox", { name: /João 8:12/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Exportar" }));
+    await act(async () => failing.reject(new Error("falhou")));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Não foi possível salvar os slides. Confira a lista antes de exportar."),
+    );
+    expect(screen.queryByRole("heading", { name: "Exportar" })).not.toBeInTheDocument();
+  });
+
   it("mostra a lista, a contagem dos marcados e a prévia só com os públicos marcados", async () => {
     renderPage();
     expect(await screen.findByRole("heading", { name: "Luz que não se apaga", level: 1 })).toBeInTheDocument();

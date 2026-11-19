@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Editor } from "@tiptap/react";
-import { ArrowLeft, Check, Clock, ListTree, Loader2, MoreHorizontal, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, Clock, Download, ListTree, Loader2, MoreHorizontal, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -20,6 +20,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from 
 import { usePermissions } from "@/features/access/hooks/use-permissions";
 import { getApiErrorMessage } from "@/lib/api";
 import { deleteSermon, duplicateSermon, getSermon, updateSermon, type Sermon } from "../api/sermons-api";
+import { ExportDialog } from "../components/ExportDialog";
 import { GenerateSlidesDialog } from "../components/GenerateSlidesDialog";
 import { SendToServiceDialog } from "../components/SendToServiceDialog";
 import { StructurePanel } from "../components/StructurePanel";
@@ -135,6 +136,7 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [slidesOpen, setSlidesOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const queryClient = useQueryClient();
   // Situação do envio e slides: vivem à parte do texto, que depois de aberto é do editor.
   const [situation, setSituation] = useState({ status: sermon.status, delivery: sermon.delivery });
@@ -142,6 +144,7 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
     count: sermon.slideCount,
     has: sermon.slides.length > 0,
     style: sermon.slideStyle,
+    items: sermon.slides,
   });
 
   const autosave = useAutosave({
@@ -268,6 +271,11 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
     }
     navigate(`${LIST_PATH}/${sermon.id}/slides`);
   }
+  /** Salva o que está na tela e abre o diálogo; a exportação usa o texto da tela, esteja salvo ou não. */
+  async function openExport() {
+    await autosave.flush();
+    setExportOpen(true);
+  }
   function handleSent(updated: Sermon) {
     setSituation({ status: updated.status, delivery: updated.delivery });
     queryClient.setQueryData<Sermon>(detailKey(sermon.id), (old) =>
@@ -275,7 +283,7 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
     );
   }
   function handleGenerated(updated: Sermon) {
-    setSlidesInfo({ count: updated.slideCount, has: updated.slides.length > 0, style: updated.slideStyle });
+    setSlidesInfo({ count: updated.slideCount, has: updated.slides.length > 0, style: updated.slideStyle, items: updated.slides });
     // Só os slides mudam na cópia em cache; o texto e a revisão ficam como estão.
     queryClient.setQueryData<Sermon>(["sermons", "detail", sermon.id], (old) =>
       old
@@ -371,6 +379,9 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
                 <StructurePanel derived={derived} activeId={activeId} onSelect={select} className="mt-6" />
               </SheetContent>
             </Sheet>
+            <Button type="button" variant="ghost" size="icon" aria-label="Exportar" onClick={() => void openExport()}>
+              <Download aria-hidden="true" />
+            </Button>
             {canEdit && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -421,6 +432,16 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
         initialStyle={slidesInfo.style}
         ensureSaved={ensureSaved}
         onGenerated={handleGenerated}
+      />
+
+      <ExportDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        title={title.trim() || UNTITLED}
+        document={doc}
+        speech={formatSpeech(derived.estimatedSeconds)}
+        slides={slidesInfo.items}
+        slideStyle={slidesInfo.style}
       />
 
       {canSendHere && (

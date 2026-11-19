@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowLeft, ArrowRight, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Download, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -8,11 +8,12 @@ import { Button } from "@/components/ui/button";
 import { usePermissions } from "@/features/access/hooks/use-permissions";
 import { getApiErrorMessage } from "@/lib/api";
 import { generateSlides, getSermon, saveSlides, type Sermon } from "../api/sermons-api";
+import { ExportDialog } from "../components/ExportDialog";
 import { GenerateSlidesDialog } from "../components/GenerateSlidesDialog";
 import { SendToServiceDialog } from "../components/SendToServiceDialog";
 import { SlideList } from "../components/SlideList";
 import { SlidePreview } from "../components/SlidePreview";
-import { formatSituation } from "../lib/format";
+import { formatSituation, formatSpeech } from "../lib/format";
 import { editSlide, moveSlide, slidesBody, toggleSlide } from "../lib/slide-edits";
 import { publicSlides, type SlideItem, type SlideStyle } from "../lib/slides";
 
@@ -20,6 +21,7 @@ const LIST_PATH = "/palavras";
 const STYLE_NAME: Record<SlideStyle, string> = { MINIMAL: "Minimalista", BACKGROUND: "Com fundo" };
 const SAVE_ERROR = "Não foi possível salvar os slides.";
 const UNSAVED = "Não foi possível salvar os slides. Confira a lista antes de enviar.";
+const UNSAVED_EXPORT = "Não foi possível salvar os slides. Confira a lista antes de exportar.";
 const RELOAD_ERROR = "Não foi possível carregar os slides. Atualize a página.";
 const REGENERATE_NOTICE = "Trocar o que mostrar refaz a sequência do zero.";
 
@@ -38,6 +40,7 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
   const [resetting, setResetting] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [generateOpen, setGenerateOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   // Fila de salvamento: um pedido por vez; o que mudar no meio espera e vai inteiro no próximo.
   const pending = useRef<Draft | null>(null);
   const running = useRef<Promise<void> | null>(null);
@@ -143,6 +146,15 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
     }
   }
 
+  /** Exporta a lista que a pessoa vê: espera a fila de salvamento e recusa se algo falhou. */
+  async function openExport() {
+    if (!(await whenIdle())) {
+      toast.error(UNSAVED_EXPORT);
+      return;
+    }
+    setExportOpen(true);
+  }
+
   const situation = sermon.delivery && sermon.status !== "DRAFT" ? formatSituation(sermon) : null;
   const hasSlides = items.length > 0;
 
@@ -158,6 +170,10 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
             </Button>
             <h1 className="min-w-0 truncate text-[22px] font-bold">{sermon.title.trim() || "Sem título"}</h1>
           </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" variant="outline" size="icon" className="h-11 w-11" aria-label="Exportar" onClick={() => void openExport()}>
+              <Download aria-hidden="true" />
+            </Button>
           {preached && situation ? (
             <span className="flex h-11 items-center rounded-lg border px-4 text-sm font-medium text-muted-foreground">{situation}</span>
           ) : canEdit ? (
@@ -174,6 +190,7 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
           ) : (
             situation && <span className="text-sm text-muted-foreground">{situation}</span>
           )}
+          </div>
         </div>
 
         {preached && hasSlides && (
@@ -266,6 +283,15 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
         )}
       </div>
 
+      <ExportDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        title={sermon.title.trim() || "Sem título"}
+        document={sermon.document}
+        speech={formatSpeech(sermon.estimatedSeconds)}
+        slides={items}
+        slideStyle={style}
+      />
       {canEdit && !preached && (
         <SendToServiceDialog
           open={sendOpen}
