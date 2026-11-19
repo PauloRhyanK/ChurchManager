@@ -8,7 +8,7 @@ import SermonsListPage from "./SermonsListPage";
 
 const ROUTER_FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true };
 
-const api = vi.hoisted(() => ({ listSermons: vi.fn(), createSermon: vi.fn() }));
+const api = vi.hoisted(() => ({ listSermons: vi.fn(), createSermon: vi.fn(), createSermonFromText: vi.fn(), getSermonAi: vi.fn() }));
 const perms = vi.hoisted(() => ({ edit: true }));
 
 vi.mock("../api/sermons-api", async (orig) => ({ ...(await orig<typeof import("../api/sermons-api")>()), ...api }));
@@ -122,11 +122,23 @@ describe("SermonsListPage", () => {
     expect(spy).toHaveBeenCalledWith({ queryKey: ["sermons", "list"] });
   });
 
+  it("Colar texto organiza com IA, cria e abre o editor", async () => {
+    api.getSermonAi.mockResolvedValue({ enabled: true, models: [{ id: "anthropic:claude-opus-5-5", label: "Claude Opus 5.5" }] });
+    api.createSermonFromText.mockResolvedValue(sermon({ id: "colada" }));
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Colar texto/ }));
+    fireEvent.change(await screen.findByRole("textbox", { name: "Texto da palavra" }), { target: { value: "A luz\n1. A luz chama" } });
+    fireEvent.click(screen.getByRole("button", { name: /Organizar e criar/ }));
+    expect(await screen.findByText("Editor aberto")).toBeInTheDocument();
+    expect(api.createSermonFromText).toHaveBeenCalledWith({ text: "A luz\n1. A luz chama" });
+  });
+
   it("sem permissão de edição não oferece Nova palavra", async () => {
     perms.edit = false;
     renderPage();
     await screen.findByText("A luz do mundo");
     expect(screen.queryByRole("button", { name: /Nova palavra/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Colar texto/ })).not.toBeInTheDocument();
   });
 
   it("biblioteca vazia convida a escrever a primeira", async () => {
