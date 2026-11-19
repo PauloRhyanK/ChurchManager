@@ -266,8 +266,9 @@ class FonteLocal:
 #  A FONTE CULTOS: as musicas montadas no ChurchManager
 #
 #  Le o culto pronto para executar, no formato fixado na especificacao do
-#  modulo Cultos ("Contrato para a Ponte"). A ROTA DE LA AINDA NAO EXISTE
-#  (19/11/2026): isto foi escrito contra o formato, e testado so com ele.
+#  modulo Cultos ("Contrato para a Ponte"). A rota existe no ChurchManager
+#  desde 20/11/2026 (PR #27), mas ESTE CODIGO SO FOI TESTADO CONTRA O FORMATO,
+#  nunca contra o servidor de verdade.
 #
 #  A igreja liga para fora, como sempre; se a internet cair, vale a ultima
 #  resposta guardada em disco (_culto_do_dia.json).
@@ -319,8 +320,10 @@ def musica_do_cultos(song, tabela, achar_no_holyrics=None):
         })
     audio = song.get("audio") if isinstance(song.get("audio"), dict) else {}
     titulo = str(song.get("title") or "")
-    holyrics_id = None
-    if achar_no_holyrics is not None and titulo:
+    # O id vem da ficha da musica no ChurchManager quando alguem preencheu;
+    # senao, procura-se pelo titulo.
+    holyrics_id = song.get("holyricsId") or None
+    if not holyrics_id and achar_no_holyrics is not None and titulo:
         try:
             holyrics_id = achar_no_holyrics(titulo)
         except Exception:
@@ -344,7 +347,10 @@ class FonteCultos:
 
     def __init__(self, url, slug, chave, caminho, tabela, achar_no_holyrics=None, buscar=None,
                  agora=time.monotonic):
-        self._endereco = "{}/public/tenants/{}/worship/services/next".format(str(url).rstrip("/"), slug)
+        base = str(url).rstrip("/")
+        if not base.endswith("/api"):
+            base += "/api"
+        self._endereco = "{}/public/tenants/{}/worship/services/next".format(base, slug)
         self._chave = str(chave or "")
         self._caminho = caminho
         self._tabela = tabela
@@ -360,6 +366,8 @@ class FonteCultos:
     def _pela_rede(self):
         import requests
         resposta = requests.get(self._endereco, headers={"x-ponte-key": self._chave}, timeout=8)
+        if resposta.status_code == 401:
+            raise RuntimeError("o ChurchManager recusou a chave da integração (bloco cultos do config.yaml)")
         if resposta.status_code != 200:
             raise RuntimeError("o ChurchManager respondeu {}".format(resposta.status_code))
         return resposta.json()

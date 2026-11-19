@@ -92,8 +92,8 @@ dela, `configurar-este-pc.bat` pergunta o papel da máquina e faz o resto. Detal
   sermão, versículo pela referência), o celular do pregador (link que vale só naquele
   culto, pelo Wi-Fi e pela versão web) e a leitura das músicas do ChurchManager pelo
   contrato. **Os nomes das ações do Holyrics para versículo e texto não foram
-  confirmados** (`python verificar_palavra.py` confere), e a rota do ChurchManager que
-  entrega músicas e palavra ainda não existe.
+  confirmados** (`python verificar_palavra.py` confere), e a leitura do ChurchManager foi testada só
+  contra o formato, nunca contra o servidor.
 - **Feito e testado só localmente:** instalador `configurar-este-pc`; o cofre da versão
   web e o envio da configuração pelo PC principal.
 - **Escrito e ainda não testado num Windows:** `instalar-do-zero.ps1`, o instalador de

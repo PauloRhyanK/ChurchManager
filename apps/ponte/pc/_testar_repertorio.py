@@ -194,7 +194,21 @@ def buscar():
 
 
 fonte = repertorio.FonteCultos("https://api.exemplo/", "igreja", "segredo-da-igreja", guardado, lambda: TABELA, buscar=buscar)
-conferir("o endereco segue o contrato", fonte._endereco == "https://api.exemplo/public/tenants/igreja/worship/services/next")
+conferir("o endereco segue o contrato", fonte._endereco == "https://api.exemplo/api/public/tenants/igreja/worship/services/next")
+conferir("url que ja termina em /api nao ganha outro", repertorio.FonteCultos(
+    "http://localhost:3312/api", "demo", "k", guardado, lambda: TABELA)._endereco == "http://localhost:3312/api/public/tenants/demo/worship/services/next")
+com_id = dict(RESPOSTA["songs"][0], holyricsId="1741522267781")
+conferir("holyricsId da ficha vale mais que a busca pelo titulo",
+         repertorio.musica_do_cultos(com_id, TABELA, lambda titulo: "999")["holyrics_id"] == "1741522267781")
+vazia = repertorio.FonteCultos("https://api.exemplo", "igreja", "k", guardado + ".vazio", lambda: TABELA,
+                               buscar=lambda: {"version": "vazio", "service": None, "sermon": None, "songs": []})
+vazia.atualizar()
+conferir("sem culto marcado: lista vazia, sem palavra, sem estourar", vazia.musicas() == [] and vazia.palavra() is None and vazia.culto() is None)
+so_titulo = repertorio.FonteCultos("https://api.exemplo", "igreja", "k", guardado + ".t", lambda: TABELA,
+                                   buscar=lambda: {"songs": [], "sermon": {"title": "Luz", "preacherName": "Pr. X", "estimatedMinutes": 35}})
+so_titulo.atualizar()
+conferir("palavra so com titulo (sem slides ainda) nao estoura",
+         so_titulo.palavra()["titulo"] == "Luz" and so_titulo.palavra()["slides"] == [] and so_titulo.palavra()["minutos"] == 35)
 conferir("antes de buscar: lista vazia, sem estourar", fonte.musicas() == [] and fonte.palavra() is None)
 fonte.atualizar()
 conferir("depois de buscar: as musicas do culto", [x["id"] for x in fonte.musicas()] == ["c1", "c2"] and len(fonte.versao()) == 12)

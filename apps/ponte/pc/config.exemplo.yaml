@@ -1077,6 +1077,9 @@ web:
 #
 # repertorio:
 #   fonte: cultos
+# cultos:
 #   url: https://api.igrejaparaiso.com.br
 #   slug: igreja-paraiso
-#   chave: "COLE-AQUI-A-CHAVE-DA-INTEGRACAO"     # segredo: só neste arquivo
+#   # A chave é gerada no painel do ChurchManager, em Cultos › Roteiro ›
+#   # "Ponte do Culto", e aparece uma vez só. É segredo: só neste arquivo.
+#   chave: "COLE-AQUI-A-CHAVE-DA-INTEGRACAO"

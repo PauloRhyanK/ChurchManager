@@ -2937,11 +2937,14 @@ def _montar_ao_vivo():
         str(conf_relogio.get("fonte") or "navegador"), conf_relogio.get("adiantar_ms") or 0)
     _pecas["medidor"] = mod_obs_ouvinte.Medidor()
     ao_vivo = mod_ao_vivo.PainelAoVivo(_pecas)
-    conf_rep = _config.get("repertorio") or {}
+    conf_rep = dict(_config.get("repertorio") or {})
+    # Endereco, slug e chave moram no bloco `cultos`; `repertorio.fonte` diz
+    # de onde ler.
+    for chave, valor in (_config.get("cultos") or {}).items():
+        conf_rep.setdefault(chave, valor)
     fonte_cultos = None
     if conf_rep.get("fonte") == "cultos" and conf_rep.get("url") and conf_rep.get("slug"):
-        # As musicas montadas no ChurchManager. A rota de la ainda nao existe
-        # (19/11/2026); ver o fim de ponte/repertorio.py.
+        # As musicas montadas no ChurchManager; ver o fim de ponte/repertorio.py.
         fonte_cultos = mod_repertorio.FonteCultos(
             conf_rep["url"], conf_rep["slug"], conf_rep.get("chave"),
             os.path.join(RAIZ, "_culto_do_dia.json"), ao_vivo.tabela, _achar_no_holyrics)

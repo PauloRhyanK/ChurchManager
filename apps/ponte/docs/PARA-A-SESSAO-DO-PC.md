@@ -341,11 +341,15 @@ A seção 12 diz que isto "não foi construído". Foi, em seguida, na branch
   (`POST /api/espelho/pedidos`, até 20 s) para o toque chegar na hora. A chave "Só
   mostra" não corta o pregador.
 - **Músicas do ChurchManager** (`FonteCultos`, no fim de `ponte/repertorio.py`): liga com
-  `repertorio: { fonte: cultos, url, slug, chave }` no config. **A rota de lá ainda não
-  existe**; foi escrito contra o formato da especificação do módulo Cultos e testado só
-  com ele. Guarda a última resposta em `_culto_do_dia.json` para o caso de a internet
-  cair. O id da música no Holyrics é procurado pelo título (`GetSongs`), o que também
-  não foi testado.
+  `repertorio: { fonte: cultos }` e o bloco `cultos: { url, slug, chave }` no config. A
+  rota existe no ChurchManager desde 20/11/2026 (PR #27, ainda fora da `qa`), mas **este
+  código só foi testado contra o formato, nunca contra o servidor**. A chave é gerada no
+  painel, em Cultos › Roteiro › "Ponte do Culto". Guarda a última resposta em `_culto_do_dia.json` para o caso de a internet
+  cair. O id da música no Holyrics vem da ficha dela no ChurchManager (`holyricsId`);
+  quando está vazio, é procurado pelo título (`GetSongs`), o que não foi testado. **A
+  ponte supõe que o slide N do ChurchManager é o slide N da música no Holyrics**, o que
+  só vale se a letra foi colada lá pelo "Letra para o Holyrics". Música antiga do
+  Holyrics, com outra divisão, sai com a letra fora do lugar.
 - A agenda passou a dizer quanto falta do momento atual mesmo sem a hora do culto.
 
 **Testes novos:** `_testar_palavra.py` (ponta a ponta do toque do pregador, pelo Wi-Fi e
