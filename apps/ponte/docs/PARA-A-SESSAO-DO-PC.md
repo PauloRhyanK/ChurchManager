@@ -439,6 +439,61 @@ nem à luz enquanto ninguém escolher uma música ou passar um slide.
   do ar ou a chave errada, a lista de músicas fica vazia (ou com a última resposta
   guardada em `_culto_do_dia.json`) e o resto do painel segue.
 
+### 15. Ver e passar slides pelo painel, e o passador que sempre funciona (20/11/2026)
+
+Branch `claude/ponte-passador-slides`. **Nada disto rodou num Windows nem com o
+passador.**
+
+**O que mudou**
+
+- **`ponte/telao.py`** (novo): uma vez por segundo pergunta ao Holyrics o que está no
+  telão (`GetCurrentPresentation`); quando a apresentação muda, pede a lista de slides
+  (`include_slides`). Passa com `ActionNext`, `ActionPrevious` e `ActionGoToIndex`. Os
+  nomes foram conferidos na documentação do API Server (as três ações desde a 2.19.0, a
+  lista de slides desde a 2.21.0, e ela não vem para versículo).
+- **No painel**, no cartão do momento: slide atual, próximo, a lista com o atual
+  destacado, Anterior e Próximo (barra de espaço), e tocar num slide para ir a ele. Ação
+  nova, só local: `telao_slide`. Com a Ponte conduzindo uma música, passar à mão assume a
+  letra (é o `ir_slide` do condutor); na palavra, anda nos slides dela.
+- **`ponte/passador.py`** (novo): Raw Input do Windows, numa janela invisível, com
+  `RIDEV_INPUTSINK` (recebe as teclas com qualquer janela em foco). Reconhece o passador
+  pelo nome do dispositivo (`VID_046D&PID_C53E`), ignora os outros teclados, e chama o
+  mesmo caminho dos botões do painel. Só no PC principal.
+- **`descobrir_passador.py`** (novo, no `PACOTE`): lista os teclados e mostra cada tecla
+  com o dispositivo de onde veio.
+- Em "Telão e palco" o painel mostra o passador: conectado ou não, e o último clique.
+- Corrigido de passagem: duas leituras simultâneas do `_palavra_do_dia.json` podiam
+  devolver "sem palavra" por um instante.
+- Testes: `_testar_telao_passador.py`.
+
+**O que só dá para conferir aí, nesta ordem**
+
+1. `python descobrir_passador.py`. O receptor aparece na lista com "-> PASSADOR"? Se
+   não, anote o `VID_...&PID_...` da linha dele e escreva em `passador.dispositivo`.
+2. Aperte os três botões e anote a tecla de cada um. **Eu não achei em documento nenhum
+   quais teclas o Spotlight manda de fábrica**; supus "PageDown"/"PageUp" ou setas. Se
+   forem outras, escreva em `passador.proximo` e `passador.anterior`. O botão de cima
+   (o do ponteiro) pode não mandar tecla nenhuma.
+3. Se o **Logi Options+** estiver instalado, ele pode trocar as teclas e até segurar o
+   aparelho para si. Veja o que o passo 2 mostra com ele aberto e fechado.
+4. Suba a ponte. Deve aparecer `[passador] ouvindo o passador de slides` na janela
+   preta. Com o **navegador** em foco e uma música aberta no Holyrics, aperte avançar:
+   o telão passa **um** slide e o painel mostra o clique.
+5. Com o **Holyrics** em foco, aperte avançar: o telão passa **um** slide, não dois, e o
+   painel diz "o Holyrics estava em foco e passou sozinho". Se passar dois, a detecção
+   de foco falhou (`holyrics_em_foco()` procura "holyrics" no título da janela e no
+   caminho do programa): anote o título exato da janela.
+6. Com o **OBS** em foco, e depois com a janela de saída do telão em tela cheia.
+7. Tire o receptor da USB: em até 10 segundos o painel diz que não achou o receptor.
+   Ponha de volta e aperte um botão.
+8. O painel: `GetCurrentPresentation` com `include_slides` devolve a letra com o token
+   da igreja? E `ActionNext`, `ActionPrevious`, `ActionGoToIndex` têm permissão? Sem
+   permissão o botão responde "o slide não passou" com o motivo.
+9. Abra um **versículo** no Holyrics: a lista não vem (é do Holyrics), o painel mostra
+   só "slide N" e os botões têm que passar do mesmo jeito.
+
+**Para desligar** sem mexer em código: `passador: { ativo: false }` no `config.yaml`.
+
 ## O que NÃO foi testado
 
 Do painel do culto ao vivo (seções 12 e 13): nada rodou contra OBS, Holyrics, YouTube ou

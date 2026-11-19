@@ -179,8 +179,18 @@ class HolyricsSimulado:
             if acao == "GetCurrentPresentation":
                 if self.musica is None:
                     return {"status": "ok", "data": None}
-                return {"status": "ok", "data": {"type": "song", "name": "Música " + self.musica,
-                                                 "slide_number": self.slide + 1, "total_slides": 40}}
+                dados = {"id": self.musica, "type": "song", "name": "Música " + self.musica,
+                         "slide_number": self.slide + 1, "total_slides": 40}
+                if payload.get("include_slides"):
+                    dados["slides"] = [{"number": s["number"], "text": s["text"], "slide_description": ""}
+                                       for s in self.slides_de(self.musica)]
+                return {"status": "ok", "data": dados}
+            if acao == "ActionNext":
+                self.slide = min(39, self.slide + 1)
+                return {"status": "ok"}
+            if acao == "ActionPrevious":
+                self.slide = max(0, self.slide - 1)
+                return {"status": "ok"}
             if acao == "GetF10":
                 return {"status": "ok", "data": self.preta}
             if acao == "SetF10":
