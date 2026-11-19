@@ -18,6 +18,7 @@ import { StorageModule } from './modules/storage/storage.module';
 import { MailModule } from './modules/mail/mail.module';
 import { RequestLoggingInterceptor } from './common/request-logging.interceptor';
 import { ChurchModule } from './modules/church/church.module';
+import { WorshipModule } from './modules/worship/worship.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { ChurchModule } from './modules/church/church.module';
     ProjectionModule,
     StorageModule,
     ChurchModule,
+    WorshipModule,
   ],
   providers: [
     {
