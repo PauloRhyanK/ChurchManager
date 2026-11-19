@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { LoginPage } from "@/features/auth/pages/LoginPage";
 import { ForgotPasswordPage } from "@/features/auth/pages/ForgotPasswordPage";
@@ -10,6 +11,12 @@ import EventSettingsPage from "@/features/events/pages/EventSettingsPage";
 import RegistrationsPage from "@/features/events/pages/RegistrationsPage";
 import CheckinPage from "@/features/checkin/pages/CheckinPage";
 import ChurchPage from "@/features/church/pages/ChurchPage";
+import SongsListPage from "@/features/worship/pages/SongsListPage";
+import NewSongPage from "@/features/worship/pages/NewSongPage";
+import SongEditorPage from "@/features/worship/pages/SongEditorPage";
+import ServicePlanPage from "@/features/worship/pages/ServicePlanPage";
+import SermonsListPage from "@/features/sermons/pages/SermonsListPage";
+import SermonSlidesPage from "@/features/sermons/pages/SermonSlidesPage";
 import UsersListPage from "@/features/access/pages/UsersListPage";
 import InviteUserPage from "@/features/access/pages/InviteUserPage";
 import PermissionGroupsPage from "@/features/access/pages/PermissionGroupsPage";
@@ -25,6 +32,24 @@ import PlatformChurches from "@/pages/PlatformChurches";
 import { PlatformAdminRoute } from "./PlatformAdminRoute";
 import { PermissionRoute } from "./PermissionRoute";
 import { ProtectedRoute } from "./ProtectedRoute";
+
+const SermonEditorPage = lazy(() => import("@/features/sermons/pages/SermonEditorPage"));
+
+/** Remonta o editor quando a palavra muda (o documento é estado local). */
+function SermonEditorRoutePage() {
+  const { id } = useParams<{ id: string }>();
+  return (
+    <Suspense fallback={null}>
+      <SermonEditorPage key={id} />
+    </Suspense>
+  );
+}
+
+/** Remonta o editor quando a música muda (o documento da letra é estado local). */
+function SongEditorRoutePage() {
+  const { id } = useParams<{ id: string }>();
+  return <SongEditorPage key={id} />;
+}
 
 /** Remonta o formulário quando o id muda (ex.: de /eventos/novo para /eventos/:id/editar). */
 function EventFormRoutePage() {
@@ -56,6 +81,21 @@ export function AppRoutes() {
             <Route path="/eventos/novo" element={<EventFormRoutePage />} />
             <Route path="/eventos/:id/editar" element={<EventFormRoutePage />} />
           </Route>
+        </Route>
+        <Route element={<PermissionRoute module="WORSHIP" />}>
+          <Route path="/cultos" element={<Navigate to="/cultos/musicas" replace />} />
+          <Route path="/cultos/musicas" element={<SongsListPage />} />
+          <Route element={<PermissionRoute module="WORSHIP" level="EDIT" />}>
+            <Route path="/cultos/musicas/nova" element={<NewSongPage />} />
+          </Route>
+          <Route path="/cultos/musicas/:id" element={<SongEditorRoutePage />} />
+          <Route path="/cultos/roteiro" element={<ServicePlanPage />} />
+        </Route>
+        <Route element={<PermissionRoute module="SERMONS" />}>
+          <Route path="/palavras" element={<SermonsListPage />} />
+          <Route path="/palavras/:id" element={<SermonEditorRoutePage />} />
+          {/* Conferência dos slides: com o menu, como a lista (o editor fica sem ele). */}
+          <Route path="/palavras/:id/slides" element={<SermonSlidesPage />} />
         </Route>
         {/* O site é gerido na aba Site de Igreja; /site fica como atalho. */}
         <Route path="/site" element={<Navigate to="/igreja?aba=site" replace />} />
