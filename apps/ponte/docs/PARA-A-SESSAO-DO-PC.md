@@ -549,6 +549,48 @@ botões passam a letra à mão, e a tela do músico avisa.
    não casarem aparecem no roteiro mas não trocam câmera nem luz; escreva o par em
    `roteiro.momentos`.
 
+### 17. "No ar" só quando o YouTube confirma (20/11/2026)
+
+Branch `claude/ponte-youtube-recebendo`. **Nunca rodou contra o YouTube de verdade.**
+
+**O que mudou**
+
+- **`ponte/recepcao.py`** (novo): com o OBS enviando, pergunta ao YouTube o estado do
+  stream (`streamStatus`, `healthStatus.status`) e da transmissão do dia
+  (`lifeCycleStatus`, `boundStreamId`), descobre de qual stream é a chave que está no OBS,
+  e devolve um de cinco casos: `ok`, `aguardando`, `nao_recebe`, `outra_chave`,
+  `nao_iniciada` (e `sem_transmissao`, quando o canal não tem nada).
+- **`ponte/youtube.py`**: `estado_dos_streams(ids)` e `iniciar(id)` (o `transition` para
+  `live`).
+- **`app.py`**: o retrato ganhou `transmissao.recepcao`; três ações novas, só locais:
+  `yt_iniciar`, `yt_usar_chave`, `yt_reconectar`. A troca de chave do OBS virou uma função
+  (`_gravar_chave_no_obs`) usada pela tela `/youtube` e pela ação nova; a chave anterior
+  continua sendo guardada em `_obs_stream_anterior.json`.
+- **A chave do OBS não é guardada**: a Ponte guarda só o SHA-256 dela, para saber quando
+  mudou. O valor nunca vai para o retrato, para o histórico nem para o navegador.
+- **No painel**: selo verde só com os dois de acordo; faixa vermelha com os botões; item
+  no "Aconteceu agora" quando o caso muda (e "O YouTube voltou a receber").
+- Testes: `_testar_recepcao.py`, com respostas de mentira para cada caso.
+
+**O que só dá para conferir aí, numa transmissão de teste (não listada), fora de culto**
+
+1. Começar a transmitir normalmente: em até 45 segundos o selo fica verde.
+2. **Não iniciada:** preparar uma transmissão sem "iniciar sozinha", começar a enviar e não
+   iniciar no YouTube Studio. O painel acusa? "Iniciar no YouTube" põe no ar? **Eu não sei
+   se o YouTube aceita o `transition` direto de `ready` para `live`** em toda
+   configuração (com monitor de prévia ligado ele pode exigir passar por `testing`); se
+   recusar, o botão mostra a recusa e a saída é iniciar pelo Studio.
+3. **Outra chave:** pôr no OBS a chave de outro stream do canal e começar. O painel acusa?
+   "Usar a chave desta transmissão" seguido de "Reconectar o OBS" resolve?
+4. **Não recebe:** com o envio no ar, bloquear a saída do notebook para o YouTube (ou tirar
+   o cabo por um minuto e ver o OBS em "reconectando"). O painel acusa em até 2 minutos
+   (depois dos 3 primeiros, a conferência é de 2 em 2)? Se 2 minutos for muito, o número
+   é `NORMAL` em `ponte/recepcao.py`.
+5. **Quanto tempo o YouTube leva** para dizer `active` depois que o OBS começa. Se passar
+   de 30 segundos, o painel vai dar alarme falso na largada: aumentar `ESPERA`.
+6. "Reconectar o OBS" com a gravação ligada: a gravação continua?
+7. A cota: no console do Google Cloud, quanto um culto inteiro gastou.
+
 ## O que NÃO foi testado
 
 Do painel do culto ao vivo (seções 12 e 13): nada rodou contra OBS, Holyrics, YouTube ou

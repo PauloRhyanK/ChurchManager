@@ -30,6 +30,7 @@ from ponte import passador as mod_passador
 from ponte import roteiro as mod_roteiro
 from ponte import vs as mod_vs
 from ponte import vs_reaper as mod_vs_reaper
+from ponte import recepcao as mod_recepcao
 from ponte import telao as mod_telao
 from ponte import relogio as mod_relogio
 from ponte import repertorio as mod_repertorio
@@ -1512,27 +1513,104 @@ def youtube_aplicar_chave(cid, id_chave):
         return jsonify({"erro": str(erro)}), 400
 
     try:
-        atual = obs.pedir("GetStreamServiceSettings")
-        cfg_atual = dict(atual.get("streamServiceSettings") or {})
-        # Guarda o que estava la antes de sobrescrever. Se a chave anterior
-        # for de outro canal, ela pode nao estar a mao na hora de voltar.
-        guarda = os.path.join(RAIZ, "_obs_stream_anterior.json")
-        if not os.path.exists(guarda):
-            with open(guarda, "w", encoding="utf-8") as arquivo:
-                json.dump({"streamServiceType": atual.get("streamServiceType"),
-                           "streamServiceSettings": cfg_atual}, arquivo)
-        novo = dict(cfg_atual)
-        novo["key"] = dados["chave"]
-        if dados.get("servidor"):
-            novo["server"] = dados["servidor"]
-        obs.pedir("SetStreamServiceSettings", {
-            "streamServiceType": atual.get("streamServiceType") or "rtmp_common",
-            "streamServiceSettings": novo,
-        })
+        _gravar_chave_no_obs(obs, dados)
     except Exception as erro:
         return jsonify({"erro": "nao consegui gravar no OBS: {}".format(erro)}), 502
 
     return jsonify({"aplicado": True, "canal": canal["nome"]})
+
+
+def _gravar_chave_no_obs(obs, dados):
+    """Poe no OBS uma chave do YouTube ({"chave", "servidor"}). O valor nunca
+    passa pelo navegador nem por log."""
+    atual = obs.pedir("GetStreamServiceSettings")
+    cfg_atual = dict(atual.get("streamServiceSettings") or {})
+    # Guarda o que estava la antes de sobrescrever. Se a chave anterior
+    # for de outro canal, ela pode nao estar a mao na hora de voltar.
+    guarda = os.path.join(RAIZ, "_obs_stream_anterior.json")
+    if not os.path.exists(guarda):
+        with open(guarda, "w", encoding="utf-8") as arquivo:
+            json.dump({"streamServiceType": atual.get("streamServiceType"),
+                       "streamServiceSettings": cfg_atual}, arquivo)
+    novo = dict(cfg_atual)
+    novo["key"] = dados["chave"]
+    if dados.get("servidor"):
+        novo["server"] = dados["servidor"]
+    obs.pedir("SetStreamServiceSettings", {
+        "streamServiceType": atual.get("streamServiceType") or "rtmp_common",
+        "streamServiceSettings": novo,
+    })
+
+
+# -- o YouTube esta recebendo? (ponte/recepcao.py) -----------------------------
+_recepcao = {"valor": None}
+
+
+def _chave_que_esta_no_obs():
+    """So para comparar com as chaves do canal. Nunca e guardada nem escrita."""
+    obs = _contexto.get("obs_saude")
+    if obs is None:
+        return None
+    try:
+        return (obs.pedir("GetStreamServiceSettings").get("streamServiceSettings") or {}).get("key")
+    except Exception:
+        return None
+
+
+def _enviando_ha():
+    obs = _estado.get("obs") or {}
+    if not obs.get("transmitindo") or obs.get("tempo_ms") is None:
+        return None
+    return obs["tempo_ms"] / 1000.0
+
+
+def _montar_recepcao():
+    def clientes():
+        return [(canal["nome"], canal["cliente"]) for canal in (_contexto.get("youtube") or {}).values()
+                if canal["cliente"].autorizado()]
+    return mod_recepcao.VigiaDaRecepcao(
+        clientes, _chave_que_esta_no_obs, _enviando_ha,
+        lambda titulo, ok, detalhe: _anotar(titulo, ok, detalhe, "ponte"))
+
+
+def _acao_da_recepcao(tipo):
+    """As tres saidas de um toque para quando o YouTube nao recebe. Devolve
+    (corpo, codigo). So a pedido de alguem; nada disto acontece sozinho."""
+    vigia = _recepcao["valor"]
+    obs = _contexto.get("obs")
+    if vigia is None:
+        return {"erro": "este PC não confere o YouTube"}, 400
+    if tipo == "yt_iniciar":
+        return vigia.iniciar_no_youtube()
+    if obs is None:
+        return {"erro": "a transmissão está desligada neste PC"}, 400
+    if tipo == "yt_usar_chave":
+        cliente, id_stream = vigia.stream_da_transmissao()
+        if cliente is None:
+            return {"erro": "não achei a chave da transmissão de hoje. Espere a próxima conferência."}, 409
+        _gravar_chave_no_obs(obs, cliente.chave_de(id_stream))
+        vigia.conferir_ja()
+        return {"ok": True, "titulo": "Chave da transmissão de hoje posta no OBS",
+                "detalhe": "toque em Reconectar o OBS para ela valer"}, 200
+    if tipo == "yt_reconectar":
+        # Parar e comecar de novo: o OBS so usa uma chave nova, ou refaz uma
+        # ligacao morta, num envio novo. Quem assiste ve alguns segundos fora.
+        try:
+            obs.pedir("StopStream")
+        except Exception:
+            pass
+        for _ in range(20):
+            time.sleep(0.5)
+            try:
+                if not obs.pedir("GetStreamStatus").get("outputActive"):
+                    break
+            except Exception:
+                break
+        obs.pedir("StartStream")
+        vigia.conferir_ja()
+        _pedir_estado_ja()
+        return {"ok": True, "titulo": "OBS reconectado ao YouTube", "detalhe": "conferindo se chegou"}, 200
+    return {"erro": "o painel não sabe fazer isso"}, 400
 
 
 def _sistema(nome, estado, detalhe):
@@ -2402,6 +2480,9 @@ def _retrato_do_painel():
             "gravando": bool(obs.get("gravando")),
             "tempo_ms": obs.get("tempo_ms"),
             "youtube": _yt_painel["dados"],
+            # O YouTube esta recebendo o que o OBS manda? (ponte/recepcao.py).
+            # None quando este PC nao tem YouTube autorizado.
+            "recepcao": _recepcao["valor"].retrato() if _recepcao["valor"] is not None else None,
         }
     telao = None
     if holyrics is not None:
@@ -2599,6 +2680,13 @@ def _acao_do_painel(dados, origem):
             cliente.pedir("TriggerStudioModeTransition")
             titulo = "Imagem preparada posta no ar"
             resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
+        elif tipo in ("yt_iniciar", "yt_usar_chave", "yt_reconectar"):
+            if origem == "web":
+                return {"erro": "isso só pode ser feito na igreja"}, 403
+            resultado, codigo = _acao_da_recepcao(tipo)
+            if codigo != 200:
+                return resultado, codigo
+            _yt_painel["pedir"] = True
         elif tipo == "visibilidade":
             valor = str(dados.get("valor") or "")
             if valor not in ("public", "unlisted"):
@@ -2766,6 +2854,22 @@ def relogio_avisar():
     aceito = relogio.avisar(str(corpo.get("fonte") or ""), corpo.get("musica"),
                             corpo.get("posicao"), bool(corpo.get("tocando")))
     return jsonify({"aceito": aceito})
+
+
+@app.post("/api/recepcao/simular")
+def recepcao_simular():
+    """So existe com PONTE_SIMULAR=1: escolhe o que o YouTube de mentira
+    responde ("ok", "nao_recebe", "outra_chave", "nao_iniciada")."""
+    canal = (_contexto.get("youtube") or {}).get("simulado")
+    if not SIMULAR or canal is None:
+        return jsonify({"erro": "só na simulação"}), 404
+    canal["cliente"].cenario = str((request.get_json(silent=True) or {}).get("caso") or "ok")
+    # "outra_chave" e o OBS com a chave de uma transmissao antiga.
+    _contexto["obs"].chave = ("chave-de-mentira-antiga" if canal["cliente"].cenario == "outra_chave"
+                              else "chave-de-mentira-de-hoje")
+    if _recepcao["valor"] is not None:
+        _recepcao["valor"].conferir_ja()
+    return jsonify({"caso": canal["cliente"].cenario})
 
 
 @app.post("/api/passador/simular")
@@ -3244,6 +3348,8 @@ def main():
         from ponte import simulados
         _contexto["obs"] = _contexto["obs_saude"] = simulados.ObsSimulado()
         _contexto["holyrics"] = _contexto["holyrics_saude"] = simulados.HolyricsSimulado()
+        _contexto["youtube"] = {"simulado": {"nome": "Canal de mentira",
+                                             "cliente": simulados.YouTubeSimulado(_contexto["obs"])}}
         print("\n  *** SIMULACAO: o OBS e o Holyrics deste painel sao de mentira ***")
     _cues_por_id = indexar_cues(_config)
     _ordens_por_id = indexar_ordens(_config)
@@ -3320,6 +3426,9 @@ def main():
     threading.Thread(target=_vigiar_atualizacao, daemon=True).start()
     if _contexto.get("youtube"):
         threading.Thread(target=_vigiar_youtube, daemon=True).start()
+        if _maquina["principal"] is None:
+            _recepcao["valor"] = _montar_recepcao()
+            _recepcao["valor"].comecar()
     _cofre["valor"] = _montar_cofre()
     if _cofre["valor"] is not None:
         _cofre["valor"].comecar()

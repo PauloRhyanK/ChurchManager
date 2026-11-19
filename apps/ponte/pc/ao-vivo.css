@@ -254,7 +254,9 @@ details.dobra .dentro { display: flex; flex-direction: column; gap: 10px; paddin
 
 /* transmissao */
 .no-ar { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--suave); }
-.no-ar.sim { color: var(--vermelho-texto); }
+.no-ar.sim { color: var(--verde-texto); }
+.no-ar.nao { color: var(--vermelho-texto); }
+.no-ar.duvida { color: var(--ambar-texto); }
 .imagem-obs { aspect-ratio: 16 / 9; border-radius: 10px; border: 2px solid var(--borda); background: var(--botao); position: relative;
   display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .imagem-obs.no-ar-sim { border-color: var(--vermelho); }
