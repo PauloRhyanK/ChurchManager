@@ -70,3 +70,31 @@ test('formatReference', () => {
   assert.equal(formatReference(ref(40, 5, 14, 16)), 'Mateus 5:14-16');
   assert.equal(formatReference(ref(19, 23, null, null)), 'Salmos 23');
 });
+
+test('ponto depois da abreviação', () => {
+  assert.deepEqual(parseReference('Mt. 5:14'), ref(40, 5, 14, 14));
+  assert.deepEqual(parseReference('1 Co. 13:4-7'), ref(46, 13, 4, 7));
+  assert.deepEqual(parseReference('Sl. 23'), ref(19, 23, null, null));
+  assert.deepEqual(parseReference('1ª Co. 13'), ref(46, 13, null, null));
+});
+
+test('limites de versículo', () => {
+  assert.equal(parseReference('mt 5 99999999999999'), null);
+  assert.equal(parseReference('mt 5 1-99999999999999'), null);
+  assert.equal(parseReference('mt 5 201'), null);
+  assert.equal(parseReference('mt 5 1-201'), null);
+  assert.equal(parseReference('mt 5 1000'), null);
+  assert.deepEqual(parseReference('mt 5 200'), ref(40, 5, 200, 200));
+});
+
+test('mais apelidos', () => {
+  assert.deepEqual(parseReference('Cântico dos Cânticos 2 1'), ref(22, 2, 1, 1));
+  assert.equal(parseReference('cantares 2 1')?.book, 22);
+  assert.equal(parseReference('cantico 2 1')?.book, 22);
+  assert.equal(parseReference('marc 1 1')?.book, 41);
+  assert.equal(parseReference('marcos 1 1')?.book, 41);
+  assert.equal(parseReference('jui 1 1')?.book, 7);
+  assert.equal(parseReference('juizes 1 1')?.book, 7);
+  assert.equal(parseReference('esdr 1 1')?.book, 15);
+  assert.equal(parseReference('esdras 1 1')?.book, 15);
+});

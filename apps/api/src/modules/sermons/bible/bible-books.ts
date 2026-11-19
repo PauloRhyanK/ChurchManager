@@ -1,7 +1,7 @@
 export type BibleBook = { number: number; name: string; vpl: string; chapters: number; aliases: string[] };
 
 function plain(text: string): string {
-  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[\s.]+/g, '');
+  return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[\s.]+/g, '');
 }
 
 // [nome, código VPL, capítulos, abreviações extras]. O nome inteiro (sem acento e sem espaço) entra sozinho.
@@ -12,7 +12,7 @@ const RAW: Array<[string, string, number, string[]]> = [
   ['Números', 'NUM', 36, ['nm', 'num']],
   ['Deuteronômio', 'DEU', 34, ['dt', 'deut']],
   ['Josué', 'JOS', 24, ['js', 'jos']],
-  ['Juízes', 'JDG', 21, ['jz', 'juiz']],
+  ['Juízes', 'JDG', 21, ['jz', 'jui', 'juiz']],
   ['Rute', 'RUT', 4, ['rt', 'rut']],
   ['1 Samuel', '1SA', 31, ['1sm', '1sam']],
   ['2 Samuel', '2SA', 24, ['2sm', '2sam']],
@@ -20,14 +20,14 @@ const RAW: Array<[string, string, number, string[]]> = [
   ['2 Reis', '2KI', 25, ['2rs', '2rei']],
   ['1 Crônicas', '1CH', 29, ['1cr', '1cron']],
   ['2 Crônicas', '2CH', 36, ['2cr', '2cron']],
-  ['Esdras', 'EZR', 10, ['ed', 'esd']],
+  ['Esdras', 'EZR', 10, ['ed', 'esd', 'esdr']],
   ['Neemias', 'NEH', 13, ['ne', 'nee']],
   ['Ester', 'EST', 10, ['et', 'est']],
   ['Jó', 'JOB', 42, ['job']],
   ['Salmos', 'PSA', 150, ['sl', 'sal', 'salmo']],
   ['Provérbios', 'PRO', 31, ['pv', 'prov', 'proverbio']],
   ['Eclesiastes', 'ECC', 12, ['ec', 'ecl']],
-  ['Cantares', 'SOL', 8, ['ct', 'cant', 'canticos', 'cantaresdesalomao']],
+  ['Cantares', 'SOL', 8, ['ct', 'cant', 'cantico', 'canticos', 'canticodoscanticos', 'cantaresdesalomao']],
   ['Isaías', 'ISA', 66, ['is', 'isa']],
   ['Jeremias', 'JER', 52, ['jr', 'jer']],
   ['Lamentações', 'LAM', 5, ['lm', 'lam']],
@@ -46,7 +46,7 @@ const RAW: Array<[string, string, number, string[]]> = [
   ['Zacarias', 'ZEC', 14, ['zc', 'zac']],
   ['Malaquias', 'MAL', 4, ['ml', 'mal']],
   ['Mateus', 'MAT', 28, ['mt', 'mat']],
-  ['Marcos', 'MAR', 16, ['mc', 'mar']],
+  ['Marcos', 'MAR', 16, ['mc', 'mar', 'marc']],
   ['Lucas', 'LUK', 24, ['lc', 'luc']],
   ['João', 'JOH', 21, ['jo', 'joa']],
   ['Atos', 'ACT', 28, ['at', 'atosdosapostolos']],

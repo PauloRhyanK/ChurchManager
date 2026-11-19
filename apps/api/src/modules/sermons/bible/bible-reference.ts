@@ -3,7 +3,7 @@ import { BIBLE_BOOKS } from './bible-books';
 export type ParsedReference = { book: number; chapter: number; verseStart: number | null; verseEnd: number | null };
 
 export function normalizeBibleText(text: string): string {
-  return text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
 const ALIAS_TO_BOOK = new Map<string, number>();
@@ -26,7 +26,11 @@ export function parseReference(text: string): ParsedReference | null {
   // "Jó" (com acento) é o livro 18; sem acento, "jo" é João.
   let raw = text.normalize('NFC').trim();
   if (/^jó(?![a-zà-ú])/i.test(raw)) raw = 'job' + raw.slice(2);
-  const s = normalizeBibleText(raw);
+  // ponto logo depois de letra é abreviação ("Mt."); depois de número continua separador ("5.14")
+  const s = normalizeBibleText(raw)
+    .replace(/([a-zªº])\./g, '$1 ')
+    .replace(/^c[aâ]ntico dos canticos\b/, 'canticodoscanticos')
+    .replace(/^cantares de salomao\b/, 'cantaresdesalomao');
   if (!s) return null;
 
   let book: number | undefined;
@@ -49,9 +53,9 @@ export function parseReference(text: string): ParsedReference | null {
   if (!book) return null;
   const info = BIBLE_BOOKS[book - 1];
 
-  const A = /^(\d+)$/.exec(tail);
-  const B = /^(\d+)[\s:.,]+(\d+)(?:\s*[-–]\s*(\d+))?$/.exec(tail);
-  const C = /^(\d+)\s*[-–]\s*(\d+)$/.exec(tail);
+  const A = /^(\d{1,3})$/.exec(tail);
+  const B = /^(\d{1,3})[\s:.,]+(\d{1,3})(?:\s*[-–]\s*(\d{1,3}))?$/.exec(tail);
+  const C = /^(\d{1,3})\s*[-–]\s*(\d{1,3})$/.exec(tail);
   let chapter: number;
   let verseStart: number | null = null;
   let verseEnd: number | null = null;
@@ -72,7 +76,7 @@ export function parseReference(text: string): ParsedReference | null {
   }
 
   if (chapter < 1 || chapter > info.chapters) return null;
-  if (verseStart !== null && (verseStart < 1 || (verseEnd as number) < verseStart)) return null;
+  if (verseStart !== null && (verseStart < 1 || (verseEnd as number) > 200 || (verseEnd as number) < verseStart)) return null;
   return { book, chapter, verseStart, verseEnd };
 }
 
