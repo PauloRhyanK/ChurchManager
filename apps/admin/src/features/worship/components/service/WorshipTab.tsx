@@ -16,14 +16,17 @@ interface WorshipTabProps {
 
 export function WorshipTab({ service, canEdit, saving, onSave, onAdd }: WorshipTabProps) {
   const items = service.songs.map((s) => ({ ...s, key: s.entryId }));
-  const worship = service.moments.find((m) => m.kind === "WORSHIP");
+  // Os itens de música do roteiro, para mostrar o horário de cada uma.
+  const songItems = service.moments.filter((m) => m.kind === "SONG" && m.song);
+  const startsAt = new Map(songItems.map((m) => [m.id, m.startsAt]));
+  const totalSeconds = songItems.reduce((sum, m) => sum + m.effectiveSeconds, 0);
   const notReady = service.songs.filter((s) => s.status !== "READY").length;
 
   return (
     <div className="flex flex-col gap-4">
       {items.length === 0 ? (
         <p className="rounded-xl border px-5 py-8 text-center text-sm text-muted-foreground">
-          Nenhuma música no louvor deste culto ainda.
+          Nenhuma música neste culto ainda.
         </p>
       ) : (
         <SortableList
@@ -37,6 +40,7 @@ export function WorshipTab({ service, canEdit, saving, onSave, onAdd }: WorshipT
             return (
               <>
                 <span className="w-6 flex-none text-right text-sm tabular-nums text-muted-foreground">{index + 1}</span>
+                <span className="w-12 flex-none text-sm tabular-nums text-muted-foreground">{startsAt.get(song.entryId)}</span>
                 <Link to={`/cultos/musicas/${song.id}`} className="min-w-0 flex-1 truncate text-[15px] font-semibold hover:underline">
                   {song.title}
                 </Link>
@@ -86,8 +90,8 @@ export function WorshipTab({ service, canEdit, saving, onSave, onAdd }: WorshipT
         )}
         <span className="text-sm text-muted-foreground">
           {items.length} {items.length === 1 ? "música" : "músicas"}
-          {worship ? ` · ${worship.effectiveMinutes} min` : ""}
-          {service.worshipStartsAt ? ` · começa às ${service.worshipStartsAt}` : ""}
+          {totalSeconds > 0 ? ` · ${formatClock(totalSeconds)} no total` : ""}
+          {service.worshipStartsAt ? ` · a primeira às ${service.worshipStartsAt}` : ""}
         </span>
       </div>
     </div>

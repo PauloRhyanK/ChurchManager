@@ -2,13 +2,34 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
-import type { ServicePlan } from "../../api/worship-api";
+import type { ServiceMoment, ServicePlan } from "../../api/worship-api";
 import { MomentsTab } from "./MomentsTab";
 
 const api = vi.hoisted(() => ({ getServiceSermon: vi.fn() }));
 vi.mock("../../api/worship-api", () => api);
 
 const SERMON = { title: "A luz do mundo", preacherName: "Pr. João", estimatedMinutes: 28, slideCount: 2 };
+
+function moment(m: Pick<ServiceMoment, "id" | "name" | "kind" | "durationMinutes" | "startsAt"> & Partial<ServiceMoment>): ServiceMoment {
+  return { effectiveMinutes: m.durationMinutes, effectiveSeconds: m.durationMinutes * 60, songId: null, song: null, ...m };
+}
+
+const SONG: NonNullable<ServiceMoment["song"]> = {
+  id: "s1",
+  title: "Rio de paz",
+  artist: null,
+  musicalKey: "D",
+  bpm: 68,
+  timeSignature: null,
+  holyricsId: null,
+  status: "READY",
+  pending: [],
+  slideCount: 8,
+  audio: { url: "https://cdn/a.mp3", fileName: "a.mp3", durationSeconds: 250, sizeBytes: 1 },
+  readyAt: null,
+  updatedAt: "",
+  mood: "WORSHIP",
+};
 
 function plan(over: Partial<ServicePlan>): ServicePlan {
   return {
@@ -18,8 +39,8 @@ function plan(over: Partial<ServicePlan>): ServicePlan {
     name: "Culto",
     templateId: null,
     moments: [
-      { id: "m1", name: "Abertura", kind: "GENERIC", durationMinutes: 10, startsAt: "19:00", effectiveMinutes: 10 },
-      { id: "m2", name: "Palavra", kind: "SERMON", durationMinutes: 40, startsAt: "19:10", effectiveMinutes: 40 },
+      moment({ id: "m1", name: "Abertura", kind: "GENERIC", durationMinutes: 10, startsAt: "19:00" }),
+      moment({ id: "m2", name: "Palavra", kind: "SERMON", durationMinutes: 40, startsAt: "19:10" }),
     ],
     endsAt: "19:50",
     worshipStartsAt: null,
@@ -32,14 +53,24 @@ function plan(over: Partial<ServicePlan>): ServicePlan {
 
 function renderTab(service: ServicePlan) {
   const onSave = vi.fn();
+  const onAddSong = vi.fn();
+  const onChooseSong = vi.fn();
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        <MomentsTab service={service} canEdit saving={false} onSave={onSave} onOpenWorship={vi.fn()} />
+        <MomentsTab
+          service={service}
+          canEdit
+          saving={false}
+          onSave={onSave}
+          onAddSong={onAddSong}
+          onChooseSong={onChooseSong}
+          onFillWorship={vi.fn()}
+        />
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  return { onSave };
+  return { onSave, onAddSong, onChooseSong };
 }
 
 describe("MomentsTab: palavra do culto", () => {
@@ -90,8 +121,44 @@ describe("MomentsTab: palavra do culto", () => {
     expect(screen.getByText("Este culto tem uma palavra, mas o roteiro não tem o momento Palavra.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Adicionar o momento Palavra" }));
     expect(onSave).toHaveBeenCalledWith([
-      { id: "m1", name: "Abertura", kind: "GENERIC", durationMinutes: 10 },
+      { id: "m1", name: "Abertura", kind: "GENERIC", durationMinutes: 10, songId: null },
       { name: "Palavra", kind: "SERMON", durationMinutes: 40 },
     ]);
+  });
+});
+
+describe("MomentsTab: músicas no meio do roteiro", () => {
+  const intercalado = () =>
+    plan({
+      moments: [
+        moment({ id: "m1", name: "Abertura", kind: "GENERIC", durationMinutes: 3, startsAt: "19:00" }),
+        moment({ id: "m2", name: "Rio de paz", kind: "SONG", durationMinutes: 5, startsAt: "19:03", songId: "s1", song: SONG, effectiveSeconds: 250, effectiveMinutes: 4 }),
+        moment({ id: "m3", name: "Oração", kind: "GENERIC", durationMinutes: 3, startsAt: "19:07" }),
+        moment({ id: "m4", name: "Música", kind: "SONG", durationMinutes: 5, startsAt: "19:10" }),
+      ],
+      endsAt: "19:15",
+    });
+
+  it("a música é uma linha do roteiro, com tom, bpm, clima e duração, na ordem", () => {
+    renderTab(intercalado());
+    const rows = screen.getAllByRole("listitem").map((li) => li.textContent);
+    expect(rows[1]).toContain("19:03");
+    expect(rows[1]).toContain("Rio de paz");
+    expect(rows[1]).toContain("Tom D · 68 bpm");
+    expect(rows[1]).toContain("Adoração");
+    expect(rows[1]).toContain("4:10");
+    expect(rows[2]).toContain("19:07");
+    expect(screen.getAllByRole("listitem")[2]).toContainElement(screen.getByLabelText("Nome do momento Oração"));
+    expect(screen.getByText("4 itens · 2 músicas · termina às 19:15")).toBeInTheDocument();
+  });
+
+  it("+ Música pede a música; espaço reservado pede a música dele; tirar a música tira o item", () => {
+    const { onSave, onAddSong, onChooseSong } = renderTab(intercalado());
+    fireEvent.click(screen.getByRole("button", { name: "Música" }));
+    expect(onAddSong).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Escolher música" }));
+    expect(onChooseSong).toHaveBeenCalledWith("m4");
+    fireEvent.click(screen.getByRole("button", { name: "Remover Rio de paz" }));
+    expect(onSave.mock.calls[0][0].map((m: { id: string }) => m.id)).toEqual(["m1", "m3", "m4"]);
   });
 });

@@ -1,6 +1,6 @@
 import { api } from "@/lib/api";
 import type { PublicSlide, SlideStyle } from "@/features/sermons/lib/slides";
-import { MAX_PART_NAME, type Pending, type RowPart, type SongStatus, type WorshipRow } from "../lib/document";
+import { MAX_PART_NAME, type Mood, type Pending, type RowPart, type SongStatus, type WorshipRow } from "../lib/document";
 
 export interface SongAudio {
   url: string;
@@ -170,7 +170,7 @@ export async function revokePonteKey(): Promise<PonteKeyStatus> {
 
 // --- roteiro -------------------------------------------------------------------
 
-export type MomentKind = "PRE_SERVICE" | "GENERIC" | "WORSHIP" | "SERMON";
+export type MomentKind = "PRE_SERVICE" | "GENERIC" | "WORSHIP" | "SERMON" | "SONG";
 
 export interface TemplateMoment {
   name: string;
@@ -186,10 +186,15 @@ export interface ServiceTemplate {
   moments: TemplateMoment[];
 }
 
+/** Um item do roteiro: momento ou música (kind SONG), na ordem do culto. */
 export interface ServiceMoment extends TemplateMoment {
   id: string;
   startsAt: string;
   effectiveMinutes: number;
+  effectiveSeconds: number;
+  /** Só em SONG; nulo = espaço reservado para música. */
+  songId: string | null;
+  song: (SongSummary & { mood: Mood | null }) | null;
 }
 
 export interface ServiceSong extends SongSummary {
@@ -292,18 +297,20 @@ export async function deleteService(id: string): Promise<void> {
   await api.delete(`${SERVICES}/${id}`);
 }
 
-export async function setServiceMoments(
-  id: string,
-  moments: { id?: string; name: string; kind: MomentKind; durationMinutes: number }[],
-): Promise<ServicePlan> {
+export interface RoteiroItemBody {
+  id?: string;
+  name: string;
+  kind: MomentKind;
+  durationMinutes: number;
+  songId?: string | null;
+}
+
+export async function setServiceMoments(id: string, moments: RoteiroItemBody[]): Promise<ServicePlan> {
   const body = {
     moments: moments.map((m) => {
-      const item: { id?: string; name: string; kind: MomentKind; durationMinutes: number } = {
-        name: m.name,
-        kind: m.kind,
-        durationMinutes: m.durationMinutes,
-      };
+      const item: RoteiroItemBody = { name: m.name, kind: m.kind, durationMinutes: m.durationMinutes };
       if (m.id) item.id = m.id;
+      if (m.kind === "SONG" && m.songId) item.songId = m.songId;
       return item;
     }),
   };
