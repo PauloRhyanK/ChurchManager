@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_DOC } from "../lib/document";
 import { EXAMPLE_DOC } from "../lib/sermon-example";
@@ -242,6 +242,11 @@ describe("ExportDialog", () => {
       ["Texto d"],
     ]);
     expect(deck[0]).toMatchObject({ width: 1920, height: 1080, background: "#092A1E", color: "#FFFFFF" });
+  });
+
+  it("PPT avisa que o computador precisa das fontes da identidade", () => {
+    renderDialog();
+    expect(within(row("PPT")).getByText("Para abrir com a identidade, o computador precisa ter as fontes Playfair Display e Poppins instaladas.")).toBeInTheDocument();
   });
 
   it("PPT mostra Gerando… enquanto gera e avisa se falhar", async () => {
