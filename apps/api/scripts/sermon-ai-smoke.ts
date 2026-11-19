@@ -9,7 +9,7 @@ import { ANTHROPIC_CLIENT_OPTIONS, AnthropicSummarizer } from '../src/modules/se
 import { describeSermonAiConfig, readSermonAiConfig } from '../src/modules/sermons/ai/sermon-ai.config';
 import { SummarizerError } from '../src/modules/sermons/ai/sermon-summarizer';
 import { EXAMPLE_DOC } from '../src/modules/sermons/sermon-example';
-import { cleanSummaries, summaryTargets } from '../src/modules/sermons/sermon-slides';
+import { aiTargets, cleanDecisions } from '../src/modules/sermons/sermon-slides';
 
 async function main() {
   const config = readSermonAiConfig(process.env);
@@ -24,15 +24,18 @@ async function main() {
     );
     process.exit(1);
   }
-  const targets = summaryTargets(EXAMPLE_DOC);
+  const targets = aiTargets(EXAMPLE_DOC);
   const summarizer = new AnthropicSummarizer(new Anthropic(ANTHROPIC_CLIENT_OPTIONS));
   let failed = 0;
   for (const option of config.models) {
     console.log(`\nModelo: ${option.label} (${option.model}), esforço ${config.effort}. Partes enviadas: ${targets.length}.`);
     try {
       const raw = await summarizer.summarize({ title: 'Luz', targets, model: option.model, effort: config.effort });
-      const summaries = cleanSummaries(targets, raw);
-      for (const t of targets) console.log(`- ${t.label}: ${summaries[t.id] ?? '(sem resumo)'}`);
+      const decisions = cleanDecisions(targets, raw);
+      for (const t of targets) {
+        const d = decisions[t.id];
+        console.log(`- ${t.label}: ${d ? `modelo ${d.layout.slice(1)}${d.text ? ` — ${d.text}` : ''}` : '(sem decisão)'}`);
+      }
     } catch (err) {
       failed++;
       // Os mesmos quatro campos do registro da API: nada do pedido, da resposta nem da chave.
