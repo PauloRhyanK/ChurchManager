@@ -70,12 +70,16 @@ export class PrismaBibleSource implements BibleSource {
 
   async searchText(translation: string, words: string[], limit: number): Promise<Row[]> {
     const likes = words.map((w) => Prisma.sql`v.search_text LIKE ${`%${escapeLike(w)}%`} ESCAPE '\\'`);
+    // Frase exata (sem a pontuação do versículo) vem antes das palavras espalhadas.
+    const phraseLike = `% ${escapeLike(words.join(' '))} %`;
     return this.prisma.$queryRaw<Row[]>`
       SELECT v.book, v.chapter, v.verse, v.text
       FROM bible_verses v
       JOIN bible_translations t ON t.id = v.translation_id
       WHERE t.code = ${translation} AND ${Prisma.join(likes, ' AND ')}
-      ORDER BY v.book, v.chapter, v.verse
+      ORDER BY
+        CASE WHEN ${Prisma.sql`' ' || regexp_replace(regexp_replace(v.search_text, '[^a-z0-9 ]', ' ', 'g'), ' +', ' ', 'g') || ' ' LIKE ${phraseLike} ESCAPE '\\'`} THEN 0 ELSE 1 END,
+        v.book, v.chapter, v.verse
       LIMIT ${limit}`;
   }
 }
@@ -146,7 +150,12 @@ export class BibleService {
   private async byText(code: string, text: string): Promise<BibleSearchResult> {
     const normalized = normalizeBibleText(text);
     if (normalized.length < MIN_TEXT_LENGTH) return NONE;
-    const rows = await this.source.searchText(code, normalized.split(' '), TEXT_LIMIT);
+    const words = normalized
+      .split(' ')
+      .map((w) => w.replace(/[^\p{L}\p{N}]/gu, ''))
+      .filter((w) => w.length >= 2);
+    if (!words.length) return NONE;
+    const rows = await this.source.searchText(code, words, TEXT_LIMIT);
     return {
       mode: 'TEXT',
       hits: rows.map((r) => this.hit(code, r.book, r.chapter, [{ number: r.verse, text: r.text }], null)),

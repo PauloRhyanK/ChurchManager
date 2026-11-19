@@ -3,7 +3,7 @@ import { normalizeBibleText } from './bible-reference';
 
 export type VplVerse = { book: number; chapter: number; verse: number; text: string };
 
-const LINE_RE = /^(\S{3}) (\d+):(\d+) (.*)$/;
+const LINE_RE = /^(\S{3}) (\d{1,3}):(\d{1,3}) (.*)$/;
 const MARKER_RE = /^\[([^\]]+)\]\s*:\s*/;
 
 // Letras do acróstico do Salmo 119 como aparecem no arquivo de origem. Outros colchetes com dois-pontos
@@ -24,7 +24,7 @@ function stripAcrostic(text: string): string {
 export function parseVpl(content: string): VplVerse[] {
   const verses: VplVerse[] = [];
   const seen = new Set<string>();
-  const lines = content.replace(/^﻿/, '').split(/\r?\n/);
+  const lines = content.replace(/^\uFEFF/, '').split(/\r?\n/);
   lines.forEach((raw, i) => {
     if (raw.trim() === '') return;
     const n = i + 1;

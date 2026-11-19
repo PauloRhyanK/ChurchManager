@@ -24,7 +24,7 @@ test('parseVpl: colchetes que não são letra de acróstico ficam no texto', () 
 });
 
 test('parseVpl: aceita BOM e CRLF', () => {
-  const out = parseVpl('﻿GEN 1:1 Um.\r\nGEN 1:2 Dois.\r\n');
+  const out = parseVpl('\uFEFFGEN 1:1 Um.\r\nGEN 1:2 Dois.\r\n');
   assert.equal(out.length, 2);
   assert.equal(out[0].text, 'Um.');
   assert.equal(out[1].text, 'Dois.');
@@ -64,4 +64,10 @@ test('assertCanon: livro faltando falha citando o livro', () => {
 test('assertCanon: capítulo faltando falha citando o livro', () => {
   const set = canonSet().filter((v) => !(v.book === 43 && v.chapter === 21));
   assert.throws(() => assertCanon(set), /João/);
+});
+
+test('parseVpl: capítulo ou versículo com mais de três dígitos é erro com o número da linha', () => {
+  assert.throws(() => parseVpl('GEN 1:1 a\nGEN 1000:1 a'), /[Ll]inha 2/);
+  assert.throws(() => parseVpl('GEN 1:1 a\nGEN 1:2 b\nGEN 1:1234 a'), /[Ll]inha 3/);
+  assert.equal(parseVpl('PSA 119:176 a')[0].verse, 176);
 });

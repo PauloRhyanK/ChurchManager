@@ -10,7 +10,7 @@ import { SermonsService } from './sermons.service';
 /** Palavras: biblioteca privada de pregações de cada pregador. */
 @Module({
   imports: [AuthModule, AccessModule],
-  // BibleController antes de SermonsController: 'bible' não pode cair em ':id'.
+  // 'bible/search' e 'bible/translations' têm dois segmentos e ':id' só um, então as rotas não colidem; a ordem aqui não importa.
   controllers: [BibleController, SermonsController],
   providers: [SermonsService, SermonDeliveryService, BibleService, { provide: BIBLE_SOURCE, useClass: PrismaBibleSource }],
   exports: [SermonsService, SermonDeliveryService],

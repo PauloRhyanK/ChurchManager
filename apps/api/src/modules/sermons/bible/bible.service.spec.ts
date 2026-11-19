@@ -20,6 +20,12 @@ const DATA: V[] = [
   ...[1, 2, 3, 4, 5, 6].map((verse) => ({ book: 19, chapter: 23, verse, text: `Salmo ${verse}` })),
 ];
 
+/** Espelha a ordenação do SQL: frase exata (sem pontuação) primeiro. */
+function phrase(text: string, words: string[]): number {
+  const plain = ` ${text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/ +/g, ' ')} `;
+  return plain.includes(` ${words.join(' ')} `) ? 1 : 0;
+}
+
 function memory(translations = [TR], data = DATA): BibleSource & { calls: string[] } {
   const calls: string[] = [];
   const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -39,7 +45,7 @@ function memory(translations = [TR], data = DATA): BibleSource & { calls: string
       calls.push(translation);
       return data
         .filter((v) => words.every((w) => norm(v.text).includes(w)))
-        .sort((a, b) => a.book - b.book || a.chapter - b.chapter || a.verse - b.verse)
+        .sort((a, b) => phrase(b.text, words) - phrase(a.text, words) || a.book - b.book || a.chapter - b.chapter || a.verse - b.verse)
         .slice(0, limit)
         .map(({ book, chapter, verse, text }) => ({ book, chapter, verse, text }));
     },
@@ -99,6 +105,26 @@ test('busca por trecho exige todas as palavras e ordena pelos livros', async () 
   assert.deepEqual(await svc().search('Luz  MUNDO'), r);
 });
 
+test('pontuação na consulta é ignorada e palavra de um caractere cai', async () => {
+  const ref = (await svc().search('luz do mundo')).hits.map((h) => h.reference);
+  assert.deepEqual(ref, ['Mateus 5:14', 'João 8:12']);
+  for (const q of ['luz, do mundo', 'luz do mundo!', '"luz" (do) mundo?', 'luz do mundo -']) {
+    assert.deepEqual((await svc().search(q)).hits.map((h) => h.reference), ref, q);
+  }
+  assert.deepEqual((await svc().search('?? ... !!')).mode, 'NONE');
+  assert.deepEqual(await svc().search('a ? b'), { mode: 'NONE', hits: [] });
+});
+
+test('frase exata vem antes das palavras espalhadas, cada grupo na ordem dos livros', async () => {
+  const data = [
+    { book: 1, chapter: 1, verse: 1, text: 'A luz brilha do alto sobre o mundo.' },
+    ...DATA,
+    { book: 66, chapter: 1, verse: 1, text: 'Luz, do mundo!' },
+  ];
+  const r = await svc(memory([TR], data)).search('luz do mundo');
+  assert.deepEqual(r.hits.map((h) => h.reference), ['Mateus 5:14', 'João 8:12', 'Apocalipse 1:1', 'Gênesis 1:1']);
+});
+
 test('trecho curto demais é NONE e sem resultado é TEXT vazio', async () => {
   assert.deepEqual(await svc().search('ab'), { mode: 'NONE', hits: [] });
   assert.deepEqual(await svc().search('   '), { mode: 'NONE', hits: [] });
@@ -137,6 +163,10 @@ test('PrismaBibleSource escapa %, _ e \\ e passa tudo como parâmetro', async ()
   assert.ok(nested.strings.join('?').includes("ESCAPE '\\'"));
   assert.ok(values.includes('ARA'));
   assert.ok(values.includes(20));
+  const order = values.find((v): v is SqlLike => typeof v === 'object' && v !== null && 'strings' in v && (v as SqlLike).strings.join('').includes('regexp_replace'));
+  assert.ok(order, 'ordenação por frase exata também é parametrizada');
+  assert.deepEqual(order.values, ['% 100\\% a\\_b c\\\\d %']);
+  assert.ok(order.strings.join('?').includes("ESCAPE '\\'"));
   assert.ok(![...strings, ...nested.strings].join('').match(/100|a_b/));
 });
 

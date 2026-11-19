@@ -8,7 +8,7 @@ As tabelas `bible_translations` e `bible_verses` são globais (sem tenant) e vê
 
 ## Como importar
 
-1. Baixe `https://ebible.org/Scriptures/porbr2018_vpl.zip` e extraia `porbr2018_vpl.txt`. Confira os SHA-256 conferidos em 19/11/2026:
+1. Baixe `https://ebible.org/Scriptures/porbr2018_vpl.zip` e extraia `porbr2018_vpl.txt`. Confira os SHA-256, verificados em 19/11/2026:
    - `porbr2018_vpl.zip`: `3d9c4c8a36d33e16f92258f86ca3eef8c4df230055ec8fb9268594f9100fcda0`
    - `porbr2018_vpl.txt`: `20f7cccf95e99d0b07d3a483aeebe9a0dcad0c8b52cb169cf917c9e684a4d858`
 2. Em `apps/api`, com `DATABASE_URL` do ambiente no `.env`:
