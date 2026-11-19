@@ -153,7 +153,10 @@ def _porteiro():
              # O projeto e publico (esta no GitHub): a versao e o pacote de
              # atualizacao nao levam segredo nenhum, e os PCs secundarios, que
              # nao guardam chave, precisam alcanca-los.
-             "/api/versao", "/api/atualizacao/pacote")
+             "/api/versao", "/api/atualizacao/pacote",
+             # Um PC da igreja perguntando onde o principal esta. Responde so
+             # para quem chega da mesma internet que a igreja.
+             "/api/principal")
     # O celular do pregador entra SEM a senha da equipe: quem autoriza e o
     # codigo do link, conferido em cada rota contra o resumo que a igreja
     # mandou. /api/espelho/pedidos confere a chave da igreja, como /api/espelho.
@@ -563,6 +566,31 @@ def espelho_pedidos():
 
 # -- a igreja ligando ---------------------------------------------------------
 
+_ENDERECO_LOCAL = re.compile(
+    r"^http://(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}"
+    r"|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}):\d{2,5}$")
+
+
+@app.get("/api/principal")
+def onde_esta_o_principal():
+    """Onde o PC principal atende na rede da igreja.
+
+    Quem pergunta e um PC secundario (o do som, o notebook) que perdeu o
+    principal porque o roteador trocou o endereco dele. So responde para
+    quem chega da MESMA internet que a igreja: para o resto do mundo, o
+    endereco da rede interna nao tem serventia e nao e da conta de ninguem.
+    """
+    with _tranca:
+        viva = _igreja_viva()
+        enderecos = list(_igreja.get("enderecos") or [])
+        ip_da_igreja = _igreja.get("ip_publico")
+    if not viva:
+        return jsonify({"erro": "a igreja nao esta conectada agora"}), 404
+    if not ip_da_igreja or _ip() != ip_da_igreja:
+        return jsonify({"erro": "so respondo para quem esta na rede da igreja"}), 403
+    return jsonify({"enderecos": enderecos})
+
+
 @app.post("/api/espelho")
 def espelho():
     """A ponte da igreja entrega o retrato e leva os pedidos."""
@@ -577,6 +605,12 @@ def espelho():
         painel = dados.get("painel")
         _igreja.update({"chegada": chegada, "em": agora, "maquina": str(dados.get("maquina") or ""),
                         "painel": painel if isinstance(painel, dict) else None})
+        # Onde o principal atende na rede da igreja, e de que internet ele
+        # liga. Ver /api/principal.
+        rede = dados.get("rede") if isinstance(dados.get("rede"), dict) else {}
+        _igreja["enderecos"] = [u for u in (rede.get("enderecos") or [])
+                                if isinstance(u, str) and _ENDERECO_LOCAL.match(u)][:6]
+        _igreja["ip_publico"] = _ip()
         conteudo = dados.get("conteudo")
         if isinstance(conteudo, dict) and conteudo.get("versao"):
             _igreja["conteudo"] = conteudo

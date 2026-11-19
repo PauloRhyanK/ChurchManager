@@ -19,6 +19,7 @@ import time
 import yaml
 from flask import Flask, Response, jsonify, request, send_from_directory
 
+from ponte import achar_principal as mod_achar
 from ponte import atualizar as mod_atualizar
 from ponte import condutor as mod_condutor
 from ponte import obs_imagem as mod_obs_imagem
@@ -1862,7 +1863,12 @@ def _montar_espelho():
         return None
     return mod_espelho.Espelho(url, chave, _chegada.retrato, _pedido_da_web,
                                nome=_maquina["nome"],
-                               extra=lambda: {"painel": _retrato_do_painel()},
+                               # `rede`: onde este PC atende na rede da igreja.
+                               # E o que deixa o PC do som achar este aqui
+                               # quando o roteador troca o endereco.
+                               extra=lambda: {"painel": _retrato_do_painel(),
+                                              "rede": {"enderecos": mod_achar.enderecos_locais(
+                                                  _porta["valor"])}},
                                conteudo=_conteudo_para_a_web)
 
 
@@ -1925,7 +1931,43 @@ def aqui_retrato():
     except Exception as erro:
         corpo["principal_ok"] = False
         corpo["erro"] = "sem contato com o PC do Holyrics: {}".format(erro)
+        explicacao = _procurador["valor"].explicar() if _procurador["valor"] else None
+        if explicacao:
+            corpo["erro"] = explicacao
     return jsonify(corpo)
+
+
+# -- achar o principal quando o endereco dele muda -----------------------------
+_procurador = {"valor": None}
+
+
+def _gravar_texto(nome, transformar):
+    caminho = os.path.join(RAIZ, nome)
+    try:
+        with open(caminho, encoding="utf-8") as arq:
+            antes = arq.read()
+    except OSError:
+        return
+    depois = transformar(antes)
+    if depois == antes:
+        return
+    provisorio = caminho + ".novo"
+    with open(provisorio, "w", encoding="utf-8", newline="") as arq:
+        arq.write(depois)
+    os.replace(provisorio, caminho)
+
+
+def _trocar_principal(url):
+    """Passa a falar com o principal em `url`, agora e nos proximos boots."""
+    _maquina["principal"] = url
+    seguidor = _contexto.get("seguidor")
+    if seguidor is not None:
+        seguidor.trocar_url(url)
+    try:
+        _gravar_texto("maquina.yaml", lambda t: mod_achar.com_principal(t, url))
+        _gravar_texto("config.yaml", lambda t: mod_achar.com_url_do_seguidor(t, url))
+    except OSError as erro:
+        print("  [principal] troquei o endereco, mas nao consegui gravar: {}".format(erro))
 
 
 def _local_ou_principal(caminho, local, timeout=4.0):
@@ -3182,6 +3224,11 @@ def main():
         # montar, a ponte sobe mesmo assim e /painel-antigo continua valendo.
         print("  [aviso] painel ao vivo desligado: {}".format(erro))
     threading.Thread(target=_vigiar_atualizacao, daemon=True).start()
+    if _maquina["principal"] is not None:
+        _procurador["valor"] = mod_achar.Procurador(
+            atual=lambda: _maquina["principal"], trocar=_trocar_principal,
+            web=_endereco_de_atualizacao)
+        _procurador["valor"].comecar()
     if _contexto.get("youtube"):
         threading.Thread(target=_vigiar_youtube, daemon=True).start()
     _cofre["valor"] = _montar_cofre()

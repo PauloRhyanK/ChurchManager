@@ -120,6 +120,11 @@ class Seguidor:
         with self._lock:
             return dict(self._estado)
 
+    def trocar_url(self, url):
+        """O principal mudou de endereco (ver ponte/achar_principal.py). A
+        proxima busca ja vai no endereco novo, sem religar nada."""
+        self._url = str(url).rstrip("/") + "/api/luz/quadro"
+
     # -- laco ---------------------------------------------------------------
 
     def _laco(self):
