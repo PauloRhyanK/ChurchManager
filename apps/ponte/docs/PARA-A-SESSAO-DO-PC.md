@@ -375,6 +375,70 @@ pela web, dentro do teste) e mais casos em `_testar_repertorio.py`.
 6. Duas pessoas ao mesmo tempo: pregador e operador tocando em Próximo no mesmo instante
    não podem pular dois slides.
 
+### 14. Como isto chega à igreja, e como voltar atrás (20/11/2026)
+
+As seções 12 e 13 entram juntas. **Nada delas foi visto com equipamento.** Antes de um
+culto, o caminho seguro é o de baixo.
+
+**Como chega**
+
+1. O código entra na `main`. Isso **não** atualiza a Ponte sozinho: a versão web roda de
+   um clone próprio na VPS (`/opt/ponte-do-culto`) e só muda quando alguém roda lá
+   `git pull --ff-only && cd apps/ponte && docker compose up -d --build`
+   (ver `IMPLANTAR-NA-VPS.md`). O CI do repositório cuida só da API.
+2. Com a web nova no ar, cada PC compara os seus arquivos com os dela:
+   - **ao ligar** (pelo `iniciar.py`): atualiza sozinho, **menos** se o papel é `som`, se
+     o `maquina.yaml` tem `atualizar: nunca`, ou se `_ordem_atual.json` indica culto em
+     andamento nas últimas 6 horas;
+   - **ligado**: só aparece a faixa "Há uma atualização da Ponte"; ninguém é atualizado
+     sem alguém tocar em "Atualizar agora".
+3. O **PC do som** não muda (ele roda a versão antiga, fora do instalador). Nada do que
+   foi feito depende dele: clima é cena e movimento que ele já conhece.
+
+**Antes do primeiro culto com este código (recomendado)**
+
+- Ponha `atualizar: nunca` no `maquina.yaml` do PC principal **antes** de a VPS ser
+  atualizada, ou atualize a VPS só depois do culto. Assim quem decide o dia da troca é
+  uma pessoa, não o botão de ligar no domingo.
+- Num dia sem culto: tire o `atualizar: nunca`, ligue, deixe atualizar, e faça os itens
+  1 a 6 da seção 12 e 1 a 4 da seção 13.
+
+**O que este código faz a mais sem ninguém pedir**, e que pode pesar: uma conexão extra
+com o OBS para o nível de áudio; uma chamada `GetStats` a cada 3 segundos; uma captura de
+imagem por segundo **enquanto o painel novo estiver aberto** (desliga no menu Mais, ou
+`painel: { imagem: { ativo: false } }` no config); duas consultas a mais ao YouTube a
+cada 2 minutos durante a transmissão. O louvor e a palavra não mandam nada ao Holyrics
+nem à luz enquanto ninguém escolher uma música ou passar um slide.
+
+**Voltar atrás, do mais leve ao mais pesado**
+
+1. **Só a tela:** abrir `/painel-antigo` (está no menu Mais). É o painel de 12/11,
+   intocado, falando com o mesmo servidor.
+2. **Só a imagem:** menu Mais › "Não mostrar".
+3. **O PC inteiro, para a versão anterior:** fechar a ponte e, na pasta dela,
+   `python -c "from ponte import atualizar; print(atualizar.restaurar('.'))"`. Isso
+   devolve os arquivos guardados em `_versao_anterior/`. Depois ponha
+   `atualizar: nunca` no `maquina.yaml`, senão ele atualiza de novo ao ligar. (Se a
+   versão nova morrer em menos de 45 segundos ao subir, o `iniciar.py` já faz essa volta
+   sozinho.)
+4. **Todo mundo:** na VPS, voltar o clone para o commit anterior e reconstruir
+   (`git checkout <commit> && docker compose up -d --build`). Os PCs comparam "diferente",
+   não "mais novo": ao ligar, ou no botão Atualizar, trazem a versão antiga de volta.
+
+**Músicas do ChurchManager: o que precisa existir**
+
+- Na **API de produção**: o código do PR #27 (rota
+  `GET /api/public/tenants/igreja-paraiso/worship/services/next`) com a migração dele.
+- Uma **chave da integração**, gerada no painel em Cultos › Roteiro › "Ponte do Culto"
+  (aparece uma vez).
+- No **`config.yaml` do PC principal** (não na VPS, que não participa disto):
+  `repertorio: { fonte: cultos }` e `cultos: { url: https://api.igrejaparaiso.com.br,
+  slug: igreja-paraiso, chave: "..." }`.
+- **Sem nada disso, nada quebra**: a função fica desligada e as músicas continuam vindo
+  do `config.yaml` e das marcas da `/louvor`, como hoje. Com o bloco escrito e a API fora
+  do ar ou a chave errada, a lista de músicas fica vazia (ou com a última resposta
+  guardada em `_culto_do_dia.json`) e o resto do painel segue.
+
 ## O que NÃO foi testado
 
 Do painel do culto ao vivo (seções 12 e 13): nada rodou contra OBS, Holyrics, YouTube ou
