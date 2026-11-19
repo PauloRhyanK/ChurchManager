@@ -1,8 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { OutlineBlock } from './ai/sermon-structurer';
 import { validateSermonDocument } from './sermon-document';
-import { buildOutlineDocument, outlineTitle, pastedLines, planOutline, planVerse, type VerseFound } from './sermon-outline';
+import { buildSlides } from './sermon-slides';
+import { normalizeListReference } from './sermon-slides.service';
+import { buildOutlineDocument, dropTitleHeading, outlineTitle, pastedLines, planOutline, planVerse, type VerseFound } from './sermon-outline';
 
 const ids = () => {
   let n = 0;
@@ -128,5 +132,49 @@ describe('outlineTitle', () => {
     assert.equal(outlineTitle('', parts), 'A luz chama');
     assert.equal(outlineTitle('', []), 'Sem título');
     assert.equal(outlineTitle('x'.repeat(300), []).length, 255);
+  });
+});
+
+describe('exemplo colado: "A agenda Profética está em Curso"', () => {
+  // O texto como o pregador colou (organizado por "SLIDES nn") e a divisão que a IA devolveria para ele.
+  const text = readFileSync(join(__dirname, 'fixtures/agenda-profetica-colado.txt'), 'utf8');
+  const title = 'A agenda Profética está em Curso';
+  const point = (line: number, t: string) => block('POINT', line, line, t);
+  const verse = (line: number, ref: string) => block('VERSE', line, line, '', ref);
+  const blocks = [
+    block('HEADING', 1, 1, title),
+    verse(2, 'Isaías 46:10'),
+    block('LIST', 3, 9),
+    point(10, 'Uma Agenda de Poder'), verse(11, '1 Coríntios 1:18'),
+    point(12, 'Uma Agenda Guiada pelo Espírito Santo'), verse(13, '1 Coríntios 2:13'),
+    point(14, 'Uma Agenda de Fé'), verse(15, 'Mateus 7:9'), verse(16, 'Mateus 7:11'),
+    point(17, 'Um Agenda para Reinar em Vida'), verse(18, 'Romanos 5:17'),
+    point(19, 'Uma Agenda que vai abalar tudo mais uma vez'), verse(20, 'Ageu 2:6'), verse(21, 'Isaías 13:13'),
+    point(22, 'Uma Agenda de Tranferência de Riquezas'), verse(23, 'Deuteronômio 8:17'), verse(24, 'Deuteronômio 8:18'),
+    point(25, 'Uma Agenda de Troca de Guarda'), block('LIST', 26, 28), verse(29, 'Salmos 101:6'),
+  ];
+
+  it('vira o esboço e os 13 slides do exemplo aprovado, com o texto colado sem a referência da ponta', () => {
+    const lines = pastedLines(text);
+    const parts = dropTitleHeading(planOutline(lines, blocks), title);
+    const doc = validateSermonDocument(buildOutlineDocument(parts, new Map(), ids()));
+    const slides = buildSlides(outlineTitle(title, parts), doc, 'VERSES_AND_POINTS', normalizeListReference);
+    assert.equal(slides.length, 13);
+    assert.deepEqual(
+      slides.map((s) => s.reference ?? s.layout),
+      ['Isaías 46:10', 'NUMBERED', '1 Coríntios 1:18', '1 Coríntios 2:13', 'Mateus 7:9', 'Mateus 7:11', 'Romanos 5:17', 'Ageu 2:6',
+        'Isaías 13:13', 'Deuteronômio 8:17', 'Deuteronômio 8:18', 'BULLETS', 'Salmos 101:6'],
+    );
+    assert.equal(slides[0].heading, title);
+    assert.equal(slides[2].heading, '1. Uma Agenda de Poder');
+    assert.equal(slides[2].text, 'A palavra da cruz é loucura para os que perecem; mas para nós, que somos salvos, é o poder de Deus.');
+    assert.equal(slides[0].text.endsWith('farei toda a minha vontade.'), true);
+    // A aspa solta do começo sai, como no slide aprovado.
+    assert.equal(slides[4].text, 'Qual de vocês, se seu filho pedir pão, lhe dará uma pedra?');
+    assert.deepEqual(slides[11].items, [
+      'Deus visitou José em sonhos: ele sustentaria Israel no Egito (Gênesis 37:5)',
+      'Deus visitou Moises em visão na sarça ardente: (Êxodo 3:2)',
+      'Deus visitou Salomão em sonho: pede-me... (1 Reis 3:5)',
+    ]);
   });
 });
