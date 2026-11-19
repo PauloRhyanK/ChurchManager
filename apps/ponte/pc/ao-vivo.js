@@ -107,7 +107,8 @@ function desenhar() {
   const d = D;
   mostrar('simulacao', !!d.simulacao);
   $('nome').textContent = (d.ordem && d.ordem.nome) || 'Ponte do Culto';
-  const ag = d.agenda || {};
+  // Com o roteiro do ChurchManager, o atraso sai dos horarios dele.
+  const ag = (d.roteiro && d.roteiro.texto) ? d.roteiro : (d.agenda || {});
   $('atraso').textContent = ag.texto || '';
   $('atraso').className = 'atraso ' + (ag.estado || '');
   desenharPilulas(d);
@@ -222,7 +223,25 @@ function confirmarMomento(m) {
   return m.confirmar ? {titulo: 'Ir para "' + m.nome + '"?', texto: 'Esse momento pede confirmação antes de ir ao ar.', sim: 'Ir'} : null;
 }
 
+// O roteiro do ChurchManager: momentos e musicas na ordem em que acontecem.
+// Quando ele vem, e ele que aparece na coluna da ordem; sem ele, a ordem do
+// culto de sempre.
+function desenharRoteiro(d) {
+  const r = d.roteiro;
+  pintar('ordem', r.itens.map(m => {
+    const agora = r.atual === m.indice, feito = r.atual != null && m.indice < r.atual;
+    let resta = m.tipo === 'musica' ? (m.tom || '♪') : '';
+    if (agora && m.resta_s != null) resta = m.resta_s >= 0 ? emMinutos(m.resta_s) + ' min' : '+' + emMinutos(m.resta_s) + ' min';
+    return '<button type="button" class="momento' + (m.tipo === 'musica' ? ' e-musica' : '') + (agora ? ' agora' : feito ? ' feito' : '') + '"' +
+      (agora ? ' aria-current="step"' : '') + ' data-a="' + esc(JSON.stringify({tipo: 'roteiro_ir', indice: m.indice})) + '"' +
+      (ocupado || !podeAgir() ? ' disabled' : '') + '>' +
+      '<span class="hora">' + esc(m.hora || '') + '</span><span class="cresce">' + (m.tipo === 'musica' ? '♪ ' : '') + esc(m.nome) + '</span>' +
+      '<span class="resta' + (agora && m.resta_s < 0 ? ' passou' : '') + '">' + esc(resta) + '</span></button>';
+  }).join(''));
+}
+
 function desenharOrdem(d) {
+  if (d.roteiro && d.roteiro.itens.length) { desenharRoteiro(d); return; }
   const o = d.ordem || {momentos: []};
   if (!o.momentos.length) {
     pintar('ordem', '<div class="vazio">Nenhuma ordem de culto carregada. Escolha uma no menu Mais.</div>');
@@ -540,7 +559,12 @@ function htmlMomento(d) {
   const audios = (d.transmissao && d.transmissao.audios) || [];
   const mic = audios.filter(a => a.palavra);
   if (mic.length) h += '<div class="caixa"><span class="rotulo">Microfone</span>' + mic.map(htmlAudio).join('') + '</div>';
-  if (proximo) {
+  const rot = d.roteiro, seguinte = rot && rot.itens[(rot.atual == null ? -1 : rot.atual) + 1];
+  if (rot && rot.itens.length) {
+    // Com o roteiro, "Proximo" e o proximo item dele: pode ser uma musica.
+    if (seguinte) h += '<div class="botoes">' + botao('Próximo: ' + (seguinte.tipo === 'musica' ? '♪ ' : '') + esc(seguinte.nome),
+      {tipo: 'roteiro_ir', indice: seguinte.indice}, {classe: tv && tv.responde && !tv.vazio ? 'bt' : 'bt forte'}) + '</div>';
+  } else if (proximo) {
     h += '<div class="botoes">' + botao((atual ? 'Próximo: ' : 'Começar: ') + esc(proximo.nome),
       {tipo: 'ir', momento: proximo.id, versao: o.versao},
       {classe: tv && tv.responde && !tv.vazio ? 'bt' : 'bt forte', confirmar: confirmarMomento(proximo)}) + '</div>';
@@ -562,7 +586,24 @@ function desenharMusicas(d) {
     const c = tocando ? {titulo: 'Trocar para "' + m.titulo + '"?', texto: '"' + l.musica.titulo + '" ainda está tocando.', sim: 'Trocar'} : null;
     return '<button type="button" class="musica ' + m.estado + '" data-a="' + esc(JSON.stringify({tipo: 'louvor_musica', para: m.id})) + '"' +
       (c ? ' data-c="' + esc(JSON.stringify(c)) + '"' : '') + (ocupado ? ' disabled' : '') + '>' + corpo + '</button>';
-  }).join(''));
+  }).join('') + linhaDoMusico(d));
+}
+
+// O celular do musico (ponte/musico.py) e o VS (ponte/vs.py): o link para a
+// banda, e quem esta no comando do audio.
+function linhaDoMusico(d) {
+  if (!d.musico || !podeConduzir()) return '';
+  const vs = d.vs || {};
+  let audio;
+  const contado = d.louvor && d.louvor.relogio && d.louvor.relogio.fonte === 'cronometro';
+  if (!vs.ativo) audio = 'A Ponte não comanda o áudio (VS desligado no config): os botões do músico ' +
+    (contado ? 'mexem no tempo que a Ponte conta, e a letra segue.' : 'passam só a letra do telão.');
+  else if (vs.alguem_obedece) audio = 'VS ligado: ' + esc(vs.quem || 'alguém') + ' está obedecendo.';
+  else audio = 'VS ligado, mas ninguém está buscando os pedidos.';
+  return '<div class="linha" style="flex-basis:100%;padding:6px 6px 2px;flex-wrap:wrap"><span class="miudo cresce">' +
+    (d.musico.link ? 'O celular do músico está liberado. ' : '') + audio + '</span>' +
+    '<button type="button" class="bt pequeno" id="bt-musico">Celular do músico</button>' +
+    (d.musico.link ? botao('Encerrar o acesso', {tipo: 'musico_link', acao: 'encerrar'}, {classe: 'bt pequeno fantasma'}) : '') + '</div>';
 }
 
 function desenharLuz(d) {
@@ -796,6 +837,26 @@ const ensaio = {
   },
 };
 setInterval(() => { if (ensaio.musica && ensaio.tocando()) ensaio.avisar(); }, 250);
+
+// O VS em ensaio (ponte/vs.py, driver "navegador"): esta tela, que toca o
+// audio, busca o ultimo pedido do musico e obedece. E o mesmo caminho que a
+// ponte do PC do som faz com o Reaper.
+let vsFeito = null;
+setInterval(async () => {
+  const vs = D && D.vs;
+  if (!vs || !vs.ativo || vs.driver !== 'navegador' || !ensaio.ligado || D.local === false) return;
+  try {
+    const p = (await (await fetch('/api/vs/pedido?quem=' + encodeURIComponent(meuNome() || 'Ensaio'), {cache: 'no-store'})).json()).pedido;
+    if (!p) return;
+    if (vsFeito === null) { vsFeito = p.n; return; }      // pedido antigo, de antes de esta tela abrir
+    if (p.n <= vsFeito) return;
+    if (p.acao === 'parar') { vsFeito = p.n; som.pause(); return; }
+    if (ensaio.musica !== p.musica) return;                // a musica ainda esta carregando: tenta na proxima volta
+    vsFeito = p.n;
+    som.currentTime = Math.max(0, p.posicao + (Date.now() / 1000 - p.em));
+    som.play().catch(() => {});
+  } catch (e) { /* tenta de novo */ }
+}, 300);
 ['pause', 'seeked', 'ended', 'play'].forEach(e => som.addEventListener(e, () => { ensaio.avisar(); redesenhar(); }));
 
 // ------------------------------------------------------------------- agir --
@@ -875,6 +936,18 @@ document.addEventListener('click', async evento => {
   if (!alvo || alvo.disabled) return;
   if (alvo.id === 'bt-recados') { recadosAbertos = !recadosAbertos; redesenhar(); return; }
   if (alvo.id === 'bt-ensaio') { ensaio.tocando() ? som.pause() : som.play().catch(e => avisar('Não consegui tocar o áudio: ' + e.message, true)); return; }
+  if (alvo.id === 'bt-musico') {
+    try {
+      if (!(D.musico && D.musico.link)) await pedir('/api/painel/acao', {tipo: 'musico_link', acao: 'gerar'});
+      const link = await (await fetch('/api/painel/musico', {cache: 'no-store'})).json();
+      if (!link.ativo) throw new Error('não consegui criar o link');
+      await perguntar({titulo: 'Celular do músico', sim: 'Pronto', campo: link.local,
+        texto: 'Com o celular no Wi-Fi da igreja, abra o endereço abaixo. Vale só neste culto.' +
+          (link.web ? ' Fora do Wi-Fi, pela internet: ' + link.web : '')});
+    } catch (e) { avisar(e.message, true); }
+    consultar();
+    return;
+  }
   if (alvo.id === 'bt-pregador') {
     // O endereco do link vem de uma rota que so existe na igreja: o codigo
     // nunca passa pelo retrato, que viaja para a web.

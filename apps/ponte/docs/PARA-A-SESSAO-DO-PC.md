@@ -494,6 +494,61 @@ passador.**
 
 **Para desligar** sem mexer em código: `passador: { ativo: false }` no `config.yaml`.
 
+### 16. Celular do músico, VS e roteiro intercalado (20/11/2026)
+
+Branch `claude/ponte-celular-do-musico`. **Nada disto rodou com equipamento.**
+
+**O que mudou**
+
+- **`ponte/roteiro.py`** (novo): a fila de momentos e músicas na ordem do culto. Vem do
+  campo `roteiro` do ChurchManager; sem ele, é montada aqui (os momentos da ordem e, depois
+  do momento do louvor, as músicas do dia), só para o celular do músico.
+- **No painel**: com o `roteiro` do ChurchManager, a coluna da ordem mostra essa fila e
+  "Próximo" segue por ela. Ação nova `roteiro_ir` (também pela web, como o `ir`). Entrar
+  numa música pelo painel **não** solta o VS; só o celular do músico solta.
+- **`ponte/musico.py`** e **`musico.html`** (novos, a página no `PACOTE`): link com código
+  como o do pregador (`/musico/<código>`, pelo Wi-Fi e pela web, toque na fila com o tipo
+  `musico`, mesma espera longa). Ações: `proximo`, `voltar`, `repetir`, `pular`,
+  `proxima_musica`, `desfazer`. Tudo anotado no histórico com a origem "músico".
+- **`ponte/vs.py`** (novo): o pedido para quem toca o áudio, numerado, em
+  `GET /api/vs/pedido`. Desligado de fábrica.
+- **`ponte/vs_reaper.py`** (novo): o lado do PC do som. Só sobe com papel `som`,
+  `vs.ativo: true` e `driver: reaper` no config **daquele** PC.
+- **`Relogio.posicionar`**: o cronômetro aceita ser levado a um segundo.
+- Config novo e opcional: `vs`, `roteiro.momentos`, `cultos.arquivo` (fim do
+  `config.exemplo.yaml`). Arquivo novo de exemplo: `roteiro.exemplo.json`.
+- Testes: `_testar_musico.py`.
+
+**Como repetir e pular conversam com o tempo.** Numa música com tempo marcado, pular para
+a ponte leva o **tempo da música** para o começo da ponte, e a letra e a luz vão atrás.
+Repetir marca a parte: quando ela acaba, o tempo volta ao começo dela (até quatro vezes).
+Se a Ponte não tem como mexer no tempo (VS desligado e o tempo vindo de fora), os mesmos
+botões passam a letra à mão, e a tela do músico avisa.
+
+**O que só dá para conferir aí**
+
+1. **Sem ligar o VS** (`vs` fora do config) e com `relogio: { fonte: cronometro }`: gerar
+   o link, abrir num celular no Wi-Fi, tocar em Próximo para começar a música ao mesmo
+   tempo em que o som solta o VS à mão, e ver a letra acompanhar. Pular e repetir vão
+   mexer na letra, **não no áudio**: serve para ensaiar a tela, não para o culto com VS.
+2. **A interface web do Reaper** (Preferências > Control/OSC/web): ligar numa porta e
+   abrir no navegador do PC do som `http://127.0.0.1:<porta>/_/TRANSPORT` e
+   `http://127.0.0.1:<porta>/_/REGION`. As respostas têm o formato que o `vs_reaper.py`
+   espera (`TRANSPORT<tab>estado<tab>segundos…`, `REGION<tab>nome<tab>id<tab>início<tab>fim`)?
+   Eu escrevi de memória; se for outro, é nas funções `ler_transporte` e `ler_regioes`.
+3. **Uma região por música** no projeto do Reaper, com o título da música no nome (ou o
+   nome escrito em `vs.reaper.regioes`).
+4. Só depois disso, e com o PC do som atualizado: `vs: { ativo: true, driver: reaper }`
+   nos dois PCs, `relogio: { fonte: reaper }` no principal, e testar **num dia sem culto**:
+   Próxima música solta o VS? Pular leva o áudio para a parte? Repetir volta no fim da
+   parte sem estalo e sem atraso que se ouça? O click continua no tempo depois do pulo?
+5. **O pulo no meio de uma frase é musical?** A Ponte pula no instante do toque e volta no
+   fim exato da parte. Se precisar esperar o fim do compasso, isso ainda não existe.
+6. O celular pela internet (4G), com a igreja ligada à web: quanto demora o toque.
+7. O `roteiro` de verdade do ChurchManager: os momentos de lá casam com os daqui? Os que
+   não casarem aparecem no roteiro mas não trocam câmera nem luz; escreva o par em
+   `roteiro.momentos`.
+
 ## O que NÃO foi testado
 
 Do painel do culto ao vivo (seções 12 e 13): nada rodou contra OBS, Holyrics, YouTube ou
