@@ -26,6 +26,7 @@ ACOES = (
     "louvor_repetir_refrao", "louvor_musica", "louvor_comecou", "louvor_acertar",
     "imagem",
     "palavra_slide", "palavra_assumir", "palavra_tirar", "pregador_link",
+    "telao_slide",
 )
 ACOES_DA_WEB = ("cena_transmissao", "clima")
 
@@ -284,7 +285,36 @@ class PainelAoVivo:
         imagem = self._dep("imagem")
         base["imagem"] = {"disponivel": imagem is not None, "ativa": bool(imagem and imagem.ativo)}
         base["palavra"] = self._palavra(ordem, base["agenda"])
+        telao = self._dep("telao")
+        base["telao_ao_vivo"] = telao.retrato() if telao is not None else None
+        passador = self._dep("passador")
+        base["passador"] = passador.retrato() if passador is not None else None
         return base
+
+    # -- passar o slide que esta no telao --------------------------------------
+
+    def passar(self, para, quem, visto=None):
+        """Proximo ou anterior, para quem estiver com o telao agora.
+
+        E o caminho do passador de slides e dos botoes do painel. Se a Ponte
+        esta conduzindo uma musica, passar a mao ASSUME a letra (o condutor
+        larga o automatico); se ha palavra da Ponte no telao, anda nela; senao
+        manda direto ao Holyrics, para o que estiver aberto la.
+        """
+        condutor = self._dep("condutor")
+        if condutor is not None and condutor.tem_musica() and para in ("proximo", "anterior"):
+            return condutor.ir_slide(para, None, quem)
+        palavra = self._dep("palavra")
+        if palavra is not None and para in ("proximo", "anterior"):
+            dela = palavra.retrato()
+            ordem = self._dep("ordem_agora") or {}
+            if dela.get("ativa") and dela.get("total") and (
+                    dela.get("visivel") or ordem.get("atual_id") in self._momentos_da_palavra()):
+                return palavra.ir(para, None, quem)
+        telao = self._dep("telao")
+        if telao is None:
+            return {"erro": "o telão não está disponível neste PC"}, 400
+        return telao.ir(para, visto)
 
     def _momentos_da_palavra(self):
         config = self._dep("config") or {}
@@ -315,6 +345,9 @@ class PainelAoVivo:
         dela = palavra.conteudo() if palavra is not None else None
         if dela:
             partes.append(dela["versao"])
+        telao = self._dep("telao")
+        if telao is not None and telao.versao():
+            partes.append(telao.versao())
         versao = "-".join(p for p in partes if p)
         return versao or None
 
@@ -323,7 +356,9 @@ class PainelAoVivo:
         dela = palavra.conteudo() if palavra is not None else None
         return {"versao": self._versao_do_conteudo(),
                 "musicas": repertorio.musicas() if repertorio is not None else [],
-                "palavra": dela["slides"] if dela else []}
+                "palavra": dela["slides"] if dela else [],
+                # os slides do que esta aberto no Holyrics agora, seja o que for
+                "telao": self._dep("telao").slides() if self._dep("telao") is not None else []}
 
     # -- o celular do pregador -------------------------------------------------
 
@@ -433,6 +468,11 @@ class PainelAoVivo:
             imagem.ativo = bool(dados.get("mostrar"))
             return {"ok": True, "detalhe": "tudo certo",
                     "titulo": "Imagem da transmissão " + ("ligada" if imagem.ativo else "desligada")}, 200
+
+        if tipo == "telao_slide":
+            corpo, codigo = self.passar(dados.get("para"), quem, dados.get("visto"))
+            corpo["silencioso"] = bool(corpo.get("ok"))
+            return corpo, codigo
 
         if tipo in ("palavra_slide", "palavra_assumir", "palavra_tirar", "pregador_link"):
             palavra = self._dep("palavra")

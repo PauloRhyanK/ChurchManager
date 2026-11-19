@@ -69,6 +69,34 @@ Sem internet, ou sem o cofre: no painel do PC do Holyrics, **Instalar em outro P
 dela, `configurar-este-pc.bat` pergunta o papel da máquina e faz o resto. Detalhes em
 [`pc/INSTALAR.md`](pc/INSTALAR.md).
 
+## Passar os slides: pelo painel e pelo passador
+
+**Pelo painel.** O painel do culto ao vivo mostra o que está aberto no Holyrics, seja o
+que for: o slide atual, o próximo, a lista inteira com o atual destacado, e os botões
+Anterior e Próximo (a barra de espaço também passa). Tocar num slide vai direto a ele.
+Funciona no PC e no celular, na rede da igreja; pela versão web não se passa slide.
+Se a Ponte estiver conduzindo uma música sozinha, passar à mão **assume** a letra, e
+"Devolver" entrega de volta.
+
+**Pelo passador (Logitech Spotlight).** O passador é um teclado: sozinho, só passa o
+slide com a janela do Holyrics em foco. A Ponte, no PC principal, ouve o passador com
+**qualquer janela em foco** e pede o próximo slide ao Holyrics.
+
+- Só reage ao passador, reconhecido pelo receptor USB (`046D:C53E`). As mesmas teclas
+  num teclado comum continuam sendo só teclas.
+- Com o Holyrics em foco a Ponte fica quieta, porque ele já recebeu a tecla e passou
+  sozinho; agir também passaria dois slides.
+- O painel mostra, em "Telão e palco", se o receptor está conectado e qual foi o último
+  clique.
+- Para ver o que cada botão do passador manda: `python descobrir_passador.py` no PC do
+  Holyrics. O que ele mostrar vai no bloco `passador` do `config.yaml` (fim do
+  `config.exemplo.yaml`). De fábrica a Ponte espera "página abaixo" ou seta para a
+  direita no botão de avançar, e "página acima" ou seta para a esquerda no de voltar.
+- **Limite:** a Ponte ouve a tecla, não a tira de ninguém. A janela em foco também a
+  recebe (um navegador pode rolar a página).
+- **Nunca foi testado com o passador nem em Windows.** Ver a seção 15 de
+  `docs/PARA-A-SESSAO-DO-PC.md`.
+
 ## Estado em 12/11/2026
 
 - **No ar no PC do Holyrics:** papéis, página por PC, guia pelo celular, letras por
