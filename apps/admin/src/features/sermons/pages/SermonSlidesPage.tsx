@@ -14,12 +14,12 @@ import { SendToServiceDialog } from "../components/SendToServiceDialog";
 import { SlideList } from "../components/SlideList";
 import { SlidePreview } from "../components/SlidePreview";
 import { formatSituation, formatSpeech } from "../lib/format";
-import { editSlide, moveSlide, slidesBody, toggleSlide } from "../lib/slide-edits";
+import { editSlide, editSubtitle, moveSlide, slidesBody, toggleSlide } from "../lib/slide-edits";
+import { SLIDE_THEMES } from "../lib/slide-identity";
 import { slideErrorMessage } from "../lib/slide-errors";
 import { publicSlides, type SlideItem, type SlideMode, type SlideStyle } from "../lib/slides";
 
 const LIST_PATH = "/palavras";
-const STYLE_NAME: Record<SlideStyle, string> = { MINIMAL: "Minimalista", BACKGROUND: "Com fundo" };
 const SAVE_ERROR = "Não foi possível salvar os slides.";
 const UNSAVED = "Não foi possível salvar os slides. Confira a lista antes de enviar.";
 const UNSAVED_EXPORT = "Não foi possível salvar os slides. Confira a lista antes de exportar.";
@@ -79,7 +79,7 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
         const next = pending.current;
         pending.current = null;
         try {
-          const saved = await saveSlides(id, { style: next.style, items: slidesBody(next.items) });
+          const saved = await saveSlides(id, { style: next.style, items: slidesBody(next.items, lastServer.current.slides) });
           failed.current = false;
           adopt(saved, pending.current === null);
         } catch {
@@ -262,6 +262,10 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
                   const next = editSlide(items, slideId, text);
                   if (next !== items) change({ items: next, style });
                 }}
+                onSubtitle={(slideId, subtitle) => {
+                  const next = editSubtitle(items, slideId, subtitle);
+                  if (next !== items) change({ items: next, style });
+                }}
               />
             </section>
 
@@ -275,10 +279,10 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
                     onClick={() => change({ items, style: style === "MINIMAL" ? "BACKGROUND" : "MINIMAL" })}
                     className="text-[13px] font-semibold text-primary hover:underline disabled:opacity-60"
                   >
-                    {STYLE_NAME[style]} · trocar
+                    {SLIDE_THEMES[style].name} · trocar
                   </button>
                 ) : (
-                  <span className="text-[13px] text-muted-foreground">{STYLE_NAME[style]}</span>
+                  <span className="text-[13px] text-muted-foreground">{SLIDE_THEMES[style].name}</span>
                 )}
               </div>
               {shown.length === 0 ? (

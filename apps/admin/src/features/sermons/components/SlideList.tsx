@@ -13,8 +13,8 @@ import { GripVertical, Lock } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import { EDITABLE_KINDS } from "../lib/slide-edits";
-import { SLIDE_LIMITS, type SlideItem, type SlideKind } from "../lib/slides";
+import { EDITABLE_KINDS, subtitleLimit, textLimit } from "../lib/slide-edits";
+import { slideFace, type SlideItem, type SlideKind } from "../lib/slides";
 
 const KIND_LABEL: Record<SlideKind, string> = {
   TITLE: "Título",
@@ -33,31 +33,50 @@ interface SlideListProps {
   /** Arrastou `fromId` para o lugar de `toId`. */
   onMove(fromId: string, toId: string): void;
   onEdit(id: string, text: string): void;
+  /** Novo subtítulo de um ponto ou versículo; "" tira. */
+  onSubtitle(id: string, subtitle: string): void;
 }
 
-/** Texto do título, ponto ou resumo: clicar abre a edição no lugar (Enter confirma, Esc cancela). */
-function EditableText({ item, onEdit }: { item: SlideItem; onEdit(text: string): void }) {
+/** Texto clicável que abre a edição no lugar (Enter confirma, Esc cancela). `emptyHint`: vazio não vale e avisa. */
+function EditableText({
+  value,
+  placeholder,
+  label,
+  maxLength,
+  emptyHint,
+  className,
+  onEdit,
+}: {
+  value: string;
+  /** Texto do botão quando `value` está vazio. */
+  placeholder?: string;
+  label: string;
+  maxLength: number;
+  emptyHint?: string;
+  className: string;
+  onEdit(text: string): void;
+}) {
   const [draft, setDraft] = useState<string | null>(null);
-  const [emptyHint, setEmptyHint] = useState(false);
+  const [showHint, setShowHint] = useState(false);
   const cancelled = useRef(false);
 
   if (draft === null) {
     return (
-      <span className="flex min-w-0 flex-1 items-center gap-2">
+      <span className="flex min-w-0 items-center gap-2">
         <button
           type="button"
           onClick={() => {
             cancelled.current = false;
-            setEmptyHint(false);
-            setDraft(item.text);
+            setShowHint(false);
+            setDraft(value);
           }}
-          className="min-w-0 truncate rounded px-1 py-1 text-left text-[15px] font-semibold hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={cn("min-w-0 truncate rounded px-1 py-1 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", className)}
         >
-          {item.text}
+          {value || placeholder}
         </button>
-        {emptyHint && (
+        {showHint && emptyHint && (
           <span role="status" className="flex-none text-xs text-destructive">
-            O texto não pode ficar vazio.
+            {emptyHint}
           </span>
         )}
       </span>
@@ -68,16 +87,16 @@ function EditableText({ item, onEdit }: { item: SlideItem; onEdit(text: string):
     cancelled.current = true;
     const text = draft.trim();
     setDraft(null);
-    // Vazio não vale: o texto antigo fica e a dica aparece ao lado.
-    if (!text) setEmptyHint(true);
-    else if (text !== item.text) onEdit(text);
+    // Vazio não vale quando há dica: o texto antigo fica e a dica aparece ao lado.
+    if (!text && emptyHint) setShowHint(true);
+    else if (text !== value) onEdit(text);
   };
   return (
     <input
-      aria-label="Texto do slide"
+      aria-label={label}
       autoFocus
       value={draft}
-      maxLength={SLIDE_LIMITS.textChars}
+      maxLength={maxLength}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => {
@@ -90,29 +109,58 @@ function EditableText({ item, onEdit }: { item: SlideItem; onEdit(text: string):
           setDraft(null);
         }
       }}
-      className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1 text-[15px] font-semibold focus:outline-none focus:ring-2 focus:ring-ring"
+      className={cn("min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1 focus:outline-none focus:ring-2 focus:ring-ring", className)}
     />
   );
+}
+
+/** Subtítulo de ponto ou versículo: "Adicionar subtítulo" ou o subtítulo, editável no lugar (vazio tira). */
+function SubtitleLine({ item, editable, onSubtitle }: { item: SlideItem; editable: boolean; onSubtitle(text: string): void }) {
+  const limit = subtitleLimit(item);
+  if (editable && limit !== null) {
+    return (
+      <EditableText
+        value={item.subtitle ?? ""}
+        placeholder="Adicionar subtítulo"
+        label="Subtítulo do slide"
+        maxLength={limit}
+        className={cn("text-[13px]", item.subtitle ? "text-muted-foreground" : "font-medium text-primary")}
+        onEdit={onSubtitle}
+      />
+    );
+  }
+  return item.subtitle ? <span className="min-w-0 truncate px-1 text-[13px] text-muted-foreground">{item.subtitle}</span> : null;
 }
 
 function ItemText({ item, editable, onEdit }: { item: SlideItem; editable: boolean; onEdit(text: string): void }) {
   if (item.kind === "VERSE") {
     return (
-      <span className="flex min-w-0 flex-1 items-baseline gap-2">
+      <span className="flex min-w-0 items-baseline gap-2">
         <span className="flex-none text-[15px] font-semibold">{item.reference}</span>
         <span className="min-w-0 truncate text-sm text-muted-foreground">{item.text}</span>
       </span>
     );
   }
-  if (editable && EDITABLE_KINDS.includes(item.kind)) return <EditableText item={item} onEdit={onEdit} />;
+  if (editable && EDITABLE_KINDS.includes(item.kind)) {
+    return (
+      <EditableText
+        value={item.text}
+        label="Texto do slide"
+        maxLength={textLimit(item)}
+        emptyHint="O texto não pode ficar vazio."
+        className="text-[15px] font-semibold"
+        onEdit={onEdit}
+      />
+    );
+  }
   return (
-    <span className={cn("min-w-0 flex-1 truncate px-1 text-[15px] font-semibold", item.kind === "PRIVATE" && "text-muted-foreground")}>
+    <span className={cn("min-w-0 truncate px-1 text-[15px] font-semibold", item.kind === "PRIVATE" && "text-muted-foreground")}>
       {item.text}
     </span>
   );
 }
 
-function RowBody({ item, readOnly, onToggle, onEdit }: { item: SlideItem; readOnly: boolean } & Pick<SlideListProps, "onToggle" | "onEdit">) {
+function RowBody({ item, readOnly, onToggle, onEdit, onSubtitle }: { item: SlideItem; readOnly: boolean } & Pick<SlideListProps, "onToggle" | "onEdit" | "onSubtitle">) {
   const isPrivate = item.kind === "PRIVATE";
   return (
     <>
@@ -137,7 +185,17 @@ function RowBody({ item, readOnly, onToggle, onEdit }: { item: SlideItem; readOn
           </span>
         )}
       </span>
-      <ItemText item={item} editable={!readOnly} onEdit={(text) => onEdit(item.id, text)} />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <ItemText item={item} editable={!readOnly} onEdit={(text) => onEdit(item.id, text)} />
+        {(item.kind === "POINT" || item.kind === "VERSE") && (
+          <SubtitleLine item={item} editable={!readOnly} onSubtitle={(text) => onSubtitle(item.id, text)} />
+        )}
+      </span>
+      {!isPrivate && (
+        <span className="flex-none rounded border px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
+          Modelo {slideFace(item).layout.slice(1)}
+        </span>
+      )}
     </>
   );
 }
@@ -169,8 +227,8 @@ function SortableRow({ id, first, muted, children }: { id: string; first: boolea
   );
 }
 
-/** Lista da conferência: marcar, reordenar (arrastando pela alça) e editar título e pontos. Privados no fim, parados. */
-export function SlideList({ items, readOnly = false, onToggle, onMove, onEdit }: SlideListProps) {
+/** Lista da conferência: marcar, reordenar (arrastando pela alça), editar título, pontos e subtítulos. Privados no fim, parados. */
+export function SlideList({ items, readOnly = false, onToggle, onMove, onEdit, onSubtitle }: SlideListProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -194,7 +252,7 @@ export function SlideList({ items, readOnly = false, onToggle, onMove, onEdit }:
         item.kind === "PRIVATE" ? "bg-muted/60" : "bg-card",
       )}
     >
-      <RowBody item={item} readOnly={readOnly} onToggle={onToggle} onEdit={onEdit} />
+      <RowBody item={item} readOnly={readOnly} onToggle={onToggle} onEdit={onEdit} onSubtitle={onSubtitle} />
     </li>
   );
 
@@ -207,7 +265,7 @@ export function SlideList({ items, readOnly = false, onToggle, onMove, onEdit }:
           <SortableContext items={movable.map((i) => i.id)} strategy={verticalListSortingStrategy}>
             {movable.map((item, i) => (
               <SortableRow key={item.id} id={item.id} first={i === 0} muted={!item.included}>
-                <RowBody item={item} readOnly={readOnly} onToggle={onToggle} onEdit={onEdit} />
+                <RowBody item={item} readOnly={readOnly} onToggle={onToggle} onEdit={onEdit} onSubtitle={onSubtitle} />
               </SortableRow>
             ))}
           </SortableContext>

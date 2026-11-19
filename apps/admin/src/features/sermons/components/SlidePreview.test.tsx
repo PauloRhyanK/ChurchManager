@@ -1,73 +1,90 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import type { PublicSlide, SlideItem } from "../lib/slides";
 import { SlidePreview } from "./SlidePreview";
 
+const M04: PublicSlide = {
+  kind: "VERSE",
+  text: "Eu sou a luz do mundo.",
+  layout: "M04",
+  title: "A luz chama",
+  subtitle: "Ninguém acha o caminho sozinho",
+  verse: "Eu sou a luz do mundo.",
+  reference: "João 8:12 · BLIVRE",
+};
+
+const card = () => screen.getByTestId("slide-card");
+const frame = () => card().firstElementChild as HTMLElement;
+
 describe("SlidePreview", () => {
-  it("mostra o texto e a referência do versículo", () => {
-    render(<SlidePreview slide={{ kind: "VERSE", text: "Eu sou a luz do mundo.", reference: "João 8:12" }} style="MINIMAL" />);
-    expect(screen.getByText("Eu sou a luz do mundo.")).toBeInTheDocument();
-    expect(screen.getByText("João 8:12")).toBeInTheDocument();
+  it("mostra título, subtítulo, versículo e a referência com a tradução, em negrito", () => {
+    render(<SlidePreview slide={M04} style="MINIMAL" />);
+    expect(screen.getByText("A luz chama")).toHaveAttribute("data-slide-role", "title");
+    expect(screen.getByText("Ninguém acha o caminho sozinho")).toHaveAttribute("data-slide-role", "subtitle");
+    expect(screen.getByText("Eu sou a luz do mundo.")).toHaveAttribute("data-slide-role", "verse");
+    const ref = screen.getByText("João 8:12 · BLIVRE");
+    expect(ref).toHaveAttribute("data-slide-role", "reference");
+    expect(ref).toHaveStyle({ fontWeight: 700 });
   });
 
-  it("não mostra referência quando não há", () => {
-    const { container } = render(<SlidePreview slide={{ kind: "POINT", text: "A luz chama", reference: null }} style="MINIMAL" />);
-    expect(screen.getByText("A luz chama")).toBeInTheDocument();
-    expect(container.querySelector("[data-slide-reference]")).toBeNull();
+  it("título na fonte de título em itálico; o resto em Poppins; tamanhos e tracking do desenho", () => {
+    render(<SlidePreview slide={M04} style="MINIMAL" />);
+    const title = screen.getByText("A luz chama");
+    expect(title.style.fontFamily).toContain("Playfair Display");
+    expect(title).toHaveStyle({ fontStyle: "italic", fontWeight: 500 });
+    expect(title.style.letterSpacing).toBe("-0.05em");
+    expect(parseFloat(title.style.fontSize)).toBeGreaterThanOrEqual(85);
+    expect(parseFloat(title.style.fontSize)).toBeLessThanOrEqual(115);
+    const verse = screen.getByText("Eu sou a luz do mundo.");
+    expect(verse.style.fontFamily).toContain("Poppins");
+    expect(verse.style.letterSpacing).toBe("-0.03em");
   });
 
-  it("o fundo muda conforme o visual", () => {
-    const slide = { kind: "TITLE", text: "Luz", reference: null } as const;
-    const { rerender } = render(<SlidePreview slide={slide} style="MINIMAL" />);
-    expect(screen.getByTestId("slide-card")).toHaveStyle({ backgroundColor: "#05070B" });
-    rerender(<SlidePreview slide={slide} style="BACKGROUND" />);
-    expect(screen.getByTestId("slide-card")).toHaveStyle({ backgroundColor: "#1E3A8A" });
+  it("desenha numa tela de 1920×1080 reduzida em escala para a largura pedida", () => {
+    const { rerender } = render(<SlidePreview slide={M04} style="MINIMAL" size="sm" />);
+    expect(card()).toHaveStyle({ width: "168px" });
+    expect(frame()).toHaveStyle({ width: "1920px", height: "1080px", transform: `scale(${168 / 1920})` });
+    rerender(<SlidePreview slide={M04} style="MINIMAL" size="lg" />);
+    expect(frame().style.transform).toBe(`scale(${480 / 1920})`);
   });
 
-  it("título, ponto e resumo em negrito; versículo com peso médio", () => {
-    for (const kind of ["TITLE", "POINT", "SUMMARY"] as const) {
-      const { unmount } = render(<SlidePreview slide={{ kind, text: "Texto", reference: null }} style="MINIMAL" />);
-      expect(screen.getByText("Texto")).toHaveStyle({ fontWeight: 700 });
-      unmount();
-    }
-    render(<SlidePreview slide={{ kind: "VERSE", text: "Texto", reference: "A 1:1" }} style="MINIMAL" />);
-    expect(screen.getByText("Texto")).toHaveStyle({ fontWeight: 500 });
+  it("cores do visual: azul institucional, modelo 01 em azul profundo; verde profundo", () => {
+    const title = { kind: "TITLE", text: "Luz", reference: null } as const;
+    const { rerender } = render(<SlidePreview slide={M04} style="MINIMAL" />);
+    expect(card()).toHaveStyle({ backgroundColor: "#334C71" });
+    expect(frame()).toHaveStyle({ color: "#F1EBE2" });
+    rerender(<SlidePreview slide={title} style="MINIMAL" />);
+    expect(card()).toHaveStyle({ backgroundColor: "#182F5D" });
+    rerender(<SlidePreview slide={M04} style="BACKGROUND" />);
+    expect(card()).toHaveStyle({ backgroundColor: "#092A1E" });
+    expect(frame()).toHaveStyle({ color: "#FFFFFF" });
   });
 
-  it("o texto diminui em quatro degraus conforme o comprimento", () => {
-    const sizeOf = (n: number) => {
-      const { unmount } = render(<SlidePreview slide={{ kind: "POINT", text: "a".repeat(n), reference: null }} style="MINIMAL" size="sm" />);
-      const v = parseFloat(screen.getByText("a".repeat(n)).style.fontSize);
-      unmount();
-      return v;
+  it("cópia antiga (só kind, text e reference) vira o modelo padrão do tipo", () => {
+    render(<SlidePreview slide={{ kind: "VERSE", text: "Eu sou a luz do mundo", reference: "João 8:12" }} style="MINIMAL" />);
+    expect(screen.getByText("Eu sou a luz do mundo")).toHaveAttribute("data-slide-role", "verse");
+    // M03 sem título de contexto: a referência é o título e também vai embaixo.
+    expect(screen.getAllByText("João 8:12").map((e) => e.dataset.slideRole)).toEqual(["title", "reference"]);
+  });
+
+  it("item do editor usa o modelo e o subtítulo dele", () => {
+    const item: SlideItem = {
+      id: "p:0", kind: "POINT", sourceBlockId: "p", text: "A luz chama", reference: null, included: true, edited: false, subtitleEdited: false,
+      layout: "M02", heading: null, subtitle: "Antes de procurar", version: null,
     };
-    const sizes = [sizeOf(40), sizeOf(120), sizeOf(180), sizeOf(220)];
-    expect(new Set(sizes).size).toBe(4);
-    expect([...sizes].sort((a, b) => b - a)).toEqual(sizes);
+    render(<SlidePreview slide={item} style="MINIMAL" />);
+    expect(screen.getByText("Antes de procurar")).toHaveAttribute("data-slide-role", "subtitle");
   });
 
-  it("versículo longo cabe no cartão: a referência fica fora da área cortada e as linhas cabem na altura", () => {
-    const text = "Nem se acende a candeia e se coloca debaixo do alqueire, mas no velador, e dá luz a todos que estão na casa.";
-    render(<SlidePreview slide={{ kind: "VERSE", text, reference: "Mateus 5:15" }} style="MINIMAL" size="sm" />);
-    const ref = screen.getByText("Mateus 5:15");
-    const p = screen.getByText(text);
-    expect(ref).toHaveClass("shrink-0");
-    expect(p.contains(ref)).toBe(false);
-    expect(p.parentElement).toHaveClass("min-h-0", "flex-1", "overflow-hidden");
+  it("texto acima do limite fica no mínimo da faixa e é cortado em linhas", () => {
+    const long = "palavra ".repeat(37).trim();
+    render(<SlidePreview slide={{ kind: "POINT", text: long, reference: null }} style="MINIMAL" />);
+    const p = screen.getByText(long);
+    expect(p.style.fontSize).toBe("100px");
+    // As linhas mostradas (line-clamp) cabem na altura da área segura (700 px).
     const lines = Number(p.dataset.lines);
     expect(lines).toBeGreaterThanOrEqual(1);
-    // cartão sm: 168 de largura, 16:9, respiro de 6% em cada lado; a linha da referência sai da altura.
-    const height = (168 * 9) / 16 - 2 * 168 * 0.06 - parseFloat(ref.style.fontSize) * 1.3;
-    expect(lines * parseFloat(p.style.fontSize) * 1.25).toBeLessThanOrEqual(height);
-  });
-
-  it("o texto diminui em três degraus conforme o comprimento", () => {
-    const sizeOf = (n: number) => {
-      const { unmount } = render(<SlidePreview slide={{ kind: "POINT", text: "a".repeat(n), reference: null }} style="MINIMAL" size="lg" />);
-      const v = screen.getByText("a".repeat(n)).style.fontSize;
-      unmount();
-      return v;
-    };
-    const small = sizeOf(40), mid = sizeOf(120), long = sizeOf(250);
-    expect(new Set([small, mid, long]).size).toBe(3);
+    expect(lines * 100 * parseFloat(p.style.lineHeight)).toBeLessThanOrEqual(700);
+    expect(p).toHaveClass("overflow-hidden");
   });
 });

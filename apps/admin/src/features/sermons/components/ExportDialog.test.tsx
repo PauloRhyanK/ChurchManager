@@ -31,13 +31,18 @@ const slide = (id: string, over: Partial<SlideItem> = {}): SlideItem => ({
   reference: "João 8:12",
   included: true,
   edited: false,
+  subtitleEdited: false,
+  layout: "M03",
+  heading: null,
+  subtitle: null,
+  version: null,
   ...over,
 });
 const SLIDES = [
   slide("a"),
   slide("b", { included: false }),
-  slide("c", { kind: "PRIVATE", included: true }),
-  slide("d", { kind: "POINT", reference: null }),
+  slide("c", { kind: "PRIVATE", included: true, layout: "M01" }),
+  slide("d", { kind: "POINT", reference: null, layout: "M01" }),
 ];
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -231,11 +236,12 @@ describe("ExportDialog", () => {
     const [fileName, title, deck] = pptx.downloadPptx.mock.calls[0];
     expect(fileName).toBe("a-luz-do-mundo.pptx");
     expect(title).toBe("A luz do mundo");
-    expect(deck.map((s: { text: string }) => s.text)).toEqual([
-      "Texto a",
-      "Texto d",
+    const texts = (s: { blocks: { text: string }[] }) => s.blocks.map((b) => b.text);
+    expect(deck.map(texts)).toEqual([
+      ["João 8:12", "Texto a", "João 8:12"],
+      ["Texto d"],
     ]);
-    expect(deck[0].background).toBe("#1E3A8A");
+    expect(deck[0]).toMatchObject({ width: 1920, height: 1080, background: "#092A1E", color: "#FFFFFF" });
   });
 
   it("PPT mostra Gerando… enquanto gera e avisa se falhar", async () => {
