@@ -1,0 +1,36 @@
+// Configuração do resumo por IA dos "Slides completos", lida do ambiente do servidor.
+// A chave em si nunca sai daqui: só se ela existe.
+
+export type AiModelOption = { id: string; provider: 'anthropic'; model: string; label: string }; // id = 'anthropic:claude-opus-5-5'
+export type SermonAiConfig = { enabled: boolean; models: AiModelOption[]; effort: 'low' | 'medium' | 'high' };
+
+const DEFAULT_MODELS = 'anthropic:claude-opus-5-5';
+const PROVIDERS = ['anthropic'] as const;
+const EFFORTS = ['low', 'medium', 'high'] as const;
+const LABELS: Record<string, string> = {
+  'claude-opus-5-5': 'Claude Opus 5.5',
+  'claude-sonnet-5-5': 'Claude Sonnet 5.5',
+  'claude-haiku-5-5': 'Claude Haiku 5.5',
+  'claude-fable-5-2': 'Claude Fable 5.2',
+};
+
+function parseModels(raw: string): AiModelOption[] {
+  const out: AiModelOption[] = [];
+  for (const entry of raw.split(',')) {
+    const m = /^([a-z]+):([A-Za-z0-9._-]+)$/.exec(entry.trim());
+    if (!m || !(PROVIDERS as readonly string[]).includes(m[1])) continue;
+    const id = `${m[1]}:${m[2]}`;
+    if (out.some((o) => o.id === id)) continue;
+    out.push({ id, provider: m[1] as AiModelOption['provider'], model: m[2], label: LABELS[m[2]] ?? m[2] });
+  }
+  return out;
+}
+
+export function readSermonAiConfig(env: Record<string, string | undefined>): SermonAiConfig {
+  const models = parseModels(env.SERMON_AI_MODELS?.trim() || DEFAULT_MODELS);
+  const effort = (EFFORTS as readonly string[]).includes(env.SERMON_AI_EFFORT?.trim() ?? '')
+    ? (env.SERMON_AI_EFFORT!.trim() as SermonAiConfig['effort'])
+    : 'low';
+  const hasKey = !!env.ANTHROPIC_API_KEY?.trim();
+  return { enabled: hasKey && models.length > 0, models, effort };
+}
