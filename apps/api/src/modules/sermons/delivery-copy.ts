@@ -1,6 +1,6 @@
 import type { Prisma, SermonSlideStyle } from '@prisma/client';
 import { deliveryHasPassed } from './delivery-match';
-import { SLIDE_LAYOUTS, parseStoredSlides, publicFaces, publicSlides, slideFace, type PublicSlide, type SlideLayout } from './sermon-slides';
+import { SLIDE_LAYOUTS, parseStoredSlides, publicSlides, slideFace, type PublicSlide, type SlideLayout } from './sermon-slides';
 
 const ymd = (date: Date) => date.toISOString().slice(0, 10);
 const PUBLIC_KINDS: PublicSlide['kind'][] = ['TITLE', 'VERSE', 'POINT', 'SUMMARY'];
@@ -41,11 +41,13 @@ export async function syncDeliveryCopy(
 }
 
 const textOrNull = (v: unknown): v is string | null => v === null || typeof v === 'string';
+const stringList = (v: unknown): string[] | null =>
+  Array.isArray(v) && v.every((x) => typeof x === 'string') ? (v as string[]) : null;
 
 /**
- * Lê os slides de um envio: `kind`, `text` e os campos de `slideFace`; o que estiver fora do formato cai.
- * Linha gravada antes dos modelos (só `kind`, `text` e `reference`) é completada com `slideFace` e, se passar do
- * limite do modelo, dividida com `splitFaceForLimits`.
+ * Lê os slides de um envio: `kind`, `text`, `reference` e os campos de `slideFace`; o que estiver fora do formato cai.
+ * Linha gravada antes da identidade "painel" (só `kind`, `text` e `reference`, ou com os modelos M01–M04) é
+ * refeita com `slideFace`: o `title` antigo vira o título do slide de VERSE e SUMMARY, e o subtítulo é ignorado.
  */
 export function readDeliverySlides(value: unknown): PublicSlide[] {
   if (!Array.isArray(value)) return [];
@@ -56,19 +58,18 @@ export function readDeliverySlides(value: unknown): PublicSlide[] {
     if (!PUBLIC_KINDS.includes(o.kind as PublicSlide['kind']) || typeof o.text !== 'string') continue;
     if (!textOrNull(o.reference)) continue;
     const kind = o.kind as PublicSlide['kind'];
-    const hasFace =
-      SLIDE_LAYOUTS.includes(o.layout as SlideLayout) && typeof o.title === 'string' && textOrNull(o.subtitle) && textOrNull(o.verse);
-    const face = hasFace
-      ? {
-          layout: o.layout as SlideLayout,
-          title: o.title as string,
-          subtitle: o.subtitle as string | null,
-          verse: o.verse as string | null,
-          reference: o.reference,
-        }
-      : slideFace({ kind, text: o.text, reference: o.reference });
-    // Linha acima do limite do modelo (ex.: ponto antigo de 300) sai em mais slides, nunca encolhida.
-    out.push(...publicFaces(kind, o.text, face));
+    const layout = SLIDE_LAYOUTS.includes(o.layout as SlideLayout) ? (o.layout as SlideLayout) : undefined;
+    const heading = typeof o.title === 'string' && o.title && (kind === 'VERSE' || kind === 'SUMMARY') ? o.title : null;
+    const face = slideFace({
+      kind,
+      text: o.text,
+      reference: o.reference,
+      layout,
+      heading,
+      items: layout ? stringList(o.items) : null,
+      start: typeof o.start === 'number' ? o.start : null,
+    });
+    out.push({ kind, text: o.text, ...face });
   }
   return out;
 }

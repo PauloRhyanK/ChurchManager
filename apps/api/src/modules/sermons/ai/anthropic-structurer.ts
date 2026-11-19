@@ -1,7 +1,7 @@
 // "Colar texto" pelo SDK da Anthropic: o modelo lê as linhas numeradas e devolve só a divisão em partes.
 // A resposta não tem campo para o texto do sermão nem para texto bíblico: só tipos, números de linha, títulos e referências.
 import type { MessageCreateParamsNonStreaming } from '@anthropic-ai/sdk/resources/beta/messages';
-import { createMessage, readResponseJson, type AnthropicMessagesClient } from './anthropic-summarizer';
+import { createMessage, readResponseJson, type AnthropicMessagesClient } from './anthropic-client';
 import { OUTLINE_KINDS, type OutlineBlock, type SermonStructurer, type StructureInput, type StructureOutput } from './sermon-structurer';
 import { SummarizerError } from './sermon-summarizer';
 
@@ -14,6 +14,7 @@ export const STRUCTURE_SYSTEM_PROMPT = [
   'Cada parte tem kind, start e end (a primeira e a última linha, inclusive), text e reference. Tipos:',
   '- HEADING: título de uma seção do sermão (Introdução, Conclusão, um subtítulo). Em text, o título como está, sem numeração nem marcadores.',
   '- POINT: um ponto do sermão ("1. A luz chama", "Primeiro ponto: …", "I – …"). Só a linha do título do ponto. Em text, o título como está, sem a numeração nem palavras como "Ponto 1:".',
+  '- Texto organizado por slides ("SLIDES 01 – Título", "Slide 2: …"): a primeira dessas linhas traz o título do sermão (vai em title e a linha fica como HEADING); as seguintes são POINT, com text sem o prefixo "SLIDES nn –" e sem a numeração do ponto.',
   '- VERSE: uma citação bíblica. As linhas com a referência e, se o texto do versículo estiver colado, as linhas dele. Em reference, a referência por extenso no formato "Livro capítulo:versículo" ou "Livro capítulo:início-fim" (ex.: "João 8:12", "Mateus 5:14-16"), com o nome do livro em português.',
   '- ILLUSTRATION: uma história, exemplo ou ilustração contada para explicar um ponto.',
   '- APPLICATION: uma aplicação prática, desafio ou chamado ao ouvinte.',

@@ -1,21 +1,2 @@
-/* Fontes dos slides (docs/identidade-slides.md): Poppins 500/700 e Playfair Display itálico 500 (os pesos usados), do Google Fonts
-   (licença aberta). A Palast Var é comercial e não está no repositório: o @font-face abaixo só baixa os arquivos quando a
-   fonte de título configurada (VITE_SLIDE_TITLE_FONT) é "Palast Var"; sem eles, a prévia cai na Playfair Display.
-   Nomes dos arquivos: PALAST_VAR_FILES em lib/slide-identity.ts e apps/admin/public/fonts/LEIA-ME.md. */
-@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,500&family=Poppins:wght@500;700&display=swap");
-
-@font-face {
-  font-family: "Palast Var";
-  src: url("/fonts/PalastVar.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "Palast Var";
-  src: url("/fonts/PalastVar-Italic.woff2") format("woff2");
-  font-style: italic;
-  font-weight: 100 900;
-  font-display: swap;
-}
+/* Fonte dos slides (docs/identidade-slides.md): Montserrat 500, 600, 700 e 800, do Google Fonts (licença aberta). */
+@import url("https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&display=swap");

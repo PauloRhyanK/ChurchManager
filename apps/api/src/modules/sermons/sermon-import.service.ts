@@ -1,19 +1,48 @@
 import { randomUUID } from 'node:crypto';
-import { BadGatewayException, BadRequestException, HttpException, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import type { AuthUser } from '../auth/auth-user';
-import type { SermonAiConfig } from './ai/sermon-ai.config';
+import { SERMON_AI_CONFIG, type SermonAiConfig } from './ai/sermon-ai.config';
 import { STRUCTURERS, type SermonStructurer, type StructureOutput } from './ai/sermon-structurer';
 import { SummarizerError } from './ai/sermon-summarizer';
 import { GenerationLimiter } from './ai/generation-limiter';
 import { BibleService } from './bible/bible.service';
 import type { CreateFromTextDto } from './dto/from-text.dto';
 import { validateSermonDocument } from './sermon-document';
-import { PASTE_LIMITS, buildOutlineDocument, outlineTitle, pastedLines, planOutline, planVerse, type VerseFound } from './sermon-outline';
-import { SERMON_AI_CONFIG, providerError } from './sermon-slides.service';
+import { PASTE_LIMITS, buildOutlineDocument, dropTitleHeading, outlineTitle, pastedLines, planOutline, planVerse, type VerseFound } from './sermon-outline';
 import { SermonsService, type SermonFull } from './sermons.service';
 
-/** Limite próprio de "Colar texto" por usuário, separado do dos slides completos. */
+/** Limite próprio de "Colar texto" por usuário. */
 export const STRUCTURE_LIMITER = Symbol('STRUCTURE_LIMITER');
+
+const REFUSED = 'O modelo não pôde organizar este texto. Crie a palavra e cole o texto no editor.';
+
+/** Falha do provedor em resposta HTTP em pt-BR. `refused` é a mensagem quando o modelo recusa o texto. */
+export const providerError = (error: unknown, refused = REFUSED): HttpException => {
+  const reason = error instanceof SummarizerError ? error.reason : 'UNAVAILABLE';
+  switch (reason) {
+    case 'AUTH':
+      return new ServiceUnavailableException('A chave do provedor de IA não foi aceita. Avise o administrador.');
+    case 'CONFIG':
+      return new ServiceUnavailableException('O modelo configurado não aceitou o pedido. Avise o administrador.');
+    case 'REFUSED':
+      return new UnprocessableEntityException(refused);
+    case 'TRUNCATED':
+    case 'INVALID':
+      return new BadGatewayException('A resposta do modelo veio incompleta. Tente de novo.');
+    default:
+      return new ServiceUnavailableException('O provedor de IA não respondeu. Tente de novo em instantes.');
+  }
+};
 
 /** "Colar texto": a IA divide o texto colado em partes e o servidor cria a palavra com o esboço montado. */
 @Injectable()
@@ -27,6 +56,12 @@ export class SermonImportService {
     @Inject(STRUCTURERS) private readonly structurers: Record<string, SermonStructurer>,
     @Inject(STRUCTURE_LIMITER) private readonly limiter: GenerationLimiter,
   ) {}
+
+  /** O que o painel precisa saber da IA: se há e quais modelos. Nunca a chave nem a configuração interna. */
+  aiOptions(): { enabled: boolean; models: { id: string; label: string }[] } {
+    if (!this.ai.enabled) return { enabled: false, models: [] };
+    return { enabled: true, models: this.ai.models.map(({ id, label }) => ({ id, label })) };
+  }
 
   async createFromText(user: AuthUser, dto: CreateFromTextDto): Promise<SermonFull> {
     if (!this.ai.enabled) throw new BadRequestException('Organizar texto com IA ainda não está disponível.');
@@ -53,10 +88,10 @@ export class SermonImportService {
           ? `Organizar texto falhou: reason=${error.reason} status=${error.status ?? '-'} type=${error.type ?? '-'} model=${option.model}`
           : `Organizar texto falhou: ${error instanceof Error ? error.name : 'erro desconhecido'} model=${option.model}`,
       );
-      throw providerError(error, 'O modelo não pôde organizar este texto. Crie a palavra e cole o texto no editor.');
+      throw providerError(error);
     }
 
-    const parts = planOutline(lines, outline.blocks);
+    const parts = dropTitleHeading(planOutline(lines, outline.blocks), outline.title);
     const verses = new Map<number, VerseFound>();
     for (const [i, part] of parts.entries()) {
       if (part.kind !== 'VERSE') continue;

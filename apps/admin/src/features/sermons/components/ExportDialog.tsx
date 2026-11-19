@@ -14,7 +14,6 @@ import { printHtml } from "@/lib/print";
 import { listBibleTranslations } from "../api/sermons-api";
 import { buildSermonHtml } from "../export/sermon-print";
 import { buildDeck } from "../export/slides-deck";
-import { SLIDE_FONTS } from "../lib/slide-identity";
 import { downloadPptx } from "../export/slides-pptx";
 import { exportFileName } from "../export/file-name";
 import {
@@ -40,7 +39,7 @@ interface ExportDialogProps {
   slideStyle: SlideStyle;
 }
 
-const PPT_FONTS_NOTE = `Para abrir com a identidade, o computador precisa ter as fontes ${SLIDE_FONTS.title} e ${SLIDE_FONTS.body} instaladas.`;
+const PPT_FONTS_NOTE = "Para o .pptx ficar igual, instale a fonte Montserrat (Google Fonts) no computador que vai abrir a apresentação.";
 
 function Option({
   badge,
@@ -194,7 +193,7 @@ export function ExportDialog({
             text={
               deck.length === 0
                 ? "Gere os slides primeiro."
-                : `${deck.length} ${deck.length === 1 ? "slide" : "slides"}, no visual escolhido`
+                : `${deck.length} ${deck.length === 1 ? "slide" : "slides"}, nas cores escolhidas`
             }
             note={PPT_FONTS_NOTE}
             disabled={deck.length === 0}

@@ -1,4 +1,4 @@
-// Limite de gerações de "Slides completos" por usuário: janela deslizante em memória.
+// Limite de chamadas à IA por usuário ("Colar texto", ajuste de tempos do culto): janela deslizante em memória.
 
 export class GenerationLimiter {
   private readonly hits = new Map<string, number[]>();

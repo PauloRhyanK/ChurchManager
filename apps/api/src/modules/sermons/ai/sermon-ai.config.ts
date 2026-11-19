@@ -1,8 +1,11 @@
-// Configuração do resumo por IA dos "Slides completos", lida do ambiente do servidor.
+// Configuração da IA da Palavra ("Colar texto"), lida do ambiente do servidor.
 // A chave em si nunca sai daqui: só se ela existe.
 
 export type AiModelOption = { id: string; provider: 'anthropic'; model: string; label: string }; // id = 'anthropic:claude-opus-5-5'
 export type SermonAiConfig = { enabled: boolean; models: AiModelOption[]; effort: 'low' | 'medium' | 'high' };
+
+/** Token de injeção da configuração (lida do ambiente na subida). */
+export const SERMON_AI_CONFIG = Symbol('SERMON_AI_CONFIG');
 
 const DEFAULT_MODELS = 'anthropic:claude-opus-5-5';
 const PROVIDERS = ['anthropic'] as const;
@@ -54,7 +57,7 @@ export function describeSermonAiConfig(env: Record<string, string | undefined>):
   const config = readSermonAiConfig(env);
   const ignored = ignoredSermonAiEntries(env);
   return [
-    `IA dos slides completos: ${config.enabled ? 'ligada' : 'desligada'}, ${config.models.length} modelo(s).`,
+    `IA da Palavra (Colar texto): ${config.enabled ? 'ligada' : 'desligada'}, ${config.models.length} modelo(s).`,
     ...(ignored.length > 0 ? [`SERMON_AI_MODELS: entradas ignoradas: ${ignored.join(', ')}`] : []),
   ];
 }
