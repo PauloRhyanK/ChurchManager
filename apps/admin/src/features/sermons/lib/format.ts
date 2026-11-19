@@ -16,6 +16,21 @@ export function formatDay(date: string): string {
   return `${weekday} ${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}`;
 }
 
+const WEEKDAYS_FULL = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+
+/** "domingo, 22/11 · 19h" (minúsculo, para frases) a partir de 'AAAA-MM-DD' e 'HH:MM'. */
+export function formatServiceSentence(date: string, startTime: string): string {
+  const [y, m, d] = date.split("-").map(Number);
+  const weekday = WEEKDAYS_FULL[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  return `${weekday}, ${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")} · ${formatHour(startTime)}`;
+}
+
+/** "Domingo, 22/11 · 19h" (dia da semana por extenso, capitalizado). */
+export function formatServiceLine(date: string, startTime: string): string {
+  const line = formatServiceSentence(date, startTime);
+  return line.charAt(0).toUpperCase() + line.slice(1);
+}
+
 /** "19h" ou "19h30". */
 export function formatHour(startTime: string): string {
   const [h, min] = startTime.split(":").map(Number);

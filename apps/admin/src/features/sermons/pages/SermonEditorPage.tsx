@@ -1,6 +1,6 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Editor } from "@tiptap/react";
-import { ArrowLeft, Check, Clock, ListTree, Loader2, MoreHorizontal } from "lucide-react";
+import { ArrowLeft, Check, Clock, ListTree, Loader2, MoreHorizontal, Send } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -20,6 +20,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from 
 import { usePermissions } from "@/features/access/hooks/use-permissions";
 import { getApiErrorMessage } from "@/lib/api";
 import { deleteSermon, duplicateSermon, getSermon, updateSermon, type Sermon } from "../api/sermons-api";
+import { SendToServiceDialog } from "../components/SendToServiceDialog";
 import { StructurePanel } from "../components/StructurePanel";
 import { SermonSheet } from "../editor/SermonSheet";
 import { SermonToolbar } from "../editor/SermonToolbar";
@@ -112,6 +113,10 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
+  const queryClient = useQueryClient();
+  // Situação do envio: vive à parte do texto, que depois de aberto é do editor.
+  const [situation, setSituation] = useState({ status: sermon.status, delivery: sermon.delivery });
 
   const autosave = useAutosave({
     sermonId: sermon.id,
@@ -184,14 +189,39 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
     setTimeout(() => scrollToBlock(editor, id), 0);
   };
 
-  const sentNotPreached = sermon.status === "SENT" && sermon.delivery !== null;
+  const { delivery } = situation;
+  const sentNotPreached = situation.status === "SENT" && delivery !== null;
   const deleteDescription =
-    sentNotPreached && sermon.delivery
-      ? `Ela também sai do culto de ${formatDay(sermon.delivery.date)}, ${formatHour(sermon.delivery.startTime)}.`
+    sentNotPreached && delivery
+      ? `Ela também sai do culto de ${formatDay(delivery.date)}, ${formatHour(delivery.startTime)}.`
       : "Esta ação não pode ser desfeita.";
 
-  // Espaço para o botão "Enviar para um culto" (Tarefa 11), ao lado do menu "…".
-  const headerActions = null;
+  /** Salva o que está na tela; só libera o envio se nada ficou sem salvar. */
+  async function ensureSaved() {
+    await autosave.flush();
+    return !autosave.isDirty();
+  }
+  function handleSendChanged(updated: Sermon) {
+    const next = { status: updated.status, delivery: updated.delivery };
+    setSituation(next);
+    // Só a situação muda na cópia em cache; o texto e a revisão ficam como estão.
+    queryClient.setQueryData<Sermon>(["sermons", "detail", sermon.id], (old) => (old ? { ...old, ...next } : old));
+    if (updated.status === "DRAFT") return;
+    navigate(LIST_PATH);
+  }
+
+  const headerActions = canEdit && (
+    <Button
+      type="button"
+      variant={delivery ? "outline" : "default"}
+      size="sm"
+      className="gap-1.5"
+      onClick={() => setSendOpen(true)}
+    >
+      <Send aria-hidden="true" />
+      {delivery ? `Enviada · ${formatDay(delivery.date)}, ${formatHour(delivery.startTime)}` : "Enviar para um culto"}
+    </Button>
+  );
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F3F4F6]">
@@ -260,6 +290,16 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
           />
         </main>
       </div>
+
+      <SendToServiceDialog
+        open={sendOpen}
+        onOpenChange={setSendOpen}
+        sermonId={sermon.id}
+        sermonTitle={title}
+        delivery={delivery}
+        ensureSaved={ensureSaved}
+        onChanged={handleSendChanged}
+      />
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>

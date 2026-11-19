@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatBase, formatSituation, formatSpeech } from "./format";
+import { formatBase, formatServiceLine, formatServiceSentence, formatSituation, formatSpeech } from "./format";
 import type { SermonSummary } from "../api/sermons-api";
 
 const sermon = (over: Partial<SermonSummary>): SermonSummary => ({
@@ -53,5 +53,20 @@ describe("formatSpeech", () => {
   it("em minutos", () => {
     expect(formatSpeech(1680)).toBe("28 min de fala");
     expect(formatSpeech(59)).toBe("menos de 1 min de fala");
+  });
+});
+
+describe("formatServiceLine", () => {
+  it("dia da semana por extenso, capitalizado", () => {
+    expect(formatServiceLine("2026-11-22", "19:00")).toBe("Domingo, 22/11 · 19h");
+    expect(formatServiceLine("2026-11-23", "09:30")).toBe("Segunda, 23/11 · 9h30");
+    expect(formatServiceLine("2026-11-24", "19:00")).toBe("Terça, 24/11 · 19h");
+    expect(formatServiceLine("2026-11-25", "19:00")).toBe("Quarta, 25/11 · 19h");
+    expect(formatServiceLine("2026-11-26", "19:00")).toBe("Quinta, 26/11 · 19h");
+    expect(formatServiceLine("2026-11-27", "19:00")).toBe("Sexta, 27/11 · 19h");
+    expect(formatServiceLine("2026-11-28", "19:00")).toBe("Sábado, 28/11 · 19h");
+  });
+  it("variante minúscula para frases", () => {
+    expect(formatServiceSentence("2026-12-06", "19:00")).toBe("domingo, 06/12 · 19h");
   });
 });

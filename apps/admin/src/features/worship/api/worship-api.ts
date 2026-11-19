@@ -160,6 +160,7 @@ export interface ServiceSummary {
   startTime: string;
   name: string;
   songCount: number;
+  hasSermon: boolean;
 }
 
 export interface ServicePlan {
@@ -172,6 +173,8 @@ export interface ServicePlan {
   endsAt: string;
   worshipStartsAt: string | null;
   songs: ServiceSong[];
+  /** Palavra enviada para este culto (nulo = nenhuma). */
+  sermon: { title: string; preacherName: string; estimatedMinutes: number } | null;
   updatedAt: string;
 }
 
