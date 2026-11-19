@@ -190,20 +190,32 @@ Pasta `apps/admin/src/features/worship`. Rotas atrás de `PermissionRoute module
 
 Cores e fonte são as do painel (`index.css`). As cores dos cinco climas são as do desenho e ficam numa constante do painel; servem só para a tela.
 
-## Contrato para a Ponte (etapa 2: só o formato, nada implementado)
+## Contrato para a Ponte (etapa 2: lado do ChurchManager implementado em 20/11/2026)
 
-A Ponte vai ler um culto pronto para executar. Rota a criar na etapa 2: `GET /public/tenants/:slug/worship/services/next` (e `/:id`), protegida por uma chave da integração no cabeçalho `x-ponte-key` (por igreja, guardada como hash, gerada no painel). A autenticação é decisão da etapa 2; o formato fica fixado aqui:
+A Ponte lê um culto pronto para executar. O lado da Ponte (buscar, guardar, executar) é da frente que cuida de `apps/ponte`; aqui fica o que o ChurchManager entrega.
+
+**Rotas** (só leitura, limite de 30 consultas por minuto por IP):
+
+- `GET /api/public/tenants/:slug/worship/services/next`: o primeiro culto de hoje em diante ("hoje" no fuso `America/Sao_Paulo`). Sem culto: `{ "version": "vazio", "service": null, "sermon": null, "songs": [] }`.
+- `GET /api/public/tenants/:slug/worship/services/:id`: um culto específico.
+
+**Autenticação:** cabeçalho `x-ponte-key` com a chave da igreja. Chave ausente, errada, revogada ou de outra igreja responde sempre 401. A chave é gerada em Cultos › Roteiro › **Ponte do Culto** (pede `SETTINGS:EDIT`), aparece uma única vez, e o banco guarda só o SHA-256 (`worship_ponte_keys`, uma por igreja; gerar outra invalida a anterior). A tela mostra o final da chave em uso e a última leitura.
+
+**Formato:**
 
 ```jsonc
 {
+  "version": "332896331eb6",          // impressão digital do conteúdo; só muda quando algo muda
   "service": {
     "id": "…", "date": "2026-11-22", "startTime": "19:00", "name": "Domingo à noite",
-    "updatedAt": "2026-11-21T14:32:00Z",
+    "updatedAt": "2026-11-21T14:32:00Z", "endsAt": "20:17",
     "moments": [{ "name": "Louvor", "kind": "WORSHIP", "startsAt": "19:05", "durationMinutes": 17 }]
   },
+  "sermon": { "title": "…", "preacherName": "…", "estimatedMinutes": 35 },   // ou null
   "songs": [{
     "id": "…", "title": "Luz da Manhã", "status": "READY", "updatedAt": "…",
     "musicalKey": "Sol", "bpm": 72, "timeSignature": "4/4",
+    "holyricsId": "1741522267781",    // ou null: aí a Ponte procura a música pelo título
     "audio": { "url": "https://…/audio/<uuid>.mp3", "fileName": "luz-da-manha.mp3", "durationSeconds": 252.4, "sizeBytes": 6048211 },
     "parts": [{ "index": 0, "kind": "VERSE", "name": "Verso 1", "mood": "WORSHIP", "time": 14.2, "firstSlide": 0, "slideCount": 2 }],
     "slides": [{
@@ -216,11 +228,15 @@ A Ponte vai ler um culto pronto para executar. Rota a criar na etapa 2: `GET /pu
 }
 ```
 
-- `time` é o segundo do áudio; corresponde ao `segundo` do `_marcas_louvor.json` de hoje. `parts[].time` é o tempo do primeiro slide da parte.
-- `mood` é a chave do clima; a Ponte decide cena e modo de luz. Corresponde ao par `cena`/`modo` de hoje.
+- `moments[].kind`: `PRE_SERVICE`, `GENERIC`, `WORSHIP` ou `SERMON`. `durationMinutes` já é a duração efetiva (o louvor pela soma dos áudios).
+- `time` é o segundo do áudio; corresponde ao `segundo` do `_marcas_louvor.json`. `parts[].time` é o tempo do primeiro slide da parte.
+- `mood`: `CONTEMPLATIVE`, `WORSHIP`, `BUILD`, `CELEBRATION`, `EXPLOSION` (na Ponte: contemplativo, adoracao, crescendo, celebracao, explosao). A Ponte decide cena e modo de luz.
+- `slides` é a sequência que o telão percorre, em ordem de execução; um refrão que volta aparece de novo, com o seu tempo. `slides[].index` é a posição nessa sequência, **não** o índice do slide no Holyrics. Quando a letra do Holyrics foi colada do `holyricsText`, a ordem dos blocos é a mesma.
 - `cues` vão só para o retorno do altar, nunca para o telão.
-- Música que não está `READY` vem com o que tiver (`time: null` onde falta); a Ponte a trata como manual.
-- `updatedAt` deixa a Ponte saber se precisa baixar de novo; o áudio muda de URL quando é trocado, então serve de chave de cache.
+- `holyricsId` é preenchido à mão na ficha da música (campo "Id da música no Holyrics").
+- Música que não está `READY` vem com o que tiver (`time: null` onde falta, `audio: null` sem áudio); a Ponte a trata como manual.
+- O áudio muda de URL quando é trocado, então a URL serve de chave de cache para o download.
+- `sermon` traz só título, pregador e tempo estimado; os slides da palavra entram quando a etapa 3 de Palavras existir.
 
 ## Testes
 
@@ -231,7 +247,7 @@ A Ponte vai ler um culto pronto para executar. Rota a criar na etapa 2: `GET /pu
 ## Fora desta entrega
 
 - Alinhamento automático da letra no áudio, e qualquer modelo de linguagem.
-- A rota pública para a Ponte e a chave da integração (etapa 2); o indicador "Na Ponte · 14:32" do desenho não aparece.
+- O lado da Ponte (buscar e executar) e o indicador "Na Ponte · 14:32" do desenho. A rota e a chave já existem (ver "Contrato para a Ponte").
 - Áudio no Reaper (etapa 3). Painel do culto ao vivo e tela do pastor (outra sessão).
 - Tela de editar modelos de culto: existe o Culto padrão e "Salvar este culto como modelo".
 - Mais de um bloco de louvor por culto; histórico de versões da música; envio direto ao Holyrics (o token da igreja não permite).

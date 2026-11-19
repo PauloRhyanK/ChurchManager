@@ -113,6 +113,7 @@ model Tenant {
   worshipSongs       WorshipSong[]
   worshipTemplates   WorshipServiceTemplate[]
   worshipServices    WorshipService[]
+  worshipPonteKey    WorshipPonteKey?
   sermons            Sermon[]
   sermonDeliveries   SermonDelivery[]
 
@@ -970,6 +971,8 @@ model WorshipSong {
   musicalKey           String?           @map("musical_key") @db.VarChar(16)
   bpm                  Int?
   timeSignature        String?           @map("time_signature") @db.VarChar(8)
+  /// Id da música no acervo do Holyrics do PC da igreja (a Ponte mostra a letra por ele).
+  holyricsId           String?           @map("holyrics_id") @db.VarChar(64)
   /// A letra como foi colada; serve ao "Organizar de novo".
   rawLyrics            String            @default("") @map("raw_lyrics") @db.Text
   /// O documento da letra: lista plana de linhas. Ver `worship-document.ts`.
@@ -990,6 +993,22 @@ model WorshipSong {
   @@index([tenantId, status])
   @@index([tenantId, title])
   @@map("worship_songs")
+}
+
+/// Chave com que a Ponte do Culto lê o roteiro e as músicas. Só o hash é guardado.
+model WorshipPonteKey {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @unique @map("tenant_id") @db.Uuid
+  /// SHA-256 da chave, em hex.
+  keyHash    String    @map("key_hash") @db.VarChar(64)
+  /// Últimos 4 caracteres, só para a pessoa reconhecer qual chave está valendo.
+  keyHint    String    @map("key_hint") @db.VarChar(8)
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastUsedAt DateTime? @map("last_used_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("worship_ponte_keys")
 }
 
 model WorshipServiceTemplate {

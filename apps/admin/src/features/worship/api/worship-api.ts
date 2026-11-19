@@ -15,6 +15,8 @@ export interface SongSummary {
   musicalKey: string | null;
   bpm: number | null;
   timeSignature: string | null;
+  /** Id da música no acervo do Holyrics do PC da igreja. */
+  holyricsId: string | null;
   status: SongStatus;
   pending: Pending[];
   slideCount: number;
@@ -59,6 +61,7 @@ export interface SongInfoBody {
   musicalKey: string | null;
   bpm: number | null;
   timeSignature: string | null;
+  holyricsId: string | null;
 }
 
 export async function updateSongInfo(id: string, info: SongInfoBody): Promise<Song> {
@@ -68,6 +71,7 @@ export async function updateSongInfo(id: string, info: SongInfoBody): Promise<So
     musicalKey: info.musicalKey,
     bpm: info.bpm,
     timeSignature: info.timeSignature,
+    holyricsId: info.holyricsId,
   };
   return (await api.put<Song>(`${SONGS}/${id}`, body)).data;
 }
@@ -128,6 +132,33 @@ export async function unmarkSongReady(id: string): Promise<Song> {
 
 export async function deleteSong(id: string): Promise<void> {
   await api.delete(`${SONGS}/${id}`);
+}
+
+// --- ligação com a Ponte do Culto ------------------------------------------------
+
+export interface PonteKeyStatus {
+  active: boolean;
+  /** Últimos caracteres da chave em uso, para reconhecer qual é. */
+  hint: string | null;
+  createdAt: string | null;
+  lastUsedAt: string | null;
+  /** Caminho que a Ponte consulta, relativo à base da API. */
+  path: string;
+}
+
+const PONTE_KEY = "/admin/tenants/me/worship/ponte-key";
+
+export async function fetchPonteKey(): Promise<PonteKeyStatus> {
+  return (await api.get<PonteKeyStatus>(PONTE_KEY)).data;
+}
+
+/** Gera uma chave nova. A chave em si só vem nesta resposta. */
+export async function generatePonteKey(): Promise<PonteKeyStatus & { key: string }> {
+  return (await api.post<PonteKeyStatus & { key: string }>(PONTE_KEY)).data;
+}
+
+export async function revokePonteKey(): Promise<PonteKeyStatus> {
+  return (await api.delete<PonteKeyStatus>(PONTE_KEY)).data;
 }
 
 // --- roteiro -------------------------------------------------------------------
