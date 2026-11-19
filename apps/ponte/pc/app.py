@@ -595,9 +595,17 @@ def _ler_estado_holyrics():
         atual = cliente.pedir("GetCurrentPresentation").get("data")
     except Exception:
         return None
-    dados = {"preta": None}
+    dados = {"preta": None, "alerta": None}
     try:
         dados["preta"] = bool(cliente.pedir("GetF10").get("data"))
+    except Exception:
+        pass
+    try:
+        # O Alerta do Holyrics: a faixa embaixo da tela. E nele que mora o Pix
+        # do ofertorio.
+        alerta = cliente.pedir("GetAlert").get("data") or {}
+        dados["alerta"] = {"mostrando": bool(alerta.get("show")),
+                           "tem_texto": bool(str(alerta.get("text") or "").strip())}
     except Exception:
         pass
     if not atual:
@@ -2457,7 +2465,7 @@ def _retrato_do_painel():
     if holyrics is not None:
         telao = {"vazio": bool(holyrics.get("vazio")), "nome": holyrics.get("nome") or "",
                  "slide": holyrics.get("slide"), "total": holyrics.get("total"),
-                 "preta": holyrics.get("preta")}
+                 "preta": holyrics.get("preta"), "alerta": holyrics.get("alerta")}
     luz = None
     if _contexto.get("luzes") is not None:
         motor = _contexto.get("movimento")
@@ -2488,6 +2496,8 @@ def _retrato_do_painel():
         "recados": recados,
         "tem_recado_limpar": "recado_limpar" in _cues_por_id,
         "retorno_tv": _vigia["valor"].retrato() if _vigia["valor"] else None,
+        "live": {"titulo": _titulo_da_live(),
+                 "pode": any(c["cliente"].autorizado() for c in (_contexto.get("youtube") or {}).values())},
         "historico": list(_historico)[:12],
         "remoto": dict(_remoto),
         "atualizacao": _retrato_da_atualizacao(),
@@ -2670,6 +2680,35 @@ def _acao_do_painel(dados, origem):
             titulo = ("Transmissão aberta ao público" if valor == "public"
                       else "Transmissão só para quem tem o link")
             resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
+        elif tipo == "pix":
+            # O texto do Pix fica no Alerta do Holyrics. Mostrar e so ligar o
+            # alerta; `ofertorio.pix_texto` no config.yaml, se existir, escreve
+            # o texto antes (a API nao escolhe um alerta salvo pelo nome).
+            cliente = _contexto.get("holyrics")
+            if cliente is None:
+                return {"erro": "o telão está desligado neste PC"}, 400
+            ligar = bool(dados.get("ligar"))
+            pedido = {"show": ligar}
+            texto_pix = str(((_config.get("ofertorio") or {}).get("pix_texto")) or "").strip()
+            if ligar and texto_pix:
+                pedido["text"] = texto_pix
+            cliente.pedir("SetAlert", pedido)
+            titulo = "Pix no telão" if ligar else "Pix tirado do telão"
+            resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
+        elif tipo == "slides_palavra":
+            # Os slides que o site gera ficam numa pasta de imagens do Holyrics
+            # ("Pregação"). ShowImage com o nome da pasta abre a pasta inteira.
+            cliente = _contexto.get("holyrics")
+            if cliente is None:
+                return {"erro": "o telão está desligado neste PC"}, 400
+            pasta = str(((_config.get("palavra") or {}).get("pasta_de_imagens")) or "Pregação")
+            cliente.pedir("ShowImage", {"file": pasta})
+            titulo = "Slides da Palavra no telão"
+            resultado = {"ok": True, "titulo": titulo, "detalhe": "pasta " + pasta}
+        elif tipo == "live":
+            titulo = "Live configurada no YouTube"
+            resultado = _configurar_live(str(dados.get("titulo") or ""))
+            titulo = resultado["titulo"]
         elif tipo == "retorno":
             vigia = _vigia["valor"]
             if vigia is None:
@@ -2730,6 +2769,107 @@ def _anotar_quem_falou():
             "versao": request.headers.get("X-Ponte-Versao", "")[:20] or None,
             "em": time.time()}
     return None
+
+
+# -- configurar a live com um botao ---------------------------------------------
+
+_TITULO_DE_PASTOR = re.compile(
+    r"(?i)^(pr|pra|pastor|pastora|ap|ap[oó]stolo|ap[oó]stola|bispo|bispa|ev|evangelista|"
+    r"miss|mission[aá]rio|mission[aá]ria|dc|di[aá]cono|presb|presb[ií]tero|rev|reverendo)\b\.?")
+TITULO_PADRAO_DA_LIVE = "Culto de Celebração"
+
+
+def _titulo_da_live():
+    """'Titulo || Pr. Nome' da palavra de hoje, ou o titulo padrao."""
+    palavra = None
+    try:
+        if _pecas.get("palavra") is not None:
+            palavra = _pecas["palavra"].retrato()
+    except Exception:
+        palavra = None
+    if not palavra or not palavra.get("ativa") or not str(palavra.get("titulo") or "").strip():
+        return TITULO_PADRAO_DA_LIVE
+    titulo = str(palavra["titulo"]).strip()
+    pregador = str(palavra.get("pregador") or "").strip()
+    if pregador and not _TITULO_DE_PASTOR.match(pregador):
+        pregador = "Pr. " + pregador
+    completo = "{} || {}".format(titulo, pregador) if pregador else titulo
+    return completo[:100]
+
+
+def _miniatura_padrao():
+    """(bytes, de_onde) da imagem padrao da live, ou (None, motivo).
+
+    A imagem mora na versao web (ponte.igrejaparaiso.com.br/miniatura), onde
+    qualquer um da equipe troca. Sem web, vale `youtube.miniatura` do config."""
+    import urllib.error
+    import urllib.request
+    conf = _config.get("web") or {}
+    url = os.environ.get("PONTE_WEB_URL") or conf.get("url") or mod_atualizar.ENDERECO_PADRAO
+    chave = os.environ.get("PONTE_WEB_CHAVE") or conf.get("chave")
+    if chave and not str(chave).startswith("COLE-AQUI"):
+        try:
+            pedido = urllib.request.Request(str(url).rstrip("/") + "/api/miniatura",
+                                            headers={"X-Ponte-Chave": str(chave)})
+            with urllib.request.urlopen(pedido, timeout=15) as resposta:
+                return resposta.read(3 * 1024 * 1024), "web"
+        except urllib.error.HTTPError as erro:
+            if erro.code != 404:
+                return None, "a versão web não entregou a imagem ({})".format(erro.code)
+        except Exception as erro:
+            return None, "não consegui falar com a versão web: {}".format(type(erro).__name__)
+    local = (_config.get("youtube") or {}).get("miniatura")
+    if local:
+        caminho = local if os.path.isabs(local) else os.path.join(RAIZ, local)
+        try:
+            with open(caminho, "rb") as arq:
+                return arq.read(), "este PC"
+        except OSError:
+            pass
+    return None, "não há imagem padrão: suba uma em ponte.igrejaparaiso.com.br/miniatura"
+
+
+def _configurar_live(titulo):
+    """Um botao: titulo e imagem padrao na transmissao de hoje.
+
+    Se a transmissao ja existe (agendada ou no ar), troca o titulo dela. Se
+    nao, prepara uma presa a chave do OBS (ver ClienteYouTube.preparar), so
+    com o link, como sempre. A visibilidade se troca depois, no cartao."""
+    titulo = titulo.strip()[:100]
+    if not titulo:
+        return {"ok": False, "titulo": "Live não configurada", "detalhe": "o título está vazio"}
+    canal = next((c for c in (_contexto.get("youtube") or {}).values() if c["cliente"].autorizado()), None)
+    if canal is None:
+        return {"ok": False, "titulo": "Live não configurada",
+                "detalhe": "nenhum canal do YouTube autorizado neste PC (veja Transmissão no YouTube)"}
+    cliente = canal["cliente"]
+    try:
+        atual = cliente.transmissao("active") or cliente.transmissao("upcoming")
+        if atual:
+            cliente.atualizar(atual, titulo=titulo)
+            video, como = atual["id"], "título trocado na transmissão de hoje"
+        else:
+            id_stream, _de_onde = _chave_do_obs_no_youtube(cliente)
+            if not id_stream:
+                return {"ok": False, "titulo": "Live não configurada",
+                        "detalhe": "não consegui saber qual chave o OBS usa"}
+            ultima = cliente.ultima_concluida()
+            nova, _criada = cliente.preparar(
+                titulo, id_stream, privacidade="unlisted",
+                descricao=((ultima or {}).get("snippet") or {}).get("description"))
+            video, como = nova["id"], "transmissão preparada, só com o link"
+    except mod_youtube.ErroYouTube as erro:
+        return {"ok": False, "titulo": "Live não configurada", "detalhe": str(erro)[:200]}
+    _yt_painel["pedir"] = True
+    imagem, de_onde = _miniatura_padrao()
+    if imagem is None:
+        return {"ok": False, "titulo": "Live configurada sem imagem", "detalhe": como + "; " + de_onde}
+    try:
+        cliente.definir_miniatura_bytes(video, imagem)
+    except mod_youtube.ErroYouTube as erro:
+        return {"ok": False, "titulo": "Live configurada sem imagem",
+                "detalhe": como + "; a imagem falhou: " + str(erro)[:160]}
+    return {"ok": True, "titulo": "Live configurada", "detalhe": como + ", com a imagem padrão"}
 
 
 @app.post("/api/retorno/pausar")

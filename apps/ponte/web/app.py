@@ -156,7 +156,10 @@ def _porteiro():
              "/api/versao", "/api/atualizacao/pacote",
              # Um PC da igreja perguntando onde o principal esta. Responde so
              # para quem chega da mesma internet que a igreja.
-             "/api/principal")
+             "/api/principal",
+             # A imagem padrao da live: a igreja busca com a chave; a equipe
+             # ve e troca logada. A rota confere uma das duas.
+             "/api/miniatura")
     # O celular do pregador entra SEM a senha da equipe: quem autoriza e o
     # codigo do link, conferido em cada rota contra o resumo que a igreja
     # mandou. /api/espelho/pedidos confere a chave da igreja, como /api/espelho.
@@ -414,7 +417,9 @@ ACOES_DO_PAINEL = ("ir", "gravar", "transmitir", "tela_preta", "recado", "cena_l
                    # o toque e o telao haveria ate 4 segundos.
                    "cena_transmissao", "clima",
                    # ir para um item do roteiro (momento ou musica), como o "ir"
-                   "roteiro_ir")
+                   "roteiro_ir",
+                   # 19/11/2026: abrir os slides da Palavra, o Pix e a live.
+                   "slides_palavra", "pix", "live")
 
 
 @app.get("/api/painel")
@@ -621,6 +626,87 @@ def espelho_pedidos():
 _ENDERECO_LOCAL = re.compile(
     r"^http://(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}"
     r"|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}):\d{2,5}$")
+
+
+# -- a imagem padrao da live ----------------------------------------------------
+
+ARQ_MINIATURA = os.path.join(PASTA_DADOS, "miniatura.img")
+MINIATURA_MAXIMA = 2 * 1024 * 1024        # o limite do YouTube
+
+
+def _tipo_da_imagem(dados):
+    if dados[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if dados[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    return None
+
+
+PAGINA_MINIATURA = """<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Imagem da live — Ponte do Culto</title><link rel="stylesheet" href="/guia.css"></head>
+<body><div class="tela" style="max-width:760px">
+<div><h1 class="ola">Imagem da live</h1>
+<div class="sub">É a miniatura que o botão <b>Configurar a live</b> põe no YouTube. Fica até alguém trocar.</div></div>
+__AVISO__
+__ATUAL__
+<form method="post" action="/api/miniatura" enctype="multipart/form-data" style="display:flex;flex-direction:column;gap:12px">
+<label class="sub" for="imagem" style="font-size:16px">Trocar por outra (JPG ou PNG, até 2 MB, de preferência 1280×720)</label>
+<input id="imagem" name="imagem" type="file" accept="image/jpeg,image/png" required style="font-size:16px">
+<button class="bt forte largo" type="submit">Guardar esta imagem</button>
+</form>
+<a class="leve" href="/">Voltar ao painel</a>
+</div></body></html>"""
+
+
+@app.get("/miniatura")
+def pagina_miniatura():
+    if os.path.exists(ARQ_MINIATURA):
+        quando = time.strftime("%d/%m/%Y %H:%M", time.localtime(os.path.getmtime(ARQ_MINIATURA)))
+        atual = ('<img src="/api/miniatura?v={}" alt="A imagem padrão da live" '
+                 'style="width:100%;max-width:640px;aspect-ratio:16/9;object-fit:cover;border-radius:14px;'
+                 'border:1px solid #243040"><div class="sub" style="font-size:14px">Guardada em {}.</div>'
+                 ).format(int(os.path.getmtime(ARQ_MINIATURA)), quando)
+    else:
+        atual = '<div class="faixa aviso">Ainda não há imagem padrão. A live vai sem miniatura até alguém subir uma.</div>'
+    aviso = {"ok": '<div class="faixa" style="background:#0d2a18;border:1px solid #1f6b3c;color:#6ee7a0">Imagem guardada.</div>',
+             "grande": '<div class="faixa erro">A imagem passou de 2 MB, o limite do YouTube.</div>',
+             "tipo": '<div class="faixa erro">Só JPG ou PNG.</div>'}.get(request.args.get("r"), "")
+    return PAGINA_MINIATURA.replace("__AVISO__", aviso).replace("__ATUAL__", atual)
+
+
+@app.get("/api/miniatura")
+def miniatura():
+    """A imagem padrao. Para a igreja (com a chave) ou para quem esta logado."""
+    pela_chave = hmac.compare_digest(request.headers.get("X-Ponte-Chave", ""), CHAVE)
+    if not pela_chave and not _logado():
+        return jsonify({"erro": "entre com a senha", "entrar": True}), 401
+    try:
+        with open(ARQ_MINIATURA, "rb") as arq:
+            dados = arq.read()
+    except OSError:
+        return jsonify({"erro": "ainda nao ha imagem padrao"}), 404
+    resposta = send_file(io.BytesIO(dados), mimetype=_tipo_da_imagem(dados) or "application/octet-stream")
+    resposta.headers["Cache-Control"] = "no-store"
+    return resposta
+
+
+@app.post("/api/miniatura")
+def miniatura_trocar():
+    if not _logado():
+        return jsonify({"erro": "entre com a senha", "entrar": True}), 401
+    arquivo = request.files.get("imagem")
+    dados = arquivo.read(MINIATURA_MAXIMA + 1) if arquivo else b""
+    if len(dados) > MINIATURA_MAXIMA:
+        return redirect("/miniatura?r=grande")
+    if not dados or _tipo_da_imagem(dados) is None:
+        return redirect("/miniatura?r=tipo")
+    os.makedirs(PASTA_DADOS, exist_ok=True)
+    provisorio = ARQ_MINIATURA + ".novo"
+    with open(provisorio, "wb") as arq:
+        arq.write(dados)
+    os.replace(provisorio, ARQ_MINIATURA)
+    return redirect("/miniatura?r=ok")
 
 
 @app.get("/api/principal")
