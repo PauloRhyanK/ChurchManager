@@ -39,6 +39,8 @@ import { SlidesPreview } from "./SlidesPreview";
 interface LyricsStepProps {
   song: Song;
   rows: WorshipRow[];
+  /** A música ainda não foi organizada: mostra a letra colada, não o editor. */
+  draft: boolean;
   version: number;
   canEdit: boolean;
   onChange: (rows: WorshipRow[], external?: boolean) => void;
@@ -50,7 +52,7 @@ interface LyricsStepProps {
 
 const EMPTY_PARTS: PartKind[] = ["INTRO", "INSTRUMENTAL", "ENDING"];
 
-export function LyricsStep({ song, rows, version, canEdit, onChange, onOrganize, organizing, onAudioUploaded }: LyricsStepProps) {
+export function LyricsStep({ song, rows, draft, version, canEdit, onChange, onOrganize, organizing, onAudioUploaded }: LyricsStepProps) {
   const [selection, setSelection] = useState<DocSelection | null>(null);
   const [cursorRow, setCursorRow] = useState(-1);
   const [cue, setCue] = useState<{ mode: "insert"; before: number } | { mode: "edit"; id: string } | null>(null);
@@ -79,7 +81,7 @@ export function LyricsStep({ song, rows, version, canEdit, onChange, onOrganize,
   const cueInitial: CueDraft | null = editingCue ? { target: editingCue.target ?? "ALL", text: editingCue.text ?? "" } : null;
 
   // Rascunho: ainda não há documento. Mostra a letra colada e o botão de organizar.
-  if (rows.length === 0) {
+  if (draft) {
     return (
       <div className="flex flex-wrap items-start gap-6">
         <section className="flex min-w-0 flex-[2_1_560px] flex-col gap-4 rounded-xl border bg-card p-6">

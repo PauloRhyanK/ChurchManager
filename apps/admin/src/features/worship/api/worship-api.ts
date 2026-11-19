@@ -76,7 +76,12 @@ export async function updateSongInfo(id: string, info: SongInfoBody): Promise<So
 function rowBody(row: WorshipRow): WorshipRow {
   const body: WorshipRow = { id: row.id, type: row.type };
   if (row.type === "break") {
+    // Linha esvaziada que abria parte ou slide: o servidor passa parte e tempo para a seguinte.
     if (row.part) body.part = { kind: row.part.kind, mood: row.part.mood };
+    if (typeof row.time === "number") {
+      body.time = row.time;
+      body.timeSource = row.timeSource ?? "MANUAL";
+    }
     return body;
   }
   body.text = (row.text ?? "").slice(0, 200);

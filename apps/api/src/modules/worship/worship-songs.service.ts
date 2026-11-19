@@ -147,7 +147,8 @@ export class WorshipSongsService {
     };
     const updated = await this.prisma.worshipSong.update({
       where: { id: song.id },
-      data: { ...audio, ...this.computed({ ...song, ...audio }, rowsOf(song)) },
+      // Os tempos foram marcados contra o arquivo anterior: a música volta a "Falta conferir".
+      data: { ...audio, ...this.computed({ ...song, ...audio, readyAt: null }, rowsOf(song)) },
     });
     await this.storage.deleteFileByPublicUrl(song.audioUrl);
     return toSongResponse(updated);

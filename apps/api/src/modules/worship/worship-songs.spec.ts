@@ -144,7 +144,9 @@ test('trocar o áudio apaga o arquivo anterior; remover derruba para pendente', 
   assert.equal(out.audio?.url, 'https://cdn/novo.mp3');
   assert.equal(out.audio?.fileName, 'novo.mp3');
   assert.deepEqual(deleted, ['https://cdn/a.mp3']);
-  assert.equal(writes[0].data?.status, 'READY');
+  assert.equal(writes[0].data?.status, 'NEEDS_TIMING', 'tempos marcados contra outro arquivo: volta a conferir');
+  assert.equal(writes[0].data?.readyAt, null);
+  assert.deepEqual(out.pending, ['CONFIRM']);
 
   const removed = build({ status: 'READY', readyAt: new Date() });
   const semAudio = await removed.svc.removeAudio(TENANT_B, SONG);

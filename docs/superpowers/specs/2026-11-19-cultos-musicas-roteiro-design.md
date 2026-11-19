@@ -137,7 +137,7 @@ Músicas:
 | `GET /songs/:id` | Música inteira, com `rows`, `status`, `pending`. |
 | `PUT /songs/:id` | Parcial: `{ title?, artist?, musicalKey?, bpm?, timeSignature?, rows? }`. Salva o documento inteiro quando `rows` vem. |
 | `POST /songs/:id/organize` | `{ rawLyrics? }`. Refaz a organização; **apaga** ajustes e tempos (a tela confirma antes). |
-| `POST /songs/:id/audio` | multipart: `file` + `durationSeconds`. Troca o áudio (apaga o anterior do R2). Os tempos ficam; a tela avisa para conferir. |
+| `POST /songs/:id/audio` | multipart: `file` + `durationSeconds`. Troca o áudio (apaga o anterior do R2). Os tempos ficam, mas a música deixa de estar Pronta (volta a "Falta conferir"): eles foram marcados contra outro arquivo. |
 | `DELETE /songs/:id/audio` | Remove o áudio. |
 | `POST /songs/:id/ready` · `DELETE /songs/:id/ready` | Marca / desmarca "Pronta para o culto". Incompleta → 400 dizendo o que falta. |
 | `DELETE /songs/:id` | 409 se a música está em algum roteiro. |
@@ -164,7 +164,7 @@ DTOs com whitelist; nenhum aceita campo que o servidor devolve (`status`, `pendi
 O `StorageService` de hoje só tem `uploadImage` (5 MB; JPEG, PNG, WebP, GIF pela assinatura dos bytes). Muda:
 
 - A parte comum (conferir configuração, `PutObject`, log sem segredo) sai para um método privado; `uploadImage` continua com a mesma assinatura e o mesmo comportamento.
-- Novo `uploadAudio(buffer, folder)`: aceita **MP3, WAV, M4A/AAC, OGG e FLAC** pela assinatura dos bytes (nunca pelo nome nem pelo mimetype), até **90 MB**, chave `tenants/<id>/worship/audio/<uuid>.<ext>`, e devolve `{ url, sizeBytes }`.
+- Novo `uploadAudio(buffer, folder)`: aceita **MP3, WAV, M4A (AAC em MP4), OGG e FLAC** pela assinatura dos bytes (nunca pelo nome nem pelo mimetype), até **90 MB**, chave `tenants/<id>/worship/audio/<uuid>.<ext>`, e devolve `{ url, sizeBytes }`.
 - Novo `AudioUploadInterceptor` (mesmo desenho do `ImageUploadInterceptor`, com o limite de áudio e 413 em pt-BR).
 
 Pontos para saber:
