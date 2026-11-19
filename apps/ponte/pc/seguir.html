@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Seguir com a luz — Ponte do Culto</title>
+<style>
+/* SEGUIR: as cabecas do teto acompanhando alguem pela camera aberta.
+
+   A tela tem dois modos de clique na imagem, e so um vale por vez:
+     - normal: clicar numa pessoa escolhe quem a luz segue;
+     - calibrando: clicar grava o ponto da luz escolhida, com o pan/tilt
+       que esta nos controles.
+   A luz SO ANDA com "Seguir" ligado. Abrir a tela nao mexe em nada. */
+:root{
+  --fundo:#0b1016; --caixa:#131b24; --linha:#243040; --borda:#3a4757;
+  --texto:#e8eef6; --suave:#b9c6d6; --apagado:#8fa0b4;
+  --ok:#22c55e; --ok-fundo:#0d2a18; --ok-texto:#6ee7a0;
+  --erro-fundo:#2a1114; --erro-texto:#f8a5a5;
+  --aviso-fundo:#2a1d07; --aviso-texto:#f7d9a3;
+  --marca:#3b82f6; --marca-fundo:#10213f; --marca-texto:#a9c9ff;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--fundo);color:var(--texto);
+  font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+a{color:var(--marca-texto)}
+button,input,select{font:inherit;color:inherit}
+main{max-width:980px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0 12px} h2{font-size:17px;margin:0 0 10px}
+.caixa{background:var(--caixa);border:1px solid var(--linha);border-radius:12px;padding:14px;margin-bottom:14px}
+.tela{position:relative;background:#000;border-radius:10px;overflow:hidden;cursor:crosshair}
+.tela img{display:block;width:100%;height:auto;min-height:120px}
+.tela.calibrando{outline:3px solid #f59e0b}
+.linha{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.bt{border:1px solid var(--borda);background:#18212c;border-radius:10px;padding:10px 14px;cursor:pointer}
+.bt:hover{border-color:var(--marca)}
+.bt.forte{background:var(--marca);border-color:var(--marca);color:#fff}
+.bt.ligado{background:var(--ok-fundo);border-color:var(--ok);color:var(--ok-texto)}
+.bt[disabled]{opacity:.5;cursor:not-allowed}
+.status{color:var(--suave);font-size:14px}
+.aviso{background:var(--aviso-fundo);color:var(--aviso-texto);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.erro{background:var(--erro-fundo);color:var(--erro-texto);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.ok{color:var(--ok-texto)}
+label{display:block;color:var(--suave);font-size:14px;margin-top:8px}
+input[type=range]{width:100%}
+ol{margin:6px 0 0;padding-left:20px;color:var(--suave);font-size:14px}
+.pilula{display:inline-block;border-radius:999px;padding:2px 10px;font-size:13px;background:var(--marca-fundo);color:var(--marca-texto)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Seguir com a luz</h1>
+  <div id="indisponivel" class="aviso" hidden></div>
+  <div id="falha" class="erro" hidden></div>
+
+  <div id="tudo" hidden>
+    <div class="caixa">
+      <div class="linha" style="justify-content:space-between;margin-bottom:10px">
+        <div class="status" id="status">Carregando…</div>
+        <div class="linha">
+          <button class="bt" id="bt-soltar" type="button">Soltar a pessoa</button>
+          <button class="bt forte" id="bt-seguir" type="button">Seguir: desligado</button>
+        </div>
+      </div>
+      <div class="tela" id="tela"><img id="video" alt="Câmera aberta, com as pessoas que a ponte encontrou"></div>
+      <p class="status" id="dica">Clique numa pessoa para escolher quem a luz vai seguir.</p>
+    </div>
+
+    <div class="caixa">
+      <h2>Calibrar uma luz</h2>
+      <ol>
+        <li>Ponha uma cena com as luzes do teto acesas.</li>
+        <li>Uma pessoa fica em pé numa marca do palco.</li>
+        <li>Mexa o pan e o tilt até a luz acertar o peito dela.</li>
+        <li>Clique em <b>Gravar ponto</b> e depois na pessoa, na imagem.</li>
+        <li>Repita em 4 a 6 marcas espalhadas pelo palco. Câmera mudou de lugar ou de zoom? Calibre de novo.</li>
+      </ol>
+      <label for="luz">Luz</label>
+      <select id="luz" class="bt" style="width:100%"></select>
+      <label for="pan">Pan <span id="pan-v"></span></label>
+      <input id="pan" type="range" min="0" max="255" value="128">
+      <label for="tilt">Tilt <span id="tilt-v"></span></label>
+      <input id="tilt" type="range" min="0" max="255" value="128">
+      <div class="linha" style="margin-top:12px">
+        <button class="bt" id="bt-gravar" type="button">Gravar ponto</button>
+        <button class="bt" id="bt-limpar" type="button">Apagar os pontos desta luz</button>
+        <span class="status" id="pontos"></span>
+      </div>
+    </div>
+  </div>
+  <p class="status"><a href="/">Voltar ao painel</a></p>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let E = null, calibrando = false, mirarEspera = null, videoAberto = false;
+
+async function chamar(url, corpo) {
+  const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(corpo || {})});
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.erro || 'Não deu certo (' + r.status + ')');
+  return d;
+}
+function falhar(e) { $('falha').textContent = e.message || String(e); $('falha').hidden = false;
+  setTimeout(() => { $('falha').hidden = true; }, 5000); }
+
+function luzAtual() { return E && E.luzes.find(l => String(l.endereco) === $('luz').value); }
+
+function desenhar() {
+  if (!E.disponivel) {
+    $('indisponivel').textContent = 'O seguir não está disponível neste PC: ' + E.motivo;
+    $('indisponivel').hidden = false; $('tudo').hidden = true; return;
+  }
+  $('indisponivel').hidden = true; $('tudo').hidden = false;
+  const pc = E.pc_da_luz;
+  if (pc && !pc.entende) {
+    $('indisponivel').textContent = pc.recente
+      ? 'O PC do som está com a ponte antiga: ele não entende o seguir, e a luz não vai acompanhar. Atualize a ponte dele (fora do culto).'
+      : 'O PC do som não está buscando a luz agora. Sem ele, a luz não acompanha ninguém.';
+    $('indisponivel').hidden = false;
+  }
+  if (!videoAberto) { $('video').src = '/api/seguir/video?t=' + Date.now(); videoAberto = true; }
+
+  const situacao = {ninguem: 'ninguém escolhido', seguindo: 'acompanhando a pessoa',
+    perdido: 'perdi a pessoa — a luz fica parada onde está'}[E.alvo.situacao] || E.alvo.situacao;
+  const detector = E.detector === 'yolo' ? 'YOLO' : 'detector simples (sem o modelo YOLO)';
+  $('status').innerHTML = (E.erro ? '<span style="color:var(--erro-texto)">' + esc(E.erro) + '</span> · ' : '') +
+    esc(E.pessoas.length + (E.pessoas.length === 1 ? ' pessoa' : ' pessoas')) + ' · ' + esc(situacao) +
+    ' · ' + esc(E.fps) + ' quadros/s · <span class="pilula">' + esc(detector) + '</span>';
+  const bt = $('bt-seguir');
+  bt.textContent = 'Seguir: ' + (E.seguindo ? 'ligado' : 'desligado');
+  bt.className = 'bt ' + (E.seguindo ? 'ligado' : 'forte');
+  bt.disabled = !E.seguindo && !E.luzes.some(l => l.calibrada);
+  bt.title = bt.disabled ? 'Calibre pelo menos uma luz primeiro' : '';
+
+  // So reescreve a lista quando ela muda: reescrever a cada segundo fecharia
+  // a lista aberta na mao de quem esta escolhendo.
+  const escolhida = $('luz').value;
+  const opcoes = E.luzes.map(l => '<option value="' + l.endereco + '">' + esc(l.nome) +
+    ' (endereço ' + l.endereco + ') — ' + (l.calibrada ? 'calibrada' : (l.pontos || []).length + ' ponto(s)') +
+    '</option>').join('');
+  if ($('luz').dataset.opcoes !== opcoes) {
+    $('luz').innerHTML = opcoes; $('luz').dataset.opcoes = opcoes;
+    if (escolhida) $('luz').value = escolhida;
+  }
+  const l = luzAtual();
+  $('pontos').textContent = l ? ((l.pontos || []).length + ' ponto(s)' +
+    (l.calibrada ? ' · desvio de ' + l.erro + ' passos (' + l.conta + ')' : ' · faltam ' + Math.max(0, 3 - (l.pontos || []).length) + ' para começar')) : '';
+}
+function esc(t) { return String(t).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c])); }
+
+async function atualizar() {
+  try {
+    const r = await fetch('/api/seguir', {cache: 'no-store'});
+    E = await r.json();
+    desenhar();
+  } catch (e) { /* rede piscou; tenta na proxima */ }
+}
+
+$('tela').addEventListener('click', async ev => {
+  const caixa = $('video').getBoundingClientRect();
+  const x = (ev.clientX - caixa.left) / caixa.width, y = (ev.clientY - caixa.top) / caixa.height;
+  if (x < 0 || x > 1 || y < 0 || y > 1) return;
+  try {
+    if (calibrando) {
+      const l = luzAtual();
+      await chamar('/api/seguir/ponto', {endereco: l.endereco, x, y, pan: +$('pan').value, tilt: +$('tilt').value});
+      calibrando = false; $('tela').classList.remove('calibrando');
+      $('dica').textContent = 'Ponto gravado. Leve a pessoa para outra marca e repita.';
+    } else {
+      await chamar('/api/seguir/escolher', {x, y});
+    }
+    atualizar();
+  } catch (e) { falhar(e); }
+});
+$('bt-gravar').addEventListener('click', () => {
+  calibrando = !calibrando;
+  $('tela').classList.toggle('calibrando', calibrando);
+  $('dica').textContent = calibrando ? 'Agora clique na pessoa que está com a luz no peito.'
+    : 'Clique numa pessoa para escolher quem a luz vai seguir.';
+});
+$('bt-limpar').addEventListener('click', async () => {
+  const l = luzAtual();
+  if (!l || !confirm('Apagar os ' + (l.pontos || []).length + ' pontos de ' + l.nome + '?')) return;
+  try { await chamar('/api/seguir/limpar', {endereco: l.endereco}); atualizar(); } catch (e) { falhar(e); }
+});
+$('bt-soltar').addEventListener('click', async () => {
+  try { await chamar('/api/seguir/soltar'); atualizar(); } catch (e) { falhar(e); }
+});
+$('bt-seguir').addEventListener('click', async () => {
+  try { await chamar('/api/seguir/ligar', {ligar: !E.seguindo}); atualizar(); } catch (e) { falhar(e); }
+});
+function mirar() {
+  $('pan-v').textContent = $('pan').value; $('tilt-v').textContent = $('tilt').value;
+  clearTimeout(mirarEspera);
+  mirarEspera = setTimeout(async () => {
+    const l = luzAtual(); if (!l) return;
+    try { await chamar('/api/seguir/mirar', {endereco: l.endereco, pan: +$('pan').value, tilt: +$('tilt').value}); atualizar(); }
+    catch (e) { falhar(e); }
+  }, 120);
+}
+$('pan').addEventListener('input', mirar);
+$('tilt').addEventListener('input', mirar);
+$('luz').addEventListener('change', desenhar);
+$('pan-v').textContent = $('pan').value; $('tilt-v').textContent = $('tilt').value;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { $('video').removeAttribute('src'); videoAberto = false; } else atualizar();
+});
+setInterval(() => { if (!document.hidden) atualizar(); }, 1000);
+setInterval(() => { if (videoAberto) { $('video').src = '/api/seguir/video?t=' + Date.now(); } }, 280000);
+atualizar();
+</script>
+</body>
+</html>

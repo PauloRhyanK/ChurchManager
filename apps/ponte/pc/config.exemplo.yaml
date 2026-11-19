@@ -1031,10 +1031,12 @@ web:
 #   adiantar_ms: 0
 #
 # A IMAGEM DA TRANSMISSÃO no painel (só na igreja; nunca vai para a web).
-# Se o notebook da transmissão sentir, aumente o intervalo ou desligue.
+# Chega em fluxo contínuo: `intervalo` é o tempo entre uma foto e outra
+# (0.25 = 4 por segundo; o mínimo é 0.15). Se o PC do OBS sentir, aumente o
+# intervalo ou desligue.
 #
 # painel:
-#   imagem: { ativo: true, intervalo: 1.0, largura: 480 }
+#   imagem: { ativo: true, intervalo: 0.25, largura: 480 }
 #   momento_do_louvor: [louvor]     # em que momentos o centro da tela é o louvor
 #
 # dentro de obs: quais entradas de áudio do OBS viram barra no painel, e com
@@ -1165,3 +1167,27 @@ web:
 #  caminho de um JPG ou PNG neste PC.
 # ===========================================================================
 
+# ===========================================================================
+#  SEGUIR — as luzes do teto acompanhando alguém pela câmera (tela /seguir)
+#
+#  Opcional. Precisa do OpenCV neste PC:  pip install -r requirements-seguir.txt
+#  Fica melhor com o modelo YOLO em modelos/yolo11n.onnx (ver INSTALAR.md);
+#  sem ele, usa um detector mais simples, que erra mais.
+#
+#  `fonte` é o nome da FONTE da câmera aberta no OBS (não o da cena): a cena
+#  troca de câmera, e a calibração só vale para uma câmera parada.
+#
+#  `cerca` e `velocidade` valem na máquina que ALCANÇA a luz (o PC do som, no
+#  modo agente): ponha lá também. A cerca é até onde o pan/tilt pode ir
+#  seguindo alguém; a velocidade é o máximo de passos por segundo (até 60).
+#
+# seguir:
+#   ativo: true
+#   fonte: "Câmera aberta"
+#   grupo: teto                  # o grupo de grupos_de_luz que segue
+#   nomes: { 113: "T2+T3", 129: "T1+T6", 145: "T4+T5" }
+#   modelo: modelos/yolo11n.onnx
+#   fps: 8                       # fotos por segundo para achar a pessoa
+#   largura: 416
+#   cerca: { pan_min: 0, pan_max: 255, tilt_min: 0, tilt_max: 255 }
+#   velocidade: 60

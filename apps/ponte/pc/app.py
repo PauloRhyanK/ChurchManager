@@ -23,6 +23,7 @@ from ponte import achar_principal as mod_achar
 from ponte import atualizar as mod_atualizar
 from ponte import condutor as mod_condutor
 from ponte import obs_imagem as mod_obs_imagem
+from ponte import rastreio as mod_rastreio
 from ponte import obs_ouvinte as mod_obs_ouvinte
 from ponte import painel_ao_vivo as mod_ao_vivo
 from ponte import palavra as mod_palavra
@@ -144,6 +145,10 @@ def montar_contexto(config):
         contexto["movimento"] = mod_movimento.Movimento(
             config.get("grupos_de_luz") or {}, config.get("movimentos") or {}
         )
+        # Os limites do SEGUIR sao sempre os DESTA maquina (ver movimento.py).
+        conf_seguir = config.get("seguir") or {}
+        contexto["movimento"].configurar_seguir(conf_seguir.get("cerca"),
+                                                conf_seguir.get("velocidade"))
     except Exception as erro:
         print("[aviso] movimento desligado: {}".format(erro))
         contexto["movimento"] = None
@@ -847,6 +852,7 @@ def louvor_slide(indice):
 
 EXTENSOES_DE_AUDIO = {".wav", ".mp3", ".ogg", ".m4a", ".flac"}
 CAMINHO_MARCAS = os.path.join(RAIZ, "_marcas_louvor.json")
+CAMINHO_SEGUIR = os.path.join(RAIZ, "_seguir_calibracao.json")
 
 
 @app.get("/api/louvor/audio/<nome>")
@@ -1103,6 +1109,9 @@ def luz_quadro():
     corpo = cliente.retrato()
     corpo["modo"] = (motor.atual() if motor else None) or "parado"
     _estudio_no_quadro(corpo, motor)    # so acrescenta algo com o estudio em uso
+    seguir = motor.seguir() if motor else None
+    if seguir is not None:
+        corpo["seguir"] = seguir        # o alvo de cada cabeca, vindo da camera
     return jsonify(corpo)
 
 
@@ -1196,7 +1205,7 @@ def luz_remover_look(nome):
 # Por isso a animacao NAO vai no campo "modo" do quadro: vai numa chave nova,
 # "estudio", que a versao antiga ignora. Para ela o modo segue "parado" e a
 # luz fica quieta, na cor certa. Ver ponte/seguidor.py.
-_estudio_visto = {"em": None, "sabe": False}
+_estudio_visto = {"em": None, "sabe": False, "seguir": False}
 
 
 def _estudio_no_quadro(corpo, motor):
@@ -1204,7 +1213,9 @@ def _estudio_no_quadro(corpo, motor):
     quem = request.remote_addr or ""
     if quem not in ("127.0.0.1", "::1"):
         _estudio_visto["em"] = time.time()
-        _estudio_visto["sabe"] = request.args.get("sabe") == "estudio"
+        sabe = str(request.args.get("sabe") or "").split(",")
+        _estudio_visto["sabe"] = "estudio" in sabe
+        _estudio_visto["seguir"] = "seguir" in sabe
     espec = motor.estudio() if motor else None
     if espec is not None:
         corpo["estudio"] = espec
@@ -1582,6 +1593,8 @@ def _trocar_host_obs(host):
     _contexto["obs_saude"] = ClienteOBS(*argumentos, timeout=3.5, tentativas=1)
     if _pecas.get("imagem") is not None:
         _pecas["imagem"].trocar_cliente(ClienteOBS(*argumentos, timeout=3.5, tentativas=1))
+    if _pecas.get("seguir") is not None:
+        _pecas["seguir"].trocar_cliente(ClienteOBS(*argumentos, timeout=2.0, tentativas=1))
 
 
 def _cue_interna(cue_id):
@@ -2942,6 +2955,217 @@ def painel_imagem():
     return resposta
 
 
+@app.get("/api/painel/video")
+def painel_video():
+    """A mesma imagem, em FLUXO (MJPEG): a tela abre uma conexao e as fotos
+    vao chegando. Ver ponte/obs_imagem.py. Some sozinho em 5 minutos; a tela
+    reabre."""
+    imagem = _pecas.get("imagem")
+    if imagem is None or not imagem.ativo:
+        return Response(status=204)
+    return _resposta_mjpeg(imagem.pegar, max(0.1, imagem._intervalo / 2))
+
+
+def _resposta_mjpeg(pegar, intervalo):
+    resposta = Response(mod_obs_imagem.fluxo_mjpeg(pegar, intervalo),
+                        mimetype="multipart/x-mixed-replace; boundary=" + mod_obs_imagem.FRONTEIRA)
+    resposta.headers["Cache-Control"] = "no-store"
+    resposta.headers["X-Accel-Buffering"] = "no"
+    return resposta
+
+
+# -- seguir: as cabecas do teto acompanhando alguem, pela camera -----------------
+#
+# Tela /seguir. Tudo aqui so existe na maquina principal e na rede da igreja.
+# A luz so anda com "Seguir" ligado; escolher a pessoa e calibrar nao mexem
+# em nada sozinhos (calibrar mira a cabeca, a pedido, como o ajuste fino).
+
+@app.get("/seguir")
+def pagina_seguir():
+    return send_from_directory(RAIZ, "seguir.html")
+
+
+def _seguir_ou_erro():
+    rastreador = _pecas.get("seguir")
+    if rastreador is None:
+        motivo = _pecas.get("seguir_motivo") or "o seguir nao roda neste PC"
+        return None, (jsonify({"erro": motivo}), 400)
+    return rastreador, None
+
+
+def _cabecas_do_seguir():
+    conf = _config.get("seguir") or {}
+    grupo = ((_config.get("grupos_de_luz") or {}).get(str(conf.get("grupo") or "teto")) or {})
+    nomes = conf.get("nomes") or {}
+    return grupo, [{"endereco": int(b), "nome": str(nomes.get(b) or nomes.get(str(b)) or "Luz {}".format(i + 1))}
+                   for i, b in enumerate(grupo.get("bases") or [])]
+
+
+@app.get("/api/seguir")
+def seguir_estado():
+    rastreador = _pecas.get("seguir")
+    _, cabecas = _cabecas_do_seguir()
+    if rastreador is None:
+        return jsonify({"disponivel": False,
+                        "motivo": _pecas.get("seguir_motivo") or "o seguir nao roda neste PC",
+                        "luzes": cabecas})
+    rastreador.olhar()
+    mapas = rastreador.mapas()
+    for cabeca in cabecas:
+        pontos = rastreador.calibracao.pontos(cabeca["endereco"])
+        mapa = mapas.get(cabeca["endereco"])
+        cabeca.update({"pontos": pontos, "calibrada": mapa is not None,
+                       "conta": mapa.tipo if mapa else None,
+                       "erro": round(mapa.erro, 1) if mapa else None})
+    corpo = rastreador.retrato()
+    corpo.update({"disponivel": True, "luzes": cabecas})
+    # Com driver agente, quem leva a luz e o PC do som. Ponte antiga la ignora
+    # o alvo, e a luz nao segue: a tela precisa dizer isso.
+    cliente = _contexto.get("luzes")
+    if cliente is not None and hasattr(cliente, "retrato"):
+        recente = _estudio_visto["em"] is not None and time.time() - _estudio_visto["em"] < 10
+        corpo["pc_da_luz"] = {"recente": recente, "entende": bool(recente and _estudio_visto["seguir"])}
+    return jsonify(corpo)
+
+
+@app.get("/api/seguir/video")
+def seguir_video():
+    rastreador, falha = _seguir_ou_erro()
+    if falha:
+        return Response(status=204)
+    return _resposta_mjpeg(rastreador.imagem, 0.05)
+
+
+def _numero(corpo, chave, lo, hi):
+    valor = float(corpo.get(chave))
+    if not (lo <= valor <= hi):
+        raise ValueError(chave)
+    return valor
+
+
+@app.post("/api/seguir/escolher")
+def seguir_escolher():
+    """Quem operou clicou numa pessoa da imagem (x, y de 0 a 1)."""
+    rastreador, falha = _seguir_ou_erro()
+    if falha:
+        return falha
+    corpo = request.get_json(silent=True) or {}
+    try:
+        x, y = _numero(corpo, "x", 0, 1), _numero(corpo, "y", 0, 1)
+    except (TypeError, ValueError):
+        return jsonify({"erro": "x e y vao de 0 a 1"}), 400
+    if not rastreador.escolher(x, y):
+        return jsonify({"erro": "nao achei uma pessoa ai — clique em cima dela"}), 404
+    return jsonify({"ok": True})
+
+
+@app.post("/api/seguir/soltar")
+def seguir_soltar():
+    rastreador, falha = _seguir_ou_erro()
+    if falha:
+        return falha
+    rastreador.soltar()
+    return jsonify({"ok": True})
+
+
+@app.post("/api/seguir/ligar")
+def seguir_ligar():
+    """Liga ou desliga a luz seguindo. Desligar devolve as cabecas a cena."""
+    rastreador, falha = _seguir_ou_erro()
+    if falha:
+        return falha
+    ligar = bool((request.get_json(silent=True) or {}).get("ligar"))
+    try:
+        rastreador.ligar(ligar)
+    except mod_rastreio.ErroRastreio as erro:
+        return jsonify({"erro": str(erro)}), 400
+    _reenviar_luz()
+    _anotar("Seguir " + ("ligado" if ligar else "desligado"), True, "", "local")
+    return jsonify({"seguindo": rastreador.seguindo})
+
+
+def _reenviar_luz():
+    cliente = _contexto.get("luzes")
+    if cliente is not None:
+        try:
+            cliente.reenviar()
+        except Exception:
+            pass
+
+
+@app.post("/api/seguir/mirar")
+def seguir_mirar():
+    """Calibracao: aponta UMA cabeca para pan/tilt dados. Desliga o seguir,
+    senao o seguir passaria por cima da mira."""
+    rastreador, falha = _seguir_ou_erro()
+    if falha:
+        return falha
+    cliente, falha = _cliente_de_luz()
+    if falha:
+        return falha
+    grupo, cabecas = _cabecas_do_seguir()
+    corpo = request.get_json(silent=True) or {}
+    try:
+        base = int(corpo.get("endereco"))
+        pan, tilt = int(_numero(corpo, "pan", 0, 255)), int(_numero(corpo, "tilt", 0, 255))
+    except (TypeError, ValueError):
+        return jsonify({"erro": "endereco, pan e tilt (0-255) sao obrigatorios"}), 400
+    if base not in [c["endereco"] for c in cabecas] or grupo.get("pan") is None or grupo.get("tilt") is None:
+        return jsonify({"erro": "essa luz nao e do grupo do seguir"}), 400
+    if rastreador.seguindo:
+        rastreador.ligar(False)
+    try:
+        cliente.aplicar({base + int(grupo["pan"]): pan, base + int(grupo["tilt"]): tilt})
+    except Exception as erro:
+        return jsonify({"erro": str(erro)}), 400
+    return jsonify({"ok": True})
+
+
+@app.post("/api/seguir/ponto")
+def seguir_ponto():
+    """Calibracao: grava (onde a pessoa esta na imagem) -> (pan, tilt atuais).
+    Se o clique cai numa pessoa detectada, vale o PE dela."""
+    rastreador, falha = _seguir_ou_erro()
+    if falha:
+        return falha
+    _, cabecas = _cabecas_do_seguir()
+    corpo = request.get_json(silent=True) or {}
+    try:
+        base = int(corpo.get("endereco"))
+        x, y = _numero(corpo, "x", 0, 1), _numero(corpo, "y", 0, 1)
+        pan, tilt = int(_numero(corpo, "pan", 0, 255)), int(_numero(corpo, "tilt", 0, 255))
+    except (TypeError, ValueError):
+        return jsonify({"erro": "endereco, x, y, pan e tilt sao obrigatorios"}), 400
+    if base not in [c["endereco"] for c in cabecas]:
+        return jsonify({"erro": "essa luz nao e do grupo do seguir"}), 400
+    for pessoa in rastreador.retrato()["pessoas"]:
+        x1, y1, x2, y2 = pessoa["caixa"]
+        if x1 <= x <= x2 and y1 <= y <= y2:
+            x, y = (x1 + x2) / 2.0, y2
+            break
+    try:
+        rastreador.calibracao.acrescentar(base, x, y, pan, tilt)
+    except mod_rastreio.ErroRastreio as erro:
+        return jsonify({"erro": str(erro)}), 400
+    rastreador.recalibrou()
+    return jsonify({"ok": True, "ponto": {"x": round(x, 4), "y": round(y, 4)}})
+
+
+@app.post("/api/seguir/limpar")
+def seguir_limpar():
+    rastreador, falha = _seguir_ou_erro()
+    if falha:
+        return falha
+    try:
+        base = int((request.get_json(silent=True) or {}).get("endereco"))
+    except (TypeError, ValueError):
+        return jsonify({"erro": "endereco obrigatorio"}), 400
+    rastreador.calibracao.limpar(base)
+    rastreador.recalibrou()
+    _reenviar_luz()
+    return jsonify({"ok": True})
+
+
 @app.post("/api/relogio")
 def relogio_avisar():
     """Uma FONTE dizendo em que segundo a musica esta (ver ponte/relogio.py).
@@ -3299,9 +3523,36 @@ def _montar_ao_vivo():
             mod_obs_ouvinte.OuvinteOBS(_args_obs, _pecas["medidor"]).comecar()
         _pecas["imagem"] = mod_obs_imagem.ImagemDoOBS(
             cliente_da_imagem, lambda: (_estado.get("obs") or {}).get("no_ar"),
-            intervalo=conf_imagem.get("intervalo", 1.0), largura=conf_imagem.get("largura", 480))
+            intervalo=conf_imagem.get("intervalo", 0.25), largura=conf_imagem.get("largura", 480))
         _pecas["imagem"].ativo = conf_imagem.get("ativo", True) is not False
+        _montar_seguir(cliente_da_imagem if SIMULAR else None)
     return ao_vivo
+
+
+def _montar_seguir(cliente=None):
+    """O SEGUIR (ponte/rastreio.py). So nasce com seguir.ativo no config, e
+    so nesta maquina, que fala com o OBS. Sem OpenCV, fica o motivo para a
+    tela /seguir mostrar — a ponte segue igual."""
+    conf = _config.get("seguir") or {}
+    _pecas["seguir"] = None
+    _pecas["seguir_motivo"] = None
+    if not conf.get("ativo"):
+        _pecas["seguir_motivo"] = "desligado no config (seguir.ativo)"
+        return
+    try:
+        detector = _pecas.get("seguir_detector") or mod_rastreio.montar_detector(conf, RAIZ)
+    except mod_rastreio.ErroRastreio as erro:
+        _pecas["seguir_motivo"] = str(erro)
+        print("[aviso] seguir desligado: {}".format(erro))
+        return
+    grupo = ((_config.get("grupos_de_luz") or {}).get(str(conf.get("grupo") or "teto")) or {})
+    rastreador = mod_rastreio.Rastreador(
+        cliente or ClienteOBS(*_args_obs(), timeout=2.0, tentativas=1),
+        conf.get("fonte"), detector, _contexto.get("movimento"),
+        mod_rastreio.Calibracao(CAMINHO_SEGUIR), grupo.get("bases") or [],
+        fps=conf.get("fps", 8), largura=conf.get("largura", 416))
+    rastreador.comecar()
+    _pecas["seguir"] = rastreador
 
 
 # -- atualizacao ---------------------------------------------------------------

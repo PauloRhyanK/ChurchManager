@@ -825,21 +825,29 @@ setInterval(andar, 200);
 
 // A imagem ao vivo do OBS. So na rede da igreja, e so com a tela a vista:
 // uma aba esquecida em segundo plano nao pode custar nada ao notebook.
-let fotoAtual = null;
-async function buscarImagem() {
-  if (!D || D.local === false || !D.transmissao || !(D.imagem && D.imagem.ativa) || document.hidden) return;
-  try {
-    const r = await fetch('/api/painel/imagem', {cache: 'no-store'});
-    const foto = $('tx-foto');
-    if (r.status !== 200) { foto.hidden = true; return; }
-    const url = URL.createObjectURL(await r.blob());
-    foto.src = url;
-    foto.hidden = false;
-    $('tx-sem').textContent = '';
-    if (fotoAtual) URL.revokeObjectURL(fotoAtual);
-    fotoAtual = url;
-  } catch (e) { $('tx-foto').hidden = true; }
+// E um FLUXO (MJPEG, /api/painel/video): uma conexao aberta, e as fotos vao
+// chegando sozinhas — varias por segundo, sem uma pergunta por foto. Tirar o
+// src fecha a conexao. A ponte encerra o fluxo em 5 minutos; aqui ele e
+// reaberto antes disso.
+let fluxoDesde = 0;
+function buscarImagem() {
+  const foto = $('tx-foto');
+  const quer = D && D.local !== false && D.transmissao && D.imagem && D.imagem.ativa && !document.hidden;
+  if (!quer) {
+    if (fluxoDesde) { foto.removeAttribute('src'); foto.hidden = true; fluxoDesde = 0; }
+    return;
+  }
+  if (fluxoDesde && Date.now() - fluxoDesde < 280000) return;
+  fluxoDesde = Date.now();
+  foto.src = '/api/painel/video?t=' + fluxoDesde;
 }
+$('tx-foto').addEventListener('load', () => { $('tx-foto').hidden = false; $('tx-sem').textContent = ''; });
+$('tx-foto').addEventListener('error', () => {
+  // Caiu (OBS fora, imagem desligada): tenta de novo daqui a pouco.
+  $('tx-foto').hidden = true;
+  fluxoDesde = Date.now() - 280000 + 3000;
+});
+document.addEventListener('visibilitychange', buscarImagem);
 setInterval(buscarImagem, 1000);
 
 // ---------------------------------------------------------------- ensaio --

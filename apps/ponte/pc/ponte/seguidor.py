@@ -43,6 +43,7 @@ class Seguidor:
         self._parar = threading.Event()
         self._thread = None
         self._visto = None          # (versao, modo) da ultima vez que agimos
+        self._seguindo = False
         self._lock = threading.Lock()
         self._estado = {"ligado": False, "ultima": None, "erro": None,
                         "versao": None, "modo": None}
@@ -155,8 +156,11 @@ class Seguidor:
                 # engasgo de rede seria muito pior no meio do culto.
 
             # Com a ponte fora do ar, espaca as tentativas ate 2s: nao adianta
-            # martelar, e assim o registro nao vira cachoeira.
-            espera = self._intervalo if not falhas_seguidas else min(
+            # martelar, e assim o registro nao vira cachoeira. Seguindo alguem,
+            # busca 10 vezes por segundo: o alvo muda o tempo todo, e cada
+            # busca a menos e luz chegando atrasada na pessoa.
+            normal = min(self._intervalo, 0.1) if self._seguindo else self._intervalo
+            espera = normal if not falhas_seguidas else min(
                 2.0, self._intervalo * min(falhas_seguidas, 8))
             if self._parar.wait(espera):
                 return
@@ -165,7 +169,7 @@ class Seguidor:
         # "sabe=estudio" so AVISA a outra ponte de que este seguidor entende
         # a chave "estudio" do quadro, para a tela de la poder dizer se a
         # animacao vai aparecer na igreja. Uma ponte antiga ignora o aviso.
-        requisicao = urllib.request.Request(self._url + "?sabe=estudio", method="GET")
+        requisicao = urllib.request.Request(self._url + "?sabe=estudio,seguir", method="GET")
         with urllib.request.urlopen(requisicao, timeout=self._timeout) as resposta:
             return json.loads(resposta.read().decode("utf-8"))
 
@@ -178,9 +182,15 @@ class Seguidor:
         # modo — e nesse caso o modo diz "parado", que ele entende. Ele fica
         # com a luz certa e parada, em vez de receber um nome que nao conhece.
         estudio = corpo.get("estudio")
+        # O SEGUIR muda o alvo varias vezes por segundo. Por isso o alvo NAO
+        # entra na assinatura (senao a cena inteira seria reaplicada a cada
+        # busca): entra so SE ha seguir. O alvo em si vai direto ao motor.
+        seguir = corpo.get("seguir")
         assinatura = (corpo.get("versao"), corpo.get("modo"),
-                      json.dumps(estudio, sort_keys=True) if estudio is not None else None)
+                      json.dumps(estudio, sort_keys=True) if estudio is not None else None,
+                      seguir is not None)
         if assinatura == self._visto:
+            self._passar_seguir(seguir)
             return      # nada mudou; o caso comum, e sai barato
 
         canais = corpo.get("canais") or {}
@@ -248,4 +258,22 @@ class Seguidor:
                 # parada e muito melhor que luz errada mexendo.
                 self._aviso("[seguidor] modo recusado: {}".format(erro))
 
+        # Depois do modo, porque escolher("parado") ali em cima desliga o
+        # seguir — e aqui ele volta, se a outra ponte ainda esta seguindo.
+        self._passar_seguir(seguir)
         self._visto = assinatura
+
+    def _passar_seguir(self, seguir):
+        """O alvo da camera vai ao motor DESTA maquina, que confere tudo de
+        novo com o config local (ver Movimento.normalizar_seguir)."""
+        self._seguindo = seguir is not None
+        if self._movimento is None or seguir is None:
+            return
+        try:
+            if self._movimento.definir_seguir(seguir) is None:
+                self._movimento.parar_seguir()
+        except Exception as erro:
+            self._movimento.parar_seguir()
+            if "seguir" not in self._ja_reclamou:
+                self._ja_reclamou.add("seguir")
+                self._aviso("[seguidor] alvo do seguir recusado: {}".format(erro))
