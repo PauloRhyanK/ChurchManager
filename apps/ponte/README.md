@@ -97,6 +97,34 @@ slide com a janela do Holyrics em foco. A Ponte, no PC principal, ouve o passado
 - **Nunca foi testado com o passador nem em Windows.** Ver a seção 15 de
   `docs/PARA-A-SESSAO-DO-PC.md`.
 
+## "No ar" só quando o YouTube confirma
+
+O OBS dizer que está enviando não quer dizer que o YouTube está recebendo. Já aconteceu
+de o painel mostrar "no ar" com a transmissão parada do lado de lá. Com o OBS enviando, a
+Ponte (no PC principal, se o YouTube estiver autorizado) passa a perguntar ao YouTube se o
+envio chega e se a transmissão do dia está no ar, e compara com a chave que está no OBS
+(`pc/ponte/recepcao.py`).
+
+- O selo "No ar" só fica verde quando os dois concordam. Enquanto não dá para saber, fica
+  âmbar ("Enviando · conferindo o YouTube").
+- Depois de 30 segundos de envio, se algo estiver errado, aparece uma faixa vermelha e um
+  item no "Aconteceu agora", com a saída a um toque:
+
+| O que o painel diz | O que é | O botão |
+|---|---|---|
+| O YouTube não está recebendo | o OBS envia e nada chega | Reconectar o OBS |
+| A chave do OBS é de outra transmissão | a transmissão de hoje espera outra chave | Usar a chave desta transmissão, e depois Reconectar o OBS |
+| Chegando no YouTube, mas a transmissão não foi iniciada | o envio chega, mas ninguém vê | Iniciar no YouTube |
+
+- **Nada acontece sozinho**: os botões pedem confirmação, e só existem na rede da igreja.
+- Nos 3 primeiros minutos de envio a conferência é a cada 15 segundos; depois, a cada 2
+  minutos. Num culto de duas horas isso gasta perto de 150 das 10.000 unidades diárias da
+  cota do YouTube (somando o que a Ponte já consultava, uns 450).
+- Se a Ponte não conseguir falar com o YouTube, ela diz que não conseguiu perguntar e
+  **não** pinta o painel de vermelho.
+- **Nunca foi testado com o YouTube de verdade.** Ver a seção 17 de
+  `docs/PARA-A-SESSAO-DO-PC.md`.
+
 ## Estado em 12/11/2026
 
 - **No ar no PC do Holyrics:** papéis, página por PC, guia pelo celular, letras por

@@ -124,6 +124,25 @@ function desenhar() {
   andar();
 }
 
+// O OBS diz que envia; o YouTube concorda?
+//   'ok'          os dois concordam (ou este PC nao confere o YouTube)
+//   'conferindo'  ainda nao deu para saber
+//   'alerta'      o OBS envia e o YouTube nao recebe / nao esta no ar
+const ALERTAS_DO_YOUTUBE = ['nao_recebe', 'outra_chave', 'nao_iniciada', 'sem_transmissao'];
+function noAr(t) {
+  if (!t || !t.no_ar || !t.recepcao) return 'ok';
+  if (ALERTAS_DO_YOUTUBE.indexOf(t.recepcao.caso) >= 0) return 'alerta';
+  return t.recepcao.caso === 'ok' ? 'ok' : 'conferindo';
+}
+const ACOES_DO_YOUTUBE = {
+  iniciar: ['Iniciar no YouTube', {tipo: 'yt_iniciar'},
+    {titulo: 'Iniciar a transmissão no YouTube?', texto: 'Quem abrir o link passa a ver o culto agora.', sim: 'Iniciar'}],
+  usar_chave: ['Usar a chave desta transmissão', {tipo: 'yt_usar_chave'},
+    {titulo: 'Trocar a chave do OBS?', texto: 'O OBS passa a enviar para a transmissão de hoje. Depois é preciso reconectar para a chave nova valer.', sim: 'Trocar a chave'}],
+  reconectar: ['Reconectar o OBS', {tipo: 'yt_reconectar'},
+    {titulo: 'Reconectar o OBS ao YouTube?', texto: 'O envio para e começa de novo. Leva alguns segundos; a gravação não é interrompida.', sim: 'Reconectar', perigo: true}],
+};
+
 function desenharPilulas(d) {
   const p = [];
   const por = (nome, cor, alerta) => p.push('<span class="pilula' + (alerta ? ' ' + alerta : '') + '">' +
@@ -131,7 +150,12 @@ function desenharPilulas(d) {
   const tx = sistema('Transmissão'), t = d.transmissao;
   if (tx && tx.estado === 'erro') por('Transmissão sem contato', 'vermelho', 'grave');
   else if (t) {
-    por(t.no_ar ? 'Transmitindo' : 'Fora do ar', t.no_ar ? 'vermelho' : '');
+    // "Transmitindo" so quando o YouTube confirma que recebe (ponte/recepcao.py).
+    // Sem YouTube autorizado neste PC, vale o que o OBS diz, como sempre.
+    const rc = noAr(t);
+    if (rc === 'alerta') por('Fora do ar no YouTube', 'vermelho', 'grave');
+    else if (rc === 'conferindo') por('Enviando, sem confirmação', 'ambar', 'alerta');
+    else por(t.no_ar ? 'Transmitindo' : 'Fora do ar', t.no_ar ? 'verde' : '');
     por(t.gravando ? 'Gravando' : 'Sem gravar', t.gravando ? 'verde' : '');
   }
   const som = (d.equipamentos || []).filter(e => e.nome === 'PC do som' || /som/i.test(e.nome))[0];
@@ -157,6 +181,16 @@ function desenharFaixas(d) {
       (d.local === false ? 'Confira a internet deste aparelho.' : 'A janela preta ainda está aberta no PC?') + '</span></div>');
   }
   if (d.erro) f.push('<div class="faixa erro"><span>' + esc(d.erro) + '</span></div>');
+  const rc = d.transmissao && d.transmissao.recepcao;
+  if (noAr(d.transmissao) === 'alerta') {
+    // O alerta que importa: do lado da igreja tudo parece certo, e quem
+    // esta em casa nao ve nada. Cada caso traz a saida dele, a um toque.
+    f.push('<div class="faixa erro"><span><b>' + esc(rc.texto) + '.</b> ' + esc(rc.detalhe || '') +
+      (rc.lido_em ? ' <span class="miudo">Conferido às ' + esc(rc.lido_em) + '.</span>' : '') + '</span>' +
+      (d.local !== false ? '<span class="linha" style="flex-wrap:wrap">' + (rc.acoes || []).map(a => ACOES_DO_YOUTUBE[a]
+        ? botao(ACOES_DO_YOUTUBE[a][0], ACOES_DO_YOUTUBE[a][1], {classe: 'bt pequeno', confirmar: ACOES_DO_YOUTUBE[a][2]}) : '').join('') + '</span>' : '') +
+      '</div>');
+  }
   if (d.local === false && d.viva && d.remoto && !d.remoto.aceita) {
     f.push('<div class="faixa aviso"><span><b>Só para acompanhar.</b> Os comandos pela web estão desligados no PC da igreja.</span></div>');
   }
@@ -614,11 +648,14 @@ function desenharTransmissao(d) {
     pintar('tx-resto', '');
     return;
   }
-  pintar('tx-cabeca', '<div class="cabeca"><h2 class="rotulo">Transmissão</h2>' + (t.no_ar
-    ? '<span class="no-ar sim"><span class="ponto vermelho" aria-hidden="true"></span>No ar · ' + duracao(t.tempo_ms) + '</span>'
-    : '<span class="no-ar"><span class="ponto" aria-hidden="true"></span>Fora do ar</span>') + '</div>');
-  $('tx-imagem').className = 'imagem-obs' + (t.no_ar ? ' no-ar-sim' : '');
-  $('tx-etiqueta').textContent = t.imagem ? (t.no_ar ? 'NO AR · ' : 'IMAGEM · ') + String(t.imagem).toUpperCase() : '';
+  const rc = noAr(t), confirmado = t.no_ar && rc === 'ok';
+  let selo = '<span class="no-ar"><span class="ponto" aria-hidden="true"></span>Fora do ar</span>';
+  if (confirmado) selo = '<span class="no-ar sim"><span class="ponto verde" aria-hidden="true"></span>No ar · ' + duracao(t.tempo_ms) + '</span>';
+  else if (t.no_ar && rc === 'alerta') selo = '<span class="no-ar nao"><span class="ponto vermelho" aria-hidden="true"></span>O OBS envia, o YouTube não · ' + duracao(t.tempo_ms) + '</span>';
+  else if (t.no_ar) selo = '<span class="no-ar duvida"><span class="ponto ambar" aria-hidden="true"></span>Enviando · conferindo o YouTube</span>';
+  pintar('tx-cabeca', '<div class="cabeca"><h2 class="rotulo">Transmissão</h2>' + selo + '</div>');
+  $('tx-imagem').className = 'imagem-obs' + (confirmado ? ' no-ar-sim' : '');
+  $('tx-etiqueta').textContent = t.imagem ? (confirmado ? 'NO AR · ' : t.no_ar ? 'ENVIANDO · ' : 'IMAGEM · ') + String(t.imagem).toUpperCase() : '';
   const comFoto = local && d.imagem && d.imagem.ativa;
   if (!comFoto) $('tx-foto').hidden = true;
   $('tx-sem').textContent = !local ? 'A imagem ao vivo aparece só na igreja.'
