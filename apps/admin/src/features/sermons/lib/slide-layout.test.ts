@@ -106,7 +106,8 @@ describe("drawSlide", () => {
           expect(b.x + b.width).toBeLessThanOrEqual(1680);
           expect(b.y).toBeGreaterThanOrEqual(bottom);
           expect(b.y + b.height).toBeLessThanOrEqual(890);
-          expect(b.y - bottom).toBeCloseTo(b === blocks[0] ? b.y - 190 : b.gapBefore, 5);
+          // Caixas da exportação: nunca mais perto que o espaço do manual (o título pode ter a linha de reserva).
+          if (b !== blocks[0]) expect(b.y - bottom).toBeGreaterThanOrEqual(b.gapBefore - 1e-6);
           bottom = b.y + b.height;
         }
       }
@@ -197,5 +198,36 @@ describe("drawSlide", () => {
     const gap = byRole(m03, "verse").gapBefore;
     expect(gap).toBeGreaterThanOrEqual(70);
     expect(gap).toBeLessThanOrEqual(90);
+  });
+
+  it("prévia: gapBefore é exatamente o espaço do manual em todo modelo, com ou sem a reserva do título", () => {
+    const caps = (f: SlideFace): SlideFace => ({ ...f, title: f.title.toUpperCase() });
+    for (const f of [SHORT.M02, FULL.M02, caps(FULL.M02)]) expect(drawSlide(f, "MINIMAL").blocks.map((b) => b.gapBefore)).toEqual([0, 55]);
+    for (const f of [SHORT.M04, FULL.M04, caps(FULL.M04)]) expect(drawSlide(f, "MINIMAL").blocks.map((b) => b.gapBefore)).toEqual([0, 55, 40, 12]);
+    for (const f of [SHORT.M03, FULL.M03, caps(FULL.M03)]) {
+      const [t, v, r] = drawSlide(f, "MINIMAL").blocks;
+      expect(t.gapBefore).toBe(0);
+      expect(v.gapBefore).toBeGreaterThanOrEqual(70);
+      expect(v.gapBefore).toBeLessThanOrEqual(90);
+      expect(r.gapBefore).toBe(12);
+    }
+  });
+
+  it("prévia: o topo do conteúdo não muda com a reserva (é o da coluna sem ela)", () => {
+    const d = drawSlide(FULL.M02, "MINIMAL");
+    const [t, s] = d.blocks;
+    expect(t.height).toBeGreaterThan(t.maxLines * t.fontSize * t.lineHeight); // a reserva existe na caixa
+    const content = t.maxLines * t.fontSize * t.lineHeight + 55 + s.height;
+    expect(d.previewTop - 190).toBeCloseTo(890 - (d.previewTop + content), 5);
+  });
+
+  it("caixas da exportação: versículo→referência a 12; a reserva só fica abaixo do título", () => {
+    for (const f of [SHORT.M03, FULL.M03, SHORT.M04, FULL.M04, { ...FULL.M04, title: FULL.M04.title.toUpperCase() }]) {
+      const { blocks } = drawSlide(f, "BACKGROUND");
+      const v = byRole(blocks, "verse");
+      const r = byRole(blocks, "reference");
+      expect(r.y - (v.y + v.height)).toBeCloseTo(12, 5);
+      expect(v.height).toBeCloseTo(v.maxLines * v.fontSize * v.lineHeight, 5);
+    }
   });
 });
