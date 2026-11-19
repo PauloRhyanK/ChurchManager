@@ -1,130 +1,222 @@
-# Identidade visual e padronização de slides — Igreja Paraíso
+# Identidade Visual — Slides de Pregação
 
-Resumo do "Manual de identidade visual e padronização de slides" da Igreja Paraíso. É a referência do gerador de slides da Palavra (`apps/api/src/modules/sermons` e `apps/admin/src/features/sermons`): a IA, a prévia e a exportação seguem o que está aqui. A seção final diz como o sistema aplica cada regra.
-
-## Formato e margens
-
-- 16:9, 1920×1080.
-- Área de segurança para texto essencial: 240 px nas laterais e 190 px em cima e embaixo. O manual também cita 120/90 px como margem geral.
-
-## Paleta
-
-| Cor | Hex | Uso |
-|---|---|---|
-| Verde oliva | `#708836` | apoio e destaque |
-| Azul institucional | `#334C71` | fundo principal |
-| Azul profundo | `#182F5D` | impacto |
-| Verde profundo | `#092A1E` | fundos elegantes |
-| Azul-claro | `#A1C0DA` | apoio, composições suaves |
-| Off-white | `#F1EBE2` | texto |
-
-Combinações de fundo e texto:
-
-| Fundo | Texto | Para |
-|---|---|---|
-| `#334C71` | `#F1EBE2` | títulos e versículos |
-| `#182F5D` | `#F1EBE2` | títulos de impacto |
-| `#092A1E` | `#FFFFFF` | mensagens e ministrações |
-| `#708836` | `#FFFFFF` | destaques |
-| `#A1C0DA` | `#182F5D` | slides claros |
-
-Fundo sólido, uma cor de fundo e uma de texto por slide; não usar todas as cores num slide. Gradiente só pontual. Não pôr azul-claro sobre os verdes.
-
-## Tipografia
-
-- **Palast Var** (de preferência Italic, Medium ou Bold): títulos e frases de impacto.
-- **Poppins** (Medium, SemiBold, Bold): subtítulo, versículo e texto.
-- Só essas duas fontes, e no máximo três pesos.
-- Tracking: títulos de -60 a -80; títulos menores e subtítulos de -40 a -60; versículos de -20 a -40.
-
-## Zonas e alinhamento
-
-- Zona superior: título e chamada. Central: subtítulo e versículo. Inferior: referência e informação complementar.
-- Centralizar frases curtas, títulos de impacto e versículos curtos.
-- Alinhar à esquerda títulos longos, textos bíblicos maiores, listas e conteúdo denso, mantendo um eixo esquerdo único.
-
-## Os quatro modelos
-
-| Modelo | Conteúdo | Medidas |
-|---|---|---|
-| **01** | Só título (impacto) | Palast Var Italic de 100 a 150 px, tracking de -60 a -80, de 1 a 3 linhas, no centro óptico, sem mais nada |
-| **02** | Título e subtítulo | título Palast Var de 95 a 135 px; subtítulo Poppins de 36 a 48 px, até 2 ou 3 linhas; de 55 a 90 px entre os blocos; o subtítulo nunca compete com o título |
-| **03** | Título e versículo | título Palast Var de 95 a 135 px no terço superior; versículo Poppins de 36 a 46 px em linhas equilibradas; referência Poppins Bold de 36 a 42 px |
-| **04** | Título, subtítulo e versículo | título de 85 a 115 px; subtítulo de 34 a 42 px; versículo de 30 a 38 px; referência Bold de 30 a 38 px. Se não couber, divide em dois slides |
-
-Espaçamentos: título e subtítulo de 35 a 55 px; título e versículo de 55 a 90 px; subtítulo e versículo de 30 a 50 px; versículo e referência de 8 a 16 px; blocos independentes de 45 a 70 px.
-
-## Elementos gráficos
-
-Com moderação: gradiente discreto, formas em 5 a 15% de opacidade, número grande ao fundo, textura sutil, destaque retangular atrás de uma palavra (não de uma frase). No máximo um ou dois por slide. Sem sombras pesadas nem 3D.
-
-## Versículos
-
-Identificar a versão; texto fiel, sem cortes que mudem o sentido; referência junto e em negrito; sem fonte decorativa; sem texto pequeno; passagens longas viram vários slides.
-
-## Evitar
-
-Misturar fontes; título e versículo do mesmo tamanho; texto perto da borda; encher todo espaço vazio; comprimir texto para caber numa tela; alinhamentos sem justificativa.
-
-## Checklist final
-
-16:9 · margens · paleta · só Poppins e Palast Var · hierarquia do título · subtítulo subordinado · versículo fiel · referência identificada · contraste · espaçamentos · nada decorativo desnecessário · consistência · ortografia.
+Padrão visual usado nas apresentações **Supere seus Limites**, **O Fim dos Tempos e a Volta de Jesus** e **A agenda Profética está em Curso**.
 
 ---
 
-## Como o sistema aplica
+## 1. Conceito
 
-### Modelo de cada slide
+Minimalista, sóbrio e feito para projeção. O impacto vem da **tipografia, do contraste e da organização**, nunca de enfeites.
 
-Cada slide gerado guarda o modelo (`layout`: `M01` a `M04`). Quem decide:
+**Não usar:** fotos, ilustrações, ícones decorativos, sombras, brilhos, 3D, texturas ou ornamentos.
 
-| Origem | Modelo | Observação |
+---
+
+## 2. Paleta de cores
+
+A identidade tem **uma estrutura de cores fixa** e **duas variações de fundo**. Cada apresentação usa **uma única variação** do começo ao fim.
+
+### Variação Verde (padrão atual)
+
+| Função | Cor | Hex |
 |---|---|---|
-| Título da palavra | 01 | |
-| Ponto | 01 | em "Slides completos" a IA pode escolher 02 e escrever o subtítulo |
-| Versículo | 03 | o título é o Ponto em que o versículo está (antes do primeiro ponto, o título da palavra); em "Slides completos" a IA pode escolher 04 e escrever um subtítulo curto |
-| Resumo (Abertura, Ilustração, Aplicação, seção) | 02 | título do contexto e a frase como subtítulo |
+| Fundo do slide | Verde neutro escuro | `#24352F` |
+| Fundo do painel | Verde neutro um tom acima | `#2C3F38` |
+| Borda do painel / separadores | Verde acinzentado | `#42584F` |
+| Texto principal | Branco quente | `#F6F2EA` |
+| Destaque | Dourado suave | `#E3B862` |
 
-Os modos de geração mapeiam assim: **Só versículos** → modelo 03; **Versículos e pontos** → 01 e 03; **Slides completos** → a IA escolhe entre 01 e 02 para cada ponto e entre 03 e 04 para cada versículo, e escreve os resumos em 02.
+### Variação Azul-marinho
 
-### Texto que não cabe
-
-A fonte nunca sai da faixa do manual. O tamanho é escolhido dentro da faixa pelo comprimento do texto; o que passa do limite do modelo é dividido em mais slides:
-
-| Modelo | Título | Subtítulo | Versículo |
-|---|---|---|---|
-| 01 | até 75 caracteres | | |
-| 02 | até 60 | até 150 | |
-| 03 | até 50 | | até 220 por slide |
-| 04 | até 45 | até 90 | até 160 por slide |
-
-- Versículo maior que o limite vira vários slides, cortando em frases.
-- Modelo 04 que não cabe é dividido em dois: um slide 02 (título e subtítulo) e os slides 03 do versículo.
-- Título de contexto maior que o limite do modelo 03 ou 04 aparece cortado na última palavra que cabe, com reticências: o título inteiro já apareceu no próprio slide.
-
-### Versículo fiel
-
-O texto do versículo vem sempre do bloco do esboço, que por sua vez vem da Bíblia importada (ou do que o pregador digitou). A IA recebe o versículo só como contexto e a resposta dela não tem campo de texto bíblico: ela não consegue reescrever. A referência vai em negrito logo abaixo, com a sigla da tradução ("Mateus 5:14 · BLIVRE").
-
-### Cores
-
-O visual escolhido pelo pregador define a combinação, sempre uma cor de fundo e uma de texto por slide:
-
-| Visual | Modelos 02, 03 e 04 | Modelo 01 |
+| Função | Cor | Hex |
 |---|---|---|
-| **Azul institucional** | `#334C71` com `#F1EBE2` | `#182F5D` com `#F1EBE2` (impacto) |
-| **Verde profundo** | `#092A1E` com `#FFFFFF` | `#092A1E` com `#FFFFFF` |
+| Fundo do slide | Azul-marinho profundo | `#11223B` |
+| Fundo do painel | Azul-marinho um tom acima | `#182D4B` |
+| Borda do painel / separadores | Azul acinzentado | `#2B4468` |
+| Texto principal | Branco quente | `#F6F2EA` |
+| Destaque | Dourado suave | `#E3B862` |
 
-Verde oliva e azul-claro ficam reservados; o gerador não usa elementos gráficos decorativos.
+### Regras de cor
 
-### Fontes
+- O **dourado é o único acento** e aparece sempre nas mesmas funções:
+  - referências bíblicas;
+  - aspa de abertura dos versículos;
+  - traço abaixo do título;
+  - palavras destacadas no texto original;
+  - números e marcadores de listas.
+- Nunca usar branco puro (`#FFFFFF`) nem preto puro (`#000000`).
+- Nunca trocar de variação no meio de uma apresentação.
 
-- **Poppins** vem do Google Fonts (licença aberta).
-- **Palast Var** é uma fonte comercial da HVD Fonts (https://www.hvdfonts.com/fonts/palast-text) e **não está no repositório**. Enquanto a igreja não fornecer os arquivos licenciados, os títulos usam **Playfair Display Italic** (Google Fonts, licença aberta) como substituta.
-- Para ativar a Palast Var: pôr os arquivos `.woff2` em `apps/admin/public/fonts/` com os nomes indicados em `apps/admin/src/features/sermons/lib/slide-identity.ts` e definir `VITE_SLIDE_TITLE_FONT=Palast Var` antes de gerar o painel (a prévia e o `.pptx` leem essa variável). Passo a passo, inclusive no Docker: `apps/admin/public/fonts/LEIA-ME.md`.
-- O `.pptx` não leva as fontes embutidas: o computador que abre a apresentação precisa ter instaladas a fonte de título ([Playfair Display](https://fonts.google.com/specimen/Playfair+Display), ou a Palast Var quando configurada) e a [Poppins](https://fonts.google.com/specimen/Poppins). O diálogo de exportação avisa isso.
-- Pesos usados: título em itálico médio; subtítulo e versículo em Poppins médio; referência em Poppins negrito. No `.pptx`, subtítulo e versículo aparecem em Poppins Regular, porque o formato só conhece negrito ligado ou desligado.
+---
 
-### Medidas na tela
+## 3. Tipografia
 
-Tudo é calculado numa tela de 1920×1080 e reduzido em escala na prévia. Área de segurança de 240 px nas laterais e 190 px em cima e embaixo. Tracking: títulos -70, subtítulos e títulos do modelo 04 -50, versículos -30. Espaços: título e subtítulo 55 px; título e versículo 70 px (no modelo 03, até 90 px; o espaço que sobra fica abaixo da referência); subtítulo e versículo 40 px; versículo e referência 12 px. Texto curto centralizado; versículo com mais de 110 caracteres ou título com mais de 35 alinha tudo à esquerda, num eixo só.
+**Família única:** [Montserrat](https://fonts.google.com/specimen/Montserrat) (Google Fonts)
+**Alternativas, caso a fonte não esteja disponível:** Helvetica Neue → Arial → sans-serif
+
+| Elemento | Tamanho (px) | ≈ pt no PowerPoint | Peso | Cor | Altura da linha |
+|---|---|---|---|---|---|
+| Título do slide | 104 | 52 | ExtraBold (800) | Branco quente | 1.1 |
+| Aspa de abertura `“` | 120 | 60 | ExtraBold (800) | Dourado | — |
+| Mensagem / tópico em destaque | 72 | 36 | Bold (700) | Branco quente | 1.3 |
+| Versículo | 54 | 27 | Medium (500) | Branco quente | 1.45 |
+| Itens de lista com marcador (•) | 46 | 23 | Medium (500) | Branco quente | 1.4 |
+| Itens de lista numerada | 44 | 22 | SemiBold (600) | Branco quente | 1.25 |
+| Referência bíblica | 38 | 19 | Bold (700) + espaçamento entre letras de 2 px | Dourado | — |
+
+> Os tamanhos em px valem para um slide de **1920 × 1080**. No PowerPoint (13,33" × 7,5"), use aproximadamente a metade em pt.
+
+**Destaque dentro do texto:** a palavra ou o trecho muda para **dourado + Bold (700)**, sem mudar de tamanho.
+
+---
+
+## 4. Hierarquia
+
+1. **Título:** sempre o elemento mais forte do slide.
+2. **Mensagem ou versículo:** dentro do painel.
+3. **Referência bíblica:** em dourado, no rodapé do painel.
+
+---
+
+## 5. Composição
+
+### Formato e margens
+- **16:9**, 1920 × 1080 px.
+- Margens: **96 px** em cima e embaixo, **128 px** nas laterais.
+
+### Estrutura fixa de cada slide (de cima para baixo)
+
+```
+┌──────────────────────────────────────────────┐
+│                                              │
+│              TÍTULO DO SLIDE                 │  104 px · ExtraBold · centralizado
+│                   ━━━━                       │  traço dourado 120 × 6 px
+│   ┌──────────────────────────────────────┐   │
+│   │                  “                   │   │  aspa dourada
+│   │     Texto do versículo, centrali-    │   │  54 px · Medium
+│   │     zado, com quebras equilibradas   │   │
+│   │            Livro 0:00                │   │  38 px · Bold · dourado
+│   └──────────────────────────────────────┘   │
+│                                              │
+└──────────────────────────────────────────────┘
+```
+
+- **Alinhamento:** tudo centralizado na horizontal e na vertical, como **um bloco único**.
+- **Espaço entre título, traço e painel:** 36 px.
+- **Espaço entre os elementos dentro do painel:** 24 px.
+
+### Traço abaixo do título
+- 120 × 6 px, dourado, cantos arredondados (raio de 3 px).
+
+### Painel de conteúdo
+- Largura: **1500 px**.
+- Fundo: cor de painel da variação.
+- Borda: **2 px** na cor de borda da variação.
+- Cantos arredondados: **28 px**.
+- Respiro interno: **56 px** em cima e embaixo, **96 px** nas laterais.
+
+### Transição
+- **Fade** suave entre os slides.
+
+---
+
+## 6. Tipos de slide
+
+| Tipo | Conteúdo do painel |
+|---|---|
+| **Versículo** | Aspa dourada → versículo → referência |
+| **Tópico / mensagem** | Frase em 72 px, sem aspa |
+| **Lista numerada** (ex.: visão geral) | Números dourados em ExtraBold + itens em SemiBold, alinhados à esquerda dentro do painel |
+| **Lista com marcadores** | Marcador `•` dourado + item; referências entre parênteses em dourado Bold |
+
+---
+
+## 7. Regras de texto
+
+- **Fidelidade:** títulos, versículos e referências seguem o documento original. Não trocar traduções nem reescrever.
+- **Nunca reduzir a fonte** para fazer o texto caber. Se não couber, **divida em dois slides**:
+  - repita o mesmo título;
+  - divida sempre **no limite entre versículos**;
+  - cada parte mostra a **referência exata** do trecho exibido;
+  - com **dois versículos** no mesmo item, use **um versículo por slide**.
+- **Quebras de linha:** podem ser ajustadas para equilibrar a leitura.
+- **Referências:** sempre com o nome completo do livro e dois-pontos.
+  - Ex.: `1 Coríntios 2:13`, `Deuteronômio 8:17`, `Salmos 101:6`.
+  - Nunca abreviar como `1 Co`, `LC`, `Gn` ou `3.25`.
+- **Numeração:** tópicos numerados mantêm o padrão `1.`, `2.`, `3.` antes do título.
+- **Pontuação:** usar aspas tipográficas (`“ ”` e `‘ ’`) no lugar de aspas retas.
+
+---
+
+## 8. Checklist final
+
+- [ ] Uma única variação de cor em todos os slides
+- [ ] Montserrat em todos os textos
+- [ ] Título sempre em destaque, no mesmo lugar
+- [ ] Dourado usado só nas funções definidas
+- [ ] Nenhum texto reduzido para caber
+- [ ] Referências completas e conferidas
+- [ ] Sem fotos, ícones, sombras ou efeitos
+---
+
+## 9. Como o sistema aplica
+
+Esta seção diz como o gerador de slides da Palavra segue o manual acima. O gerador fica em `apps/api/src/modules/sermons/sermon-slides.ts`; o painel (`apps/admin/src/features/sermons/lib/slides.ts`) é uma cópia dele, usada na prévia, na contagem e no `.pptx`.
+
+### Um slide por tópico
+
+O gerador lê o esboço da palavra, só os blocos de primeiro nível, e monta:
+
+1. **Capa:** o título da palavra. Em "Com versículos", se houver versículo antes do primeiro ponto, a capa é esse versículo no painel, com o título da palavra no alto (um slide por versículo).
+2. **Visão geral:** com 2 pontos ou mais, logo depois da capa, a lista numerada dos pontos, com o título da palavra no alto. Uma lista com marcadores antes do primeiro ponto não gera slide quando há visão geral: ela é a própria visão geral.
+3. **Cada ponto:** "n. Título do ponto" no alto, numerado a partir de 1. Uma numeração que o pregador já escreveu ("1.", "1)", "I –", "Ponto 1:") sai antes de numerar de novo.
+   - Cada versículo do ponto vira um slide, com o versículo no painel. Ponto com dois versículos vira dois slides com o mesmo título.
+   - Cada lista com marcadores do ponto vira um slide de lista.
+   - Ponto sem versículo nem lista vira um slide só com o título.
+4. **Título de seção** (Introdução, Conclusão, um subtítulo): os versículos e listas dele levam o texto do título no alto, sem número.
+5. Parágrafo, ilustração e aplicação não viram slide. As anotações "Só para mim" ficam no fim da lista, desmarcadas, e nunca vão para o telão.
+
+No exemplo "A agenda Profética está em Curso" (7 pontos, 11 versículos e uma lista no último ponto), isso dá 13 slides.
+
+### Modos
+
+- **Com versículos** (padrão): capa, visão geral e os slides de cada ponto, como acima.
+- **Só títulos:** capa só com o título, visão geral e um slide com o título de cada ponto.
+
+Gerações antigas ("Só versículos", "Versículos e pontos" e "Slides completos") continuam abrindo e, ao atualizar, valem como "Com versículos".
+
+### Caber sem reduzir a fonte
+
+O gerador estima o espaço por caracteres, com quebra em palavra inteira, nas medidas desta identidade (tela de 1920 × 1080):
+
+| Elemento | Medida usada |
+|---|---|
+| Área útil | 1664 × 888 (margens de 128 e 96) |
+| Título | 104 px, linha de 114,4, até 26 caracteres por linha |
+| Título → traço → painel | 36 + 6 + 36 |
+| Painel | 1500 de largura; respiro de 56 em cima e embaixo e 96 nas laterais (1308 úteis) |
+| Aspa | caixa de 60 de altura e 24 até o texto |
+| Versículo | 54 px, linha de 78,3, até 44 caracteres por linha |
+| Referência | 24 de espaço e 46 de altura |
+| Lista com marcadores | 46 px, linha de 64,4, até 48 caracteres por linha, 16 entre itens |
+| Lista numerada | 44 px, linha de 55, até 46 caracteres por linha, 12 entre itens |
+
+- Linhas de versículo que cabem = (888 − altura do título − 78 − 112 − aspa, referência e espaços) ÷ 78,3, arredondado para baixo e nunca menos de 2. Com título de uma linha cabem 5; com título de duas, 4.
+- Versículo que passa disso vira mais slides com o mesmo título e a mesma referência: o corte é na última fronteira de frase (`. ; : ? !`) que cabe; sem ela, na última vírgula; sem ela, na última palavra.
+- Lista que não cabe é dividida entre itens, com o mesmo título; a visão geral dividida continua a numeração. Um item que sozinho não cabe vai inteiro num slide.
+
+### Texto
+
+- O texto dos versículos, dos pontos e das listas vem do esboço, sem reescrever. Nenhuma parte dos slides é feita por IA.
+- A referência aparece como "Livro c:v" com o nome completo do livro, sem a sigla da tradução (a tradução continua guardada).
+- Nos itens de lista, cada referência entre parênteses é escrita por extenso: "(Gn 37:5)" vira "(Gênesis 37:5)".
+- O pregador pode desmarcar e reordenar slides e editar o título da capa e dos pontos (até 120 caracteres). Versículos e listas não se editam no slide: muda-se o esboço e atualiza-se.
+
+### Cores e fonte
+
+- As duas variações de cor são as da seção 2: **Verde** (padrão) e **Azul-marinho**, escolhidas para a apresentação inteira.
+- A fonte é a Montserrat (pesos 500, 600, 700 e 800). A prévia carrega a fonte do Google Fonts; o `.pptx` não leva a fonte embutida, então o computador que abre a apresentação precisa ter a Montserrat instalada.
+
+### Telão (Ponte do Culto e Cultos)
+
+O envio leva, de cada slide marcado, `kind` (TITLE, VERSE, POINT ou SUMMARY), `text` e `reference`, mais o desenho (`layout`, `title`, `verse`, `items` e `start`). Num slide de lista, `text` traz os itens separados por quebra de linha.

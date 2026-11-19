@@ -1150,9 +1150,10 @@ model Sermon {
 }
 
 enum SermonSlideMode {
-  VERSES
+  VERSES // antigo: vale como VERSES_AND_POINTS
   VERSES_AND_POINTS
-  FULL
+  FULL // antigo: vale como VERSES_AND_POINTS
+  TITLES
 }
 
 enum SermonSlideStyle {

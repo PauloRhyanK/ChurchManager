@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { Logger, Module } from '@nestjs/common';
-import { ANTHROPIC_CLIENT_OPTIONS } from '../sermons/ai/anthropic-summarizer';
+import { ANTHROPIC_CLIENT_OPTIONS } from '../sermons/ai/anthropic-client';
 import { GenerationLimiter } from '../sermons/ai/generation-limiter';
 import { readSermonAiConfig, type SermonAiConfig } from '../sermons/ai/sermon-ai.config';
 import { AccessModule } from '../access/access.module';

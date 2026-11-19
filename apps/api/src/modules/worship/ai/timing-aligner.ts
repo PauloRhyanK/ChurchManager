@@ -2,7 +2,7 @@
 // (o mesmo cliente e a mesma chave da IA das Palavras). Uma chamada, saída estruturada.
 import Anthropic from '@anthropic-ai/sdk';
 import type { BetaMessage, MessageCreateParamsNonStreaming } from '@anthropic-ai/sdk/resources/beta/messages';
-import { supportsServerFallback, toSummarizerError, type AnthropicMessagesClient } from '../../sermons/ai/anthropic-summarizer';
+import { supportsServerFallback, toSummarizerError, type AnthropicMessagesClient } from '../../sermons/ai/anthropic-client';
 import { SummarizerError } from '../../sermons/ai/sermon-summarizer';
 import type { LearnedTiming } from '../timing-learning';
 
