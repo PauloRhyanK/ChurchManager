@@ -281,11 +281,22 @@ describe("SermonEditorPage", () => {
     expect(await screen.findByText("Conferência dos slides")).toBeInTheDocument();
   });
 
-  it("com slides e enviada: a etiqueta Enviada é um link para a conferência", async () => {
+  it("com slides e enviada: a etiqueta Enviada leva à conferência", async () => {
     api.getSermon.mockResolvedValue({ ...sermon, ...WITH_SLIDES, status: "SENT", delivery: SENT_DELIVERY });
     renderPage();
-    expect(await screen.findByRole("link", { name: "Enviada · dom 22/11, 19h" })).toHaveAttribute("href", "/palavras/s1/slides");
+    fireEvent.click(await screen.findByRole("button", { name: "Enviada · dom 22/11, 19h" }));
+    expect(await screen.findByText("Conferência dos slides")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Enviar para um culto" })).not.toBeInTheDocument();
+  });
+
+  it("com slides e enviada: a etiqueta Enviada salva antes de ir; se o salvamento falha, fica", async () => {
+    api.getSermon.mockResolvedValue({ ...sermon, ...WITH_SLIDES, status: "SENT", delivery: SENT_DELIVERY });
+    api.updateSermon.mockRejectedValue(new Error("rede"));
+    renderPage();
+    fireEvent.change(await screen.findByLabelText("Título da palavra"), { target: { value: "Novo" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviada · dom 22/11, 19h" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Salve a palavra antes de abrir os slides."));
+    expect(screen.queryByText("Conferência dos slides")).not.toBeInTheDocument();
   });
 
   it("Slides · N salva o que está pendente antes de ir; se o salvamento falha, fica", async () => {
@@ -338,7 +349,10 @@ describe("SermonEditorPage", () => {
     fireEvent.click(await screen.findByRole("link", { name: "abrir a palavra" }));
     await waitFor(() => expect(screen.getByTestId("sheet-doc")).toHaveTextContent("Graça"));
     expect(api.updateSermon).toHaveBeenCalledWith("s1", { document: TYPED, baseRevision: 1 });
-    expect((client.getQueryData(["sermons", "detail", "s1"]) as { revision: number } | undefined)?.revision ?? 2).toBe(2);
+    // Reabrir buscou de novo no servidor e a busca veio depois do salvamento (revisão nova).
+    const lastRead = await api.getSermon.mock.results.at(-1)!.value;
+    expect(lastRead.revision).toBe(2);
+    expect(api.getSermon.mock.invocationCallOrder.at(-1)!).toBeGreaterThan(api.updateSermon.mock.invocationCallOrder[0]);
     // A próxima escrita parte da revisão nova: sem 409.
     fireEvent.change(screen.getByLabelText("Título da palavra"), { target: { value: "x" } });
     fireEvent.click(screen.getByRole("button", { name: "Digitar no texto" }));

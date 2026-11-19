@@ -40,11 +40,14 @@ const SLIDES = [
   slide("d", { kind: "POINT", reference: null }),
 ];
 
+const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+let now = 1_000_000;
+const later = () => (now += 2000);
 function renderDialog(
   over: { slides?: SlideItem[]; document?: typeof EXAMPLE_DOC } = {},
 ) {
-  render(
-    <QueryClientProvider client={new QueryClient()}>
+  return render(
+    <QueryClientProvider client={client}>
       <ExportDialog
         open
         onOpenChange={vi.fn()}
@@ -63,6 +66,9 @@ const row = (badge: string) =>
 describe("ExportDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    client.clear();
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    later();
     print.printHtml.mockReturnValue(true);
     pptx.downloadPptx.mockResolvedValue(undefined);
     api.listBibleTranslations.mockResolvedValue([
@@ -77,8 +83,9 @@ describe("ExportDialog", () => {
     ]);
   });
 
-  it("mostra as três opções com as contagens", () => {
+  it("mostra as três opções com as contagens", async () => {
     renderDialog();
+    await waitFor(() => expect(row("PDF")).toBeEnabled());
     expect(
       screen.getByRole("heading", { name: "Exportar" }),
     ).toBeInTheDocument();
@@ -94,11 +101,12 @@ describe("ExportDialog", () => {
     expect(screen.getByText("Vale só para o PDF.")).toBeInTheDocument();
   });
 
-  it("singular: 1 slide e a referência", () => {
+  it("singular: 1 slide e a referência", async () => {
     renderDialog({
       slides: [slide("a")],
       document: { type: "doc", content: [EXAMPLE_DOC.content[0]] },
     });
+    await waitFor(() => expect(row("PDF")).toBeEnabled());
     expect(
       screen.getByText("1 slide, no visual escolhido"),
     ).toBeInTheDocument();
@@ -127,6 +135,7 @@ describe("ExportDialog", () => {
     expect(html).not.toContain("Dois minutos nessa história");
     expect(html).toContain("A luz do mundo");
     fireEvent.click(screen.getByLabelText(/Incluir as anotações/));
+    later();
     fireEvent.click(row("PDF"));
     expect(print.printHtml.mock.calls[1][0]).toContain(
       "Dois minutos nessa história",
@@ -146,9 +155,69 @@ describe("ExportDialog", () => {
     );
   });
 
-  it("pop-up bloqueado mostra o aviso", () => {
+  it("crédito: tradução que a lista não conhece entra só com o código", async () => {
+    api.listBibleTranslations.mockResolvedValue([]);
+    renderDialog();
+    await waitFor(() => expect(row("PDF")).toBeEnabled());
+    fireEvent.click(row("PDF"));
+    const html = print.printHtml.mock.calls[0][0] as string;
+    expect(html).toContain("BLIVRE");
+    expect(html).not.toContain("domínio público");
+  });
+
+  it("enquanto a lista de traduções carrega, PDF e TXT ficam desligados com aviso", async () => {
+    let finish!: (v: unknown) => void;
+    api.listBibleTranslations.mockReturnValue(new Promise((res) => (finish = res)));
+    renderDialog();
+    expect(screen.getAllByText("Carregando os créditos…")).toHaveLength(2);
+    expect(row("PDF")).toBeDisabled();
+    expect(row("TXT")).toBeDisabled();
+    finish([]);
+    await waitFor(() => expect(row("PDF")).toBeEnabled());
+    expect(row("TXT")).toBeEnabled();
+  });
+
+  it("se a lista de traduções falhar, exporta com o código", async () => {
+    api.listBibleTranslations.mockRejectedValue(new Error("x"));
+    renderDialog();
+    await waitFor(() => expect(row("PDF")).toBeEnabled());
+    fireEvent.click(row("TXT"));
+    expect(text.downloadText.mock.calls[0][1]).toContain("BLIVRE");
+  });
+
+  it("a caixa das anotações volta desmarcada quando o diálogo reabre", async () => {
+    const view = renderDialog();
+    await waitFor(() => expect(row("PDF")).toBeEnabled());
+    fireEvent.click(screen.getByLabelText(/Incluir as anotações/));
+    expect(screen.getByLabelText(/Incluir as anotações/)).toBeChecked();
+    const again = (open: boolean) =>
+      view.rerender(
+        <QueryClientProvider client={client}>
+          <ExportDialog open={open} onOpenChange={vi.fn()} title="A luz do mundo" document={EXAMPLE_DOC} speech="3 min de fala" slides={SLIDES} slideStyle="BACKGROUND" />
+        </QueryClientProvider>,
+      );
+    again(false);
+    again(true);
+    expect(screen.getByLabelText(/Incluir as anotações/)).not.toBeChecked();
+    fireEvent.click(row("PDF"));
+    expect(print.printHtml.mock.calls[0][0]).not.toContain("Dois minutos nessa história");
+  });
+
+  it("segundo clique em PDF e TXT em seguida é ignorado", async () => {
+    renderDialog();
+    await waitFor(() => expect(row("PDF")).toBeEnabled());
+    fireEvent.click(row("PDF"));
+    fireEvent.click(row("PDF"));
+    expect(print.printHtml).toHaveBeenCalledTimes(1);
+    fireEvent.click(row("TXT"));
+    fireEvent.click(row("TXT"));
+    expect(text.downloadText).toHaveBeenCalledTimes(1);
+  });
+
+  it("pop-up bloqueado mostra o aviso", async () => {
     print.printHtml.mockReturnValue(false);
     renderDialog();
+    await waitFor(() => expect(row("PDF")).toBeEnabled());
     fireEvent.click(row("PDF"));
     expect(toast.error).toHaveBeenCalledWith(
       "Permita janelas pop-up para exportar o PDF.",
@@ -188,8 +257,9 @@ describe("ExportDialog", () => {
     );
   });
 
-  it("TXT chama downloadText com o texto dos versículos, sem anotação", () => {
+  it("TXT chama downloadText com o texto dos versículos, sem anotação", async () => {
     renderDialog();
+    await waitFor(() => expect(row("TXT")).toBeEnabled());
     fireEvent.click(screen.getByLabelText(/Incluir as anotações/));
     fireEvent.click(row("TXT"));
     const [fileName, body] = text.downloadText.mock.calls[0];

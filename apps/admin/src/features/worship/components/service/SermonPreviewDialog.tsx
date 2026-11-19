@@ -21,6 +21,8 @@ export function SermonPreviewDialog({ serviceId, open, onOpenChange }: SermonPre
     enabled: open,
     // Os slides mudam na conferência sem invalidar o roteiro: cada abertura busca de novo.
     staleTime: 0,
+    // Focar a janela não pode trocar os slides pelo carregando.
+    refetchOnWindowFocus: false,
   });
   const data = query.data;
 

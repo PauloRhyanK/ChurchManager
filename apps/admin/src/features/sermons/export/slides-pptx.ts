@@ -11,6 +11,9 @@ export async function buildPptx(
   const pptx = new PptxGenJS();
   pptx.layout = "LAYOUT_16x9";
   pptx.title = title;
+  pptx.subject = title;
+  pptx.author = "ChurchManager";
+  pptx.company = "ChurchManager";
   const width = 10;
   const height = 5.625;
   const boxWidth = width * 0.8;

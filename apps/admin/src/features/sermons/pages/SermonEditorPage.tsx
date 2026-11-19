@@ -318,8 +318,8 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
       {slidesInfo.has ? (
         <>
           {situationText && !preached ? (
-            <Button asChild variant="outline" size="sm">
-              <Link to={`${LIST_PATH}/${sermon.id}/slides`}>{situationText}</Link>
+            <Button type="button" variant="outline" size="sm" onClick={() => void openSlides()}>
+              {situationText}
             </Button>
           ) : (
             plainSituation

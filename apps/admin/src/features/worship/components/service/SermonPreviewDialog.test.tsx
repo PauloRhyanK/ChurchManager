@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SermonPreviewDialog } from "./SermonPreviewDialog";
@@ -63,6 +63,19 @@ describe("SermonPreviewDialog", () => {
     expect(screen.queryByTestId("slide-card")).not.toBeInTheDocument();
     finish({ ...PREVIEW, slides: [PREVIEW.slides[0]] });
     expect(await screen.findAllByTestId("slide-card")).toHaveLength(1);
+  });
+
+  it("focar a janela não busca de novo (não troca os slides pelo carregando)", async () => {
+    api.getServiceSermon.mockResolvedValue(PREVIEW);
+    renderDialog();
+    await screen.findAllByTestId("slide-card");
+    act(() => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(api.getServiceSermon).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("status", { name: "Carregando" })).not.toBeInTheDocument();
   });
 
   it("sem slides avisa", async () => {

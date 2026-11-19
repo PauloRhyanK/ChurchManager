@@ -171,7 +171,7 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
             <h1 className="min-w-0 truncate text-[22px] font-bold">{sermon.title.trim() || "Sem título"}</h1>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" variant="outline" size="icon" className="h-11 w-11" aria-label="Exportar" onClick={() => void openExport()}>
+            <Button type="button" variant="outline" size="icon" className="h-11 w-11" aria-label="Exportar" disabled={locked} onClick={() => void openExport()}>
               <Download aria-hidden="true" />
             </Button>
           {preached && situation ? (

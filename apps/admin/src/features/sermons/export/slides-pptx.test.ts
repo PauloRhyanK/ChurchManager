@@ -1,3 +1,4 @@
+import JSZip from 'jszip';
 import { describe, expect, it } from "vitest";
 import { buildPptx } from "./slides-pptx";
 import type { DeckSlide } from "./slides-deck";
@@ -25,5 +26,16 @@ describe("buildPptx (pptxgenjs de verdade)", () => {
     const text = new TextDecoder("latin1").decode(bytes);
     expect(text).toContain("ppt/slides/slide3.xml");
     expect(text).not.toContain("ppt/slides/slide4.xml");
+  }, 20000);
+
+  it('propriedades do arquivo: autor e empresa ChurchManager, assunto = título', async () => {
+    const zip = await JSZip.loadAsync(await buildPptx('Luz do mundo', [slide('Um', null)]));
+    const core = await zip.file('docProps/core.xml')!.async('string');
+    const app = await zip.file('docProps/app.xml')!.async('string');
+    expect(core).toContain('ChurchManager');
+    expect(core).toContain('Luz do mundo');
+    expect(core).not.toMatch(/<dc:creator>PptxGenJS/);
+    expect(app).toContain('<Company>ChurchManager</Company>');
+    expect(app).not.toMatch(/<Company>PptxGenJS/);
   }, 20000);
 });

@@ -114,6 +114,18 @@ describe("SermonSlidesPage", () => {
     expect(screen.getByText("3 slides, no visual escolhido")).toBeInTheDocument();
   });
 
+  it("Exportar fica desligado enquanto a lista está travada (atualizando)", async () => {
+    const regenerating = deferred<unknown>();
+    api.getSermon.mockResolvedValue(sermon({ slidesStale: true }));
+    api.generateSlides.mockReturnValue(regenerating.promise);
+    renderPage();
+    expect(await screen.findByRole("button", { name: "Exportar" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Atualizar" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Exportar" })).toBeDisabled());
+    await act(async () => regenerating.resolve(sermon()));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Exportar" })).toBeEnabled());
+  });
+
   it("Exportar espera a fila e não abre se o salvamento falhou", async () => {
     const failing = deferred<unknown>();
     api.saveSlides.mockReturnValueOnce(failing.promise);

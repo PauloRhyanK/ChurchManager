@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Download, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -25,6 +25,7 @@ import type { SermonDoc } from "../lib/document";
 import type { SlideItem, SlideStyle } from "../lib/slides";
 
 const HOUR_MS = 60 * 60 * 1000;
+const DOUBLE_CLICK_MS = 1000;
 
 interface ExportDialogProps {
   open: boolean;
@@ -92,6 +93,12 @@ export function ExportDialog({
 }: ExportDialogProps) {
   const [includePrivate, setIncludePrivate] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const lastPdf = useRef(0);
+  const lastText = useRef(0);
+  // A caixa das anotações nunca vem marcada de uma abertura anterior.
+  useEffect(() => {
+    setIncludePrivate(false);
+  }, [open]);
   // Mesma consulta do seletor de versículos: normalmente já está em cache.
   const translations = useQuery({
     queryKey: ["sermons", "bible", "translations"],
@@ -101,6 +108,9 @@ export function ExportDialog({
   });
 
   const deck = buildDeck(slides, slideStyle);
+  // Sem a lista de traduções os créditos sairiam só com o código: espera (se a consulta falhar, segue com o código).
+  const creditsLoading =
+    translations.isPending && usedTranslations(document).length > 0;
   const verseCount = document.content.filter((b) => b.type === "verse").length;
 
   function credits(): string[] {
@@ -110,7 +120,16 @@ export function ExportDialog({
     );
   }
 
+  /** Ignora o segundo clique logo em seguida (evita duas janelas ou dois arquivos). */
+  function once(last: { current: number }): boolean {
+    const now = Date.now();
+    if (now - last.current < DOUBLE_CLICK_MS) return false;
+    last.current = now;
+    return true;
+  }
+
   function exportPdf() {
+    if (!once(lastPdf)) return;
     const html = buildSermonHtml({
       title,
       document,
@@ -134,6 +153,7 @@ export function ExportDialog({
   }
 
   function exportText() {
+    if (!once(lastText)) return;
     downloadText(
       exportFileName(title, "txt"),
       buildVersesText({ title, document, credits: credits() }),
@@ -153,7 +173,12 @@ export function ExportDialog({
           <Option
             badge="PDF"
             name="O sermão"
-            text="O texto inteiro, para imprimir ou ler no tablet"
+            text={
+              creditsLoading
+                ? "Carregando os créditos…"
+                : "O texto inteiro, para imprimir ou ler no tablet"
+            }
+            disabled={creditsLoading}
             onClick={exportPdf}
           />
           <Option
@@ -174,11 +199,13 @@ export function ExportDialog({
             text={
               verseCount === 0
                 ? "Esta palavra ainda não tem versículos."
-                : verseCount === 1
-                  ? "A referência, na ordem"
-                  : `As ${verseCount} referências, na ordem`
+                : creditsLoading
+                  ? "Carregando os créditos…"
+                  : verseCount === 1
+                    ? "A referência, na ordem"
+                    : `As ${verseCount} referências, na ordem`
             }
-            disabled={verseCount === 0}
+            disabled={verseCount === 0 || creditsLoading}
             onClick={exportText}
           />
         </div>
