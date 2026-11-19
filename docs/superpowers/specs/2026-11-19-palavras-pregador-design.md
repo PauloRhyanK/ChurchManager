@@ -3,12 +3,13 @@
 Data: 19/11/2026 · Branch: `claude/palavras-pregador-0fc79e` (entra pela `qa`).
 Telas aprovadas: https://claude.ai/artifact/QU7o3ybrFftbDyX6hugHLu (`PalavraLista`, `Palavra`, `PalavraVersiculo`, `PalavraSlides`, `PalavraEnviar`, `PalavraCulto`, `PalavraExportar`, e a linha "Palavra" de `Roteiro`). Os textos de sermão ali são inventados.
 
-**Situação:** aprovada em 19/11/2026. As etapas 1 a 4 estão implementadas (planos em `docs/superpowers/plans/2026-11-19-palavras-etapa-*.md`). Falta a etapa 5 (slides completos, que depende de provedor e chave de IA) e a etapa 6 (Ponte).
+**Situação:** aprovada em 19/11/2026. As etapas 1 a 5 estão implementadas (planos em `docs/superpowers/plans/2026-11-19-palavras-etapa-*.md`). Falta a etapa 6 (Ponte). A etapa 5 só liga quando a chave do provedor está no ambiente do servidor; a chamada real ao provedor ainda não foi exercitada (ver `apps/api/src/modules/sermons/ai/README.md`).
 
 **O que a implementação decidiu além do que está abaixo:**
 
 - **Bíblia:** só os 22 marcadores de acróstico do Salmo 119 são removidos na importação; as palavras supridas e os rótulos de fala entre colchetes da Bíblia Livre ("[assim]", "[Ela] :") ficam como na edição. A busca por trecho ignora pontuação, separa palavras com hífen e traz a frase exata primeiro. Em livro de um capítulo só, "jd 3" é o versículo 3. Em QA e produção a importação roda dentro do contêiner da API (`apps/api/src/modules/sermons/bible/README.md`).
 - **Slides:** cada item tem id `<bloco>:<n>`; "Atualizar" casa por esse id. Título e ponto com mais de 300 caracteres são cortados na geração. Mudar só o título também marca os slides como desatualizados. Palavra sem slides continua podendo ser enviada pelo editor; com slides, o envio fica na conferência. Palavra pregada tem os slides só para leitura.
+- **IA (decisão do usuário em 19/11/2026: Anthropic, sem ficar preso a um modelo):** a chamada fica atrás da interface `SermonSummarizer`, com um registro de provedores; o primeiro é a Anthropic, pelo SDK oficial. A chave vem de `ANTHROPIC_API_KEY` no ambiente do servidor (uma para a plataforma); os modelos vêm de `SERMON_AI_MODELS` (lista `provedor:modelo`, o primeiro é o padrão; sem a variável, `claude-opus-5-5`), e o painel deixa escolher quando há mais de um. São resumidos a Abertura, cada Ilustração, cada Aplicação e cada seção com título; pontos e versículos não. Limite de 10 gerações por pessoa por hora. Sem chave, a opção continua desligada.
 - **Exportar:** a caixa das anotações volta desmarcada toda vez que o diálogo abre. A apresentação sai com um slide por item marcado; o PDF e o texto levam o crédito da tradução.
 
 ## Problema
