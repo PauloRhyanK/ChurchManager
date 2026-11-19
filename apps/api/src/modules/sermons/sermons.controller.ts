@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { SkipThrottle } from '@nestjs/throttler';
+import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { PermissionLevel, PermissionModule } from '@prisma/client';
 import { PermissionsGuard } from '../access/permissions.guard';
 import { RequirePermission } from '../access/require-permission.decorator';
@@ -54,7 +54,9 @@ export class SermonsController {
     return this.sermons.get(user, id);
   }
 
+  /** O autosave salva a cada pausa na digitação: 30/min por rota e IP seria pouco. */
   @Put(':id')
+  @Throttle({ public: { limit: 120, ttl: 60_000 } })
   @RequirePermission(PermissionModule.SERMONS, PermissionLevel.EDIT)
   update(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateSermonDto) {
     return this.sermons.update(user, id, dto);

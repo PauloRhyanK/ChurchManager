@@ -2,7 +2,8 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { AuthUser } from '../auth/auth-user';
-import { matchDeliveries } from './delivery-match';
+import { deliveryHasPassed } from './delivery-match';
+import { rematchDeliveries } from './delivery-rematch';
 import type { SendSermonDto } from './dto/delivery.dto';
 import { SermonsService, toSermonFull, type SermonFull } from './sermons.service';
 
@@ -35,8 +36,17 @@ const minutesOf = (hhmm: string) => {
 };
 const hasSermonConflict = () =>
   new ConflictException({ code: 'SERVICE_HAS_SERMON', message: 'Este culto já tem uma palavra.' });
+const serviceHasPassed = () => new BadRequestException('Este culto já aconteceu.');
 const BY_TIME = [{ startTime: 'asc' }, { id: 'asc' }] as const;
 const MAX_OPTIONS = 8;
+
+/** Dois envios ao mesmo culto ao mesmo tempo: o segundo bate na unicidade de `service_id`. */
+function isServiceUniqueViolation(error: unknown): boolean {
+  const e = error as { code?: unknown; meta?: { target?: unknown } } | null;
+  if (e?.code !== 'P2002') return false;
+  const target = JSON.stringify(e.meta?.target ?? '');
+  return !/sermon_?id/i.test(target) || /service_?id/i.test(target);
+}
 
 /** O envio: a cópia pública da palavra que o módulo de culto lê. Nunca lê `sermons` sem o filtro de autor. */
 @Injectable()
@@ -46,18 +56,34 @@ export class SermonDeliveryService {
     private readonly sermons: SermonsService,
   ) {}
 
-  private today(): string {
-    return new Intl.DateTimeFormat('en-CA', {
+  /** Data (AAAA-MM-DD) e hora (HH:MM) de agora no fuso das palavras. */
+  private now(): { date: string; time: string } {
+    const parts = new Intl.DateTimeFormat('en-CA', {
       timeZone: this.sermons.timeZone(),
+      hourCycle: 'h23',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
-    }).format(this.sermons.clock());
+      hour: '2-digit',
+      minute: '2-digit',
+    }).formatToParts(this.sermons.clock());
+    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+    return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour')}:${get('minute')}` };
   }
 
+  private hasPassed(date: string, startTime: string): boolean {
+    return deliveryHasPassed(date, startTime, this.sermons.clock(), this.sermons.timeZone());
+  }
+
+  /** Só cultos que ainda não começaram: de hoje, os de hora posterior à atual. */
   async serviceOptions(user: AuthUser): Promise<ServiceOption[]> {
+    const now = this.now();
+    const today = toDate(now.date);
     const rows = await this.prisma.worshipService.findMany({
-      where: { tenantId: user.tenantId, date: { gte: toDate(this.today()) } },
+      where: {
+        tenantId: user.tenantId,
+        OR: [{ date: { gt: today } }, { date: today, startTime: { gt: now.time } }],
+      },
       include: { sermonDelivery: { select: { authorId: true } } },
       orderBy: [{ date: 'asc' }, ...BY_TIME],
       take: MAX_OPTIONS,
@@ -99,10 +125,32 @@ export class SermonDeliveryService {
     if (byService ? anyDate : !byDate) {
       throw new BadRequestException('Escolha um culto ou informe a data e a hora.');
     }
-    if (byDate) toDate(dto.date!);
+    if (byDate) {
+      toDate(dto.date!);
+      if (this.hasPassed(dto.date!, dto.startTime!)) throw new BadRequestException('Escolha uma data futura.');
+    }
 
+    try {
+      return await this.sendInTransaction(user, sermonId, dto, byService, byDate);
+    } catch (error) {
+      if (isServiceUniqueViolation(error)) throw hasSermonConflict();
+      throw error;
+    }
+  }
+
+  private async sendInTransaction(
+    user: AuthUser,
+    sermonId: string,
+    dto: SendSermonDto,
+    byService: boolean,
+    byDate: boolean,
+  ): Promise<SermonFull> {
     const saved = await this.prisma.$transaction(async (tx) => {
       const sermon = await this.sermons.findOwned(user, sermonId, tx);
+      // O envio passado é o registro do que foi pregado: não sai do lugar.
+      if (sermon.delivery && this.hasPassed(ymd(sermon.delivery.date), sermon.delivery.startTime)) {
+        throw new BadRequestException('Esta palavra já foi pregada. Duplique a palavra para enviar de novo.');
+      }
       const account = await tx.adminUser.findFirst({
         where: { id: user.userId, tenantId: user.tenantId },
         select: { name: true },
@@ -134,8 +182,10 @@ export class SermonDeliveryService {
       if (byService) {
         const service = await tx.worshipService.findFirst({ where: { id: dto.serviceId, tenantId: user.tenantId } });
         if (!service) throw new NotFoundException('Culto não encontrado.');
+        if (this.hasPassed(ymd(service.date), service.startTime)) throw serviceHasPassed();
         const holder = await tx.sermonDelivery.findFirst({ where: { tenantId: user.tenantId, serviceId: service.id } });
         if (holder && holder.sermonId !== sermon.id) {
+          if (this.hasPassed(ymd(holder.date), holder.startTime)) throw serviceHasPassed();
           if (!dto.replace) throw hasSermonConflict();
           await tx.sermonDelivery.delete({ where: { id: holder.id } });
         }
@@ -155,10 +205,11 @@ export class SermonDeliveryService {
         if (mine && mine.serviceId === null) {
           const near = await this.preview(user.tenantId, newDate, dto.startTime!, tx);
           if (near.service && near.occupied) {
-            if (!dto.replace) throw hasSermonConflict();
             const holder = await tx.sermonDelivery.findFirst({
               where: { tenantId: user.tenantId, serviceId: near.service.id },
             });
+            if (holder && this.hasPassed(ymd(holder.date), holder.startTime)) throw serviceHasPassed();
+            if (!dto.replace) throw hasSermonConflict();
             if (holder) await tx.sermonDelivery.delete({ where: { id: holder.id } });
             await tx.sermonDelivery.update({
               where: { id: mine.id },
@@ -176,6 +227,9 @@ export class SermonDeliveryService {
     const saved = await this.prisma.$transaction(async (tx) => {
       const sermon = await this.sermons.findOwned(user, sermonId, tx);
       if (sermon.delivery) {
+        if (this.hasPassed(ymd(sermon.delivery.date), sermon.delivery.startTime)) {
+          throw new BadRequestException('Esta palavra já foi pregada.');
+        }
         await tx.sermonDelivery.delete({ where: { id: sermon.delivery.id } });
         await this.rematch(tx, user.tenantId, [ymd(sermon.delivery.date)]);
       }
@@ -186,24 +240,7 @@ export class SermonDeliveryService {
 
   /** Reaplica o casamento por data e hora e grava só o que mudou. Para o módulo de culto também. */
   async rematch(tx: Tx, tenantId: string, dates: string[]): Promise<void> {
-    for (const day of [...new Set(dates)]) {
-      const date = toDate(day);
-      const services = await tx.worshipService.findMany({ where: { tenantId, date }, orderBy: [...BY_TIME] });
-      const deliveries = await tx.sermonDelivery.findMany({
-        where: { tenantId, date },
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      });
-      const result = matchDeliveries(services, deliveries);
-      const changed = deliveries.filter((x) => (result.get(x.id) ?? null) !== x.serviceId);
-      // serviceId é único: libera primeiro, atribui depois, para a troca não colidir no meio.
-      for (const x of changed) {
-        if (x.serviceId !== null) await tx.sermonDelivery.update({ where: { id: x.id }, data: { serviceId: null } });
-      }
-      for (const x of changed) {
-        const next = result.get(x.id) ?? null;
-        if (next !== null) await tx.sermonDelivery.update({ where: { id: x.id }, data: { serviceId: next } });
-      }
-    }
+    await rematchDeliveries(tx, tenantId, dates);
   }
 
   /** O envio fixado ao culto copia a nova data e hora dele. */

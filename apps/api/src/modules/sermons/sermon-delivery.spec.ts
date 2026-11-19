@@ -46,11 +46,13 @@ function build(init: { sermons?: Row[]; services?: Row[]; deliveries?: Row[] }) 
   const deliveries = (init.deliveries ?? []).map((x) => ({ ...x }));
   const writes: string[] = [];
   const snapshot = () => JSON.stringify(deliveries);
-  const matches = (row: Row, where: Row = {}) =>
+  const matches = (row: Row, where: Row = {}): boolean =>
     Object.entries(where).every(([k, v]) => {
+      if (k === 'OR') return (v as Row[]).some((w) => matches(row, w));
       if (v && typeof v === 'object' && !(v instanceof Date)) {
         if ('in' in v) return v.in.includes(row[k]);
         if ('gte' in v) return row[k] >= v.gte;
+        if ('gt' in v) return row[k] > v.gt;
         return true;
       }
       if (v instanceof Date) return row[k]?.getTime() === v.getTime();
@@ -75,6 +77,15 @@ function build(init: { sermons?: Row[]; services?: Row[]; deliveries?: Row[] }) 
         if (!s) return null;
         const dl = deliveries.find((x) => x.sermonId === s.id);
         return { ...s, delivery: dl ? withService(dl) : null };
+      },
+      deleteMany: async ({ where }: Row) => {
+        const i = sermons.findIndex((r) => matches(r, where));
+        if (i < 0) return { count: 0 };
+        writes.push('sermon.delete');
+        sermons.splice(i, 1);
+        // sermon_id SetNull: o envio passado fica, sem a palavra.
+        deliveries.filter((x) => x.sermonId === where.id).forEach((x) => (x.sermonId = null));
+        return { count: 1 };
       },
     },
     worshipService: {
@@ -372,4 +383,113 @@ test('409 no caminho da data desfaz a mudança de um envio que já existia', asy
   await assert.rejects(service.send(user(), S1, { date: '2026-11-22', startTime: '19:30' }), ConflictException);
   assert.deepEqual(deliveries.find((x) => x.id === 'a'), before);
   assert.equal(deliveries.find((x) => x.id === 'b')!.serviceId, SV_B);
+});
+
+// ---- revisão final ----
+
+const PAST = '2026-11-15'; // domingo passado: a palavra desse dia já foi pregada
+
+test('apagar a palavra enviada devolve o culto à palavra guardada de outro pregador', async () => {
+  const { sermonsService, deliveries } = build({
+    sermons: [sermonRow(S1), sermonRow(S2, { authorId: OTHER })],
+    services: SERVICES(),
+    deliveries: [
+      deliveryRow({ id: 'mine', sermonId: S1, serviceId: SV_B, pinned: true, date: d('2026-11-22'), startTime: '19:00', createdAt: new Date('2026-11-01T00:00:00Z') }),
+      deliveryRow({ id: 'g', sermonId: S2, authorId: OTHER, serviceId: null, pinned: false, date: d('2026-11-22'), startTime: '19:00', createdAt: new Date('2026-11-06T00:00:00Z') }),
+    ],
+  });
+  await sermonsService.remove(user(), S1);
+  assert.equal(deliveries.some((x) => x.id === 'mine'), false);
+  assert.equal(deliveries.find((x) => x.id === 'g')!.serviceId, SV_B);
+});
+
+test('cancelar o envio de uma palavra já pregada dá 400 e o registro fica', async () => {
+  const past = deliveryRow({ id: 'p', sermonId: S1, serviceId: null, pinned: false, date: d(PAST), startTime: '19:00' });
+  const { service, deliveries, writes } = build({ sermons: [sermonRow(S1)], services: SERVICES(), deliveries: [{ ...past }] });
+  await assert.rejects(service.cancel(user(), S1), (e: any) => e instanceof BadRequestException && e.message === 'Esta palavra já foi pregada.');
+  assert.deepEqual(writes, []);
+  assert.deepEqual(deliveries, [past]);
+});
+
+test('reenviar uma palavra já pregada dá 400 e o registro fica', async () => {
+  const past = deliveryRow({ id: 'p', sermonId: S1, serviceId: null, pinned: false, date: d(PAST), startTime: '19:00' });
+  const { service, deliveries, writes } = build({ sermons: [sermonRow(S1)], services: SERVICES(), deliveries: [{ ...past }] });
+  for (const dto of [{ serviceId: SV_B }, { date: '2026-11-29', startTime: '19:00' }]) {
+    await assert.rejects(
+      service.send(user(), S1, dto),
+      (e: any) => e instanceof BadRequestException && e.message === 'Esta palavra já foi pregada. Duplique a palavra para enviar de novo.',
+    );
+  }
+  assert.deepEqual(writes, []);
+  assert.deepEqual(deliveries, [past]);
+});
+
+test('culto que já aconteceu não é destino, nem com replace: o envio passado de outro pregador fica', async () => {
+  const SV_PAST = '33333333-3333-4333-8333-333333333360';
+  const theirs = deliveryRow({ id: 'x', sermonId: S2, authorId: OTHER, serviceId: SV_PAST, pinned: true, date: d(PAST), startTime: '19:00' });
+  const { service, deliveries, writes } = build({
+    sermons: [sermonRow(S1), sermonRow(S2, { authorId: OTHER })],
+    services: [...SERVICES(), serviceRow(SV_PAST, PAST, '19:00')],
+    deliveries: [{ ...theirs }],
+  });
+  for (const replace of [undefined, true]) {
+    await assert.rejects(
+      service.send(user(), S1, { serviceId: SV_PAST, replace }),
+      (e: any) => e instanceof BadRequestException && e.message === 'Este culto já aconteceu.',
+    );
+  }
+  assert.deepEqual(writes, []);
+  assert.deepEqual(deliveries, [theirs]);
+});
+
+test('replace pela data não apaga o envio de hoje que já passou', async () => {
+  // Hoje (sexta 20/11) às 08:00 já passou: são 09:00 em Brasília.
+  const SV_TODAY = '33333333-3333-4333-8333-333333333370';
+  const theirs = deliveryRow({ id: 'x', sermonId: S2, authorId: OTHER, serviceId: SV_TODAY, pinned: true, date: d('2026-11-20'), startTime: '08:00' });
+  const { service, deliveries } = build({
+    sermons: [sermonRow(S1), sermonRow(S2, { authorId: OTHER })],
+    services: [serviceRow(SV_TODAY, '2026-11-20', '08:00')],
+    deliveries: [{ ...theirs }],
+  });
+  await assert.rejects(
+    service.send(user(), S1, { date: '2026-11-20', startTime: '10:00', replace: true }),
+    (e: any) => e instanceof BadRequestException && e.message === 'Este culto já aconteceu.',
+  );
+  assert.deepEqual(deliveries, [theirs]);
+});
+
+test('violação de unicidade em serviceId (envio simultâneo) vira 409 SERVICE_HAS_SERMON', async () => {
+  const t = build({ sermons: [sermonRow(S1)], services: SERVICES() });
+  (t.service as any).prisma.sermonDelivery.create = async () => {
+    throw Object.assign(new Error('Unique constraint failed'), { code: 'P2002', meta: { target: ['service_id'] } });
+  };
+  await assert.rejects(t.service.send(user(), S1, { serviceId: SV_B }), (e: any) => {
+    assert.ok(e instanceof ConflictException);
+    assert.deepEqual(e.getResponse(), { code: 'SERVICE_HAS_SERMON', message: 'Este culto já tem uma palavra.' });
+    return true;
+  });
+  // Outro erro do banco segue como está.
+  (t.service as any).prisma.sermonDelivery.create = async () => {
+    throw Object.assign(new Error('outro'), { code: 'P2003' });
+  };
+  await assert.rejects(t.service.send(user(), S1, { serviceId: SV_B }), (e: any) => e.code === 'P2003');
+});
+
+test('serviceOptions não lista o culto de hoje que já começou', async () => {
+  const early = '33333333-3333-4333-8333-333333333380';
+  const later = '33333333-3333-4333-8333-333333333381';
+  const { service } = build({
+    services: [...SERVICES(), serviceRow(early, '2026-11-20', '09:00'), serviceRow(later, '2026-11-20', '09:01')],
+  });
+  const out = await service.serviceOptions(user());
+  assert.deepEqual(out.map((o) => o.id), [later, SV_A, SV_B]);
+});
+
+test('enviar para data e hora que já passaram dá 400', async () => {
+  const { service, writes } = build({ sermons: [sermonRow(S1)], services: SERVICES() });
+  for (const dto of [{ date: '2026-11-19', startTime: '19:00' }, { date: '2026-11-20', startTime: '09:00' }]) {
+    await assert.rejects(service.send(user(), S1, dto), (e: any) => e instanceof BadRequestException && e.message === 'Escolha uma data futura.');
+  }
+  assert.deepEqual(writes, []);
+  await service.send(user(), S1, { date: '2026-11-20', startTime: '09:01' });
 });

@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { AuthUser } from '../auth/auth-user';
 import { deliveryHasPassed, sermonStatus, type SermonStatus } from './delivery-match';
+import { rematchDeliveries } from './delivery-rematch';
 import { CreateSermonDto, UpdateSermonDto } from './dto/sermon.dto';
 import { deriveSermon, normalizeSearch } from './sermon-derive';
 import { EMPTY_DOC, validateSermonDocument, type SermonDoc } from './sermon-document';
@@ -189,11 +190,12 @@ export class SermonsService {
     await this.prisma.$transaction(async (tx) => {
       const current = await this.findOwned(user, id, tx);
       const delivery = current.delivery;
-      if (delivery && !deliveryHasPassed(ymd(delivery.date), delivery.startTime, now, timeZone)) {
-        await tx.sermonDelivery.delete({ where: { id: delivery.id } });
-      }
+      const freed = delivery && !deliveryHasPassed(ymd(delivery.date), delivery.startTime, now, timeZone) ? delivery : null;
+      if (freed) await tx.sermonDelivery.delete({ where: { id: freed.id } });
       const done = await tx.sermon.deleteMany({ where: { id, tenantId: user.tenantId, authorId: user.userId } });
       if (done.count === 0) throw new NotFoundException('Palavra não encontrada.');
+      // O culto que a palavra deixou volta à disputa (a palavra guardada de outro pregador pode entrar).
+      if (freed) await rematchDeliveries(tx, user.tenantId, [ymd(freed.date)]);
     });
     return { success: true };
   }

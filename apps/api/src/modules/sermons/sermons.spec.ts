@@ -88,7 +88,10 @@ function build(initial: Row[]) {
         return { count: 1 };
       },
     },
+    // O rematch depois de apagar: sem cultos nem envios no dia, não escreve nada.
+    worshipService: { findMany: async () => [] },
     sermonDelivery: {
+      findMany: async () => [],
       update: async ({ where, data }: Row) => {
         writes.push('delivery.update');
         calls.push({ op: 'delivery.update', args: { where, data } });
