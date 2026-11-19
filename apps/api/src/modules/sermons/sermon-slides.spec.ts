@@ -174,4 +174,55 @@ describe('publicSlides e parseStoredSlides', () => {
     const bad = { ...item('b:0'), id: undefined };
     assert.deepEqual(parseStoredSlides([good, bad, 'x', { ...good, kind: 'OUTRO' }]), [good]);
   });
+
+  it('parseStoredSlides: PRIVATE vira desmarcado, id repetido fica o primeiro, texto longo é cortado', () => {
+    const priv = item('n:0', { kind: 'PRIVATE', included: true });
+    assert.equal(parseStoredSlides([priv])[0].included, false);
+    const dup = parseStoredSlides([item('a:0', { text: 'primeiro' }), item('a:0', { text: 'segundo' })]);
+    assert.deepEqual(dup.map((x) => x.text), ['primeiro']);
+    const long = parseStoredSlides([item('p:0', { text: 'z'.repeat(500) }), item('v:0', { kind: 'VERSE', text: 'z'.repeat(500) })]);
+    assert.equal(long[0].text.length, 300);
+    assert.equal(long[1].text.length, 500);
+  });
+
+  it('parseStoredSlides: 401 itens válidos viram 400', () => {
+    const many = Array.from({ length: 401 }, (_, i) => item(`b${i}:0`));
+    assert.equal(parseStoredSlides(many).length, 400);
+  });
+});
+
+describe('casos de borda', () => {
+  it('mergeSlides nunca repete id mesmo com repetição em previous', () => {
+    const prev = [item('a:0'), item('a:0', { included: false }), item('b:0')];
+    const m = mergeSlides(prev, [item('a:0'), item('b:0')]);
+    assert.deepEqual(m.map((x) => x.id), ['a:0', 'b:0']);
+  });
+
+  it('versículo de 220 caracteres é um pedaço; de 221, dois sem vazio', () => {
+    const one = buildSlides('', doc(verseBlock('v', 'João 1:1', [{ number: 1, text: 'ab '.repeat(73) + 'a' }])), 'VERSES');
+    assert.equal(one.length, 1);
+    assert.equal(one[0].text.length, 220);
+    const two = buildSlides('', doc(verseBlock('v', 'João 1:1', [{ number: 1, text: 'ab '.repeat(73) + 'ab' }])), 'VERSES');
+    assert.equal(two.length, 2);
+    assert.ok(two.every((x) => x.text.length > 0 && x.text.length <= 220));
+  });
+
+  it('versículo só de espaços não gera item', () => {
+    assert.deepEqual(buildSlides('', doc(verseBlock('v', 'João 1:1', [{ number: 1, text: ' \n\t ' }])), 'VERSES'), []);
+  });
+
+  it('versículo de 100 mil caracteres termina e todo pedaço tem de 1 a 220', () => {
+    const text = Array(20000).fill('amen').join(' ');
+    const s = buildSlides('', doc(verseBlock('v', 'João 1:1', [{ number: 1, text }])), 'VERSES');
+    assert.ok(s.length > 0 && s.length <= 400);
+    assert.ok(s.every((x) => x.text.length >= 1 && x.text.length <= 220));
+  });
+
+  it('rótulo privado corta por ponto de código e sem espaço antes das reticências', () => {
+    const emoji = '😀'.repeat(100);
+    const n = (t: string): SermonBlock => ({ type: 'privateNote', attrs: { id: 'n' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: t }] }] });
+    assert.equal(buildSlides('', doc(n(emoji)), 'VERSES')[0].text, '😀'.repeat(80) + '…');
+    const spaced = 'a'.repeat(79) + ' ' + 'b'.repeat(50);
+    assert.equal(buildSlides('', doc(n(spaced)), 'VERSES')[0].text, 'a'.repeat(79) + '…');
+  });
 });

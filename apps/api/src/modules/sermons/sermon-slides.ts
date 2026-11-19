@@ -98,6 +98,11 @@ function blockItems(b: SermonBlock, mode: Exclude<SlideMode, 'FULL'>): SlideItem
   return [];
 }
 
+function label(text: string, max: number): string {
+  const chars = Array.from(text);
+  return chars.length > max ? `${chars.slice(0, max).join('').trim()}…` : text;
+}
+
 export function buildSlides(title: string, doc: SermonDoc, mode: Exclude<SlideMode, 'FULL'>): SlideItem[] {
   const main: SlideItem[] = [];
   const privates: SlideItem[] = [];
@@ -114,7 +119,7 @@ export function buildSlides(title: string, doc: SermonDoc, mode: Exclude<SlideMo
         id: `${b.attrs.id}:0`,
         kind: 'PRIVATE',
         sourceBlockId: b.attrs.id,
-        text: text.length > max ? `${text.slice(0, max)}…` : text,
+        text: label(text, max),
         reference: null,
         included: false,
         edited: false,
@@ -139,9 +144,13 @@ export function mergeSlides(previous: SlideItem[], fresh: SlideItem[]): SlideIte
     return { ...f, included: f.kind === 'PRIVATE' ? false : p.included, ...kept };
   };
   const result: SlideItem[] = [];
+  const seen = new Set<string>();
   for (const p of previous) {
     const f = freshById.get(p.id);
-    if (f && f.kind !== 'PRIVATE') result.push(merge(f));
+    if (f && f.kind !== 'PRIVATE' && !seen.has(p.id)) {
+      seen.add(p.id);
+      result.push(merge(f));
+    }
   }
   fresh.forEach((f, i) => {
     if (f.kind === 'PRIVATE' || prevById.has(f.id)) return;
@@ -164,6 +173,7 @@ export function publicSlides(items: SlideItem[]): PublicSlide[] {
 export function parseStoredSlides(value: unknown): SlideItem[] {
   if (!Array.isArray(value)) return [];
   const out: SlideItem[] = [];
+  const ids = new Set<string>();
   for (const v of value) {
     if (typeof v !== 'object' || v === null) continue;
     const o = v as Record<string, unknown>;
@@ -174,15 +184,18 @@ export function parseStoredSlides(value: unknown): SlideItem[] {
       !(o.sourceBlockId === null || typeof o.sourceBlockId === 'string') ||
       !(o.reference === null || typeof o.reference === 'string') ||
       typeof o.included !== 'boolean' ||
-      typeof o.edited !== 'boolean'
+      typeof o.edited !== 'boolean' ||
+      ids.has(o.id)
     ) continue;
+    ids.add(o.id);
+    const kind = o.kind as SlideKind;
     out.push({
       id: o.id,
-      kind: o.kind as SlideKind,
+      kind,
       sourceBlockId: o.sourceBlockId as string | null,
-      text: o.text,
+      text: kind === 'VERSE' ? o.text : o.text.slice(0, SLIDE_LIMITS.textChars),
       reference: o.reference as string | null,
-      included: o.included,
+      included: kind === 'PRIVATE' ? false : o.included,
       edited: o.edited,
     });
     if (out.length >= SLIDE_LIMITS.items) break;
