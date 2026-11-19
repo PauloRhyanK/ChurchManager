@@ -114,10 +114,42 @@ const cut = (s: string, max: number) => Array.from(s).slice(0, max).join('');
 const EPSILON = 1e-9;
 
 /** Quebra em linhas de até `chars` caracteres, em palavra inteira; palavra maior que a linha é cortada. */
+/** Até quantos caracteres um trecho entre parênteses fica inteiro numa linha (ex.: "(1 Reis 3:5)"). */
+const KEEP_TOGETHER = 24;
+
+/** As palavras do texto; um trecho curto entre parênteses conta como uma palavra só, para não quebrar no meio. */
+function wrapTokens(text: string): string[] {
+  const tokens: string[] = [];
+  const words = collapse(text).split(' ').filter(Boolean);
+  for (let i = 0; i < words.length; i++) {
+    let token = words[i];
+    if (token.startsWith('(') && !token.includes(')')) {
+      let j = i + 1;
+      let joined = token;
+      while (j < words.length && !joined.includes(')') && Array.from(joined).length <= KEEP_TOGETHER) joined += ` ${words[j++]}`;
+      if (joined.includes(')') && Array.from(joined).length <= KEEP_TOGETHER) {
+        token = joined;
+        i = j - 1;
+      }
+    }
+    tokens.push(token);
+  }
+  return tokens;
+}
+
+/** Aspas retas viram tipográficas (manual, "Regras de texto"): abre no começo ou depois de espaço/parêntese. */
+export function typographicQuotes(text: string): string {
+  return text
+    .replace(/(^|[\s([{—–-])"/g, '$1“')
+    .replace(/"/g, '”')
+    .replace(/(^|[\s([{—–-])'/g, '$1‘')
+    .replace(/'/g, '’');
+}
+
 export function wrapLines(text: string, chars: number): string[] {
   const lines: string[] = [];
   let current = '';
-  for (let word of collapse(text).split(' ')) {
+  for (let word of wrapTokens(text)) {
     if (!word) continue;
     while (Array.from(word).length > chars) {
       if (current) {
@@ -281,7 +313,7 @@ function verseItems(b: VerseBlock, heading: string | null): SlideItem[] {
   const out: SlideItem[] = [];
   for (const v of b.attrs.verses) {
     const reference = verseReference(b.attrs.reference, v.number);
-    for (const text of splitVerseToFit(v.text, maxLines)) {
+    for (const text of splitVerseToFit(typographicQuotes(v.text), maxLines)) {
       out.push({ ...blank, id: `${id}:${out.length}`, kind: 'VERSE', sourceBlockId: id, text, reference, layout: 'VERSE', heading, version });
     }
   }
@@ -294,7 +326,7 @@ function listTexts(b: ListBlock, normalizeRef?: (s: string) => string | null): s
   for (const li of b.content) {
     const first = li.content.find((c) => c.type === 'paragraph');
     const text = first ? collapse(inlineText(first.type === 'paragraph' ? first.content : undefined)) : '';
-    if (text) out.push(cut(normalizeRefs(text, normalizeRef), SLIDE_LIMITS.textChars));
+    if (text) out.push(cut(typographicQuotes(normalizeRefs(text, normalizeRef)), SLIDE_LIMITS.textChars));
     if (out.length >= SLIDE_LIMITS.listItems) break;
   }
   return out;

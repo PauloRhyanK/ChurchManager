@@ -22,6 +22,7 @@ import {
   verseLinesAvailable,
   wrapLines,
   type SlideItem,
+  typographicQuotes,
 } from './sermon-slides';
 
 const verseBlock = (id: string, reference: string, verses: { number: number | null; text: string }[]): SermonBlock => ({
@@ -406,6 +407,20 @@ describe('readSlideMode', () => {
   it('VERSES e FULL antigos valem como VERSES_AND_POINTS', () => {
     assert.deepEqual(['VERSES', 'FULL', 'VERSES_AND_POINTS', 'TITLES', null].map((m) => readSlideMode(m as never)), [
       'VERSES_AND_POINTS', 'VERSES_AND_POINTS', 'VERSES_AND_POINTS', 'TITLES', null,
+    ]);
+  });
+});
+
+describe('texto no slide', () => {
+  it('aspas retas viram tipográficas, inclusive o apóstrofo', () => {
+    assert.equal(typographicQuotes('Não digam: "A minha força". E disse: "Qual'), 'Não digam: “A minha força”. E disse: “Qual');
+    assert.equal(typographicQuotes("d'água e 'isso'"), 'd’água e ‘isso’');
+  });
+
+  it('referência curta entre parênteses não quebra no meio da linha', () => {
+    assert.deepEqual(wrapLines('Deus visitou Salomão em sonho: pede-me... (1 Reis 3:5)', 48), [
+      'Deus visitou Salomão em sonho: pede-me...',
+      '(1 Reis 3:5)',
     ]);
   });
 });
