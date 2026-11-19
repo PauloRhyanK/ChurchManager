@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
   sendSermon: vi.fn(),
   cancelDelivery: vi.fn(),
   listBibleTranslations: vi.fn(),
+  getSermonAi: vi.fn(),
 }));
 vi.mock("../api/sermons-api", () => api);
 const perms = vi.hoisted(() => ({ canEdit: true }));
@@ -104,6 +105,7 @@ beforeEach(() => {
   api.getSermon.mockResolvedValue(sermon());
   api.listServiceOptions.mockResolvedValue([]);
   api.listBibleTranslations.mockResolvedValue([]);
+  api.getSermonAi.mockResolvedValue({ enabled: false, models: [] });
 });
 
 describe("SermonSlidesPage", () => {
@@ -242,6 +244,30 @@ describe("SermonSlidesPage", () => {
     expect(await screen.findByText("O esboço mudou depois destes slides.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Atualizar" }));
     await waitFor(() => expect(api.generateSlides).toHaveBeenCalledWith("s1", { mode: "VERSES" }));
+    await waitFor(() => expect(screen.queryByText("O esboço mudou depois destes slides.")).not.toBeInTheDocument());
+  });
+
+  it("faixa de aviso dos resumos só em Slides completos", async () => {
+    api.getSermon.mockResolvedValue(sermon({ slideMode: "FULL" }));
+    renderPage();
+    expect(await screen.findByText("Os resumos foram escritos por IA. Confira antes de enviar.")).toBeInTheDocument();
+  });
+
+  it("sem a faixa dos resumos fora de Slides completos", async () => {
+    renderPage();
+    await screen.findByText("Tirado do esboço");
+    expect(screen.queryByText(/Os resumos foram escritos por IA/)).not.toBeInTheDocument();
+  });
+
+  it("Atualizar em Slides completos gera em FULL (sem model) e mostra Resumindo…", async () => {
+    api.getSermon.mockResolvedValue(sermon({ slidesStale: true, slideMode: "FULL" }));
+    const gen = deferred<ReturnType<typeof sermon>>();
+    api.generateSlides.mockReturnValue(gen.promise);
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Atualizar" }));
+    expect(await screen.findByRole("button", { name: "Resumindo…" })).toBeDisabled();
+    expect(api.generateSlides).toHaveBeenCalledWith("s1", { mode: "FULL" });
+    gen.resolve(sermon({ slidesStale: false, slideMode: "FULL" }));
     await waitFor(() => expect(screen.queryByText("O esboço mudou depois destes slides.")).not.toBeInTheDocument());
   });
 

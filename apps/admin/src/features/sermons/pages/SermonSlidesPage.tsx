@@ -15,7 +15,7 @@ import { SlideList } from "../components/SlideList";
 import { SlidePreview } from "../components/SlidePreview";
 import { formatSituation, formatSpeech } from "../lib/format";
 import { editSlide, moveSlide, slidesBody, toggleSlide } from "../lib/slide-edits";
-import { publicSlides, type SlideItem, type SlideStyle } from "../lib/slides";
+import { publicSlides, type SlideItem, type SlideMode, type SlideStyle } from "../lib/slides";
 
 const LIST_PATH = "/palavras";
 const STYLE_NAME: Record<SlideStyle, string> = { MINIMAL: "Minimalista", BACKGROUND: "Com fundo" };
@@ -129,6 +129,8 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
   const locked = busy || resetting;
   const readOnly = !canChange || locked;
 
+  const currentMode: SlideMode = sermon.slideMode ?? "VERSES_AND_POINTS";
+
   async function refresh() {
     setBusy(true);
     busyRef.current = true;
@@ -137,7 +139,7 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
         toast.error(UNSAVED);
         return;
       }
-      adopt(await generateSlides(id, { mode: sermon.slideMode === "VERSES" ? "VERSES" : "VERSES_AND_POINTS" }), true);
+      adopt(await generateSlides(id, { mode: currentMode }), true);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -199,6 +201,12 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
           </p>
         )}
 
+        {sermon.slideMode === "FULL" && hasSlides && (
+          <p className="rounded-xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+            Os resumos foram escritos por IA. Confira antes de enviar.
+          </p>
+        )}
+
         {sermon.slidesStale && hasSlides && canChange && (
           <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
             <span className="flex items-center gap-2">
@@ -208,7 +216,7 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
             {canChange && (
               <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={locked} onClick={refresh}>
                 <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-                Atualizar
+                {busy && currentMode === "FULL" ? "Resumindo…" : "Atualizar"}
               </Button>
             )}
           </div>
@@ -313,7 +321,7 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
           title={sermon.title}
           document={sermon.document}
           initialStyle={style}
-          initialMode={sermon.slideMode === "VERSES" ? "VERSES" : "VERSES_AND_POINTS"}
+          initialMode={currentMode}
           notice={hasSlides ? REGENERATE_NOTICE : undefined}
           ensureSaved={whenIdle}
           unsavedMessage={UNSAVED}

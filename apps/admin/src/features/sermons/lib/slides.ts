@@ -82,7 +82,7 @@ function verseReference(blockRef: string, number: number | null): string {
   return m && number !== null ? `${m[1]}:${number}` : blockRef;
 }
 
-function blockItems(b: SermonBlock, mode: Exclude<SlideMode, 'FULL'>): SlideItem[] {
+function blockItems(b: SermonBlock, mode: SlideMode): SlideItem[] {
   const base = { included: true, edited: false };
   if (b.type === 'verse') {
     const out: SlideItem[] = [];
@@ -100,7 +100,7 @@ function blockItems(b: SermonBlock, mode: Exclude<SlideMode, 'FULL'>): SlideItem
     }
     return out;
   }
-  if (b.type === 'point' && mode === 'VERSES_AND_POINTS') {
+  if (b.type === 'point' && mode !== 'VERSES') {
     const text = collapse(inlineText(b.content));
     return text ? [{ id: `${b.attrs.id}:0`, kind: 'POINT', sourceBlockId: b.attrs.id, text: capText(text), reference: null, ...base }] : [];
   }
@@ -112,13 +112,27 @@ function label(text: string, max: number): string {
   return chars.length > max ? `${chars.slice(0, max).join('').trim()}…` : text;
 }
 
-export function buildSlides(title: string, doc: SermonDoc, mode: Exclude<SlideMode, 'FULL'>): SlideItem[] {
+export function buildSlides(title: string, doc: SermonDoc, mode: SlideMode, summaries?: Record<string, string>): SlideItem[] {
   const main: SlideItem[] = [];
   const privates: SlideItem[] = [];
+  const summaryById = new Map<string, SlideItem>();
+  if (mode === 'FULL' && summaries) {
+    for (const t of summaryTargets(doc)) {
+      const text = Object.prototype.hasOwnProperty.call(summaries, t.id) ? collapse(String(summaries[t.id])) : '';
+      if (text) {
+        summaryById.set(t.id, { id: t.id, kind: 'SUMMARY', sourceBlockId: t.sourceBlockId, text: capText(text), reference: null, included: true, edited: false });
+      }
+    }
+  }
+  const pushSummary = (id: string) => {
+    const s = summaryById.get(id);
+    if (s) main.push(s);
+  };
   const trimmed = title.trim();
-  if (mode === 'VERSES_AND_POINTS' && trimmed) {
+  if (mode !== 'VERSES' && trimmed) {
     main.push({ id: 'title', kind: 'TITLE', sourceBlockId: null, text: capText(trimmed), reference: null, included: true, edited: false });
   }
+  pushSummary(OPENING_ID);
   for (const b of doc.content) {
     if (b.type === 'privateNote') {
       const text = collapse(innerText(b.content));
@@ -133,14 +147,96 @@ export function buildSlides(title: string, doc: SermonDoc, mode: Exclude<SlideMo
         included: false,
         edited: false,
       });
-    } else main.push(...blockItems(b, mode));
+      continue;
+    }
+    if (b.type === 'illustration' || b.type === 'application' || b.type === 'heading') pushSummary(`${b.attrs.id}:0`);
+    main.push(...blockItems(b, mode));
   }
   return [...main.slice(0, SLIDE_LIMITS.items), ...privates].slice(0, SLIDE_LIMITS.items);
 }
 
-export function countSlides(title: string, doc: SermonDoc): { VERSES: number; VERSES_AND_POINTS: number } {
+export function countSlides(title: string, doc: SermonDoc): { VERSES: number; VERSES_AND_POINTS: number; FULL: number } {
   const n = (mode: 'VERSES' | 'VERSES_AND_POINTS') => buildSlides(title, doc, mode).filter((s) => s.kind !== 'PRIVATE').length;
-  return { VERSES: n('VERSES'), VERSES_AND_POINTS: n('VERSES_AND_POINTS') };
+  const versesAndPoints = n('VERSES_AND_POINTS');
+  return { VERSES: n('VERSES'), VERSES_AND_POINTS: versesAndPoints, FULL: versesAndPoints + summaryTargets(doc).length };
+}
+
+// ---- Partes resumidas por IA em "Slides completos" ----
+
+export type SummaryTarget = {
+  id: string; // id do slide: 'opening:0' ou `${blockId}:0`
+  sourceBlockId: string | null; // null na Abertura
+  part: 'OPENING' | 'ILLUSTRATION' | 'APPLICATION' | 'SECTION';
+  label: string; // "Abertura", "Ilustração", "Aplicação", ou o texto do título de seção
+  text: string; // o texto a resumir, sem nenhum bloco "Só para mim"
+};
+
+export const SUMMARY_MAX = 90;
+const SUMMARY_SOURCE = { chars: 6000, targets: 60, sectionWords: 12, blockWords: 6 } as const;
+const OPENING_ID = 'opening:0';
+
+/** Pedaços separados por espaço que têm letra ou dígito (mesma regra de sermon-derive). */
+function countWords(text: string): number {
+  let n = 0;
+  for (const piece of text.split(/\s+/)) if (/[\p{L}\p{N}]/u.test(piece)) n++;
+  return n;
+}
+
+/**
+ * Partes a resumir, na ordem do documento, só blocos de primeiro nível. Seção nova em cada `point` e em cada
+ * `heading` nível 2; a Abertura é o que vem antes da primeira seção. Abertura e seção com título levam o texto dos
+ * parágrafos e listas delas; Ilustração e Aplicação, o próprio conteúdo. `privateNote` nunca entra.
+ */
+export function summaryTargets(doc: SermonDoc): SummaryTarget[] {
+  type Entry = Omit<SummaryTarget, 'text'> & { chunks: string[]; minWords: number };
+  const entries: Entry[] = [];
+  let section: Entry | null = { id: OPENING_ID, sourceBlockId: null, part: 'OPENING', label: 'Abertura', chunks: [], minWords: SUMMARY_SOURCE.sectionWords };
+  entries.push(section);
+  for (const b of doc.content) {
+    switch (b.type) {
+      case 'point':
+        section = null;
+        break;
+      case 'heading':
+        if (b.attrs.level !== 2) break;
+        section = {
+          id: `${b.attrs.id}:0`,
+          sourceBlockId: b.attrs.id,
+          part: 'SECTION',
+          label: collapse(inlineText(b.content)) || 'Seção',
+          chunks: [],
+          minWords: SUMMARY_SOURCE.sectionWords,
+        };
+        entries.push(section);
+        break;
+      case 'paragraph':
+      case 'bulletList':
+      case 'orderedList':
+        section?.chunks.push(innerText([b]));
+        break;
+      case 'illustration':
+      case 'application':
+        entries.push({
+          id: `${b.attrs.id}:0`,
+          sourceBlockId: b.attrs.id,
+          part: b.type === 'illustration' ? 'ILLUSTRATION' : 'APPLICATION',
+          label: b.type === 'illustration' ? 'Ilustração' : 'Aplicação',
+          chunks: [innerText(b.content)],
+          minWords: SUMMARY_SOURCE.blockWords,
+        });
+        break;
+      default: // verse, privateNote: fora do texto
+        break;
+    }
+  }
+  const out: SummaryTarget[] = [];
+  for (const { chunks, minWords, ...rest } of entries) {
+    const text = collapse(chunks.join(' '));
+    if (countWords(text) < minWords) continue;
+    out.push({ ...rest, text: Array.from(text).slice(0, SUMMARY_SOURCE.chars).join('') });
+    if (out.length >= SUMMARY_SOURCE.targets) break;
+  }
+  return out;
 }
 
 export function publicSlides(items: SlideItem[]): PublicSlide[] {
