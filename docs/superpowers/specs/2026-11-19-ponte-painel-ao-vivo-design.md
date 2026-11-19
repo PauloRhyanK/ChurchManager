@@ -224,7 +224,7 @@ slide   { parte, tempo, tempo_estimado, linhas[], instrucoes[ { para, texto } ] 
 - **`FonteLocal`** (esta entrega): `louvores` do `config.yaml` + `_marcas_louvor.json` + o texto dos slides lido do Holyrics (`GetSong`, já usado pela `/louvor`).
   - Partes: as marcas, quando existem (`segundo`, `cena`, `modo`, `slide`). Sem marcas, as `secoes` do config, sem tempo.
   - Tempo de cada slide: as marcas só dizem quando cada **parte** entra. Os slides de dentro da parte são repartidos por igual entre o início dela e o da próxima, como a `/louvor` faz hoje, e saem com `tempo_estimado: true`.
-  - `pronta`: tem áudio, tem marcas, e toda parte tem tempo. Senão é "à mão".
+  - `pronta`: tem marcas e toda parte tem tempo. Senão é "à mão". (O arquivo de áudio só é exigido pela fonte `navegador`; com o cronômetro ou o Reaper ele não mora neste PC.)
   - Linhas que começam com `//` viram `instrucoes` e não entram em `linhas`.
   - `clima`: achado pela tabela `climas` ao contrário (a cena e o movimento da parte batem com algum clima?). Se não bate, `clima` fica vazio e a luz usa `cena` e `modo` direto.
   - Lista do dia: `louvor_do_dia: [avante, sou_grato, ...]` no config (opcional); sem ela, todos os `louvores`, na ordem.
