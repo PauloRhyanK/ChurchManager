@@ -1,5 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { Song } from "../../api/worship-api";
 import type { WorshipRow } from "../../lib/document";
 import { PreviewStep } from "./PreviewStep";
@@ -18,6 +18,7 @@ const song = (over: Partial<Song> = {}): Song => ({
   musicalKey: null,
   bpm: null,
   timeSignature: null,
+  holyricsId: null,
   status: "NEEDS_TIMING",
   pending: ["CONFIRM"],
   slideCount: 2,
@@ -28,6 +29,12 @@ const song = (over: Partial<Song> = {}): Song => ({
   rawLyrics: "",
   rows,
   ...over,
+});
+
+// O jsdom não toca áudio; a prévia só precisa que o tocador exista.
+beforeAll(() => {
+  vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+  vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
 });
 
 const checklist = () => within(screen.getByRole("heading", { name: "Conferência" }).closest("section") as HTMLElement);

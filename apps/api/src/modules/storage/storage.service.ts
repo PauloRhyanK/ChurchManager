@@ -44,6 +44,8 @@ export interface DetectedAudioType {
   extension: string;
 }
 
+const M4A_BRANDS = new Set(['M4A ', 'M4B ', 'mp41', 'mp42', 'isom', 'iso2', 'dash']);
+
 /** Detecta MP3, WAV, M4A/AAC, OGG e FLAC pela assinatura dos primeiros bytes. */
 export function detectAudioType(buf: Buffer): DetectedAudioType | null {
   if (buf.length < 12) return null;
@@ -51,11 +53,22 @@ export function detectAudioType(buf: Buffer): DetectedAudioType | null {
   if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WAVE') return { mime: 'audio/wav', extension: '.wav' };
   if (ascii(0, 4) === 'OggS') return { mime: 'audio/ogg', extension: '.ogg' };
   if (ascii(0, 4) === 'fLaC') return { mime: 'audio/flac', extension: '.flac' };
-  if (ascii(4, 8) === 'ftyp') return { mime: 'audio/mp4', extension: '.m4a' };
+  // MP4 só com marca de áudio ou genérica; vídeo QuickTime, HEIC e afins ficam de fora.
+  if (ascii(4, 8) === 'ftyp' && M4A_BRANDS.has(ascii(8, 12))) return { mime: 'audio/mp4', extension: '.m4a' };
   if (ascii(0, 3) === 'ID3') return { mime: 'audio/mpeg', extension: '.mp3' };
   // Quadro MPEG sem etiqueta ID3: 11 bits de sincronismo, versão e camada válidas
   // (AAC cru/ADTS tem a camada zerada e fica de fora; AAC entra como M4A).
-  if (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0 && (buf[1] & 0x18) !== 0x08 && (buf[1] & 0x06) !== 0x00) {
+  // Taxa de bits e de amostragem também não podem ser as reservadas (um texto
+  // UTF-16 com BOM `FF FE` passaria só pelo sincronismo).
+  if (
+    buf[0] === 0xff &&
+    (buf[1] & 0xe0) === 0xe0 &&
+    (buf[1] & 0x18) !== 0x08 &&
+    (buf[1] & 0x06) === 0x02 && // camada III: é o que faz de um quadro MPEG um MP3
+    (buf[2] & 0xf0) !== 0xf0 &&
+    (buf[2] & 0xf0) !== 0x00 &&
+    (buf[2] & 0x0c) !== 0x0c
+  ) {
     return { mime: 'audio/mpeg', extension: '.mp3' };
   }
   return null;

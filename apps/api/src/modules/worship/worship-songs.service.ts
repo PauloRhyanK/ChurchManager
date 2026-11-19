@@ -38,6 +38,7 @@ export function toSongSummary(song: SongSummarySource) {
     musicalKey: song.musicalKey,
     bpm: song.bpm,
     timeSignature: song.timeSignature,
+    holyricsId: song.holyricsId,
     status: computed.status,
     pending: computed.pending,
     slideCount: computed.slideCount,
@@ -120,6 +121,7 @@ export class WorshipSongsService {
     if (dto.musicalKey !== undefined) data.musicalKey = dto.musicalKey;
     if (dto.bpm !== undefined) data.bpm = dto.bpm;
     if (dto.timeSignature !== undefined) data.timeSignature = dto.timeSignature;
+    if (dto.holyricsId !== undefined) data.holyricsId = dto.holyricsId;
     if (dto.rows) data.rows = asJson(rows);
     return toSongResponse(await this.prisma.worshipSong.update({ where: { id: song.id }, data }));
   }
@@ -147,7 +149,8 @@ export class WorshipSongsService {
     };
     const updated = await this.prisma.worshipSong.update({
       where: { id: song.id },
-      data: { ...audio, ...this.computed({ ...song, ...audio }, rowsOf(song)) },
+      // Os tempos foram marcados contra o arquivo anterior: a música volta a "Falta conferir".
+      data: { ...audio, ...this.computed({ ...song, ...audio, readyAt: null }, rowsOf(song)) },
     });
     await this.storage.deleteFileByPublicUrl(song.audioUrl);
     return toSongResponse(updated);

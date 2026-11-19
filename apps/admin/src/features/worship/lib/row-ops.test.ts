@@ -160,9 +160,30 @@ describe("rowsFromEditorNodes", () => {
     expect(new Set(out.map((r) => r.id)).size).toBe(3);
   });
 
+  it("apagar a instrução que abria a parte (Backspace) passa parte e tempo para a letra", () => {
+    const withCue = insertCue(previous, 0, "VOCAL", "solo");
+    const out = rowsFromEditorNodes([node("a", "Antes do sol nascer"), node("b", "Tua voz me chamou")], withCue);
+    expect(out[0]).toMatchObject({ id: "a", part: { kind: "VERSE", mood: "WORSHIP" }, time: 10 });
+  });
+
+  it("Enter no começo da primeira linha de um slide: o texto leva a parte e o tempo", () => {
+    const out = rowsFromEditorNodes([node("a", ""), node("a", "Antes do sol nascer"), node("b", "Tua voz")], previous);
+    expect(out[0]).toEqual({ id: "a", type: "break" });
+    expect(out[1]).toMatchObject({ type: "lyric", text: "Antes do sol nascer", part: { kind: "VERSE", mood: "WORSHIP" }, time: 10 });
+    expect(deriveSong(out).slides[0].time).toBe(10);
+  });
+
+  it("apagar o texto de uma linha e redigitar não perde o tempo dela", () => {
+    const emptied = rowsFromEditorNodes([node("a", "Antes"), node("b", "x"), node("c", ""), node("d", "")], previous);
+    expect(emptied[3]).toMatchObject({ id: "d", type: "break", time: 20 });
+    const retyped = rowsFromEditorNodes([node("a", "Antes"), node("b", "x"), node("c", ""), node("d", "És a luz")], emptied);
+    expect(retyped[3]).toMatchObject({ id: "d", type: "lyric", time: 20 });
+    expect(normalizeRows([...emptied, { id: "z", type: "lyric", text: "depois" }]).at(-1)).toMatchObject({ id: "z", time: 20 });
+  });
+
   it("linha esvaziada vira quebra; se abria parte, a parte passa adiante", () => {
     const out = rowsFromEditorNodes([node("a", "  "), node("b", "Tua voz me chamou")], previous);
-    expect(out[0]).toEqual({ id: "a", type: "break", part: { kind: "VERSE", mood: "WORSHIP" } });
+    expect(out[0]).toEqual({ id: "a", type: "break", part: { kind: "VERSE", mood: "WORSHIP" }, time: 10, timeSource: undefined });
     expect(deriveSong(out).parts).toHaveLength(1);
     expect(normalizeRows(out)[0]).toMatchObject({ id: "b", part: { kind: "VERSE", mood: "WORSHIP" } });
   });

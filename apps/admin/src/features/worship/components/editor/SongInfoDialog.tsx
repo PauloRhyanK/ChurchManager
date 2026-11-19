@@ -20,6 +20,7 @@ export function SongInfoDialog({ song, open, onOpenChange, onSave, saving }: Son
   const [musicalKey, setMusicalKey] = useState(song.musicalKey ?? "");
   const [bpm, setBpm] = useState(song.bpm ? String(song.bpm) : "");
   const [timeSignature, setTimeSignature] = useState(song.timeSignature ?? "");
+  const [holyricsId, setHolyricsId] = useState(song.holyricsId ?? "");
 
   useEffect(() => {
     if (!open) return;
@@ -28,6 +29,7 @@ export function SongInfoDialog({ song, open, onOpenChange, onSave, saving }: Son
     setMusicalKey(song.musicalKey ?? "");
     setBpm(song.bpm ? String(song.bpm) : "");
     setTimeSignature(song.timeSignature ?? "");
+    setHolyricsId(song.holyricsId ?? "");
   }, [open, song]);
 
   const bpmNumber = bpm.trim() === "" ? null : Number(bpm);
@@ -54,6 +56,7 @@ export function SongInfoDialog({ song, open, onOpenChange, onSave, saving }: Son
               musicalKey: musicalKey.trim() || null,
               bpm: bpmNumber,
               timeSignature: timeSignature.trim() || null,
+              holyricsId: holyricsId.trim() || null,
             });
           }}
         >
@@ -78,6 +81,19 @@ export function SongInfoDialog({ song, open, onOpenChange, onSave, saving }: Son
               <Label htmlFor="ficha-compasso">Compasso</Label>
               <Input id="ficha-compasso" value={timeSignature} maxLength={8} placeholder="4/4" onChange={(e) => setTimeSignature(e.target.value)} />
             </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="ficha-holyrics">Id da música no Holyrics</Label>
+            <Input
+              id="ficha-holyrics"
+              value={holyricsId}
+              maxLength={64}
+              placeholder="Opcional"
+              onChange={(e) => setHolyricsId(e.target.value)}
+            />
+            <p className="text-[13px] text-muted-foreground">
+              É por ele que a Ponte do Culto põe a letra no telão. Sem ele, ela procura a música pelo nome.
+            </p>
           </div>
           {bpmInvalid && <p className="text-sm text-destructive">BPM deve ser um número inteiro entre 30 e 300.</p>}
           <DialogFooter>

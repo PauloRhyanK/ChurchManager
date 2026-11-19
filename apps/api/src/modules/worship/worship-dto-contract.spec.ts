@@ -31,6 +31,12 @@ test('UpdateSongDto aceita o documento e preserva null (sem tempo, sem clima)', 
   assert.equal(dto.rows?.[3].time, 12.5);
 });
 
+test('UpdateSongDto: vínculo com o Holyrics é texto livre curto; vazio vira null', async () => {
+  assert.equal((await parse(UpdateSongDto, { holyricsId: ' 1741522267781 ' })).holyricsId, '1741522267781');
+  assert.equal((await parse(UpdateSongDto, { holyricsId: '' })).holyricsId, null);
+  await rejects(UpdateSongDto, { holyricsId: 'x'.repeat(65) });
+});
+
 test('UpdateSongDto recusa campos que o servidor devolve', async () => {
   for (const extra of [
     { status: 'READY' },

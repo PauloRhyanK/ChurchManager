@@ -69,6 +69,13 @@ export class UpdateSongDto {
   @Transform(emptyToNull)
   timeSignature?: string | null;
 
+  /** Id da música no acervo do Holyrics (texto livre; a Ponte usa para mostrar a letra). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  @Transform(emptyToNull)
+  holyricsId?: string | null;
+
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(MAX_ROWS)

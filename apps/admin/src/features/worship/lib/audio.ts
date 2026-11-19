@@ -1,4 +1,4 @@
-export const AUDIO_ACCEPT = ".mp3,.wav,.m4a,.aac,.ogg,.flac,audio/*";
+export const AUDIO_ACCEPT = ".mp3,.wav,.m4a,.ogg,.flac,audio/*";
 export const MAX_AUDIO_BYTES = 90 * 1024 * 1024;
 
 /** Mesma regra da API: até 90 MB. Devolve a mensagem de erro, ou null. */

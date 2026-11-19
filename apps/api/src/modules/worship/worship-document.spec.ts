@@ -81,6 +81,18 @@ test('normalizeRows: forma canônica', () => {
   assert.equal(out[2].time, 0, 'tempo negativo vira zero');
 });
 
+test('normalizeRows: linha apagada passa parte e tempo adiante; com duas, vale a última (como na tela)', () => {
+  const rows: WorshipRow[] = [
+    { id: 'a', type: 'lyric', text: 'um', part: { kind: 'VERSE', mood: null }, time: 1 },
+    { id: 'b', type: 'break', part: { kind: 'CHORUS', mood: null }, time: 5 },
+    { id: 'c', type: 'break', part: { kind: 'BRIDGE', mood: 'BUILD' }, time: 7 },
+    { id: 'd', type: 'lyric', text: 'dois' },
+  ];
+  const out = normalizeRows(rows);
+  assert.deepEqual(out[1], { id: 'd', type: 'lyric', text: 'dois', part: { kind: 'BRIDGE', mood: 'BUILD' }, time: 7, timeSource: 'MANUAL' });
+  assert.deepEqual(deriveSong(rows).parts.map((p) => p.kind), deriveSong(out).parts.map((p) => p.kind));
+});
+
 test('normalizeRows é idempotente', () => {
   const once = normalizeRows(song());
   assert.deepEqual(normalizeRows(once), once);

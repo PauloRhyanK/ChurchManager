@@ -26,6 +26,7 @@ const song = (over: Partial<SongSummary>): SongSummary => ({
   musicalKey: "Sol",
   bpm: 72,
   timeSignature: null,
+  holyricsId: null,
   status: "READY",
   pending: [],
   slideCount: 14,

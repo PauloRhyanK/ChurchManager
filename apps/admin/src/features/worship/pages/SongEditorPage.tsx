@@ -53,6 +53,9 @@ export default function SongEditorPage() {
   const [version, setVersion] = useState(0);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [infoOpen, setInfoOpen] = useState(false);
+  // Rascunho: a música ainda não foi organizada. Decidido ao abrir e ao organizar,
+  // não a cada tecla (apagar tudo no editor não troca de tela).
+  const [draft, setDraft] = useState(false);
 
   const rowsRef = useRef<WorshipRow[]>([]);
   const dirty = useRef(false);
@@ -63,6 +66,7 @@ export default function SongEditorPage() {
     if (!songQuery.data || song) return;
     setSong(songQuery.data);
     setRows(songQuery.data.rows);
+    setDraft(songQuery.data.rows.length === 0);
     rowsRef.current = songQuery.data.rows;
     setVersion((v) => v + 1);
   }, [songQuery.data, song]);
@@ -72,14 +76,19 @@ export default function SongEditorPage() {
     void queryClient.invalidateQueries({ queryKey: ["worship", "service"] });
   }, [queryClient]);
 
-  /** Salva o documento se houver mudança pendente; devolve quando o servidor confirmou. */
-  const flush = useCallback(async (): Promise<void> => {
+  /**
+   * Salva o documento se houver mudança pendente. Devolve `true` quando o
+   * servidor está com tudo o que há na tela, `false` se o salvamento falhou.
+   */
+  const flush = useCallback(async (): Promise<boolean> => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
-    if (saving.current) await saving.current;
-    if (!dirty.current) return;
+    // Em laço: vários chamadores podem estar esperando o mesmo salvamento.
+    while (saving.current) await saving.current;
+    if (!dirty.current) return true;
     dirty.current = false;
     setSaveState("saving");
+    let ok = true;
     const run = (async () => {
       try {
         const saved = await saveSongRows(id, rowsRef.current);
@@ -88,6 +97,7 @@ export default function SongEditorPage() {
         setSaveState(dirty.current ? "saving" : "saved");
         refreshList();
       } catch (err) {
+        ok = false;
         dirty.current = true;
         setSaveState("error");
         toast.error(`Não foi possível salvar. ${getApiErrorMessage(err)}`);
@@ -96,6 +106,7 @@ export default function SongEditorPage() {
     saving.current = run;
     await run;
     saving.current = null;
+    return ok;
   }, [id, refreshList]);
 
   const flushRef = useRef(flush);
@@ -118,7 +129,7 @@ export default function SongEditorPage() {
   // Ao sair do editor, salva o que estiver pendente; ao fechar a aba, avisa.
   useEffect(() => {
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (dirty.current) e.preventDefault();
+      if (dirty.current || saving.current) e.preventDefault();
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => {
@@ -134,8 +145,10 @@ export default function SongEditorPage() {
       if (replaceRows) {
         rowsRef.current = saved.rows;
         setRows(saved.rows);
+        setDraft(saved.rows.length === 0);
         setVersion((v) => v + 1);
         dirty.current = false;
+        setSaveState("saved");
       }
       refreshList();
     },
@@ -144,15 +157,21 @@ export default function SongEditorPage() {
 
   const organize = useMutation({
     mutationFn: async (rawLyrics?: string) => {
+      // Um salvamento em voo não pode chegar depois e desfazer a organização.
       if (timer.current) clearTimeout(timer.current);
-      dirty.current = false;
+      timer.current = null;
+      while (saving.current) await saving.current;
       return organizeSong(id, rawLyrics);
     },
     onSuccess: (saved) => {
       adopt(saved, true);
       toast.success("Letra organizada.");
     },
-    onError: (err) => toast.error(getApiErrorMessage(err)),
+    onError: (err) => {
+      toast.error(getApiErrorMessage(err));
+      // O documento da tela continua valendo: volta a salvar o que estava pendente.
+      if (dirty.current) timer.current = setTimeout(() => void flushRef.current(), SAVE_DELAY_MS);
+    },
   });
 
   const info = useMutation({
@@ -166,7 +185,8 @@ export default function SongEditorPage() {
 
   const ready = useMutation({
     mutationFn: async (value: boolean) => {
-      await flushRef.current();
+      // Nunca marcar como pronta um documento que o servidor ainda não tem.
+      if (!(await flushRef.current())) throw new Error("Salve a música antes de marcar como pronta.");
       return value ? markSongReady(id) : unmarkSongReady(id);
     },
     onSuccess: (saved, value) => {
@@ -305,8 +325,9 @@ export default function SongEditorPage() {
           <LyricsStep
             song={liveSong}
             rows={rows}
+            draft={draft}
             version={version}
-            canEdit={canEdit}
+            canEdit={canEdit && !organize.isPending}
             onChange={change}
             onOrganize={(rawLyrics) => organize.mutate(rawLyrics)}
             organizing={organize.isPending}

@@ -198,36 +198,73 @@ export interface EditorNode {
 export function rowsFromEditorNodes(nodes: EditorNode[], previous: WorshipRow[]): WorshipRow[] {
   const byId = new Map(previous.map((r) => [r.id, r]));
   const used = new Set<string>();
-  return nodes.map((node) => {
-    const known = node.id && !used.has(node.id) ? byId.get(node.id) : undefined;
+  // Enter no começo de uma linha: o navegador deixa a de cima vazia e põe o texto
+  // numa cópia com o mesmo id. A parte e o tempo são do texto, não da linha vazia.
+  const movedDown = new Map<number, WorshipRow>();
+  nodes.forEach((node, i) => {
+    const above = nodes[i - 1];
+    if (above && node.id && above.id === node.id && above.kind === "text" && !above.text.trim() && node.text.trim()) {
+      const source = byId.get(node.id);
+      if (source) movedDown.set(i, source);
+    }
+  });
+
+  const out = nodes.map((node, i) => {
+    const moved = movedDown.get(i);
+    const gaveAway = movedDown.has(i + 1);
+    const found = node.id && !used.has(node.id) ? byId.get(node.id) : undefined;
+    // `known` guarda o id; `meta` é de onde vêm a parte e o tempo.
+    const known = found;
+    const meta = moved ?? (gaveAway ? undefined : found);
     const id = known ? known.id : newRowId();
     used.add(id);
 
     if (node.kind === "cue") {
       const source = known ?? (node.id ? byId.get(node.id) : undefined);
       const cue: WorshipRow = { id, type: "cue", target: source?.target ?? "ALL", text: source?.text ?? node.text.trim() };
-      if (known?.part) cue.part = known.part;
-      if (typeof known?.time === "number") {
-        cue.time = known.time;
-        cue.timeSource = known.timeSource;
+      if (meta?.part) cue.part = meta.part;
+      if (typeof meta?.time === "number") {
+        cue.time = meta.time;
+        cue.timeSource = meta.timeSource;
       }
       return cue;
     }
 
     const text = node.text.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
     if (!text) {
+      // Linha esvaziada: guarda a parte e o tempo. Se o texto voltar, voltam com
+      // ele; se não, ao salvar passam para a linha seguinte.
       const blank: WorshipRow = { id, type: "break" };
-      if (known?.part) blank.part = known.part; // a parte passa para a linha seguinte
+      if (meta?.part) blank.part = meta.part;
+      if (typeof meta?.time === "number") {
+        blank.time = meta.time;
+        blank.timeSource = meta.timeSource;
+      }
       return blank;
     }
     const row: WorshipRow = { id, type: "lyric", text };
-    if (known?.part) row.part = known.part;
-    if (typeof known?.time === "number") {
-      row.time = known.time;
-      row.timeSource = known.timeSource;
+    if (meta?.part) row.part = meta.part;
+    if (typeof meta?.time === "number") {
+      row.time = meta.time;
+      row.timeSource = meta.timeSource;
     }
     return row;
   });
+
+  // Linha que sumiu da tela (instrução apagada com Backspace, linha juntada à de
+  // cima): se abria parte ou slide, a linha que vinha logo depois herda, como em `removeRow`.
+  const outById = new Map(out.map((r) => [r.id, r]));
+  previous.forEach((gone, i) => {
+    if (outById.has(gone.id) || (!gone.part && typeof gone.time !== "number")) return;
+    const heir = previous[i + 1] ? outById.get(previous[i + 1].id) : undefined;
+    if (!heir || heir.type === "break" || heir.part) return;
+    if (gone.part) heir.part = gone.part;
+    if (typeof gone.time === "number" && typeof heir.time !== "number") {
+      heir.time = gone.time;
+      heir.timeSource = gone.timeSource;
+    }
+  });
+  return out;
 }
 
 /** Cola texto puro com várias linhas na posição do cursor. Devolve o documento e a linha onde o cursor fica. */
