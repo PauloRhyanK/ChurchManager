@@ -1,6 +1,6 @@
 import type { Prisma, SermonSlideStyle } from '@prisma/client';
 import { deliveryHasPassed } from './delivery-match';
-import { SLIDE_LAYOUTS, parseStoredSlides, publicSlides, slideFace, type PublicSlide, type SlideLayout } from './sermon-slides';
+import { SLIDE_LAYOUTS, parseStoredSlides, publicFaces, publicSlides, slideFace, type PublicSlide, type SlideLayout } from './sermon-slides';
 
 const ymd = (date: Date) => date.toISOString().slice(0, 10);
 const PUBLIC_KINDS: PublicSlide['kind'][] = ['TITLE', 'VERSE', 'POINT', 'SUMMARY'];
@@ -44,7 +44,8 @@ const textOrNull = (v: unknown): v is string | null => v === null || typeof v ==
 
 /**
  * Lê os slides de um envio: `kind`, `text` e os campos de `slideFace`; o que estiver fora do formato cai.
- * Linha gravada antes dos modelos (só `kind`, `text` e `reference`) é completada com `slideFace`.
+ * Linha gravada antes dos modelos (só `kind`, `text` e `reference`) é completada com `slideFace` e, se passar do
+ * limite do modelo, dividida com `splitFaceForLimits`.
  */
 export function readDeliverySlides(value: unknown): PublicSlide[] {
   if (!Array.isArray(value)) return [];
@@ -57,19 +58,17 @@ export function readDeliverySlides(value: unknown): PublicSlide[] {
     const kind = o.kind as PublicSlide['kind'];
     const hasFace =
       SLIDE_LAYOUTS.includes(o.layout as SlideLayout) && typeof o.title === 'string' && textOrNull(o.subtitle) && textOrNull(o.verse);
-    out.push(
-      hasFace
-        ? {
-            kind,
-            text: o.text,
-            layout: o.layout as SlideLayout,
-            title: o.title as string,
-            subtitle: o.subtitle as string | null,
-            verse: o.verse as string | null,
-            reference: o.reference,
-          }
-        : { kind, text: o.text, ...slideFace({ kind, text: o.text, reference: o.reference }) },
-    );
+    const face = hasFace
+      ? {
+          layout: o.layout as SlideLayout,
+          title: o.title as string,
+          subtitle: o.subtitle as string | null,
+          verse: o.verse as string | null,
+          reference: o.reference,
+        }
+      : slideFace({ kind, text: o.text, reference: o.reference });
+    // Linha acima do limite do modelo (ex.: ponto antigo de 300) sai em mais slides, nunca encolhida.
+    out.push(...publicFaces(kind, o.text, face));
   }
   return out;
 }

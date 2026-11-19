@@ -172,17 +172,28 @@ export class SermonSlidesService {
       if (ids.length !== stored.length || new Set(ids).size !== ids.length || ids.some((id) => !byId.has(id))) {
         throw staleList();
       }
+      // Títulos de contexto inteiros no limite do 03, para o versículo que volta de 04 para 03 (calculado sob demanda).
+      let contextM03: Map<string, string | null> | null = null;
+      const headingM03 = (id: string): string | null | undefined => {
+        contextM03 ??= new Map(
+          buildSlides(current.title, validateSermonDocument(current.document), 'VERSES')
+            .filter((s) => s.kind === 'VERSE')
+            .map((s) => [s.id, s.heading]),
+        );
+        return contextM03.get(id);
+      };
       const items: SlideItem[] = dto.items.map((input) => {
         const saved = byId.get(input.id)!;
         if (saved.kind === 'PRIVATE') return { ...saved, included: false };
         const next: SlideItem = { ...saved, included: input.included };
-        let changed = false;
+        let textChanged = false;
+        let subtitleChanged = false;
         if (input.text !== undefined && EDITABLE.includes(saved.kind)) {
           const text = input.text.trim();
           if (!text) throw new BadRequestException('O texto do slide não pode ficar vazio.');
           if (text !== saved.text) {
             next.text = text;
-            changed = true;
+            textChanged = true;
           }
         }
         // Subtítulo só em Ponto (modelo 02) e Versículo (modelo 04); vazio remove e volta a 01/03.
@@ -190,17 +201,20 @@ export class SermonSlidesService {
           const subtitle = input.subtitle.trim() || null;
           if (subtitle !== saved.subtitle) {
             const point = saved.kind === 'POINT';
+            // No versículo, só o primeiro pedaço do bloco leva subtítulo (modelo 04).
+            if (subtitle && !point && !saved.id.endsWith(':0')) throw overLimit();
             next.subtitle = subtitle;
             next.layout = subtitle ? (point ? 'M02' : 'M04') : point ? 'M01' : 'M03';
-            changed = true;
+            subtitleChanged = true;
           }
         }
-        if (!changed) return next;
+        if (!textChanged && !subtitleChanged) return next;
         checkModelLimits(next);
-        if (next.kind === 'VERSE' && next.heading !== null) {
-          next.heading = fitContextTitle(next.heading, next.layout === 'M04' ? SLIDE_MODEL_LIMITS.M04.title : SLIDE_MODEL_LIMITS.M03.title);
+        if (subtitleChanged && next.kind === 'VERSE' && next.heading !== null) {
+          if (next.layout === 'M04') next.heading = fitContextTitle(next.heading, SLIDE_MODEL_LIMITS.M04.title);
+          else next.heading = headingM03(next.id) ?? fitContextTitle(next.heading, SLIDE_MODEL_LIMITS.M03.title);
         }
-        return { ...next, edited: true };
+        return { ...next, ...(textChanged ? { edited: true } : {}), ...(subtitleChanged ? { subtitleEdited: true } : {}) };
       });
       const slides = [...items.filter((s) => s.kind !== 'PRIVATE'), ...items.filter((s) => s.kind === 'PRIVATE')];
       return { slides, ...(dto.style ? { slideStyle: dto.style } : {}) };
