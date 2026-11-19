@@ -88,7 +88,8 @@ export function toSummarizerError(error: unknown): unknown {
   return new SummarizerError('UNAVAILABLE', 'O provedor de IA respondeu com erro.', info);
 }
 
-function readSlides(response: BetaMessage): { id: string; model: string; text: string }[] {
+/** O JSON que o último modelo escreveu, já conferido quanto a recusa e corte. Formato inválido vira INVALID. */
+export function readResponseJson(response: BetaMessage): unknown {
   if (response.stop_reason === 'refusal') throw new SummarizerError('REFUSED', 'O provedor de IA se recusou a resumir este texto.');
   if (response.stop_reason === 'max_tokens') throw new SummarizerError('TRUNCATED', 'A resposta do provedor de IA veio cortada.');
   // Depois de um reencaminhamento (bloco "fallback"), só vale o que o último modelo escreveu.
@@ -97,13 +98,35 @@ function readSlides(response: BetaMessage): { id: string; model: string; text: s
     .slice(lastFallback + 1)
     .flatMap((b) => (b.type === 'text' ? [b.text] : []))
     .join('');
-  const invalid = () => new SummarizerError('INVALID', 'A resposta do provedor de IA veio fora do formato.');
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(text);
+    return JSON.parse(text);
   } catch {
-    throw invalid();
+    throw new SummarizerError('INVALID', 'A resposta do provedor de IA veio fora do formato.');
   }
+}
+
+/**
+ * Uma chamada ao provedor. Modelos com reencaminhamento no servidor recebem `fallbacks`; um 400 com ele faz uma
+ * nova tentativa sem. Erro do SDK sai já classificado (SummarizerError).
+ */
+export async function createMessage(client: AnthropicMessagesClient, base: MessageCreateParamsNonStreaming): Promise<BetaMessage> {
+  try {
+    if (!supportsServerFallback(base.model)) return await client.beta.messages.create(base);
+    try {
+      return await client.beta.messages.create({ ...base, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' });
+    } catch (error) {
+      // 400 com fallbacks: talvez o modelo ou a conta não aceite o reencaminhamento. Uma vez, sem ele.
+      if (!(error instanceof Anthropic.APIError) || error.status !== 400) throw error;
+      return await client.beta.messages.create(base);
+    }
+  } catch (error) {
+    throw toSummarizerError(error);
+  }
+}
+
+function readSlides(response: BetaMessage): { id: string; model: string; text: string }[] {
+  const invalid = () => new SummarizerError('INVALID', 'A resposta do provedor de IA veio fora do formato.');
+  const parsed = readResponseJson(response);
   const list = (parsed as { slides?: unknown } | null)?.slides;
   if (!Array.isArray(list)) throw invalid();
   return list.map((item: unknown) => {
@@ -125,22 +148,6 @@ export class AnthropicSummarizer implements SermonSummarizer {
       messages: [{ role: 'user', content: JSON.stringify({ title: cap(input.title, REQUEST_CAPS.title), parts }) }],
       output_config: { effort: input.effort, format: { type: 'json_schema', schema: SLIDES_SCHEMA } },
     };
-    let response: BetaMessage;
-    try {
-      if (!supportsServerFallback(input.model)) {
-        response = await this.client.beta.messages.create(base);
-      } else {
-        try {
-          response = await this.client.beta.messages.create({ ...base, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' });
-        } catch (error) {
-          // 400 com fallbacks: talvez o modelo ou a conta não aceite o reencaminhamento. Uma vez, sem ele.
-          if (!(error instanceof Anthropic.APIError) || error.status !== 400) throw error;
-          response = await this.client.beta.messages.create(base);
-        }
-      }
-    } catch (error) {
-      throw toSummarizerError(error);
-    }
-    return readSlides(response);
+    return readSlides(await createMessage(this.client, base));
   }
 }
