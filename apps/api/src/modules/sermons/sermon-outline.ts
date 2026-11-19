@@ -57,12 +57,31 @@ function withoutReference(text: string, reference: string): string {
   return cut.replace(/\s+/g, ' ').replace(QUOTES, '').trim();
 }
 
+// "1 Co 1:18", "(Gn 37.5)", "l Reis 3.5": livro (com número e abreviação) seguido de capítulo e versículo.
+const EDGE_REF = String.raw`\(?((?:[1-3lI]{1,3}\s*)?[A-Za-zÀ-ÿ]+\.?\s*\d{1,3}\s*[:.]\s*\d{1,3}(?:\s*[-–]\s*\d{1,3})?)\)?`;
+const TRAILING_REF = new RegExp(`[\\s,;–—-]*${EDGE_REF}[\\s.]*$`);
+const LEADING_REF = new RegExp(`^\\s*${EDGE_REF}[\\s:–—-]*`);
+const looksLikeRef = (s: string) => parseReference(s.replace(/^l(?=\s*\D)/, '1')) !== null;
+
+/**
+ * Tira uma referência escrita na ponta do texto colado, em qualquer forma que o leitor de referências entenda
+ * ("…poder de Deus. 1 Co 1:18"). A IA devolve a referência por extenso; aqui sai a forma que o pregador digitou.
+ */
+function withoutEdgeReference(text: string): string {
+  let out = text;
+  const end = TRAILING_REF.exec(out);
+  if (end && looksLikeRef(end[1])) out = out.slice(0, end.index);
+  const start = LEADING_REF.exec(out);
+  if (start && looksLikeRef(start[1])) out = out.slice(start[0].length);
+  return out.replace(/\s+/g, ' ').replace(QUOTES, '').trim();
+}
+
 export function planVerse(part: PlannedPart): VersePlan {
   const joined = part.lines.join(' ');
   const ref = parseReference(part.reference) ?? null;
   const reference = ref ? formatReference(ref) : part.reference;
-  // A referência pode estar escrita de outro jeito no texto ("Jo 8.12"); tira as duas formas.
-  const body = withoutReference(withoutReference(joined, part.reference), reference);
+  // A referência pode estar escrita de outro jeito no texto ("Jo 8.12"); tira as duas formas e a da ponta.
+  const body = withoutEdgeReference(withoutReference(withoutReference(joined, part.reference), reference));
   if (body.length >= MIN_PASTED_VERSE) return { source: 'PASTED', reference: reference || body.slice(0, 40), ref, text: body };
   // O que sobrou na linha além da referência ("Jesus disse:") não se perde: vai como texto antes do versículo.
   if (ref) return { source: 'LOOKUP', reference, ref, rest: body };
@@ -141,6 +160,19 @@ export function buildOutlineDocument(parts: PlannedPart[], verses: Map<number, V
     }
   });
   return { type: 'doc', content: content.length ? content : [{ type: 'paragraph' }] };
+}
+
+/**
+ * Texto organizado por slides traz o título do sermão na primeira linha ("SLIDES 01 – Título"); a IA a marca como
+ * HEADING com o mesmo texto do title. Esse título vira o título da palavra, não uma seção: a parte sai do esboço,
+ * para os versículos dela ficarem na abertura (a capa dos slides).
+ */
+export function dropTitleHeading(parts: PlannedPart[], title: string): PlannedPart[] {
+  const i = parts.findIndex((p) => p.kind !== 'PARAGRAPH' || p.lines.length > 0);
+  const first = parts[i];
+  const same = (a: string) => fold(a).replace(/\s+/g, ' ').trim();
+  if (!first || first.kind !== 'HEADING' || !title.trim() || same(first.text || first.lines[0] || '') !== same(title)) return parts;
+  return [...parts.slice(0, i), ...parts.slice(i + 1)];
 }
 
 /** Título da palavra: o da IA, senão o primeiro título ou ponto, senão "Sem título". */

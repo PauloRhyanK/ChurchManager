@@ -18,7 +18,7 @@ import { GenerationLimiter } from './ai/generation-limiter';
 import { BibleService } from './bible/bible.service';
 import type { CreateFromTextDto } from './dto/from-text.dto';
 import { validateSermonDocument } from './sermon-document';
-import { PASTE_LIMITS, buildOutlineDocument, outlineTitle, pastedLines, planOutline, planVerse, type VerseFound } from './sermon-outline';
+import { PASTE_LIMITS, buildOutlineDocument, dropTitleHeading, outlineTitle, pastedLines, planOutline, planVerse, type VerseFound } from './sermon-outline';
 import { SermonsService, type SermonFull } from './sermons.service';
 
 /** Limite próprio de "Colar texto" por usuário. */
@@ -91,7 +91,7 @@ export class SermonImportService {
       throw providerError(error);
     }
 
-    const parts = planOutline(lines, outline.blocks);
+    const parts = dropTitleHeading(planOutline(lines, outline.blocks), outline.title);
     const verses = new Map<number, VerseFound>();
     for (const [i, part] of parts.entries()) {
       if (part.kind !== 'VERSE') continue;
