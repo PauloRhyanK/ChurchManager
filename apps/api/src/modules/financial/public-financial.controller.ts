@@ -1,12 +1,4 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Headers,
-  HttpCode,
-  Param,
-  Post,
-} from '@nestjs/common';
+import { Body, Controller, HttpCode, Param, Post } from '@nestjs/common';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import {
   assertPublicPaymentSuccessUrlAllowed,
@@ -14,11 +6,6 @@ import {
 } from '../tenants/public-web-origin.util';
 import { TenantPublicWebOriginService } from '../tenants/tenant-public-web-origin.service';
 import { TenantsService } from '../tenants/tenants.service';
-import { ContributorAccessService } from './contributor-access.service';
-import {
-  CreateContributorSessionDto,
-  RequestContributorAccessLinkDto,
-} from './dto/contributor-access.dto';
 import { PayerProfilesService } from './payer-profiles.service';
 import { PaymentIntentsService } from './payment-intents.service';
 import { PaymentLinksOrchestratorService } from './payment-links-orchestrator.service';
@@ -35,7 +22,6 @@ export class PublicFinancialController {
     private readonly paymentIntents: PaymentIntentsService,
     private readonly paymentLinksOrchestrator: PaymentLinksOrchestratorService,
     private readonly publicWebOrigins: TenantPublicWebOriginService,
-    private readonly contributorAccess: ContributorAccessService,
   ) {}
 
   @Post(':slug/payer-profiles')
@@ -107,50 +93,6 @@ export class PublicFinancialController {
       subscriptionDurationMonths: dto.subscriptionDurationMonths,
       successUrl: effectiveSuccessUrl,
       autoRedirect: dto.autoRedirect,
-      confirmAdditional: dto.confirmAdditional,
     });
-  }
-
-  /**
-   * "Minhas contribuições": envia link mágico ao e-mail do perfil do CPF.
-   * Sempre 202 `{ sent: true }` (não revela se o CPF existe). 3/min/IP.
-   */
-  @Post(':slug/contributions/access-link')
-  @HttpCode(202)
-  @Throttle({ public: { limit: 3, ttl: 60_000 } })
-  async requestContributorAccessLink(
-    @Param('slug') slug: string,
-    @Body() dto: RequestContributorAccessLinkDto,
-  ) {
-    const tenant = await this.tenants.findBySlugOrThrow(slug);
-    const allowed = await this.publicWebOrigins.getAllowedOriginsForSlug(slug);
-    return this.contributorAccess.requestAccessLink(
-      tenant,
-      { cpf: dto.cpf, returnUrl: dto.returnUrl },
-      allowed,
-    );
-  }
-
-  /** Troca o token do e-mail por sessão JWT (30 dias). Inválido → 401 `INVALID_TOKEN`. */
-  @Post(':slug/contributions/session')
-  @HttpCode(200)
-  @Throttle({ public: { limit: 10, ttl: 60_000 } })
-  async createContributorSession(
-    @Param('slug') slug: string,
-    @Body() dto: CreateContributorSessionDto,
-  ) {
-    const tenant = await this.tenants.findBySlugOrThrow(slug);
-    return this.contributorAccess.createSession(tenant, dto.token);
-  }
-
-  /** Resumo só leitura do contribuidor. `Authorization: Bearer <sessionToken>`. */
-  @Get(':slug/contributions/me')
-  @Throttle({ public: { limit: 30, ttl: 60_000 } })
-  async getContributorSummary(
-    @Param('slug') slug: string,
-    @Headers('authorization') authorization: string | undefined,
-  ) {
-    const tenant = await this.tenants.findBySlugOrThrow(slug);
-    return this.contributorAccess.getMe(tenant, authorization);
   }
 }

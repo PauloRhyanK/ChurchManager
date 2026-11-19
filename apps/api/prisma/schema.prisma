@@ -88,7 +88,6 @@ model Tenant {
   webhookEvents      FinancialWebhookEvent[]
   paymentLinks       FinancialPaymentLink[]
   linkPresets        FinancialLinkPreset[]
-  contributorTokens  FinancialContributorAccessToken[]
   adminUsers         AdminUser[]
   permissionGroups   PermissionGroup[]
   signupLinks        TenantSignupLink[]
@@ -812,23 +811,6 @@ model FinancialLinkPreset {
   @@unique([tenantId, module, presetKey])
   @@index([tenantId, module, active])
   @@map("financial_link_presets")
-}
-
-/// Token de uso único do link mágico de "Minhas contribuições" (site público, sem login).
-/// Só o hash SHA-256 do token é guardado.
-model FinancialContributorAccessToken {
-  id        String    @id @default(uuid()) @db.Uuid
-  tenantId  String    @map("tenant_id") @db.Uuid
-  cpf       String    @db.Char(11)
-  tokenHash String    @unique @map("token_hash") @db.Char(64)
-  expiresAt DateTime  @map("expires_at")
-  usedAt    DateTime? @map("used_at")
-  createdAt DateTime  @default(now()) @map("created_at")
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId, cpf])
-  @@map("financial_contributor_access_tokens")
 }
 
 model FinancialPaymentLink {

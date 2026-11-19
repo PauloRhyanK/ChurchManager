@@ -100,14 +100,6 @@ export class CreatePublicPaymentLinkDto {
   @IsBoolean()
   autoRedirect?: boolean;
 
-  /**
-   * Só com `cpf_custom`: confirma uma contribuição adicional quando o CPF já tem
-   * assinatura ativa (sem isto a API responde 409 `HAS_ACTIVE_CONTRIBUTION`).
-   */
-  @IsOptional()
-  @IsBoolean()
-  confirmAdditional?: boolean;
-
   /** Obrigatório com `isMonthly: true` — duração da assinatura em meses (enviado à Asaas como `endDate`). */
   @ValidateIf(
     (o: CreatePublicPaymentLinkDto) =>
