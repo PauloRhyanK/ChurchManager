@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BadRequestException } from '@nestjs/common';
 import { DOC_LIMITS, EMPTY_DOC, SermonDoc, validateSermonDocument } from './sermon-document';
+import { EXAMPLE_DOC } from './sermon-example';
 
 const t = (text: string) => ({ type: 'text', text });
 const p = (text?: string) => (text === undefined ? { type: 'paragraph' } : { type: 'paragraph', content: [t(text)] });
@@ -22,28 +23,12 @@ function verse(id: string, reference: string, book: number, chapter: number, ver
   };
 }
 
-const EXEMPLO = {
-  type: 'doc',
-  content: [
-    verse('v1', 'João 8:12', 43, 8, 12, 'Eu sou a luz do mundo; quem me segue não andará em trevas.'),
-    { type: 'paragraph', content: [t('Todo mundo já ficou sem luz em casa. A primeira coisa que a gente faz é procurar onde está a vela.')] },
-    { type: 'point', attrs: { id: 'pt1' }, content: [t('A luz chama')] },
-    p('Antes de a gente procurar, a luz já estava acesa. Ninguém acha o caminho sozinho no escuro.'),
-    verse('v2', 'Salmos 119:105', 19, 119, 105, 'Lâmpada para os meus pés é a tua palavra, e luz para o meu caminho.'),
-    { type: 'illustration', attrs: { id: 'i1' }, content: [p('A lanterna na trilha: ela não mostra a montanha inteira, só o próximo passo.')] },
-    { type: 'privateNote', attrs: { id: 'n1' }, content: [p('Dois minutos nessa história, não mais. Olhar para o lado esquerdo do templo.')] },
-    { type: 'point', attrs: { id: 'pt2' }, content: [t('A luz mostra')] },
-    p('Luz não serve para ser olhada, serve para a gente enxergar o resto.'),
-    { type: 'application', attrs: { id: 'a1' }, content: [p('O que você tem evitado olhar, por medo do que a luz vai mostrar?')] },
-  ],
-};
-
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
 const doc = (...content: unknown[]) => ({ type: 'doc', content });
 const recusa = (input: unknown) => assert.throws(() => validateSermonDocument(input), BadRequestException);
 
 test('aceita o documento de exemplo, devolvendo o mesmo conteúdo', () => {
-  assert.deepEqual(validateSermonDocument(EXEMPLO), EXEMPLO);
+  assert.deepEqual(validateSermonDocument(EXAMPLE_DOC), EXAMPLE_DOC);
 });
 
 test('aceita EMPTY_DOC', () => {
@@ -79,7 +64,7 @@ test('recusa o que está fora do esquema', () => {
   recusa(doc({ type: 'paragraph', content: [{ type: 'text', text: 'a', marks: [{ type: 'bold', attrs: {} }] }] }));
   recusa(doc({ type: 'heading', attrs: { id: 'h', level: 1 } }));
   recusa(doc({ type: 'heading', attrs: { id: 'h', level: 4 } }));
-  recusa(doc({ ...clone(EXEMPLO.content[0]), content: [p('x')] }));
+  recusa(doc({ ...clone(EXAMPLE_DOC.content[0]), content: [p('x')] }));
   recusa(doc({ type: 'paragraph', content: [{ type: 'text', text: '' }] }));
   recusa(doc({ type: 'paragraph', content: [{ type: 'text', text: 'a', bold: true }] }));
   recusa(doc({ type: 'paragraph', content: [{ type: 'point' }] }));
@@ -88,7 +73,7 @@ test('recusa o que está fora do esquema', () => {
   recusa(doc({ type: 'illustration', attrs: { id: 'x' } }));
   recusa(doc({ type: 'bulletList', content: [p('x')] }));
   recusa(doc({ type: 'listItem', content: [p('x')] }));
-  const v = clone(EXEMPLO.content[0]) as ReturnType<typeof verse>;
+  const v = clone(EXAMPLE_DOC.content[0]) as ReturnType<typeof verse>;
   recusa(doc({ ...v, attrs: { ...v.attrs, book: 67 } }));
   recusa(doc({ ...v, attrs: { ...v.attrs, book: 0 } }));
   recusa(doc({ ...v, attrs: { ...v.attrs, extra: 1 } }));
@@ -139,7 +124,7 @@ test('limites: profundidade', () => {
 });
 
 test('limites: id, reference e versículos', () => {
-  const v = clone(EXEMPLO.content[0]) as ReturnType<typeof verse>;
+  const v = clone(EXAMPLE_DOC.content[0]) as ReturnType<typeof verse>;
   validateSermonDocument(doc({ ...v, attrs: { ...v.attrs, id: 'x'.repeat(DOC_LIMITS.id) } }));
   recusa(doc({ ...v, attrs: { ...v.attrs, id: 'x'.repeat(DOC_LIMITS.id + 1) } }));
   recusa(doc({ type: 'point', attrs: { id: 'x'.repeat(37) } }));
