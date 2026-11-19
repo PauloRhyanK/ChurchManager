@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { PublicSlide, SlideItem } from "../lib/slides";
+import { drawSlide } from "../lib/slide-layout";
 import { SlidePreview } from "./SlidePreview";
 
 const M04: PublicSlide = {
@@ -89,14 +90,21 @@ describe("SlidePreview", () => {
     expect(p.dataset.clamped).toBe("true");
   });
 
-  it("texto dentro do limite nunca é cortado: sem line-clamp; a caixa tem a altura do desenho", () => {
+  it("texto dentro do limite nunca é cortado: sem line-clamp nem altura fixa (a reserva do título é só da exportação)", () => {
     render(<SlidePreview slide={M04} style="MINIMAL" />);
     for (const text of ["A luz chama", "Ninguém acha o caminho sozinho", "Eu sou a luz do mundo.", "João 8:12 · BLIVRE"]) {
       const p = screen.getByText(text);
       expect(p.style.display).not.toBe("-webkit-box");
       expect(p.style.overflow).not.toBe("hidden");
       expect(p.dataset.clamped).toBeUndefined();
-      expect(parseFloat(p.style.minHeight)).toBeGreaterThan(0);
+      expect(p.style.minHeight).toBe("");
     }
+  });
+
+  it("espaços da prévia são os do manual e o topo é o da coluna sem a reserva", () => {
+    render(<SlidePreview slide={M04} style="MINIMAL" />);
+    const gaps = ["A luz chama", "Ninguém acha o caminho sozinho", "Eu sou a luz do mundo.", "João 8:12 · BLIVRE"].map((t) => screen.getByText(t).style.marginTop);
+    expect(gaps).toEqual(["0px", "55px", "40px", "12px"]);
+    expect(frame().style.paddingTop).toBe(`${drawSlide(M04, "MINIMAL").previewTop}px`);
   });
 });

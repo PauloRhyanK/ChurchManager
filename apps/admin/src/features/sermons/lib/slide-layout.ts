@@ -30,8 +30,8 @@ export type SlideBlock = {
   x: number;
   y: number;
   width: number;
-  height: number; // caixa estimada, para a exportação
-  gapBefore: number; // espaço até o bloco anterior, para a prévia
+  height: number; // caixa estimada, para a exportação (no título com bloco abaixo, com uma linha de reserva)
+  gapBefore: number; // espaço do manual até o bloco anterior, para a prévia (sem reserva)
   /** Linhas estimadas (no texto cortado, as que ficam). */
   maxLines: number;
   /** Só texto acima do limite do modelo: a prévia corta em `maxLines` linhas. Dentro do limite nada é cortado. */
@@ -45,6 +45,8 @@ export type SlideDrawing = {
   color: string;
   layout: SlideLayout;
   align: "center" | "left";
+  /** Topo do primeiro bloco na prévia (sem a reserva do título, que só vale nas caixas da exportação). */
+  previewTop: number;
   blocks: SlideBlock[];
 };
 
@@ -183,8 +185,27 @@ export function drawSlide(face: SlideFace, style: SlideStyle): SlideDrawing {
     if (total() > SAFE_HEIGHT) drafts[0].reserve = 0;
   }
 
+  // Prévia: posições sem a reserva (o navegador quebra as linhas de verdade, numa coluna com os espaços do manual).
+  // Exportação: caixas com a reserva do título, para uma linha a mais não cobrir o bloco de baixo.
+  const preview = place(drafts.map((b) => ({ ...b, reserve: 0 })), gaps, layout);
+  const boxes = place(drafts, gaps, layout);
+
+  const blocks: SlideBlock[] = drafts.map(({ reserve: _reserve, ...b }, i) => ({
+    ...b,
+    x: BOX_X,
+    y: boxes.tops[i],
+    width: BOX_WIDTH,
+    height: heightOf(drafts[i]),
+    gapBefore: preview.before[i],
+  }));
+  return { width: SLIDE_CANVAS.width, height: SLIDE_CANVAS.height, background, color, layout, align, previewTop: preview.tops[0] ?? SAFE_TOP, blocks };
+}
+
+/** Topo de cada bloco e espaço até o anterior: M01 no centro óptico; M03 título no topo; M02/M04 coluna centralizada. */
+function place(drafts: Draft[], gaps: number[], layout: SlideLayout): { tops: number[]; before: number[] } {
   const tops: number[] = [];
   const before = [...gaps];
+  const total = drafts.reduce((sum, b, i) => sum + heightOf(b) + gaps[i], 0);
   if (layout === "M01" && drafts.length === 1) {
     const h = heightOf(drafts[0]);
     const center = SLIDE_CANVAS.height / 2 - SLIDE_OPTICAL_SHIFT * SLIDE_CANVAS.height;
@@ -205,21 +226,12 @@ export function drawSlide(face: SlideFace, style: SlideStyle): SlideDrawing {
       y += heightOf(b);
     });
   } else {
-    let y = SAFE_TOP + Math.max(0, (SAFE_HEIGHT - total()) / 2);
+    let y = SAFE_TOP + Math.max(0, (SAFE_HEIGHT - total) / 2);
     drafts.forEach((b, i) => {
       y += gaps[i];
       tops.push(y);
       y += heightOf(b);
     });
   }
-
-  const blocks: SlideBlock[] = drafts.map(({ reserve: _reserve, ...b }, i) => ({
-    ...b,
-    x: BOX_X,
-    y: tops[i],
-    width: BOX_WIDTH,
-    height: heightOf(drafts[i]),
-    gapBefore: before[i],
-  }));
-  return { width: SLIDE_CANVAS.width, height: SLIDE_CANVAS.height, background, color, layout, align, blocks };
+  return { tops, before };
 }

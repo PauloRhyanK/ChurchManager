@@ -30,7 +30,6 @@ interface SlidePreviewProps {
 export function SlidePreview({ slide, style, size = "md" }: SlidePreviewProps) {
   const drawing = drawSlide(toFace(slide), style);
   const width = SIZES[size];
-  const top = drawing.blocks[0]?.y ?? 0;
   return (
     <div
       data-testid="slide-card"
@@ -49,7 +48,7 @@ export function SlidePreview({ slide, style, size = "md" }: SlidePreviewProps) {
           boxSizing: "border-box",
           display: "flex",
           flexDirection: "column",
-          paddingTop: top,
+          paddingTop: drawing.previewTop,
           paddingLeft: drawing.blocks[0]?.x ?? 0,
           paddingRight: drawing.blocks[0]?.x ?? 0,
           color: drawing.color,
@@ -64,7 +63,6 @@ export function SlidePreview({ slide, style, size = "md" }: SlidePreviewProps) {
             className="m-0 shrink-0 break-words"
             style={{
               marginTop: b.gapBefore,
-              minHeight: b.height,
               fontFamily: FAMILIES[b.fontFamily],
               fontSize: `${b.fontSize}px`,
               fontWeight: b.fontWeight,
