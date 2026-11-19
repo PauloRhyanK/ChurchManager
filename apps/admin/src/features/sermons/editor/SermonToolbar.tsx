@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { BLOCK_COLORS, BLOCK_LABELS, type CalloutKind, type SermonBlockKind } from "./block-colors";
-import { VerseDialog, manualVerseAttrs } from "./VerseDialog";
+import { VerseDialog } from "./VerseDialog";
 
 type TextStyle = "paragraph" | "h2" | "h3";
 const TEXT_STYLES: { value: TextStyle; label: string }[] = [
@@ -144,7 +144,8 @@ export function SermonToolbar({ editor, className }: { editor: Editor; className
       <VerseDialog
         open={verseOpen}
         onOpenChange={setVerseOpen}
-        onSubmit={(verse) => editor.chain().focus().insertVerse(manualVerseAttrs(verse)).run()}
+        onSubmit={(verse) => editor.chain().focus().insertVerse(verse).run()}
+        restoreFocus={() => !editor.isDestroyed && editor.commands.focus()}
       />
     </div>
   );

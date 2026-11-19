@@ -1,9 +1,25 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Editor } from "@tiptap/react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { EXAMPLE_DOC } from "../lib/sermon-example";
 import { SermonSheet } from "./SermonSheet";
 import { SermonToolbar } from "./SermonToolbar";
+
+// O diálogo de Versículo consulta as traduções da Bíblia.
+vi.mock("../api/sermons-api", () => ({
+  listBibleTranslations: vi.fn().mockResolvedValue([]),
+  searchBible: vi.fn(),
+}));
+
+function renderToolbar(editor: Editor) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <SermonToolbar editor={editor} />
+    </QueryClientProvider>,
+  );
+}
 
 // ProseMirror pede ao DOM medidas que o jsdom não tem.
 Range.prototype.getClientRects ??= () => [] as unknown as DOMRectList;
@@ -44,7 +60,7 @@ describe("SermonSheet", () => {
     const { onEditor, onDocumentChange } = renderSheet();
     await waitFor(() => expect(onEditor).toHaveBeenCalled());
     const editor = onEditor.mock.calls[0][0];
-    render(<SermonToolbar editor={editor} />);
+    renderToolbar(editor);
     const point = screen.getByRole("button", { name: "Ponto" });
     expect(point).toHaveAttribute("aria-pressed", "false");
     act(() => {
@@ -60,7 +76,7 @@ describe("SermonSheet", () => {
   it("só leitura: barra desligada e título sem edição", async () => {
     const { onEditor } = renderSheet(false);
     await waitFor(() => expect(onEditor).toHaveBeenCalled());
-    render(<SermonToolbar editor={onEditor.mock.calls[0][0]} />);
+    renderToolbar(onEditor.mock.calls[0][0]);
     expect(screen.getByRole("button", { name: "Negrito" })).toBeDisabled();
     expect(screen.getByRole("textbox", { name: "Título da palavra" })).toHaveAttribute("readonly");
   });

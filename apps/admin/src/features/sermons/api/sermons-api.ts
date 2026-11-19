@@ -111,3 +111,43 @@ export async function sendSermon(id: string, target: SendTarget, replace?: boole
 export async function cancelDelivery(id: string): Promise<Sermon> {
   return (await api.delete<Sermon>(`${SERMONS}/${id}/delivery`)).data;
 }
+
+// ---- Bíblia (tabelas globais; espelha apps/api/src/modules/sermons/bible) ----
+
+export interface BibleTranslation {
+  code: string;
+  name: string;
+  shortName: string;
+  attribution: string;
+  license: string;
+  isDefault: boolean;
+}
+
+/** Um resultado da busca: já no formato do bloco Versículo, mais a dica para a lista. */
+export interface BibleHit {
+  reference: string;
+  book: number;
+  chapter: number;
+  verseStart: number;
+  verseEnd: number;
+  translation: string;
+  verses: { number: number; text: string }[];
+  hint: string | null;
+}
+
+export interface BibleSearchResult {
+  mode: "REFERENCE" | "TEXT" | "NONE";
+  hits: BibleHit[];
+}
+
+const BIBLE = `${SERMONS}/bible`;
+
+export async function listBibleTranslations(): Promise<BibleTranslation[]> {
+  return (await api.get<BibleTranslation[]>(`${BIBLE}/translations`)).data;
+}
+
+export async function searchBible(q: string, translation?: string): Promise<BibleSearchResult> {
+  const params: { q: string; translation?: string } = { q };
+  if (translation) params.translation = translation;
+  return (await api.get<BibleSearchResult>(`${BIBLE}/search`, { params })).data;
+}
