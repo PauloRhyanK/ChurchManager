@@ -355,6 +355,7 @@ Lista dos próximos cultos (de hoje em diante, até 8), cada um com data, hora, 
 3. **Outra data** → envio com `date`, `startTime`, `pinned: false`, e o casamento roda na hora.
 4. **Culto que já tem palavra** (de qualquer autor): a API responde 409 `SERVICE_HAS_SERMON`; a tela pergunta "Este culto já tem uma palavra. Trocar?"; confirmando, reenvia com `replace: true`. O envio anterior é apagado e a palavra dele volta a Rascunho. Qualquer pessoa com `SERMONS: EDIT` pode trocar; avisar o outro pregador não está nesta entrega.
 5. **Cancelar o envio:** a palavra volta a Rascunho e sai do roteiro.
+7. **O que já passou não muda.** Palavra pregada não pode ter o envio cancelado nem ser reenviada (para pregar de novo, duplica); culto que já aconteceu não é destino; e o envio de um culto passado nunca é trocado. A lista de cultos para enviar só traz os que ainda não começaram.
 6. **Apagar uma palavra:** enviada e ainda não pregada, a tela avisa que ela sai do culto, e o envio é apagado junto. Já pregada, o envio fica (com `sermonId` nulo) como registro no roteiro.
 
 ### Casamento por data e hora
