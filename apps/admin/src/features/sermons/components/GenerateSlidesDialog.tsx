@@ -1,6 +1,6 @@
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
 import { Sparkles } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -64,12 +64,21 @@ export function GenerateSlidesDialog({
   const [style, setStyle] = useState<SlideStyle>(initialStyle);
   const [busy, setBusy] = useState(false);
 
+  // Volta ao padrão só quando o diálogo abre; mudanças das props com ele aberto não desfazem a escolha.
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (open) {
+    if (open && !wasOpen.current) {
       setMode(initialMode);
       setStyle(initialStyle);
     }
+    wasOpen.current = open;
   }, [open, initialStyle, initialMode]);
+
+  /** Enquanto monta, o diálogo não fecha. */
+  function changeOpen(next: boolean) {
+    if (!next && busy) return;
+    onOpenChange(next);
+  }
 
   const counts = useMemo(() => (open ? countSlides(title, document) : { VERSES: 0, VERSES_AND_POINTS: 0 }), [open, title, document]);
   const chosen = mode === "FULL" ? 0 : counts[mode];
@@ -93,7 +102,7 @@ export function GenerateSlidesDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={changeOpen}>
       <DialogContent className="max-w-lg" aria-label="Gerar slides">
         <DialogHeader>
           <DialogTitle>Gerar slides</DialogTitle>
@@ -167,7 +176,7 @@ export function GenerateSlidesDialog({
         {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
 
         <DialogFooter>
-          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="ghost" disabled={busy} onClick={() => changeOpen(false)}>
             Cancelar
           </Button>
           <Button type="button" className="gap-2" disabled={busy || chosen === 0} onClick={build}>

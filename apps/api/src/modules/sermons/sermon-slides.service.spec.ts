@@ -43,6 +43,15 @@ function build(init: { sermons: Row[]; deliveries?: Row[] }) {
     Object.entries(where).every(([k, v]) => (typeof v === 'object' && v !== null ? true : row[k] === v));
   const prisma: Row = {
     sermon: {
+      findMany: async ({ where }: Row) =>
+        structuredClone(
+          sermons
+            .filter((r) => match(r, where))
+            .map((s) => {
+              const dl = deliveries.find((x) => x.sermonId === s.id);
+              return { ...s, delivery: dl ? { ...dl, service: null } : null };
+            }),
+        ),
       findFirst: async ({ where }: Row) => {
         const s = sermons.find((r) => match(r, where));
         if (!s) return null;
@@ -252,8 +261,36 @@ test('salvar título de palavra Enviada copia título, tempo e slides públicos 
 test('resumo da lista traz slideCount (marcados, sem PRIVATE)', async () => {
   const slides = buildSlides('Luz', EXAMPLE_DOC, 'VERSES_AND_POINTS').map((s) => (s.id === 'v1:0' ? { ...s, included: false } : s));
   const { sermonsService } = build({ sermons: [sermonRow({ slides })] });
-  // A lista usa findMany: o fake deste arquivo não tem; o resumo é o mesmo do get.
   assert.equal((await sermonsService.get(user(), S1)).slideCount, 4);
+  const listed = await sermonsService.list(user(), {});
+  assert.equal(listed.items.length, 1);
+  assert.equal(listed.items[0].slideCount, 4);
+});
+
+test('mudar só o título deixa os slides desatualizados; Atualizar (mesmo modo) põe o título novo e limpa', async () => {
+  const { service, sermonsService } = build({ sermons: [sermonRow()] });
+  await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
+  const renamed = await sermonsService.update(user(), S1, { title: 'Nova luz' });
+  assert.equal(renamed.slidesStale, true);
+  assert.equal((await sermonsService.get(user(), S1)).slidesStale, true);
+  const again = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
+  assert.equal(again.slidesStale, false);
+  assert.equal(again.slides.find((s) => s.kind === 'TITLE')!.text, 'Nova luz');
+});
+
+test('título do slide editado à mão não fica desatualizado quando o título da palavra muda', async () => {
+  const { service, sermonsService } = build({ sermons: [sermonRow()] });
+  const gen = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
+  await service.save(user(), S1, {
+    items: gen.slides.map((s) => (s.kind === 'TITLE' ? { id: s.id, included: true, text: 'Meu título' } : { id: s.id, included: s.included })),
+  });
+  assert.equal((await sermonsService.update(user(), S1, { title: 'Nova luz' })).slidesStale, false);
+});
+
+test('modo só versículos (sem TITLE) não fica desatualizado pela troca de título', async () => {
+  const { service, sermonsService } = build({ sermons: [sermonRow()] });
+  await service.generate(user(), S1, { mode: 'VERSES' });
+  assert.equal((await sermonsService.update(user(), S1, { title: 'Nova luz' })).slidesStale, false);
 });
 
 // --- DTOs ------------------------------------------------------------------

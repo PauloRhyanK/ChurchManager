@@ -34,7 +34,7 @@ export interface Sermon extends SermonSummary {
   slideMode: SlideMode | null;
   slideStyle: SlideStyle;
   slides: SlideItem[];
-  /** O documento mudou depois da última geração dos slides. */
+  /** O documento (ou o título, se o slide de título não foi editado) mudou depois da última geração dos slides. */
   slidesStale: boolean;
 }
 

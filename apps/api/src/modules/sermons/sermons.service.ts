@@ -8,7 +8,7 @@ import { rematchDeliveries } from './delivery-rematch';
 import { CreateSermonDto, UpdateSermonDto } from './dto/sermon.dto';
 import { deriveSermon, normalizeSearch } from './sermon-derive';
 import { EMPTY_DOC, validateSermonDocument, type SermonDoc } from './sermon-document';
-import { parseStoredSlides, publicSlides, type SlideItem, type SlideMode, type SlideStyle } from './sermon-slides';
+import { buildSlides, parseStoredSlides, publicSlides, type SlideItem, type SlideMode, type SlideStyle } from './sermon-slides';
 
 export interface SermonSummary {
   id: string;
@@ -28,7 +28,7 @@ export interface SermonFull extends SermonSummary {
   slideMode: SlideMode | null;
   slideStyle: SlideStyle;
   slides: SlideItem[];
-  /** O documento mudou depois da última geração dos slides. */
+  /** O documento (ou o título, se o slide de título não foi editado) mudou depois da última geração dos slides. */
   slidesStale: boolean;
 }
 
@@ -64,6 +64,14 @@ export function toSermonSummary(sermon: SermonRow, now: Date, timeZone: string):
   };
 }
 
+/** O slide de título (não editado) já não bate com o título da palavra (aparado e cortado como na geração)? */
+function titleChanged(slides: SlideItem[], title: string): boolean {
+  const slide = slides.find((s) => s.kind === 'TITLE' && !s.edited);
+  if (!slide) return false;
+  const expected = buildSlides(title, EMPTY_DOC, 'VERSES_AND_POINTS').find((s) => s.kind === 'TITLE')?.text ?? '';
+  return slide.text !== expected;
+}
+
 export function toSermonFull(sermon: SermonWithDelivery, now: Date, timeZone: string): SermonFull {
   const slides = parseStoredSlides(sermon.slides);
   return {
@@ -73,7 +81,7 @@ export function toSermonFull(sermon: SermonWithDelivery, now: Date, timeZone: st
     slideMode: sermon.slideMode,
     slideStyle: sermon.slideStyle,
     slides,
-    slidesStale: slides.length > 0 && sermon.slidesRevision !== sermon.revision,
+    slidesStale: slides.length > 0 && (sermon.slidesRevision !== sermon.revision || titleChanged(slides, sermon.title)),
   };
 }
 

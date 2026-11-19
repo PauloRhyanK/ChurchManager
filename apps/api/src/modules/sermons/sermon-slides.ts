@@ -68,6 +68,16 @@ function splitVerse(raw: string): string[] {
   return pieces;
 }
 
+/** Até `max` caracteres (por ponto de código): corta no último espaço antes do limite e põe reticências. */
+function capText(text: string, max: number = SLIDE_LIMITS.textChars): string {
+  const chars = Array.from(text);
+  if (chars.length <= max) return text;
+  let head = chars.slice(0, max - 1).join('');
+  const cut = head.lastIndexOf(' ');
+  if (cut > 0) head = head.slice(0, cut);
+  return `${head.trimEnd()}…`;
+}
+
 function verseReference(blockRef: string, number: number | null): string {
   const m = /^(.*\d+):\d+(?:-\d+)?$/.exec(blockRef);
   return m && number !== null ? `${m[1]}:${number}` : blockRef;
@@ -93,7 +103,7 @@ function blockItems(b: SermonBlock, mode: Exclude<SlideMode, 'FULL'>): SlideItem
   }
   if (b.type === 'point' && mode === 'VERSES_AND_POINTS') {
     const text = collapse(inlineText(b.content));
-    return text ? [{ id: `${b.attrs.id}:0`, kind: 'POINT', sourceBlockId: b.attrs.id, text, reference: null, ...base }] : [];
+    return text ? [{ id: `${b.attrs.id}:0`, kind: 'POINT', sourceBlockId: b.attrs.id, text: capText(text), reference: null, ...base }] : [];
   }
   return [];
 }
@@ -108,7 +118,7 @@ export function buildSlides(title: string, doc: SermonDoc, mode: Exclude<SlideMo
   const privates: SlideItem[] = [];
   const trimmed = title.trim();
   if (mode === 'VERSES_AND_POINTS' && trimmed) {
-    main.push({ id: 'title', kind: 'TITLE', sourceBlockId: null, text: trimmed, reference: null, included: true, edited: false });
+    main.push({ id: 'title', kind: 'TITLE', sourceBlockId: null, text: capText(trimmed), reference: null, included: true, edited: false });
   }
   for (const b of doc.content) {
     if (b.type === 'privateNote') {
@@ -193,7 +203,7 @@ export function parseStoredSlides(value: unknown): SlideItem[] {
       id: o.id,
       kind,
       sourceBlockId: o.sourceBlockId as string | null,
-      text: kind === 'VERSE' ? o.text : o.text.slice(0, SLIDE_LIMITS.textChars),
+      text: kind === 'VERSE' ? o.text : Array.from(o.text).slice(0, SLIDE_LIMITS.textChars).join(''),
       reference: o.reference as string | null,
       included: kind === 'PRIVATE' ? false : o.included,
       edited: o.edited,

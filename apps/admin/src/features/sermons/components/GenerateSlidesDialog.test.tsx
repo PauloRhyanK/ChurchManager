@@ -51,6 +51,57 @@ describe("GenerateSlidesDialog", () => {
     expect(screen.getByRole("radio", { name: /Só versículos/ })).toBeChecked();
   });
 
+  it("enquanto monta, o diálogo não fecha e Cancelar fica desligado", async () => {
+    let finish!: (v: unknown) => void;
+    api.generateSlides.mockReturnValue(new Promise((res) => (finish = res)));
+    const { onOpenChange, onGenerated } = renderDialog();
+    fireEvent.click(screen.getByRole("button", { name: "Montar" }));
+    await waitFor(() => expect(api.generateSlides).toHaveBeenCalled());
+    expect(screen.getByRole("button", { name: "Cancelar" })).toBeDisabled();
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    finish({ id: "s1", slides: [] });
+    await waitFor(() => expect(onGenerated).toHaveBeenCalled());
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("o visual gravado mudar com o diálogo aberto não desfaz a escolha", () => {
+    const props = {
+      open: true,
+      onOpenChange: vi.fn(),
+      sermonId: "s1",
+      title: "Luz",
+      document: EXAMPLE_DOC,
+      ensureSaved: vi.fn().mockResolvedValue(true),
+      onGenerated: vi.fn(),
+    };
+    const client = new QueryClient();
+    const { rerender } = render(
+      <QueryClientProvider client={client}>
+        <GenerateSlidesDialog {...props} initialStyle="MINIMAL" />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("radio", { name: /Só versículos/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Com fundo/ }));
+    rerender(
+      <QueryClientProvider client={client}>
+        <GenerateSlidesDialog {...props} initialStyle="MINIMAL" initialMode="VERSES_AND_POINTS" />
+      </QueryClientProvider>,
+    );
+    rerender(
+      <QueryClientProvider client={client}>
+        <GenerateSlidesDialog {...props} initialStyle="BACKGROUND" initialMode="VERSES" />
+      </QueryClientProvider>,
+    );
+    rerender(
+      <QueryClientProvider client={client}>
+        <GenerateSlidesDialog {...props} initialStyle="MINIMAL" />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole("radio", { name: /Só versículos/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Com fundo/ })).toBeChecked();
+  });
+
   it("sem aviso, o texto não aparece", () => {
     renderDialog();
     expect(screen.queryByText(/refaz a sequência/)).not.toBeInTheDocument();

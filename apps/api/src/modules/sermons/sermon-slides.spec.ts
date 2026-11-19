@@ -118,6 +118,26 @@ describe('buildSlides', () => {
     assert.equal(s[0].text, 'y'.repeat(80) + '…');
   });
 
+  it('título e ponto passam de 300: corta no último espaço antes de 300, sem espaço no fim, com reticências', () => {
+    const long = 'palavra '.repeat(50).trim();
+    const s = buildSlides(long, doc(point('p', long)), 'VERSES_AND_POINTS');
+    const expected = Array(37).fill('palavra').join(' ') + '…';
+    assert.equal(s[0].kind, 'TITLE');
+    assert.equal(s[0].text, expected);
+    assert.equal(s[1].text, expected);
+    assert.ok(Array.from(s[1].text).length <= 300);
+  });
+
+  it('texto sem espaço e com emoji é cortado sem partir caractere', () => {
+    const s = buildSlides('', doc(point('p', '😀'.repeat(400))), 'VERSES_AND_POINTS');
+    assert.equal(s[0].text, '😀'.repeat(299) + '…');
+  });
+
+  it('ponto de até 300 fica inteiro', () => {
+    const exact = 'a'.repeat(300);
+    assert.equal(buildSlides('', doc(point('p', exact)), 'VERSES_AND_POINTS')[0].text, exact);
+  });
+
   it('corta em 400 itens tirando os PRIVATE primeiro', () => {
     const blocks: SermonBlock[] = [];
     for (let i = 0; i < 405; i++) blocks.push(point(`p${i}`, `ponto ${i}`));
@@ -183,6 +203,11 @@ describe('publicSlides e parseStoredSlides', () => {
     const long = parseStoredSlides([item('p:0', { text: 'z'.repeat(500) }), item('v:0', { kind: 'VERSE', text: 'z'.repeat(500) })]);
     assert.equal(long[0].text.length, 300);
     assert.equal(long[1].text.length, 500);
+  });
+
+  it('parseStoredSlides: texto longo é cortado em 300 caracteres sem partir emoji', () => {
+    const [p] = parseStoredSlides([item('a:0', { text: '😀'.repeat(301) })]);
+    assert.equal(p.text, '😀'.repeat(300));
   });
 
   it('parseStoredSlides: 401 itens válidos viram 400', () => {

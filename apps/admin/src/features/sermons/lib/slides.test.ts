@@ -54,6 +54,27 @@ describe("buildSlides (cópia da API)", () => {
   });
 });
 
+describe("limite de texto (igual à API)", () => {
+  const point = (id: string, text: string): SermonBlock => ({ type: "point", attrs: { id }, content: [{ type: "text", text }] });
+
+  it("título e ponto passam de 300: corta no último espaço antes de 300, sem espaço no fim, com reticências", () => {
+    const long = "palavra ".repeat(50).trim();
+    const s = buildSlides(long, doc(point("p", long)), "VERSES_AND_POINTS");
+    const expected = Array(37).fill("palavra").join(" ") + "…";
+    expect(s[0]).toMatchObject({ kind: "TITLE", text: expected });
+    expect(s[1].text).toBe(expected);
+    expect(Array.from(s[1].text).length).toBeLessThanOrEqual(SLIDE_LIMITS.textChars);
+  });
+
+  it("texto sem espaço e com emoji é cortado sem partir caractere", () => {
+    expect(buildSlides("", doc(point("p", "😀".repeat(400))), "VERSES_AND_POINTS")[0].text).toBe("😀".repeat(299) + "…");
+  });
+
+  it("ponto de até 300 fica inteiro", () => {
+    expect(buildSlides("", doc(point("p", "a".repeat(300))), "VERSES_AND_POINTS")[0].text).toBe("a".repeat(300));
+  });
+});
+
 describe("publicSlides", () => {
   it("devolve só os marcados e não privados", () => {
     const s = buildSlides("Luz", EXAMPLE_DOC, "VERSES_AND_POINTS");
