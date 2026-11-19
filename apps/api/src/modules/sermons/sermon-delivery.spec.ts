@@ -236,7 +236,7 @@ test('"Outra data" cujo culto mais próximo está ocupado dá 409 e desfaz; com 
 
 test('corpo sem destino ou com os dois destinos dá 400', async () => {
   const { service } = build({ sermons: [sermonRow(S1)], services: SERVICES() });
-  for (const dto of [{}, { date: '2026-11-22' }, { startTime: '19:00' }, { serviceId: SV_A, date: '2026-11-22', startTime: '19:00' }, { serviceId: SV_A, date: '2026-11-22' }]) {
+  for (const dto of [{}, { serviceId: null as never }, { date: '2026-11-22' }, { startTime: '19:00' }, { serviceId: SV_A, date: '2026-11-22', startTime: '19:00' }, { serviceId: SV_A, date: '2026-11-22' }]) {
     await assert.rejects(service.send(user(), S1, dto), (e: any) => e instanceof BadRequestException && /Escolha um culto/.test(e.message));
   }
   await assert.rejects(service.send(user(), S1, { date: '2026-02-30', startTime: '19:00' }), BadRequestException);
@@ -341,4 +341,35 @@ test('DTOs recusam pinned, authorId, title e formatos inválidos', async () => {
   await parse(SendSermonDto, { serviceId: SV_A, replace: true });
   await assert.rejects(parse(DeliveryPreviewQuery, { date: '2026-11-22' }, 'query'), BadRequestException);
   await parse(DeliveryPreviewQuery, { date: '2026-11-22', startTime: '19:00' }, 'query');
+});
+
+test('reenviar uma palavra antiga não toma o culto de quem já espera: 409 e o envio fica onde estava', async () => {
+  const before = deliveryRow({ id: 'a', sermonId: S1, serviceId: null, pinned: false, date: d('2026-12-06'), startTime: '10:00', createdAt: new Date('2026-11-01T00:00:00Z') });
+  const mk = () => build({
+    sermons: [sermonRow(S1), sermonRow(S2, { authorId: OTHER })],
+    services: SERVICES(),
+    deliveries: [
+      { ...before },
+      deliveryRow({ id: 'b', sermonId: S2, authorId: OTHER, serviceId: SV_B, pinned: false, date: d('2026-11-22'), startTime: '19:00', createdAt: new Date('2026-11-10T00:00:00Z') }),
+    ],
+  });
+  const t = mk();
+  await assert.rejects(t.service.send(user(), S1, { date: '2026-11-22', startTime: '19:00' }), (e: any) => e instanceof ConflictException && (e.getResponse() as any).code === 'SERVICE_HAS_SERMON');
+  assert.equal(t.deliveries.find((x) => x.id === 'b')!.serviceId, SV_B);
+  assert.deepEqual(t.deliveries.find((x) => x.id === 'a'), before);
+});
+
+test('409 no caminho da data desfaz a mudança de um envio que já existia', async () => {
+  const before = deliveryRow({ id: 'a', sermonId: S1, serviceId: SV_A, pinned: true, date: d('2026-11-22'), startTime: '09:00' });
+  const { service, deliveries } = build({
+    sermons: [sermonRow(S1), sermonRow(S2, { authorId: OTHER })],
+    services: SERVICES(),
+    deliveries: [
+      { ...before },
+      deliveryRow({ id: 'b', sermonId: S2, authorId: OTHER, serviceId: SV_B, pinned: true, date: d('2026-11-22'), startTime: '19:00' }),
+    ],
+  });
+  await assert.rejects(service.send(user(), S1, { date: '2026-11-22', startTime: '19:30' }), ConflictException);
+  assert.deepEqual(deliveries.find((x) => x.id === 'a'), before);
+  assert.equal(deliveries.find((x) => x.id === 'b')!.serviceId, SV_B);
 });

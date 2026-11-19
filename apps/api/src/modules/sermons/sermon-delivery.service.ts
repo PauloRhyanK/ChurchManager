@@ -93,9 +93,9 @@ export class SermonDeliveryService {
   }
 
   async send(user: AuthUser, sermonId: string, dto: SendSermonDto): Promise<SermonFull> {
-    const byService = dto.serviceId !== undefined;
-    const byDate = dto.date !== undefined && dto.startTime !== undefined;
-    const anyDate = dto.date !== undefined || dto.startTime !== undefined;
+    const byService = dto.serviceId != null;
+    const byDate = dto.date != null && dto.startTime != null;
+    const anyDate = dto.date != null || dto.startTime != null;
     if (byService ? anyDate : !byDate) {
       throw new BadRequestException('Escolha um culto ou informe a data e a hora.');
     }
@@ -121,6 +121,8 @@ export class SermonDeliveryService {
           startTime: where.startTime,
           serviceId: where.serviceId,
           pinned: where.pinned,
+          // Quem é reenviado entra no fim da fila da data: não passa na frente de quem já espera o culto.
+          createdAt: this.sermons.clock(),
         };
         if (previous) return tx.sermonDelivery.update({ where: { id: previous.id }, data });
         return tx.sermonDelivery.create({
