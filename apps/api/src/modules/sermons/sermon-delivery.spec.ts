@@ -5,6 +5,8 @@ import type { Type } from '@nestjs/common';
 import { VALIDATION_PIPE_OPTIONS } from '../../validation-options';
 import type { AuthUser } from '../auth/auth-user';
 import { DeliveryPreviewQuery, SendSermonDto } from './dto/delivery.dto';
+import { EXAMPLE_DOC } from './sermon-example';
+import { buildSlides } from './sermon-slides';
 import { SermonDeliveryService } from './sermon-delivery.service';
 import { SermonsService } from './sermons.service';
 
@@ -28,6 +30,7 @@ const d = (ymd: string) => new Date(`${ymd}T00:00:00.000Z`);
 const sermonRow = (id: string, over: Row = {}): Row => ({
   id, tenantId: TENANT, authorId: AUTHOR, title: `Palavra ${id.slice(0, 2)}`, document: {}, revision: 1,
   baseReference: null, pointCount: 0, verseRefs: '', estimatedSeconds: 601,
+  slideMode: null, slideStyle: 'MINIMAL', slides: [], slidesRevision: null,
   createdAt: new Date('2026-11-01T00:00:00Z'), updatedAt: new Date('2026-11-10T00:00:00Z'), ...over,
 });
 const serviceRow = (id: string, date: string, startTime: string, over: Row = {}): Row => ({
@@ -37,7 +40,7 @@ let seq = 0;
 const deliveryRow = (over: Row): Row => ({
   id: `eeeeeeee-eeee-4eee-8eee-${String(++seq).padStart(12, '0')}`,
   tenantId: TENANT, sermonId: null, authorId: AUTHOR, serviceId: null, pinned: false,
-  title: 'T', preacherName: 'Pr', estimatedSeconds: 60, createdAt: new Date('2026-11-05T00:00:00Z'), ...over,
+  title: 'T', preacherName: 'Pr', estimatedSeconds: 60, slideStyle: 'MINIMAL', slides: [], createdAt: new Date('2026-11-05T00:00:00Z'), ...over,
 });
 
 function build(init: { sermons?: Row[]; services?: Row[]; deliveries?: Row[] }) {
@@ -305,14 +308,14 @@ test('rematch troca envios entre cultos sem violar a unicidade', async () => {
   assert.equal(deliveries.find((x) => x.id === 'b')!.serviceId, SV_A);
 });
 
-test('summaries devolve só título, pregador e minutos (arredondados para cima)', async () => {
+test('summaries devolve só título, pregador, minutos (arredondados para cima) e slideCount', async () => {
   const { service } = build({
     services: SERVICES(),
     deliveries: [deliveryRow({ serviceId: SV_B, title: 'Luz', preacherName: 'Paulo', estimatedSeconds: 601, sermonId: S1 })],
   });
   const map = await service.summaries(TENANT, [SV_A, SV_B]);
   assert.deepEqual([...map.keys()], [SV_B]);
-  assert.deepEqual(map.get(SV_B), { title: 'Luz', preacherName: 'Paulo', estimatedMinutes: 11 });
+  assert.deepEqual(map.get(SV_B), { title: 'Luz', preacherName: 'Paulo', estimatedMinutes: 11, slideCount: 0 });
   assert.equal((await service.summaries(TENANT, [])).size, 0);
 });
 
@@ -492,4 +495,70 @@ test('enviar para data e hora que já passaram dá 400', async () => {
   }
   assert.deepEqual(writes, []);
   await service.send(user(), S1, { date: '2026-11-20', startTime: '09:01' });
+});
+
+// --- slides no envio ---------------------------------------------------------
+
+const STORED = () =>
+  buildSlides('Luz', EXAMPLE_DOC, 'VERSES_AND_POINTS').map((x) => (x.id === 'pt2:0' ? { ...x, included: false } : x));
+// Um PRIVATE marcado à força no banco também não pode sair.
+const TAMPERED = () => STORED().map((x) => (x.kind === 'PRIVATE' ? { ...x, included: true } : x));
+
+test('send copia os slides públicos atuais e o estilo para o envio, sem PRIVATE', async () => {
+  const { service, deliveries } = build({
+    sermons: [sermonRow(S1, { slides: TAMPERED(), slideStyle: 'BACKGROUND', slideMode: 'VERSES_AND_POINTS' })],
+    services: SERVICES(),
+  });
+  await service.send(user(), S1, { serviceId: SV_B });
+  assert.equal(deliveries[0].slideStyle, 'BACKGROUND');
+  assert.deepEqual(deliveries[0].slides.map((x: Row) => x.kind), ['TITLE', 'VERSE', 'POINT', 'VERSE']);
+  assert.equal(JSON.stringify(deliveries[0].slides).includes('Dois minutos'), false);
+  for (const x of deliveries[0].slides) assert.deepEqual(Object.keys(x).sort(), ['kind', 'reference', 'text']);
+});
+
+test('reenviar (mover) recopia os slides atuais', async () => {
+  const { service, deliveries, sermons } = build({
+    sermons: [sermonRow(S1)],
+    services: SERVICES(),
+    deliveries: [deliveryRow({ sermonId: S1, serviceId: SV_A, pinned: true, date: d('2026-11-22'), startTime: '09:00', slides: [] })],
+  });
+  sermons[0].slides = STORED();
+  await service.send(user(), S1, { serviceId: SV_B });
+  assert.equal(deliveries.length, 1);
+  assert.equal(deliveries[0].slides.length, 4);
+});
+
+test('summaries conta os slides do envio', async () => {
+  const { service } = build({
+    services: SERVICES(),
+    deliveries: [deliveryRow({ serviceId: SV_B, sermonId: S1, slides: [{ kind: 'VERSE', text: 'a', reference: 'b' }, { kind: 'TITLE', text: 'c', reference: null }] })],
+  });
+  assert.equal((await service.summaries(TENANT, [SV_B])).get(SV_B)!.slideCount, 2);
+});
+
+test('slidesForService lê só o envio do tenant: kind, text e reference; mySermonId só para o autor', async () => {
+  const slides = [
+    { kind: 'VERSE', text: 'Eu sou a luz', reference: 'João 8:12' },
+    { kind: 'PRIVATE', text: 'segredo', reference: null },
+    { kind: 'POINT', text: 'A luz chama', reference: null, sourceBlockId: 'pt1', edited: true },
+  ];
+  const { service, writes } = build({
+    services: SERVICES(),
+    deliveries: [deliveryRow({ serviceId: SV_B, sermonId: S1, title: 'Luz', preacherName: 'Paulo', slideStyle: 'BACKGROUND', slides })],
+  });
+  const mine = await service.slidesForService(TENANT, SV_B, AUTHOR);
+  assert.deepEqual(mine, {
+    title: 'Luz',
+    preacherName: 'Paulo',
+    slideStyle: 'BACKGROUND',
+    slides: [
+      { kind: 'VERSE', text: 'Eu sou a luz', reference: 'João 8:12' },
+      { kind: 'POINT', text: 'A luz chama', reference: null },
+    ],
+    mySermonId: S1,
+  });
+  assert.equal((await service.slidesForService(TENANT, SV_B, OTHER))!.mySermonId, null);
+  assert.equal(await service.slidesForService(OTHER_TENANT, SV_B, AUTHOR), null);
+  assert.equal(await service.slidesForService(TENANT, SV_A, AUTHOR), null);
+  assert.deepEqual(writes, []);
 });

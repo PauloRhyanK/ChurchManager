@@ -17,7 +17,8 @@ type Row = Record<string, any>;
 function build() {
   const sermons: Row[] = [{
     id: S1, tenantId: TENANT, authorId: AUTHOR, title: 'Graça', document: {}, revision: 1, baseReference: null,
-    pointCount: 0, verseRefs: '', estimatedSeconds: 601, createdAt: new Date('2026-11-01T00:00:00Z'),
+    pointCount: 0, verseRefs: '', estimatedSeconds: 601, slideMode: null, slideStyle: 'MINIMAL', slides: [],
+    slidesRevision: null, createdAt: new Date('2026-11-01T00:00:00Z'),
     updatedAt: new Date('2026-11-10T00:00:00Z'),
   }];
   const services: Row[] = [];
@@ -119,7 +120,9 @@ test('envio para outra data espera; criar o culto o pega; apagar o culto o devol
 
   const created = await worship.create(TENANT, { date: '2026-12-06', startTime: '19:00' });
   assert.equal(deliveries[0].serviceId, created.id);
-  assert.deepEqual(created.sermon, { title: 'Graça', preacherName: 'Pastor Paulo', estimatedMinutes: 11 });
+  assert.deepEqual(created.sermon, { title: 'Graça', preacherName: 'Pastor Paulo', estimatedMinutes: 11, slideCount: 0 });
+  const preview = await worship.sermonSlides(TENANT, created.id, AUTHOR);
+  assert.deepEqual(preview, { title: 'Graça', preacherName: 'Pastor Paulo', slideStyle: 'MINIMAL', slides: [], mySermonId: S1 });
   assert.equal((await worship.list(TENANT)).items[0].hasSermon, true);
 
   await worship.remove(TENANT, created.id);

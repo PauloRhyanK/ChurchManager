@@ -27,6 +27,12 @@ export class WorshipServicesController {
     return this.services.get(user.tenantId, id);
   }
 
+  /** Prévia dos slides da palavra do culto (só a parte pública, copiada no envio). */
+  @Get(':id/sermon')
+  sermon(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.services.sermonSlides(user.tenantId, id, user.userId);
+  }
+
   @Post()
   @RequirePermission(PermissionModule.WORSHIP, PermissionLevel.EDIT)
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateServiceDto) {

@@ -3,7 +3,13 @@
 Data: 19/11/2026 · Branch: `claude/palavras-pregador-0fc79e` (entra pela `qa`).
 Telas aprovadas: https://claude.ai/artifact/QU7o3ybrFftbDyX6hugHLu (`PalavraLista`, `Palavra`, `PalavraVersiculo`, `PalavraSlides`, `PalavraEnviar`, `PalavraCulto`, `PalavraExportar`, e a linha "Palavra" de `Roteiro`). Os textos de sermão ali são inventados.
 
-**Situação:** aprovada em 19/11/2026. A etapa 1 está implementada (plano em `docs/superpowers/plans/2026-11-19-palavras-etapa-1.md`); as etapas 2 a 6 seguem como descritas aqui.
+**Situação:** aprovada em 19/11/2026. As etapas 1 a 4 estão implementadas (planos em `docs/superpowers/plans/2026-11-19-palavras-etapa-*.md`). Falta a etapa 5 (slides completos, que depende de provedor e chave de IA) e a etapa 6 (Ponte).
+
+**O que a implementação decidiu além do que está abaixo:**
+
+- **Bíblia:** só os 22 marcadores de acróstico do Salmo 119 são removidos na importação; as palavras supridas e os rótulos de fala entre colchetes da Bíblia Livre ("[assim]", "[Ela] :") ficam como na edição. A busca por trecho ignora pontuação, separa palavras com hífen e traz a frase exata primeiro. Em livro de um capítulo só, "jd 3" é o versículo 3. Em QA e produção a importação roda dentro do contêiner da API (`apps/api/src/modules/sermons/bible/README.md`).
+- **Slides:** cada item tem id `<bloco>:<n>`; "Atualizar" casa por esse id. Título e ponto com mais de 300 caracteres são cortados na geração. Mudar só o título também marca os slides como desatualizados. Palavra sem slides continua podendo ser enviada pelo editor; com slides, o envio fica na conferência. Palavra pregada tem os slides só para leitura.
+- **Exportar:** a caixa das anotações volta desmarcada toda vez que o diálogo abre. A apresentação sai com um slide por item marcado; o PDF e o texto levam o crédito da tradução.
 
 ## Problema
 

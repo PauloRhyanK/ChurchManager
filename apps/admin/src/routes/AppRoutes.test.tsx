@@ -31,6 +31,7 @@ vi.mock("@/features/worship/pages/SongEditorPage", () => ({ default: () => <p>Ed
 vi.mock("@/features/worship/pages/ServicePlanPage", () => ({ default: () => <p>Página do roteiro</p> }));
 vi.mock("@/features/sermons/pages/SermonsListPage", () => ({ default: () => <p>Página de palavras</p> }));
 vi.mock("@/features/sermons/pages/SermonEditorPage", () => ({ default: () => <p>Editor da palavra</p> }));
+vi.mock("@/features/sermons/pages/SermonSlidesPage", () => ({ default: () => <p>Conferência dos slides</p> }));
 vi.mock("@/features/events/pages/RegistrationsPage", () => ({
   default: () => <p>Página de inscrições</p>,
 }));
@@ -206,5 +207,19 @@ describe("AppRoutes — Palavras", () => {
     expect(await screen.findByText("Página de palavras")).toBeInTheDocument();
     act(() => void navigate("/palavras/abc"));
     expect(await screen.findByText("Editor da palavra")).toBeInTheDocument();
+  });
+
+  it("/palavras/:id/slides abre a conferência (não o editor) e exige SERMONS", async () => {
+    perms.modules = { SERMONS: "VIEW" };
+    renderAt("/palavras/abc/slides");
+    expect(await screen.findByText("Conferência dos slides")).toBeInTheDocument();
+    expect(screen.queryByText("Editor da palavra")).not.toBeInTheDocument();
+  });
+
+  it("sem SERMONS a conferência volta para o início", async () => {
+    perms.modules = { WORSHIP: "EDIT" };
+    renderAt("/palavras/abc/slides");
+    expect(await screen.findByText("Página inicial")).toBeInTheDocument();
+    expect(screen.queryByText("Conferência dos slides")).not.toBeInTheDocument();
   });
 });

@@ -1,5 +1,8 @@
 import { api } from "@/lib/api";
 import type { SermonDoc } from "../lib/document";
+import type { SlideItem, SlideMode, SlideStyle } from "../lib/slides";
+
+export type { SlideItem, SlideKind, SlideMode, SlideStyle } from "../lib/slides";
 
 export type SermonStatus = "DRAFT" | "SENT" | "PREACHED";
 
@@ -20,12 +23,19 @@ export interface SermonSummary {
   estimatedSeconds: number;
   status: SermonStatus;
   delivery: SermonDelivery | null;
+  /** Slides marcados e não privados: o que vai para o envio. */
+  slideCount: number;
   updatedAt: string;
 }
 
 export interface Sermon extends SermonSummary {
   document: SermonDoc;
   revision: number;
+  slideMode: SlideMode | null;
+  slideStyle: SlideStyle;
+  slides: SlideItem[];
+  /** O documento (ou o título, se o slide de título não foi editado) mudou depois da última geração dos slides. */
+  slidesStale: boolean;
 }
 
 export interface SermonsList {
@@ -110,4 +120,68 @@ export async function sendSermon(id: string, target: SendTarget, replace?: boole
 
 export async function cancelDelivery(id: string): Promise<Sermon> {
   return (await api.delete<Sermon>(`${SERMONS}/${id}/delivery`)).data;
+}
+
+export async function generateSlides(id: string, input: { mode: SlideMode; style?: SlideStyle }): Promise<Sermon> {
+  const body: { mode: SlideMode; style?: SlideStyle } = { mode: input.mode };
+  if (input.style !== undefined) body.style = input.style;
+  return (await api.post<Sermon>(`${SERMONS}/${id}/slides/generate`, body)).data;
+}
+
+export interface SlideItemInput {
+  id: string;
+  included: boolean;
+  text?: string;
+}
+
+export async function saveSlides(id: string, input: { style?: SlideStyle; items: SlideItemInput[] }): Promise<Sermon> {
+  const body: { style?: SlideStyle; items: SlideItemInput[] } = {
+    items: input.items.map((i) => {
+      const item: SlideItemInput = { id: i.id, included: i.included };
+      if (i.text !== undefined) item.text = i.text;
+      return item;
+    }),
+  };
+  if (input.style !== undefined) body.style = input.style;
+  return (await api.put<Sermon>(`${SERMONS}/${id}/slides`, body)).data;
+}
+
+// ---- Bíblia (tabelas globais; espelha apps/api/src/modules/sermons/bible) ----
+
+export interface BibleTranslation {
+  code: string;
+  name: string;
+  shortName: string;
+  attribution: string;
+  license: string;
+  isDefault: boolean;
+}
+
+/** Um resultado da busca: já no formato do bloco Versículo, mais a dica para a lista. */
+export interface BibleHit {
+  reference: string;
+  book: number;
+  chapter: number;
+  verseStart: number;
+  verseEnd: number;
+  translation: string;
+  verses: { number: number; text: string }[];
+  hint: string | null;
+}
+
+export interface BibleSearchResult {
+  mode: "REFERENCE" | "TEXT" | "NONE";
+  hits: BibleHit[];
+}
+
+const BIBLE = `${SERMONS}/bible`;
+
+export async function listBibleTranslations(): Promise<BibleTranslation[]> {
+  return (await api.get<BibleTranslation[]>(`${BIBLE}/translations`)).data;
+}
+
+export async function searchBible(q: string, translation?: string): Promise<BibleSearchResult> {
+  const params: { q: string; translation?: string } = { q };
+  if (translation) params.translation = translation;
+  return (await api.get<BibleSearchResult>(`${BIBLE}/search`, { params })).data;
 }

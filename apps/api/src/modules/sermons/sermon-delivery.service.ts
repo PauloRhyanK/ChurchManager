@@ -2,9 +2,11 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { AuthUser } from '../auth/auth-user';
+import { deliveryCopy, readDeliverySlides } from './delivery-copy';
 import { deliveryHasPassed } from './delivery-match';
 import { rematchDeliveries } from './delivery-rematch';
 import type { SendSermonDto } from './dto/delivery.dto';
+import type { PublicSlide, SlideStyle } from './sermon-slides';
 import { SermonsService, toSermonFull, type SermonFull } from './sermons.service';
 
 type Tx = Prisma.TransactionClient;
@@ -16,6 +18,20 @@ export interface ServiceOption {
   name: string;
   hasSermon: boolean;
   isMine: boolean;
+}
+export interface DeliverySummary {
+  title: string;
+  preacherName: string;
+  estimatedMinutes: number;
+  slideCount: number;
+}
+export interface ServiceSlides {
+  title: string;
+  preacherName: string;
+  slideStyle: SlideStyle;
+  slides: PublicSlide[];
+  /** A palavra de quem olha, para o atalho "editar"; `null` para os demais. */
+  mySermonId: string | null;
 }
 export interface DeliveryPreview {
   service: { id: string; date: string; startTime: string; name: string } | null;
@@ -155,11 +171,8 @@ export class SermonDeliveryService {
         where: { id: user.userId, tenantId: user.tenantId },
         select: { name: true },
       });
-      const copy = {
-        title: sermon.title,
-        preacherName: account?.name?.trim() || user.email,
-        estimatedSeconds: sermon.estimatedSeconds,
-      };
+      // A mesma cópia de `syncDeliveryCopy`: título, tempo, estilo e só os slides públicos.
+      const copy = { ...deliveryCopy(sermon), preacherName: account?.name?.trim() || user.email };
       const previous = sermon.delivery;
       const oldDate = previous ? ymd(previous.date) : null;
       const save = async (where: { date: string; startTime: string; serviceId: string | null; pinned: boolean }) => {
@@ -257,15 +270,12 @@ export class SermonDeliveryService {
   }
 
   /** Só o que o módulo de culto pode ver: lê apenas `sermonDelivery`. */
-  async summaries(
-    tenantId: string,
-    serviceIds: string[],
-  ): Promise<Map<string, { title: string; preacherName: string; estimatedMinutes: number }>> {
-    const out = new Map<string, { title: string; preacherName: string; estimatedMinutes: number }>();
+  async summaries(tenantId: string, serviceIds: string[]): Promise<Map<string, DeliverySummary>> {
+    const out = new Map<string, DeliverySummary>();
     if (serviceIds.length === 0) return out;
     const rows = await this.prisma.sermonDelivery.findMany({
       where: { tenantId, serviceId: { in: serviceIds } },
-      select: { serviceId: true, title: true, preacherName: true, estimatedSeconds: true },
+      select: { serviceId: true, title: true, preacherName: true, estimatedSeconds: true, slides: true },
     });
     for (const r of rows) {
       if (!r.serviceId) continue;
@@ -273,8 +283,25 @@ export class SermonDeliveryService {
         title: r.title,
         preacherName: r.preacherName,
         estimatedMinutes: Math.ceil(r.estimatedSeconds / 60),
+        slideCount: readDeliverySlides(r.slides).length,
       });
     }
     return out;
+  }
+
+  /** Os slides do culto para a prévia do roteiro. Lê só `sermonDelivery`, do tenant de quem chama. */
+  async slidesForService(tenantId: string, serviceId: string, viewerUserId: string): Promise<ServiceSlides | null> {
+    const row = await this.prisma.sermonDelivery.findFirst({
+      where: { tenantId, serviceId },
+      select: { title: true, preacherName: true, slideStyle: true, slides: true, sermonId: true, authorId: true },
+    });
+    if (!row) return null;
+    return {
+      title: row.title,
+      preacherName: row.preacherName,
+      slideStyle: row.slideStyle,
+      slides: readDeliverySlides(row.slides),
+      mySermonId: row.authorId !== null && row.authorId === viewerUserId ? row.sermonId : null,
+    };
   }
 }
