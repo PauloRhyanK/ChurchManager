@@ -43,6 +43,13 @@ function renderDialog(
   return { onGenerated, onOpenChange, ensureSaved };
 }
 
+/** Montar só liga depois que a consulta da IA volta. */
+async function clickMontar() {
+  const button = screen.getByRole("button", { name: "Montar" });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+}
+
 describe("GenerateSlidesDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -59,7 +66,7 @@ describe("GenerateSlidesDialog", () => {
     let finish!: (v: unknown) => void;
     api.generateSlides.mockReturnValue(new Promise((res) => (finish = res)));
     const { onOpenChange, onGenerated } = renderDialog();
-    fireEvent.click(screen.getByRole("button", { name: "Montar" }));
+    await clickMontar();
     await waitFor(() => expect(api.generateSlides).toHaveBeenCalled());
     expect(screen.getByRole("button", { name: "Cancelar" })).toBeDisabled();
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
@@ -138,7 +145,7 @@ describe("GenerateSlidesDialog", () => {
     const { onGenerated, ensureSaved } = renderDialog();
     fireEvent.click(screen.getByRole("radio", { name: /Só versículos/ }));
     fireEvent.click(screen.getByRole("radio", { name: /Com fundo/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Montar" }));
+    await clickMontar();
     await waitFor(() => expect(onGenerated).toHaveBeenCalledWith(generated));
     expect(ensureSaved).toHaveBeenCalled();
     expect(api.generateSlides).toHaveBeenCalledWith("s1", { mode: "VERSES", style: "BACKGROUND" });
@@ -146,7 +153,7 @@ describe("GenerateSlidesDialog", () => {
 
   it("não chama a API quando o salvamento falha", async () => {
     const { onGenerated } = renderDialog({ ensureSaved: vi.fn().mockResolvedValue(false) });
-    fireEvent.click(screen.getByRole("button", { name: "Montar" }));
+    await clickMontar();
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Salve a palavra antes de montar os slides."));
     expect(api.generateSlides).not.toHaveBeenCalled();
     expect(onGenerated).not.toHaveBeenCalled();
@@ -155,7 +162,7 @@ describe("GenerateSlidesDialog", () => {
   it("erro da API vira aviso e não fecha", async () => {
     api.generateSlides.mockRejectedValue(new Error("rede"));
     const { onGenerated } = renderDialog();
-    fireEvent.click(screen.getByRole("button", { name: "Montar" }));
+    await clickMontar();
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
     expect(onGenerated).not.toHaveBeenCalled();
   });
@@ -282,6 +289,40 @@ describe("GenerateSlidesDialog", () => {
       expect(onOpenChange).not.toHaveBeenCalledWith(false);
       finish({ id: "s1", slides: [] });
       await waitFor(() => expect(onGenerated).toHaveBeenCalled());
+    });
+
+    it("Montar fica desligado enquanto a consulta da IA não volta", async () => {
+      let answer!: (v: unknown) => void;
+      api.getSermonAi.mockReturnValue(new Promise((res) => (answer = res)));
+      api.generateSlides.mockResolvedValue({ id: "s1", slides: [] });
+      renderDialog({ mode: "FULL" });
+      expect(screen.getByRole("button", { name: "Montar" })).toBeDisabled();
+      fireEvent.click(screen.getByRole("button", { name: "Montar" }));
+      expect(api.generateSlides).not.toHaveBeenCalled();
+      answer({ enabled: true, models: [MODEL_A] });
+      await waitFor(() => expect(screen.getByRole("radio", { name: /Slides completos/ })).toBeChecked());
+      expect(screen.getByRole("button", { name: "Montar" })).toBeEnabled();
+    });
+
+    it("429 do limitador geral (ThrottlerException) vira texto em português", async () => {
+      enable();
+      api.generateSlides.mockRejectedValue(apiError(429, "ThrottlerException: Too Many Requests"));
+      renderDialog();
+      fireEvent.click(await screen.findByRole("radio", { name: /Slides completos/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Montar" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("Muitas tentativas em pouco tempo. Aguarde um minuto e tente de novo.");
+    });
+
+    it("fora de Slides completos, 409 e 503 mostram a mensagem da API no aviso", async () => {
+      enable();
+      api.generateSlides.mockRejectedValueOnce(apiError(409, "A palavra mudou enquanto os slides eram gerados. Gere de novo."));
+      renderDialog();
+      await waitFor(() => expect(screen.getByRole("radio", { name: /Slides completos/ })).toBeEnabled());
+      fireEvent.click(screen.getByRole("button", { name: "Montar" }));
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith("A palavra mudou enquanto os slides eram gerados. Gere de novo."));
+      api.generateSlides.mockRejectedValueOnce(apiError(503, "O modelo configurado não aceitou o pedido. Avise o administrador."));
+      fireEvent.click(screen.getByRole("button", { name: "Montar" }));
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith("O modelo configurado não aceitou o pedido. Avise o administrador."));
     });
 
     it("palavra já em Slides completos abre nele quando a IA está ligada", async () => {

@@ -15,6 +15,7 @@ import { SlideList } from "../components/SlideList";
 import { SlidePreview } from "../components/SlidePreview";
 import { formatSituation, formatSpeech } from "../lib/format";
 import { editSlide, moveSlide, slidesBody, toggleSlide } from "../lib/slide-edits";
+import { slideErrorMessage } from "../lib/slide-errors";
 import { publicSlides, type SlideItem, type SlideMode, type SlideStyle } from "../lib/slides";
 
 const LIST_PATH = "/palavras";
@@ -23,6 +24,7 @@ const SAVE_ERROR = "Não foi possível salvar os slides.";
 const UNSAVED = "Não foi possível salvar os slides. Confira a lista antes de enviar.";
 const UNSAVED_EXPORT = "Não foi possível salvar os slides. Confira a lista antes de exportar.";
 const RELOAD_ERROR = "Não foi possível carregar os slides. Atualize a página.";
+const REFRESH_ERROR = "Não foi possível atualizar os slides.";
 const REGENERATE_NOTICE = "Trocar o que mostrar refaz a sequência do zero.";
 
 const plural = (n: number) => `${n} ${n === 1 ? "slide" : "slides"}`;
@@ -141,7 +143,7 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
       }
       adopt(await generateSlides(id, { mode: currentMode }), true);
     } catch (error) {
-      toast.error(getApiErrorMessage(error));
+      toast.error(slideErrorMessage(error, REFRESH_ERROR));
     } finally {
       setBusy(false);
       busyRef.current = false;
@@ -159,6 +161,8 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
 
   const situation = sermon.delivery && sermon.status !== "DRAFT" ? formatSituation(sermon) : null;
   const hasSlides = items.length > 0;
+  // O aviso vale enquanto há resumo escrito pela IA que a pessoa ainda não reescreveu.
+  const hasAiSummary = items.some((s) => s.kind === "SUMMARY" && !s.edited);
 
   return (
     <DashboardLayout>
@@ -201,7 +205,7 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
           </p>
         )}
 
-        {sermon.slideMode === "FULL" && hasSlides && (
+        {hasAiSummary && (
           <p className="rounded-xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
             Os resumos foram escritos por IA. Confira antes de enviar.
           </p>

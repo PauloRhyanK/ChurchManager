@@ -1,16 +1,15 @@
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
 import { Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { getApiErrorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { generateSlides, getSermonAi, type Sermon } from "../api/sermons-api";
 import type { SermonDoc } from "../lib/document";
+import { slideErrorMessage } from "../lib/slide-errors";
 import { countSlides, type SlideMode, type SlideStyle } from "../lib/slides";
 import { SLIDE_BACKGROUNDS } from "./SlidePreview";
 
@@ -29,15 +28,6 @@ const STYLES: { style: SlideStyle; name: string }[] = [
 
 const AI_NOTICE = "O texto da palavra é enviado ao provedor de IA para gerar os resumos. As anotações “Só para mim” nunca são enviadas.";
 const GENERATE_ERROR = "Não foi possível gerar os slides.";
-
-/** A mensagem que a API devolveu (campo `message` da resposta), ou o texto padrão. */
-function apiMessage(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    const message = (error.response?.data as { message?: unknown } | undefined)?.message;
-    if (typeof message === "string" && message.trim()) return message;
-  }
-  return GENERATE_ERROR;
-}
 
 const plural = (n: number) => `${n} ${n === 1 ? "slide" : "slides"}`;
 
@@ -109,8 +99,11 @@ export function GenerateSlidesDialog({
   const effective: Choice = mode === "FULL" && !aiOn ? "VERSES_AND_POINTS" : mode;
   const chosen = counts[effective];
 
+  // Enquanto a consulta da IA não volta, o modo mostrado pode ainda mudar: não monta.
+  const aiLoading = ai.isLoading;
+
   async function build() {
-    if (chosen === 0) return;
+    if (chosen === 0 || aiLoading) return;
     setBusy(true);
     setError(null);
     try {
@@ -126,8 +119,9 @@ export function GenerateSlidesDialog({
       onOpenChange(false);
       onGenerated(sermon);
     } catch (err) {
-      if (effective === "FULL") setError(apiMessage(err));
-      else toast.error(getApiErrorMessage(err));
+      const message = slideErrorMessage(err, GENERATE_ERROR);
+      if (effective === "FULL") setError(message);
+      else toast.error(message);
     } finally {
       setBusy(false);
     }
@@ -241,7 +235,7 @@ export function GenerateSlidesDialog({
           <Button type="button" variant="ghost" disabled={busy} onClick={() => changeOpen(false)}>
             Cancelar
           </Button>
-          <Button type="button" className="gap-2" disabled={busy || chosen === 0} onClick={build}>
+          <Button type="button" className="gap-2" disabled={busy || chosen === 0 || aiLoading} onClick={build}>
             <Sparkles aria-hidden="true" />
             {busy && effective === "FULL" ? "Resumindo…" : "Montar"}
           </Button>
