@@ -42,11 +42,12 @@ vi.mock("../components/SlideList", async (importOriginal) => {
   };
 });
 
+const NEW_FIELDS = { subtitleEdited: false, layout: "M01", heading: null, subtitle: null, version: null } as const;
 const SLIDES: SlideItem[] = [
-  { id: "title", kind: "TITLE", sourceBlockId: null, text: "Luz que não se apaga", reference: null, included: true, edited: false },
-  { id: "v1:0", kind: "VERSE", sourceBlockId: "v1", text: "Eu sou a luz do mundo", reference: "João 8:12", included: true, edited: false },
-  { id: "p1:0", kind: "POINT", sourceBlockId: "p1", text: "A luz chama", reference: null, included: true, edited: false },
-  { id: "n1:0", kind: "PRIVATE", sourceBlockId: "n1", text: "História da lanterna", reference: null, included: false, edited: false },
+  { id: "title", kind: "TITLE", sourceBlockId: null, text: "Luz que não se apaga", reference: null, included: true, edited: false, ...NEW_FIELDS },
+  { id: "v1:0", kind: "VERSE", sourceBlockId: "v1", text: "Eu sou a luz do mundo", reference: "João 8:12", included: true, edited: false, ...NEW_FIELDS, layout: "M03" },
+  { id: "p1:0", kind: "POINT", sourceBlockId: "p1", text: "A luz chama", reference: null, included: true, edited: false, ...NEW_FIELDS },
+  { id: "n1:0", kind: "PRIVATE", sourceBlockId: "n1", text: "História da lanterna", reference: null, included: false, edited: false, ...NEW_FIELDS },
 ];
 
 function sermon(over: Record<string, unknown> = {}) {
@@ -189,6 +190,18 @@ describe("SermonSlidesPage", () => {
     await settle();
   });
 
+  it("adicionar subtítulo a um ponto manda subtitle (sem text) e a prévia mostra o modelo 02", async () => {
+    api.saveSlides.mockResolvedValue(sermon());
+    renderPage();
+    fireEvent.click(within((await screen.findByRole("button", { name: "A luz chama" })).closest("li")!).getByRole("button", { name: "Adicionar subtítulo" }));
+    const input = screen.getByLabelText("Subtítulo do slide");
+    fireEvent.change(input, { target: { value: "Antes de procurar" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(lastBody().items[2]).toEqual({ id: "p1:0", included: true, subtitle: "Antes de procurar" });
+    expect(within(screen.getByRole("region", { name: "No telão" })).getByText("Antes de procurar")).toHaveAttribute("data-slide-role", "subtitle");
+    await settle();
+  });
+
   it("editar o texto de um ponto manda text", async () => {
     api.saveSlides.mockResolvedValue(sermon());
     renderPage();
@@ -233,9 +246,9 @@ describe("SermonSlidesPage", () => {
   it("trocar o visual salva o estilo", async () => {
     api.saveSlides.mockResolvedValue(sermon({ slideStyle: "BACKGROUND" }));
     renderPage();
-    fireEvent.click(await screen.findByRole("button", { name: "Minimalista · trocar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Azul institucional · trocar" }));
     expect(lastBody().style).toBe("BACKGROUND");
-    expect(await screen.findByRole("button", { name: "Com fundo · trocar" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Verde profundo · trocar" })).toBeInTheDocument();
   });
 
   it("esboço alterado: aviso e Atualizar gera com o modo atual", async () => {
@@ -249,7 +262,7 @@ describe("SermonSlidesPage", () => {
   });
 
   const summary = (edited: boolean): SlideItem => ({
-    id: "i1:0", kind: "SUMMARY", sourceBlockId: "i1", text: "A lanterna mostra o passo", reference: null, included: true, edited,
+    id: "i1:0", kind: "SUMMARY", sourceBlockId: "i1", text: "A lanterna mostra o passo", reference: null, included: true, edited, ...NEW_FIELDS, layout: "M02", heading: "A luz chama",
   });
 
   it("faixa de aviso dos resumos quando há resumo da IA não editado", async () => {
@@ -435,7 +448,7 @@ describe("SermonSlidesPage", () => {
     api.getSermon.mockReturnValue(reset.promise);
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
     expect(box(/Luz que não se apaga/)).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Minimalista · trocar" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Azul institucional · trocar" })).toBeDisabled();
     await act(async () => reset.resolve(sermon()));
     expect(box(/Luz que não se apaga/)).not.toBeDisabled();
     expect(api.saveSlides).toHaveBeenCalledTimes(1);

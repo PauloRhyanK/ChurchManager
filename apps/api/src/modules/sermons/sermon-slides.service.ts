@@ -21,12 +21,15 @@ import type { SermonAiConfig } from './ai/sermon-ai.config';
 import { SUMMARIZERS, SummarizerError, type SermonSummarizer } from './ai/sermon-summarizer';
 import { validateSermonDocument } from './sermon-document';
 import {
-  SLIDE_LIMITS,
+  SLIDE_MODEL_LIMITS,
+  aiTargets,
   buildSlides,
-  cleanSummaries,
+  cleanDecisions,
+  fitContextTitle,
   mergeSlides,
   parseStoredSlides,
   summaryTargets,
+  type AiDecision,
   type SlideItem,
   type SlideKind,
 } from './sermon-slides';
@@ -53,6 +56,34 @@ const providerError = (error: unknown): HttpException => {
   }
 };
 const staleList = () => new BadRequestException('A lista de slides está desatualizada. Atualize a página.');
+const overLimit = () => new BadRequestException('O texto passa do limite deste modelo de slide. Divida em dois.');
+const chars = (s: string) => Array.from(s).length;
+
+/** Confere o item editado contra os limites do modelo (docs/identidade-slides.md); o que passa é recusado, não cortado. */
+function checkModelLimits(s: SlideItem): void {
+  const L = SLIDE_MODEL_LIMITS;
+  switch (s.kind) {
+    case 'TITLE':
+      if (chars(s.text) > L.M01.title) throw overLimit();
+      return;
+    case 'POINT':
+      if (chars(s.text) > (s.layout === 'M02' ? L.M02.title : L.M01.title)) throw overLimit();
+      if (s.subtitle && chars(s.subtitle) > L.M02.subtitle) throw overLimit();
+      return;
+    case 'SUMMARY':
+      if (chars(s.text) > L.M02.subtitle) throw overLimit();
+      return;
+    case 'VERSE':
+      if (s.layout !== 'M04') return;
+      if (s.subtitle && chars(s.subtitle) > L.M04.subtitle) throw overLimit();
+      if (s.text.length > L.M04.verse) {
+        throw new BadRequestException(`Este versículo passa de ${L.M04.verse} caracteres e não cabe no modelo com subtítulo.`);
+      }
+      return;
+    default:
+      return;
+  }
+}
 
 /** Slides da palavra. Só o autor lê e grava; o envio recebe só a parte pública. */
 @Injectable()
@@ -94,8 +125,8 @@ export class SermonSlidesService {
 
     const read = await this.sermons.findOwned(user, sermonId);
     const doc = validateSermonDocument(read.document);
-    const targets = summaryTargets(doc);
-    let summaries: Record<string, string> = {};
+    const targets = aiTargets(doc);
+    let decisions: Record<string, AiDecision> = {};
     if (targets.length > 0) {
       if (!this.limiter.take(user.userId)) {
         throw new HttpException(
@@ -105,7 +136,7 @@ export class SermonSlidesService {
       }
       try {
         const raw = await summarizer.summarize({ title: read.title, targets, model: option.model, effort: this.ai.effort });
-        summaries = cleanSummaries(targets, raw);
+        decisions = cleanDecisions(targets, raw);
       } catch (error) {
         // Só reason, status, type e o modelo; de outro erro, só o nome. Nunca mensagem, corpo ou chave.
         this.logger.warn(
@@ -122,10 +153,10 @@ export class SermonSlidesService {
       }
       const previous = parseStoredSlides(current.slides);
       // Frase editada pelo pregador continua mesmo se o modelo, desta vez, não devolver aquele alvo.
-      const targetIds = new Set(targets.map((t) => t.id));
-      const kept = { ...summaries };
+      const summaryIds = new Set(summaryTargets(doc).map((t) => t.id));
+      const kept = { ...decisions };
       for (const p of previous) {
-        if (p.kind === 'SUMMARY' && p.edited && targetIds.has(p.id) && !(p.id in kept)) kept[p.id] = p.text;
+        if (p.kind === 'SUMMARY' && p.edited && summaryIds.has(p.id) && !(p.id in kept)) kept[p.id] = { layout: 'M02', text: p.text };
       }
       const fresh = buildSlides(current.title, doc, 'FULL', kept);
       const slides = current.slideMode === 'FULL' && previous.length > 0 ? mergeSlides(previous, fresh) : fresh;
@@ -141,18 +172,49 @@ export class SermonSlidesService {
       if (ids.length !== stored.length || new Set(ids).size !== ids.length || ids.some((id) => !byId.has(id))) {
         throw staleList();
       }
+      // Títulos de contexto inteiros no limite do 03, para o versículo que volta de 04 para 03 (calculado sob demanda).
+      let contextM03: Map<string, string | null> | null = null;
+      const headingM03 = (id: string): string | null | undefined => {
+        contextM03 ??= new Map(
+          buildSlides(current.title, validateSermonDocument(current.document), 'VERSES')
+            .filter((s) => s.kind === 'VERSE')
+            .map((s) => [s.id, s.heading]),
+        );
+        return contextM03.get(id);
+      };
       const items: SlideItem[] = dto.items.map((input) => {
         const saved = byId.get(input.id)!;
         if (saved.kind === 'PRIVATE') return { ...saved, included: false };
-        const next = { ...saved, included: input.included };
+        const next: SlideItem = { ...saved, included: input.included };
+        let textChanged = false;
+        let subtitleChanged = false;
         if (input.text !== undefined && EDITABLE.includes(saved.kind)) {
           const text = input.text.trim();
-          if (text.length < 1 || text.length > SLIDE_LIMITS.textChars) {
-            throw new BadRequestException(`O texto do slide deve ter de 1 a ${SLIDE_LIMITS.textChars} caracteres.`);
+          if (!text) throw new BadRequestException('O texto do slide não pode ficar vazio.');
+          if (text !== saved.text) {
+            next.text = text;
+            textChanged = true;
           }
-          if (text !== saved.text) Object.assign(next, { text, edited: true });
         }
-        return next;
+        // Subtítulo só em Ponto (modelo 02) e Versículo (modelo 04); vazio remove e volta a 01/03.
+        if (typeof input.subtitle === 'string' && (saved.kind === 'POINT' || saved.kind === 'VERSE')) {
+          const subtitle = input.subtitle.trim() || null;
+          if (subtitle !== saved.subtitle) {
+            const point = saved.kind === 'POINT';
+            // No versículo, só o primeiro pedaço do bloco leva subtítulo (modelo 04).
+            if (subtitle && !point && !saved.id.endsWith(':0')) throw overLimit();
+            next.subtitle = subtitle;
+            next.layout = subtitle ? (point ? 'M02' : 'M04') : point ? 'M01' : 'M03';
+            subtitleChanged = true;
+          }
+        }
+        if (!textChanged && !subtitleChanged) return next;
+        checkModelLimits(next);
+        if (subtitleChanged && next.kind === 'VERSE' && next.heading !== null) {
+          if (next.layout === 'M04') next.heading = fitContextTitle(next.heading, SLIDE_MODEL_LIMITS.M04.title);
+          else next.heading = headingM03(next.id) ?? fitContextTitle(next.heading, SLIDE_MODEL_LIMITS.M03.title);
+        }
+        return { ...next, ...(textChanged ? { edited: true } : {}), ...(subtitleChanged ? { subtitleEdited: true } : {}) };
       });
       const slides = [...items.filter((s) => s.kind !== 'PRIVATE'), ...items.filter((s) => s.kind === 'PRIVATE')];
       return { slides, ...(dto.style ? { slideStyle: dto.style } : {}) };

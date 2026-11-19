@@ -8,8 +8,9 @@ import { GenerateSlidesDto, SaveSlidesDto } from './dto/slides.dto';
 import { EXAMPLE_DOC } from './sermon-example';
 import { GenerationLimiter } from './ai/generation-limiter';
 import type { SermonAiConfig } from './ai/sermon-ai.config';
-import { SummarizerError, type SermonSummarizer, type SummarizeInput } from './ai/sermon-summarizer';
-import { buildSlides, type SlideItem } from './sermon-slides';
+import { SummarizerError, type SermonSummarizer, type SummarizeInput, type SummarizeOutput } from './ai/sermon-summarizer';
+import { readDeliverySlides } from './delivery-copy';
+import { aiTargets, buildSlides, type AiDecision, type SlideItem } from './sermon-slides';
 import { SermonSlidesService } from './sermon-slides.service';
 import { SermonsService } from './sermons.service';
 
@@ -47,13 +48,22 @@ const AI_ON: SermonAiConfig = {
 };
 const AI_OFF: SermonAiConfig = { ...AI_ON, enabled: false };
 
-/** Resumidor falso: registra as chamadas e devolve uma frase por alvo (ou o que `reply` mandar). */
-function fakeSummarizer(reply?: (input: SummarizeInput) => Promise<{ id: string; text: string }[]>) {
+const SUMMARY_PARTS = ['OPENING', 'ILLUSTRATION', 'APPLICATION', 'SECTION'];
+/** Resposta padrão: frase em 02 para cada resumo; ponto em 01 e versículo em 03, sem texto. */
+const defaultReply = (input: SummarizeInput): SummarizeOutput =>
+  input.targets.map((t) =>
+    SUMMARY_PARTS.includes(t.part)
+      ? { id: t.id, model: '02', text: `Resumo de ${t.id}` }
+      : { id: t.id, model: t.part === 'POINT' ? '01' : '03', text: '' },
+  );
+
+/** Resumidor falso: registra as chamadas e devolve uma decisão por alvo (ou o que `reply` mandar). */
+function fakeSummarizer(reply?: (input: SummarizeInput) => Promise<SummarizeOutput>) {
   const calls: SummarizeInput[] = [];
   const summarizer: SermonSummarizer = {
     summarize: async (input) => {
       calls.push(structuredClone(input));
-      return reply ? reply(input) : input.targets.map((t) => ({ id: t.id, text: `Resumo de ${t.id}` }));
+      return reply ? reply(input) : defaultReply(input);
     },
   };
   return { summarizer, calls };
@@ -211,8 +221,10 @@ test('text em VERSE e PRIVATE é ignorado; em POINT aparado marca edited; 301 ca
   assert.equal(out.slides.find((s) => s.id === 'title')!.edited, false, 'texto igual ao gravado não marca edited');
 
   writes.length = 0;
-  const long = gen.slides.map((s) => ({ id: s.id, included: true, ...(s.id === 'pt1:0' ? { text: 'x'.repeat(301) } : {}) }));
-  await assert.rejects(service.save(user(), S1, { items: long }), BadRequestException);
+  for (const size of [301, 76]) {
+    const long = gen.slides.map((s) => ({ id: s.id, included: true, ...(s.id === 'pt1:0' ? { text: 'x'.repeat(size) } : {}) }));
+    await assert.rejects(service.save(user(), S1, { items: long }), BadRequestException);
+  }
   assert.deepEqual(writes, []);
 });
 
@@ -269,7 +281,7 @@ test('palavra Enviada: save atualiza slides e estilo do envio, sem nenhum PRIVAT
   assert.equal(copy.slides.length, 5);
   assert.equal(copy.slides.some((s: Row) => s.kind === 'PRIVATE'), false);
   assert.equal(JSON.stringify(copy.slides).includes('Dois minutos'), false, 'o texto da nota privada não sai');
-  for (const s of copy.slides) assert.deepEqual(Object.keys(s).sort(), ['kind', 'reference', 'text']);
+  for (const s of copy.slides) assert.deepEqual(Object.keys(s).sort(), ['kind', 'layout', 'reference', 'subtitle', 'text', 'title', 'verse']);
 
   const original = deliveryRow('2026-11-15');
   const preached = build({ sermons: [sermonRow()], deliveries: [original] });
@@ -362,6 +374,8 @@ test('DTO de gerar aceita os três modos e recusa o resto', async () => {
 // --- Slides completos (IA) -------------------------------------------------
 
 const TARGET_IDS = ['opening:0', 'i1:0', 'a1:0'];
+const AI_IDS = ['opening:0', 'v1', 'pt1:0', 'v2', 'i1:0', 'pt2:0', 'a1:0'];
+const summaryDecisions = (): Record<string, AiDecision> => Object.fromEntries(TARGET_IDS.map((id) => [id, { layout: 'M02' as const, text: `Resumo de ${id}` }]));
 const rejectsWith = (p: Promise<unknown>, status: number, message: string) =>
   assert.rejects(p, (e: any) => e instanceof HttpException && e.getStatus() === status && e.message === message);
 
@@ -406,13 +420,13 @@ test('FULL feliz: SUMMARY nas posições certas, modo FULL, envio atualizado sem
     summarizer: f.summarizer,
   });
   const out = await service.generate(user(), S1, { mode: 'FULL' });
-  assert.deepEqual(f.calls[0].targets.map((t) => t.id), TARGET_IDS);
+  assert.deepEqual(f.calls[0].targets.map((t) => t.id), AI_IDS);
   assert.equal(JSON.stringify(f.calls[0]).includes('Dois minutos'), false, 'a nota privada não vai ao provedor');
   const summaries = out.slides.filter((s) => s.kind === 'SUMMARY');
   assert.deepEqual(ids(summaries), TARGET_IDS);
   assert.deepEqual(
     out.slides.map((s) => s.id),
-    ids(buildSlides('Luz', EXAMPLE_DOC, 'FULL', Object.fromEntries(TARGET_IDS.map((id) => [id, `Resumo de ${id}`])))),
+    ids(buildSlides('Luz', EXAMPLE_DOC, 'FULL', summaryDecisions())),
   );
   assert.equal(out.slideMode, 'FULL');
   assert.equal(sermons[0].slidesRevision, 3);
@@ -472,7 +486,7 @@ test('documento salvo durante a geração: 409 e nada gravado', async () => {
   let bump: () => void = () => {};
   const f = fakeSummarizer(async (input) => {
     bump();
-    return input.targets.map((t) => ({ id: t.id, text: 'x' }));
+    return input.targets.map((t) => ({ id: t.id, model: '02', text: 'x' }));
   });
   const { service, writes, sermons } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
   bump = () => {
@@ -490,7 +504,7 @@ test('o provedor é chamado fora da transação', async () => {
   let inTx = false;
   const f = fakeSummarizer(async (input) => {
     assert.equal(inTx, false);
-    return input.targets.map((t) => ({ id: t.id, text: 'ok' }));
+    return input.targets.map((t) => ({ id: t.id, model: '02', text: 'ok' }));
   });
   const { service } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
   const prisma = (service as any).prisma;
@@ -573,7 +587,7 @@ test('falha do provedor registra só reason, status, type e o modelo; outra falh
 test('gerar FULL de novo: frase editada continua mesmo se o modelo omitir o alvo', async () => {
   let omit = false;
   const f = fakeSummarizer(async (input) =>
-    input.targets.filter((t) => !(omit && (t.id === 'opening:0' || t.id === 'a1:0'))).map((t) => ({ id: t.id, text: `Resumo de ${t.id}` })),
+    defaultReply(input).filter((t) => !(omit && (t.id === 'opening:0' || t.id === 'a1:0'))),
   );
   const { service } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
   const first = await service.generate(user(), S1, { mode: 'FULL' });
@@ -591,10 +605,10 @@ test('gerar FULL de novo: frase editada continua mesmo se o modelo omitir o alvo
 test('FULL: id não pedido (o da nota privada), id repetido e frase de 300 caracteres', async () => {
   const long = 'palavra '.repeat(40).trim() + ' ' + 'x'.repeat(20);
   const f = fakeSummarizer(async () => [
-    { id: 'n1:0', text: 'Dois minutos nessa história' },
-    { id: 'i1:0', text: 'Primeira' },
-    { id: 'i1:0', text: 'Segunda' },
-    { id: 'a1:0', text: long },
+    { id: 'n1:0', model: '02', text: 'Dois minutos nessa história' },
+    { id: 'i1:0', model: '02', text: 'Primeira' },
+    { id: 'i1:0', model: '02', text: 'Segunda' },
+    { id: 'a1:0', model: '02', text: long },
   ]);
   const { service, deliveries } = build({
     sermons: [sermonRow()],
@@ -616,4 +630,206 @@ test('FULL: id não pedido (o da nota privada), id repetido e frase de 300 carac
   const copy = deliveries[0].slides as Row[];
   assert.equal(copy.some((s) => s.kind === 'PRIVATE'), false);
   assert.equal(JSON.stringify(copy).includes('Dois minutos'), false);
+});
+
+// --- Modelos de slide do manual ---------------------------------------------
+
+test('FULL grava layout, heading, subtitle e version decididos pela IA', async () => {
+  const f = fakeSummarizer(async (input) =>
+    defaultReply(input).map((d) =>
+      d.id === 'pt1:0' ? { ...d, model: '02', text: 'Ninguém acha o caminho sozinho' } : d.id === 'v1' ? { ...d, model: '04', text: 'A luz que guia' } : d,
+    ),
+  );
+  const { service, sermons } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
+  await service.generate(user(), S1, { mode: 'FULL' });
+  const stored = sermons[0].slides as SlideItem[];
+  const pick = (id: string) => {
+    const s = stored.find((x) => x.id === id)!;
+    return [s.layout, s.heading, s.subtitle, s.version];
+  };
+  assert.deepEqual(pick('title'), ['M01', null, null, null]);
+  assert.deepEqual(pick('pt1:0'), ['M02', null, 'Ninguém acha o caminho sozinho', null]);
+  assert.deepEqual(pick('v1:0'), ['M04', 'Luz', 'A luz que guia', 'BLIVRE']);
+  assert.deepEqual(pick('v2:0'), ['M03', 'A luz chama', null, 'BLIVRE']);
+  assert.deepEqual(pick('i1:0'), ['M02', 'A luz chama', null, null]);
+  assert.deepEqual(pick('pt2:0'), ['M01', null, null, null]);
+});
+
+test('resposta da IA tentando mudar um versículo não muda o texto gravado', async () => {
+  const fake = 'Texto bíblico inventado pela IA que tenta substituir o versículo original da Bíblia importada, bem longo para passar de noventa caracteres e mais';
+  const f = fakeSummarizer(async () => [
+    { id: 'v1', model: '03', text: fake },
+    { id: 'v2', model: '04', text: fake },
+    { id: 'v1:0', model: '04', text: fake },
+  ]);
+  const { service, sermons } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
+  await service.generate(user(), S1, { mode: 'FULL' });
+  const verses = (sermons[0].slides as SlideItem[]).filter((x) => x.kind === 'VERSE');
+  assert.deepEqual(
+    verses.map((x) => [x.id, x.text, x.reference]),
+    buildSlides('Luz', EXAMPLE_DOC, 'VERSES').filter((x) => x.kind === 'VERSE').map((x) => [x.id, x.text, x.reference]),
+  );
+  assert.deepEqual(verses.map((x) => x.layout), ['M03', 'M04']);
+  assert.ok(Array.from(verses[1].subtitle!).length <= 90);
+  assert.equal(verses.some((x) => x.text.includes('inventado')), false);
+});
+
+test('save com subtitle em ponto e em versículo; vazio remove e volta a M01/M03', async () => {
+  const { service } = build({ sermons: [sermonRow()] });
+  const gen = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
+  const withSubs = (pt: string, v: string) =>
+    gen.slides.map((s) => ({
+      id: s.id,
+      included: s.included,
+      ...(s.id === 'pt1:0' ? { subtitle: pt } : {}),
+      ...(s.id === 'v2:0' ? { subtitle: v } : {}),
+      ...(s.id === 'title' ? { subtitle: 'ignorado no título' } : {}),
+    }));
+  const out = await service.save(user(), S1, { items: withSubs('  Antes de procurar  ', 'Lâmpada para o caminho') });
+  const pt = out.slides.find((s) => s.id === 'pt1:0')!;
+  assert.deepEqual([pt.layout, pt.subtitle, pt.edited, pt.subtitleEdited, pt.text], ['M02', 'Antes de procurar', false, true, 'A luz chama']);
+  const v = out.slides.find((s) => s.id === 'v2:0')!;
+  assert.deepEqual([v.layout, v.subtitle, v.edited, v.subtitleEdited, v.heading], ['M04', 'Lâmpada para o caminho', false, true, 'A luz chama']);
+  assert.equal(v.text, 'Lâmpada para os meus pés é a tua palavra, e luz para o meu caminho.');
+  const title = out.slides.find((s) => s.id === 'title')!;
+  assert.deepEqual([title.layout, title.subtitle, title.edited], ['M01', null, false]);
+
+  const cleared = await service.save(user(), S1, { items: withSubs('', '') });
+  const pt2 = cleared.slides.find((s) => s.id === 'pt1:0')!;
+  const v2 = cleared.slides.find((s) => s.id === 'v2:0')!;
+  assert.deepEqual([pt2.layout, pt2.subtitle, v2.layout, v2.subtitle], ['M01', null, 'M03', null]);
+});
+
+test('limites do modelo no save: 400 com a mensagem e nada escrito', async () => {
+  const longVerse = Array(12).fill('Bem-aventurados os mansos.').join(' ');
+  const doc = {
+    type: 'doc',
+    content: [
+      ...EXAMPLE_DOC.content,
+      { type: 'verse', attrs: { id: 'vl', reference: 'Mateus 5:5', book: 40, chapter: 5, verseStart: 5, verseEnd: 5, translation: null, verses: [{ number: 5, text: longVerse }] } },
+    ],
+  };
+  const f = fakeSummarizer();
+  const { service, writes } = build({ sermons: [sermonRow({ document: doc })], config: AI_ON, summarizer: f.summarizer });
+  const gen = await service.generate(user(), S1, { mode: 'FULL' });
+  writes.length = 0;
+  const LIMIT = 'O texto passa do limite deste modelo de slide. Divida em dois.';
+  const attempt = (id: string, change: { text?: string; subtitle?: string }) =>
+    service.save(user(), S1, { items: gen.slides.map((s) => ({ id: s.id, included: s.included, ...(s.id === id ? change : {}) })) });
+  const cases: [string, { text?: string; subtitle?: string }, string][] = [
+    ['title', { text: 'x'.repeat(76) }, LIMIT],
+    ['pt1:0', { text: 'x'.repeat(76) }, LIMIT],
+    ['pt1:0', { text: 'x'.repeat(61), subtitle: 'Sub' }, LIMIT],
+    ['pt1:0', { subtitle: 's'.repeat(151) }, LIMIT],
+    ['i1:0', { text: 'x'.repeat(151) }, LIMIT],
+    ['v1:0', { subtitle: 's'.repeat(91) }, LIMIT],
+    ['vl:1', { subtitle: 'Liga' }, LIMIT],
+    ['vl:0', { subtitle: 'Liga' }, 'Este versículo passa de 160 caracteres e não cabe no modelo com subtítulo.'],
+  ];
+  for (const [id, change, message] of cases) {
+    await assert.rejects(attempt(id, change), (e: any) => e instanceof BadRequestException && e.message === message, `${id} ${JSON.stringify(change).slice(0, 40)}`);
+  }
+  assert.deepEqual(writes, []);
+  const ok = await attempt('i1:0', { text: 'x'.repeat(150) });
+  assert.equal(ok.slides.find((s) => s.id === 'i1:0')!.text.length, 150);
+});
+
+test('DTO de salvar recusa layout, heading, version e subtitle acima de 150; aceita subtitle vazio', async () => {
+  for (const extra of [{ layout: 'M02' }, { heading: 'X' }, { version: 'BLIVRE' }, { subtitle: 's'.repeat(151) }, { subtitle: 3 }]) {
+    await rejects(SaveSlidesDto, { items: [{ id: 'pt1:0', included: true, ...extra }] });
+  }
+  const ok = await parse(SaveSlidesDto, { items: [{ id: 'pt1:0', included: true, subtitle: '' }, { id: 'v1:0', included: true, subtitle: ' Liga ' }] });
+  assert.deepEqual(ok.items.map((i) => i.subtitle), ['', 'Liga']);
+});
+
+test('cópia do envio traz os campos de slideFace, com a versão na referência, e nenhum PRIVATE', async () => {
+  const f = fakeSummarizer(async (input) => defaultReply(input).map((d) => (d.id === 'v1' ? { ...d, model: '04', text: 'A luz que guia' } : d)));
+  const { service, deliveries } = build({ sermons: [sermonRow()], deliveries: [deliveryRow('2026-11-22')], config: AI_ON, summarizer: f.summarizer });
+  await service.generate(user(), S1, { mode: 'FULL' });
+  const copy = deliveries[0].slides as Row[];
+  assert.equal(copy.some((s) => s.kind === 'PRIVATE'), false);
+  assert.equal(JSON.stringify(copy).includes('Dois minutos'), false);
+  assert.deepEqual(copy[0], { kind: 'TITLE', text: 'Luz', layout: 'M01', title: 'Luz', subtitle: null, verse: null, reference: null });
+  assert.deepEqual(copy.find((s) => s.kind === 'VERSE'), {
+    kind: 'VERSE',
+    text: 'Eu sou a luz do mundo; quem me segue não andará em trevas.',
+    layout: 'M04',
+    title: 'Luz',
+    subtitle: 'A luz que guia',
+    verse: 'Eu sou a luz do mundo; quem me segue não andará em trevas.',
+    reference: 'João 8:12 · BLIVRE',
+  });
+  assert.deepEqual(copy.find((s) => s.kind === 'SUMMARY' && s.title === 'A luz chama')?.subtitle, 'Resumo de i1:0');
+  assert.deepEqual(readDeliverySlides(copy), copy);
+});
+
+test('readDeliverySlides aceita a linha gravada antes dos modelos e completa com slideFace', () => {
+  const old = [
+    { kind: 'TITLE', text: 'Luz', reference: null },
+    { kind: 'VERSE', text: 'Eu sou a luz do mundo.', reference: 'João 8:12' },
+    { kind: 'POINT', text: 'A luz chama', reference: null, sourceBlockId: 'pt1', edited: true },
+    { kind: 'SUMMARY', text: 'Lanterna', reference: null },
+    { kind: 'PRIVATE', text: 'segredo', reference: null },
+    { kind: 'VERSE', text: 3, reference: 'x' },
+  ];
+  assert.deepEqual(readDeliverySlides(old), [
+    { kind: 'TITLE', text: 'Luz', layout: 'M01', title: 'Luz', subtitle: null, verse: null, reference: null },
+    { kind: 'VERSE', text: 'Eu sou a luz do mundo.', layout: 'M03', title: 'João 8:12', subtitle: null, verse: 'Eu sou a luz do mundo.', reference: 'João 8:12' },
+    { kind: 'POINT', text: 'A luz chama', layout: 'M01', title: 'A luz chama', subtitle: null, verse: null, reference: null },
+    { kind: 'SUMMARY', text: 'Lanterna', layout: 'M02', title: '', subtitle: 'Lanterna', verse: null, reference: null },
+  ]);
+});
+
+test('aiTargets do exemplo: nenhum alvo leva a nota privada', () => {
+  assert.equal(JSON.stringify(aiTargets(EXAMPLE_DOC)).includes('Dois minutos'), false);
+});
+
+// --- Correções da revisão ---------------------------------------------------
+
+const renamePoint = (doc: any, id: string, text: string) => ({
+  ...doc,
+  content: doc.content.map((b: any) => (b.type === 'point' && b.attrs.id === id ? { ...b, content: [{ type: 'text', text }] } : b)),
+});
+
+test('subtítulo editado não congela o título: renomear o ponto e Atualizar traz o título novo e mantém o subtítulo', async () => {
+  const { service, sermons } = build({ sermons: [sermonRow()] });
+  const gen = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
+  await service.save(user(), S1, { items: gen.slides.map((s) => ({ id: s.id, included: s.included, ...(s.id === 'pt1:0' ? { subtitle: 'Meu subtítulo' } : {}) })) });
+  sermons[0].document = renamePoint(EXAMPLE_DOC, 'pt1', 'A luz convida');
+  const again = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
+  const pt = again.slides.find((s) => s.id === 'pt1:0')!;
+  assert.deepEqual([pt.text, pt.layout, pt.subtitle, pt.edited, pt.subtitleEdited], ['A luz convida', 'M02', 'Meu subtítulo', false, true]);
+});
+
+test('Atualizar em Só versículos também passa pelo merge: subtítulo do versículo continua', async () => {
+  const { service } = build({ sermons: [sermonRow()] });
+  const gen = await service.generate(user(), S1, { mode: 'VERSES' });
+  await service.save(user(), S1, { items: gen.slides.map((s) => ({ id: s.id, included: s.included, ...(s.id === 'v2:0' ? { subtitle: 'Liga' } : {}) })) });
+  const again = await service.generate(user(), S1, { mode: 'VERSES' });
+  const v = again.slides.find((s) => s.id === 'v2:0')!;
+  assert.deepEqual([v.layout, v.subtitle, v.subtitleEdited], ['M04', 'Liga', true]);
+});
+
+test('tirar o subtítulo do versículo (M04 → M03) recalcula o título de contexto com o limite 50', async () => {
+  const context = 'Quarenta e oito letras cabem no título do três';
+  assert.ok(context.length > 45 && context.length <= 50);
+  const { service } = build({ sermons: [sermonRow({ document: renamePoint(EXAMPLE_DOC, 'pt1', context) })] });
+  const gen = await service.generate(user(), S1, { mode: 'VERSES' });
+  assert.equal(gen.slides.find((s) => s.id === 'v2:0')!.heading, context);
+  const withSub = (sub: string) => gen.slides.map((s) => ({ id: s.id, included: s.included, ...(s.id === 'v2:0' ? { subtitle: sub } : {}) }));
+  const m04 = await service.save(user(), S1, { items: withSub('Liga') });
+  const cutHeading = m04.slides.find((s) => s.id === 'v2:0')!.heading!;
+  assert.ok(Array.from(cutHeading).length <= 45 && cutHeading.endsWith('…'));
+  const m03 = await service.save(user(), S1, { items: withSub('') });
+  const v = m03.slides.find((s) => s.id === 'v2:0')!;
+  assert.deepEqual([v.layout, v.heading], ['M03', context]);
+});
+
+test('linha antiga do envio com ponto de 300 caracteres sai em vários M01 de até 75', () => {
+  const long = Array(37).fill('palavra').join(' ') + ' fim';
+  assert.ok(long.length >= 295 && long.length <= 300);
+  const out = readDeliverySlides([{ kind: 'POINT', text: long, reference: null }]);
+  assert.ok(out.length >= 4);
+  assert.ok(out.every((x) => x.kind === 'POINT' && x.layout === 'M01' && Array.from(x.title).length <= 75 && x.text === x.title));
+  assert.equal(out.map((x) => x.title).join(' '), long);
 });

@@ -142,6 +142,8 @@ export interface SlideItemInput {
   id: string;
   included: boolean;
   text?: string;
+  /** Subtítulo do ponto (modelo 02) ou do versículo (modelo 04); "" tira. */
+  subtitle?: string;
 }
 
 export async function saveSlides(id: string, input: { style?: SlideStyle; items: SlideItemInput[] }): Promise<Sermon> {
@@ -149,6 +151,7 @@ export async function saveSlides(id: string, input: { style?: SlideStyle; items:
     items: input.items.map((i) => {
       const item: SlideItemInput = { id: i.id, included: i.included };
       if (i.text !== undefined) item.text = i.text;
+      if (i.subtitle !== undefined) item.subtitle = i.subtitle;
       return item;
     }),
   };
