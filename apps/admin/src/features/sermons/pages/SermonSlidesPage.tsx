@@ -14,10 +14,10 @@ import { SendToServiceDialog } from "../components/SendToServiceDialog";
 import { SlideList } from "../components/SlideList";
 import { SlidePreview } from "../components/SlidePreview";
 import { formatSituation, formatSpeech } from "../lib/format";
-import { editSlide, editSubtitle, moveSlide, slidesBody, toggleSlide } from "../lib/slide-edits";
+import { editSlide, moveSlide, slidesBody, toggleSlide } from "../lib/slide-edits";
 import { SLIDE_THEMES } from "../lib/slide-identity";
 import { slideErrorMessage } from "../lib/slide-errors";
-import { publicSlides, type SlideItem, type SlideMode, type SlideStyle } from "../lib/slides";
+import { publicSlides, readSlideMode, type SlideItem, type SlideMode, type SlideStyle } from "../lib/slides";
 
 const LIST_PATH = "/palavras";
 const SAVE_ERROR = "Não foi possível salvar os slides.";
@@ -79,7 +79,7 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
         const next = pending.current;
         pending.current = null;
         try {
-          const saved = await saveSlides(id, { style: next.style, items: slidesBody(next.items, lastServer.current.slides) });
+          const saved = await saveSlides(id, { style: next.style, items: slidesBody(next.items) });
           failed.current = false;
           adopt(saved, pending.current === null);
         } catch {
@@ -131,7 +131,7 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
   const locked = busy || resetting;
   const readOnly = !canChange || locked;
 
-  const currentMode: SlideMode = sermon.slideMode ?? "VERSES_AND_POINTS";
+  const currentMode: SlideMode = readSlideMode(sermon.slideMode) ?? "VERSES_AND_POINTS";
 
   async function refresh() {
     setBusy(true);
@@ -161,8 +161,6 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
 
   const situation = sermon.delivery && sermon.status !== "DRAFT" ? formatSituation(sermon) : null;
   const hasSlides = items.length > 0;
-  // O aviso vale enquanto há resumo escrito pela IA que a pessoa ainda não reescreveu.
-  const hasAiSummary = items.some((s) => s.kind === "SUMMARY" && !s.edited);
 
   return (
     <DashboardLayout>
@@ -205,12 +203,6 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
           </p>
         )}
 
-        {hasAiSummary && (
-          <p className="rounded-xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-            Os resumos foram escritos por IA. Confira antes de enviar.
-          </p>
-        )}
-
         {sermon.slidesStale && hasSlides && canChange && (
           <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
             <span className="flex items-center gap-2">
@@ -220,7 +212,7 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
             {canChange && (
               <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={locked} onClick={refresh}>
                 <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-                {busy && currentMode === "FULL" ? "Resumindo…" : "Atualizar"}
+                Atualizar
               </Button>
             )}
           </div>
@@ -260,10 +252,6 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
                 }}
                 onEdit={(slideId, text) => {
                   const next = editSlide(items, slideId, text);
-                  if (next !== items) change({ items: next, style });
-                }}
-                onSubtitle={(slideId, subtitle) => {
-                  const next = editSubtitle(items, slideId, subtitle);
                   if (next !== items) change({ items: next, style });
                 }}
               />
