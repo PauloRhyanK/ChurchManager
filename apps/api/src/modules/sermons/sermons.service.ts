@@ -143,6 +143,25 @@ export class SermonsService {
     return toSermonFull(sermon, this.clock(), this.timeZone());
   }
 
+  /** Palavra nova já com o esboço (de "Colar texto"). O documento chega validado; tenant e autor vêm do JWT. */
+  async createWithDocument(user: AuthUser, title: string, doc: SermonDoc): Promise<SermonFull> {
+    const derived = deriveSermon(doc);
+    const sermon = await this.prisma.sermon.create({
+      data: {
+        tenantId: user.tenantId,
+        authorId: user.userId,
+        title,
+        document: doc as unknown as Prisma.InputJsonValue,
+        baseReference: derived.baseReference,
+        pointCount: derived.pointCount,
+        verseRefs: derived.verseRefs,
+        estimatedSeconds: derived.estimatedSeconds,
+      },
+      include: SERMON_INCLUDE,
+    });
+    return toSermonFull(sermon, this.clock(), this.timeZone());
+  }
+
   async get(user: AuthUser, id: string): Promise<SermonFull> {
     const sermon = await this.findOwned(user, id);
     return toSermonFull(sermon, this.clock(), this.timeZone());

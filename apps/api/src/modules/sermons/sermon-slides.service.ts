@@ -39,7 +39,11 @@ const EDITABLE: SlideKind[] = ['POINT', 'TITLE', 'SUMMARY'];
 /** Token de injeção da configuração da IA dos slides completos (lida do ambiente na subida). */
 export const SERMON_AI_CONFIG = Symbol('SERMON_AI_CONFIG');
 
-const providerError = (error: unknown): HttpException => {
+/** Falha do provedor em resposta HTTP em pt-BR. `refused` é a mensagem quando o modelo recusa o texto. */
+export const providerError = (
+  error: unknown,
+  refused = 'O modelo não pôde resumir esta palavra. Use “Versículos e pontos”.',
+): HttpException => {
   const reason = error instanceof SummarizerError ? error.reason : 'UNAVAILABLE';
   switch (reason) {
     case 'AUTH':
@@ -47,7 +51,7 @@ const providerError = (error: unknown): HttpException => {
     case 'CONFIG':
       return new ServiceUnavailableException('O modelo configurado não aceitou o pedido. Avise o administrador.');
     case 'REFUSED':
-      return new UnprocessableEntityException('O modelo não pôde resumir esta palavra. Use “Versículos e pontos”.');
+      return new UnprocessableEntityException(refused);
     case 'TRUNCATED':
     case 'INVALID':
       return new BadGatewayException('A resposta do modelo veio incompleta. Tente de novo.');
