@@ -125,18 +125,19 @@ export class SermonsService {
   }
 
   async update(user: AuthUser, id: string, dto: UpdateSermonDto): Promise<SermonFull> {
-    const current = await this.findOwned(user, id);
     const timeZone = this.timeZone();
     const now = this.clock();
     const doc = dto.document !== undefined ? validateSermonDocument(dto.document) : null;
-    if (doc && dto.baseRevision !== undefined && dto.baseRevision !== current.revision) {
-      throw new ConflictException('Esta palavra foi alterada em outra aba. Recarregue para continuar.');
-    }
     const derived = doc ? deriveSermon(doc) : null;
-    const title = dto.title ?? current.title;
-    const estimatedSeconds = derived ? derived.estimatedSeconds : current.estimatedSeconds;
+    const conflict = () =>
+      new ConflictException('Esta palavra foi alterada em outra aba. Recarregue para continuar.');
 
     const saved = await this.prisma.$transaction(async (tx) => {
+      // Lê dentro da transação: o envio e a revisão agem sobre o que existe agora.
+      const current = await this.findOwned(user, id, tx);
+      if (doc && dto.baseRevision !== undefined && dto.baseRevision !== current.revision) throw conflict();
+      const title = dto.title ?? current.title;
+      const estimatedSeconds = derived ? derived.estimatedSeconds : current.estimatedSeconds;
       const data: Prisma.SermonUpdateManyMutationInput = { title };
       if (doc && derived) {
         Object.assign(data, {
@@ -153,9 +154,7 @@ export class SermonsService {
         where: { id, tenantId: user.tenantId, authorId: user.userId, ...(doc ? { revision: current.revision } : {}) },
         data,
       });
-      if (done.count === 0) {
-        throw new ConflictException('Esta palavra foi alterada em outra aba. Recarregue para continuar.');
-      }
+      if (done.count === 0) throw conflict();
       const delivery = current.delivery;
       if (delivery && !deliveryHasPassed(ymd(delivery.date), delivery.startTime, now, timeZone)) {
         await tx.sermonDelivery.update({ where: { id: delivery.id }, data: { title, estimatedSeconds } });
@@ -185,15 +184,16 @@ export class SermonsService {
   }
 
   async remove(user: AuthUser, id: string): Promise<{ success: true }> {
-    const current = await this.findOwned(user, id);
     const timeZone = this.timeZone();
     const now = this.clock();
     await this.prisma.$transaction(async (tx) => {
+      const current = await this.findOwned(user, id, tx);
       const delivery = current.delivery;
       if (delivery && !deliveryHasPassed(ymd(delivery.date), delivery.startTime, now, timeZone)) {
         await tx.sermonDelivery.delete({ where: { id: delivery.id } });
       }
-      await tx.sermon.delete({ where: { id } });
+      const done = await tx.sermon.deleteMany({ where: { id, tenantId: user.tenantId, authorId: user.userId } });
+      if (done.count === 0) throw new NotFoundException('Palavra não encontrada.');
     });
     return { success: true };
   }

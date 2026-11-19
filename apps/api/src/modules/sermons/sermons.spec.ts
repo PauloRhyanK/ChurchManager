@@ -70,6 +70,7 @@ function build(initial: Row[]) {
         return row;
       },
       updateMany: async ({ where, data }: Row) => {
+        calls.push({ op: 'sermon.updateMany', args: { where, data } });
         const target = sermons.find((s) => match(s, where) && (where.revision === undefined || s.revision === where.revision));
         if (!target) return { count: 0 };
         writes.push('sermon.update');
@@ -78,9 +79,13 @@ function build(initial: Row[]) {
         }
         return { count: 1 };
       },
-      delete: async ({ where }: Row) => {
+      deleteMany: async ({ where }: Row) => {
+        calls.push({ op: 'sermon.deleteMany', args: { where } });
+        const i = sermons.findIndex((s) => match(s, where));
+        if (i < 0) return { count: 0 };
         writes.push('sermon.delete');
-        sermons.splice(sermons.findIndex((s) => s.id === where.id), 1);
+        sermons.splice(i, 1);
+        return { count: 1 };
       },
     },
     sermonDelivery: {
@@ -235,4 +240,15 @@ test('duplicate cria "<título> (cópia)", sem envio, revisão 0, do mesmo autor
   assert.equal(copy.revision, 0);
   assert.equal(sermons[1].authorId, AUTHOR);
   assert.equal(sermons[1].pointCount, 2);
+});
+
+test('as escritas filtram por id, tenant e autor de quem chama', async () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  const { service, calls } = build([sermonRow({ id })]);
+  await service.update(user(), id, { title: 'Nova', document: VERSE_DOC as never });
+  await service.remove(user(), id);
+  const owner = { id, tenantId: TENANT, authorId: AUTHOR };
+  const upd = calls.find((c) => c.op === 'sermon.updateMany')!;
+  assert.deepEqual({ id: upd.args.where.id, tenantId: upd.args.where.tenantId, authorId: upd.args.where.authorId }, owner);
+  assert.deepEqual(calls.find((c) => c.op === 'sermon.deleteMany')!.args.where, owner);
 });
