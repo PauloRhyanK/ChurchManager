@@ -5,7 +5,7 @@ import { DEFAULT_TEMPLATE, computeSchedule } from './service-schedule';
 import { WorshipServicesService } from './worship-services.service';
 
 test('modelo padrão às 19:00: pré-culto conta para trás e o culto termina às 20:17', () => {
-  const out = computeSchedule('19:00', DEFAULT_TEMPLATE.moments, []);
+  const out = computeSchedule('19:00', DEFAULT_TEMPLATE.moments);
   assert.deepEqual(out.moments.map((m) => [m.startsAt, m.name]), [
     ['18:45', 'Pré-culto'],
     ['19:00', 'Abertura'],
@@ -19,21 +19,26 @@ test('modelo padrão às 19:00: pré-culto conta para trás e o culto termina à
   assert.equal(out.worshipStartsAt, '19:05');
 });
 
-test('o louvor dura a soma dos áudios quando todas as músicas têm áudio', () => {
-  const out = computeSchedule('19:00', DEFAULT_TEMPLATE.moments, [200, 200, 200]);
-  assert.equal(out.moments[2].effectiveMinutes, 10);
-  assert.equal(out.moments[3].startsAt, '19:15');
-  assert.equal(out.moments[2].durationMinutes, 17, 'a duração digitada não é perdida');
-});
-
-test('com uma música sem áudio vale a duração do momento', () => {
-  const out = computeSchedule('19:00', DEFAULT_TEMPLATE.moments, [200, null]);
-  assert.equal(out.moments[2].effectiveMinutes, 17);
+test('música com áudio dura o áudio, contado em segundos; sem áudio, a duração do item', () => {
+  const out = computeSchedule('19:00', [
+    { name: 'Abertura', kind: 'GENERIC', durationMinutes: 3 },
+    { name: 'Céu aberto', kind: 'SONG', durationMinutes: 5, songSeconds: 250 },
+    { name: 'Nada nos separa', kind: 'SONG', durationMinutes: 5, songSeconds: 250 },
+    { name: 'Oração', kind: 'GENERIC', durationMinutes: 3 },
+    { name: 'Espaço', kind: 'SONG', durationMinutes: 6, songSeconds: null },
+    { name: 'Encerramento', kind: 'GENERIC', durationMinutes: 2 },
+  ]);
+  assert.deepEqual(out.moments.map((m) => [m.startsAt, m.effectiveMinutes]), [
+    ['19:00', 3], ['19:03', 4], ['19:07', 4], ['19:11', 3], ['19:14', 6], ['19:20', 2],
+  ]);
+  // 2 × 250 s = 8:20, não 2 × 5 min.
+  assert.equal(out.endsAt, '19:22');
+  assert.equal(out.worshipStartsAt, '19:03');
 });
 
 test('culto sem momentos e virada da meia-noite', () => {
-  assert.deepEqual(computeSchedule('19:00', [], []), { moments: [], endsAt: '19:00', worshipStartsAt: null });
-  const late = computeSchedule('23:30', [{ name: 'Vigília', kind: 'GENERIC', durationMinutes: 90 }], []);
+  assert.deepEqual(computeSchedule('19:00', []), { moments: [], endsAt: '19:00', worshipStartsAt: null });
+  const late = computeSchedule('23:30', [{ name: 'Vigília', kind: 'GENERIC', durationMinutes: 90 }]);
   assert.equal(late.endsAt, '01:00');
 });
 
@@ -54,6 +59,7 @@ function build(
   const calls: string[] = [];
   let inTx = false;
   const created: Record<string, unknown>[] = [];
+  const mirror: Record<string, unknown>[] = [];
   const service = {
     id: SERVICE,
     tenantId: TENANT_B,
@@ -62,8 +68,9 @@ function build(
     name: 'Culto padrão',
     templateId: null,
     updatedAt: new Date(),
-    moments: [{ id: MOMENT, serviceId: SERVICE, name: 'Louvor', kind: 'WORSHIP', durationMinutes: 17, sortOrder: 0 }],
-    songs: [],
+    moments: [
+      { id: MOMENT, serviceId: SERVICE, name: 'Louvor', kind: 'WORSHIP', durationMinutes: 17, sortOrder: 0, songId: null, song: null },
+    ] as Record<string, unknown>[],
   };
   const op = (name: string) => (args: { data?: unknown }) => {
     writes.push(name);
@@ -82,14 +89,23 @@ function build(
       },
       create: async ({ data }: { data: { moments: { create: unknown[] } } & Record<string, unknown> }) => {
         writes.push('service.create');
-        return { ...service, ...data, moments: data.moments.create.map((m, i) => ({ id: `m${i}`, ...(m as object) })), songs: [] };
+        return { ...service, ...data, moments: data.moments.create.map((m, i) => ({ id: `m${i}`, songId: null, song: null, ...(m as object) })) };
       },
     },
     worshipServiceMoment: { deleteMany: op('moment.deleteMany'), createMany: op('moment.createMany') },
-    worshipServiceSong: { deleteMany: op('song.deleteMany'), createMany: op('song.createMany') },
+    worshipServiceSong: {
+      deleteMany: op('song.deleteMany'),
+      createMany: (args: { data: Record<string, unknown>[] }) => {
+        writes.push('song.createMany');
+        mirror.push(...args.data);
+        return Promise.resolve({});
+      },
+    },
     worshipSong: {
-      count: async ({ where }: { where: { tenantId: string; id: { in: string[] } } }) =>
-        where.id.in.filter((id) => id === SONG_B && where.tenantId === TENANT_B).length,
+      findMany: async ({ where }: { where: { tenantId: string; id: { in: string[] } } }) =>
+        where.id.in
+          .filter((id) => id === SONG_B && where.tenantId === TENANT_B)
+          .map((id) => ({ id, title: 'Rio de paz', audioDurationSeconds: 250 })),
     },
     worshipServiceTemplate: { findFirst: async () => null, create: op('template.create'), delete: op('template.delete') },
     $transaction: async (arg: Promise<unknown>[] | ((tx: unknown) => Promise<unknown>)) => {
@@ -115,7 +131,7 @@ function build(
       return slides ? { ...slides, extra: 'não sai' } : null;
     },
   };
-  return { svc: new WorshipServicesService(prisma as never, deliveries as never), writes, created, calls };
+  return { svc: new WorshipServicesService(prisma as never, deliveries as never), writes, created, mirror, calls, service };
 }
 
 test('culto de outro tenant → 404 e nada é escrito', async () => {
@@ -140,10 +156,54 @@ test('música de outro tenant no roteiro → 400 e nada é escrito', async () =>
   assert.deepEqual(writes, []);
 });
 
-test('a mesma música pode entrar duas vezes, na ordem recebida', async () => {
-  const { svc, created } = build();
+test('só as músicas: a primeira vez, entram no lugar do bloco Louvor; a mesma música pode entrar duas vezes', async () => {
+  const { svc, created, mirror } = build();
   await svc.setSongs(TENANT_B, SERVICE, { songIds: [SONG_B, SONG_B] });
-  assert.deepEqual(created.map((c) => [c.songId, c.sortOrder]), [[SONG_B, 0], [SONG_B, 1]]);
+  assert.deepEqual(created.map((c) => [c.kind, c.songId, c.sortOrder, c.name, c.durationMinutes]), [
+    ['SONG', SONG_B, 0, 'Rio de paz', 5],
+    ['SONG', SONG_B, 1, 'Rio de paz', 5],
+  ]);
+  // O espelho acompanha a ordem dos itens de música.
+  assert.deepEqual(mirror.map((m) => [m.songId, m.sortOrder]), [[SONG_B, 0], [SONG_B, 1]]);
+});
+
+test('roteiro intercalado: música no meio dos momentos; música só em item de música', async () => {
+  const { svc, created, mirror } = build();
+  await svc.setMoments(TENANT_B, SERVICE, {
+    moments: [
+      { name: 'Abertura', kind: 'GENERIC', durationMinutes: 3 },
+      { name: 'x', kind: 'SONG', durationMinutes: 5, songId: SONG_B },
+      { name: 'Oração', kind: 'GENERIC', durationMinutes: 3 },
+      { name: 'Música', kind: 'SONG', durationMinutes: 5 },
+    ],
+  });
+  assert.deepEqual(created.map((c) => [c.kind, c.songId, c.name]), [
+    ['GENERIC', null, 'Abertura'],
+    ['SONG', SONG_B, 'Rio de paz'],
+    ['GENERIC', null, 'Oração'],
+    ['SONG', null, 'Música'],
+  ]);
+  assert.equal(mirror.length, 1);
+  const again = build();
+  await assert.rejects(
+    again.svc.setMoments(TENANT_B, SERVICE, { moments: [{ name: 'Avisos', kind: 'GENERIC', durationMinutes: 5, songId: SONG_B }] }),
+    BadRequestException,
+  );
+  await assert.rejects(
+    again.svc.setMoments(TENANT_B, SERVICE, { moments: [{ name: 'x', kind: 'SONG', durationMinutes: 5, songId: SONG_A }] }),
+    BadRequestException,
+  );
+  assert.deepEqual(again.writes, []);
+});
+
+test('modelo a partir do culto guarda o lugar da música, não a música', async () => {
+  const { svc, service, writes } = build();
+  service.moments = [
+    { id: MOMENT, name: 'Rio de paz', kind: 'SONG', durationMinutes: 5, sortOrder: 0, songId: SONG_B, song: null },
+  ];
+  const out = await svc.createTemplate(TENANT_B, { name: 'Domingo', fromServiceId: SERVICE });
+  assert.deepEqual(out.moments, [{ name: 'Música', kind: 'SONG', durationMinutes: 5 }]);
+  assert.ok(writes.includes('template.create'));
 });
 
 test('momentos: reaproveita só id deste culto, uma vez', async () => {

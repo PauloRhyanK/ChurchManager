@@ -15,7 +15,7 @@ import {
 } from 'class-validator';
 import { RequiredText } from '../../church/dto/field-decorators';
 
-export const MOMENT_KINDS = ['PRE_SERVICE', 'GENERIC', 'WORSHIP', 'SERMON'] as const;
+export const MOMENT_KINDS = ['PRE_SERVICE', 'GENERIC', 'WORSHIP', 'SERMON', 'SONG'] as const;
 export type MomentKind = (typeof MOMENT_KINDS)[number];
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -64,6 +64,11 @@ export class MomentDto {
   @Min(1)
   @Max(600)
   durationMinutes!: number;
+
+  /** Só em SONG: a música do item; sem ela, o item é um espaço reservado. */
+  @IsOptional()
+  @IsUUID()
+  songId?: string | null;
 }
 
 export class SetMomentsDto {

@@ -87,7 +87,7 @@ describe("ServiceTemplatesPage", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/não muda os cultos já criados a partir dele/)).toBeInTheDocument();
     fireEvent.change(within(dialog).getByLabelText("Nome do modelo"), { target: { value: "Domingo 19h" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: /Adicionar momento/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Momento" }));
     fireEvent.change(within(dialog).getByLabelText("Tipo de Novo momento"), { target: { value: "PRE_SERVICE" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Salvar modelo" }));
     await waitFor(() => expect(api.updateTemplate).toHaveBeenCalledTimes(1));
