@@ -53,6 +53,39 @@ export function maxTextDepth(doc: JSONContent): number {
 }
 const INNER_CONTENT = "(paragraph | bulletList | orderedList)";
 
+/** O mesmo que `maxTextDepth`, direto no documento do ProseMirror (sem passar por JSON). */
+function docTextDepth(node: PMNode, depth = 1): number {
+  if (node.isTextblock) return depth + 1;
+  let max = depth;
+  node.forEach((child) => {
+    max = Math.max(max, docTextDepth(child, depth + 1));
+  });
+  return max;
+}
+
+/**
+ * Guarda geral do limite de níveis do servidor: recusa qualquer mudança que deixe o documento mais fundo que
+ * o limite ("- " ou "1. " digitado dentro de um item, lista colada, etc.). O Tab tem a sua própria recusa.
+ * Passam o `setContent` (carregar um documento) e mudanças que não aprofundam um documento que já estava fundo.
+ */
+const DepthLimit = Extension.create({
+  name: "depthLimit",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey("depthLimit"),
+        filterTransaction(tr, state) {
+          if (!tr.docChanged) return true;
+          // O comando setContent sempre marca `preventUpdate` (verdadeiro ou falso).
+          if (tr.getMeta("preventUpdate") !== undefined) return true;
+          const after = docTextDepth(tr.doc);
+          return after <= DEPTH_MAX || after <= docTextDepth(state.doc);
+        },
+      }),
+    ];
+  },
+});
+
 export function newBlockId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
   const hex = (n: number) => Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join("");
@@ -431,6 +464,7 @@ export const sermonExtensions: Extensions = [
   callout("privateNote"),
   UniqueBlockId,
   SafeOrderedList,
+  DepthLimit,
   TextSelectionWhenBlurred,
   SermonCommands,
 ];

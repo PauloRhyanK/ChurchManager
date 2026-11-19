@@ -316,6 +316,67 @@ describe("sermonExtensions", () => {
     });
   });
 
+  describe("nenhuma transação passa do limite de 8 níveis", () => {
+    const li = (text: string, ...rest: JSONContent[]): JSONContent => ({
+      type: "listItem",
+      content: [{ type: "paragraph", content: [{ type: "text", text }] }, ...rest],
+    });
+    const ul = (...items: JSONContent[]): JSONContent => ({ type: "bulletList", content: items });
+    const ill = (...content: JSONContent[]): JSONContent => ({ type: "illustration", attrs: { id: "i1" }, content });
+    const p = (text: string): JSONContent => ({ type: "paragraph", content: [{ type: "text", text }] });
+    // Já no limite: os parágrafos do item interno estão no nível 7 e o texto no 8. O segundo parágrafo do item
+    // pode virar lista ("- " ou "1. "), o que desceria mais dois níveis.
+    const atLimit = (last: string): JSONContent => ({
+      type: "doc",
+      content: [ill(ul(li("a", ul({ type: "listItem", content: [p("x"), p(last)] }))))],
+    });
+
+    function typeAtEnd(editor: Editor, text: string, typed: string) {
+      let pos = -1;
+      editor.state.doc.descendants((node, p) => {
+        if (node.isText && node.text === text) pos = p + node.nodeSize;
+      });
+      editor.commands.setTextSelection(pos);
+      editor.view.someProp("handleTextInput", (f) => f(editor.view, pos, pos, typed, () => editor.state.tr));
+    }
+
+    for (const marker of ["-", "1."]) {
+      it(`digitar "${marker} " num item já no limite não cria outra lista dentro`, () => {
+        const editor = makeEditor(atLimit(marker));
+        expect(maxTextDepth(editor.getJSON())).toBe(8);
+        typeAtEnd(editor, marker, " ");
+        expect(maxTextDepth(editor.getJSON())).toBeLessThanOrEqual(8);
+        expect(allowedShape(editor.getJSON())).toEqual([]);
+      });
+    }
+
+    it("colar uma lista dentro de um item no limite é recusado", () => {
+      const editor = makeEditor(atLimit("b"));
+      const before = editor.getJSON();
+      let pos = -1;
+      editor.state.doc.descendants((node, p) => {
+        if (node.isText && node.text === "b") pos = p + 1;
+      });
+      editor.commands.insertContentAt(pos, "<ul><li><p>fundo</p></li></ul>");
+      expect(editor.getJSON()).toEqual(before);
+    });
+
+    it("digitar no limite continua funcionando", () => {
+      const editor = makeEditor(atLimit("b"));
+      typeAtEnd(editor, "b", "c");
+      editor.commands.insertContent("d");
+      expect(JSON.stringify(editor.getJSON())).toContain("bd");
+    });
+
+    it("carregar um documento mais fundo que o limite (setContent) não é bloqueado", () => {
+      const deep: JSONContent = { type: "doc", content: [ill(ul(li("a", ul(li("b", ul(li("c")))))))] };
+      const editor = makeEditor();
+      editor.commands.setContent(deep);
+      expect(maxTextDepth(editor.getJSON())).toBe(10);
+      expect(maxTextDepth(makeEditor(deep).getJSON())).toBe(10);
+    });
+  });
+
   it("colar ou inserir a cópia de um Ponto termina com ids únicos", () => {
     const editor = makeEditor(EXAMPLE_DOC);
     editor.commands.insertContentAt(editor.state.doc.content.size, '<div data-type="point" data-id="pt1">Cópia</div>');
