@@ -20,7 +20,8 @@ export type PermissionModule =
   | "SETTINGS"
   | "USERS"
   | "CHURCH"
-  | "WORSHIP";
+  | "WORSHIP"
+  | "SERMONS";
 
 export type PermissionLevel = "VIEW" | "EDIT";
 

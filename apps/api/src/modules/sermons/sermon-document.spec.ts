@@ -1,0 +1,156 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { BadRequestException } from '@nestjs/common';
+import { DOC_LIMITS, EMPTY_DOC, SermonDoc, validateSermonDocument } from './sermon-document';
+import { EXAMPLE_DOC } from './sermon-example';
+
+const t = (text: string) => ({ type: 'text', text });
+const p = (text?: string) => (text === undefined ? { type: 'paragraph' } : { type: 'paragraph', content: [t(text)] });
+
+function verse(id: string, reference: string, book: number, chapter: number, verseNo: number, text: string) {
+  return {
+    type: 'verse',
+    attrs: {
+      id,
+      reference,
+      book,
+      chapter,
+      verseStart: verseNo,
+      verseEnd: verseNo,
+      translation: 'BLIVRE',
+      verses: [{ number: verseNo, text }],
+    },
+  };
+}
+
+const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
+const doc = (...content: unknown[]) => ({ type: 'doc', content });
+const recusa = (input: unknown) => assert.throws(() => validateSermonDocument(input), BadRequestException);
+
+test('aceita o documento de exemplo, devolvendo o mesmo conteúdo', () => {
+  assert.deepEqual(validateSermonDocument(EXAMPLE_DOC), EXAMPLE_DOC);
+});
+
+test('aceita EMPTY_DOC', () => {
+  assert.deepEqual(validateSermonDocument(EMPTY_DOC), EMPTY_DOC);
+});
+
+test('aceita listas, marcas, quebra de linha, título e versículo digitado à mão', () => {
+  const ok: SermonDoc = validateSermonDocument(
+    doc(
+      { type: 'heading', attrs: { id: 'h1', level: 2 }, content: [t('Conclusão')] },
+      { type: 'heading', attrs: { id: 'h2', level: 3 } },
+      {
+        type: 'bulletList',
+        content: [
+          { type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x', marks: [{ type: 'bold' }, { type: 'italic' }] }, { type: 'hardBreak' }] }] },
+          { type: 'listItem', content: [{ type: 'orderedList', content: [{ type: 'listItem', content: [p('y')] }] }] },
+        ],
+      },
+      {
+        type: 'verse',
+        attrs: { id: 'v', reference: 'Texto livre', book: null, chapter: null, verseStart: null, verseEnd: null, translation: null, verses: [{ number: null, text: 'abc' }] },
+      },
+    ),
+  );
+  assert.equal(ok.content.length, 4);
+});
+
+test('recusa o que está fora do esquema', () => {
+  recusa(doc({ type: 'image' }));
+  recusa(doc({ type: 'paragraph', attrs: { style: 'x' } }));
+  recusa(doc({ type: 'paragraph', extra: 1 }));
+  recusa(doc({ type: 'paragraph', content: [{ type: 'text', text: 'a', marks: [{ type: 'link' }] }] }));
+  recusa(doc({ type: 'paragraph', content: [{ type: 'text', text: 'a', marks: [{ type: 'bold', attrs: {} }] }] }));
+  recusa(doc({ type: 'heading', attrs: { id: 'h', level: 1 } }));
+  recusa(doc({ type: 'heading', attrs: { id: 'h', level: 4 } }));
+  recusa(doc({ ...clone(EXAMPLE_DOC.content[0]), content: [p('x')] }));
+  recusa(doc({ type: 'paragraph', content: [{ type: 'text', text: '' }] }));
+  recusa(doc({ type: 'paragraph', content: [{ type: 'text', text: 'a', bold: true }] }));
+  recusa(doc({ type: 'paragraph', content: [{ type: 'point' }] }));
+  recusa(doc({ type: 'point', attrs: { id: 'x' }, content: [p('x')] }));
+  recusa(doc({ type: 'illustration', attrs: { id: 'x' }, content: [{ type: 'point', attrs: { id: 'y' } }] }));
+  recusa(doc({ type: 'illustration', attrs: { id: 'x' } }));
+  recusa(doc({ type: 'bulletList', content: [p('x')] }));
+  recusa(doc({ type: 'listItem', content: [p('x')] }));
+  const v = clone(EXAMPLE_DOC.content[0]) as ReturnType<typeof verse>;
+  recusa(doc({ ...v, attrs: { ...v.attrs, book: 67 } }));
+  recusa(doc({ ...v, attrs: { ...v.attrs, book: 0 } }));
+  recusa(doc({ ...v, attrs: { ...v.attrs, extra: 1 } }));
+  recusa(doc({ ...v, attrs: { ...v.attrs, verses: [{ number: 0, text: 'a' }] } }));
+  recusa(doc({ ...v, attrs: { ...v.attrs, verses: [{ number: 1, text: 'a', x: 1 }] } }));
+  recusa(doc({ ...v, attrs: { ...v.attrs, translation: 5 } }));
+  recusa(doc({ ...v, attrs: { ...v.attrs, id: '' } }));
+});
+
+test('recusa entrada que não é um documento', () => {
+  recusa(null);
+  recusa([]);
+  recusa('doc');
+  recusa({ type: 'doc' });
+  recusa({ type: 'doc', content: 'x' });
+  recusa({ type: 'doc', content: [], extra: 1 });
+  recusa({ type: 'paragraph', content: [] });
+});
+
+test('mensagens de erro em pt-BR', () => {
+  assert.throws(() => validateSermonDocument(doc({ type: 'image' })), (e: BadRequestException) => /Documento inválido/.test(e.message));
+});
+
+test('limites: nós', () => {
+  const n = (k: number) => doc(...Array.from({ length: k }, () => ({ type: 'paragraph' })));
+  validateSermonDocument(n(DOC_LIMITS.nodes));
+  recusa(n(DOC_LIMITS.nodes + 1));
+});
+
+test('limites: caracteres', () => {
+  const chars = (total: number) => doc(...Array.from({ length: total / 1000 }, () => p('a'.repeat(1000))), ...(total % 1000 ? [p('a'.repeat(total % 1000))] : []));
+  validateSermonDocument(chars(DOC_LIMITS.chars));
+  recusa(chars(DOC_LIMITS.chars + 1));
+});
+
+test('limites: profundidade', () => {
+  const lists = (levels: number, leaf: unknown): unknown => {
+    let node = leaf;
+    for (let i = 0; i < levels; i++) node = { type: 'bulletList', content: [{ type: 'listItem', content: [node] }] };
+    return node;
+  };
+  // doc(1) > 2 níveis de lista (4) > parágrafo(5) > texto(6) ... até 8
+  validateSermonDocument(doc(lists(2, p('x'))));
+  validateSermonDocument(doc(lists(2, { type: 'paragraph', content: [t('x')] }), lists(2, p('y'))));
+  validateSermonDocument(doc(lists(3, { type: 'paragraph' })));
+  recusa(doc(lists(3, p('x'))));
+  recusa(doc(lists(4, { type: 'paragraph' })));
+});
+
+test('limites: id, reference e versículos', () => {
+  const v = clone(EXAMPLE_DOC.content[0]) as ReturnType<typeof verse>;
+  validateSermonDocument(doc({ ...v, attrs: { ...v.attrs, id: 'x'.repeat(DOC_LIMITS.id) } }));
+  recusa(doc({ ...v, attrs: { ...v.attrs, id: 'x'.repeat(DOC_LIMITS.id + 1) } }));
+  recusa(doc({ type: 'point', attrs: { id: 'x'.repeat(37) } }));
+  validateSermonDocument(doc({ ...v, attrs: { ...v.attrs, reference: 'r'.repeat(DOC_LIMITS.reference) } }));
+  recusa(doc({ ...v, attrs: { ...v.attrs, reference: 'r'.repeat(DOC_LIMITS.reference + 1) } }));
+  const many = (k: number) => doc({ ...v, attrs: { ...v.attrs, verses: Array.from({ length: k }, (_, i) => ({ number: i + 1, text: 'a' })) } });
+  validateSermonDocument(many(DOC_LIMITS.verses));
+  recusa(many(DOC_LIMITS.verses + 1));
+});
+
+test('aceita documento com content vazio (padrão da coluna)', () => {
+  assert.deepEqual(validateSermonDocument({ type: 'doc', content: [] }), { type: 'doc', content: [] });
+});
+
+test('orderedList aceita attrs start/type; recusa o resto; demais nós seguem sem attrs', () => {
+  const ol = (attrs?: unknown) => doc({ type: 'orderedList', ...(attrs === undefined ? {} : { attrs }), content: [{ type: 'listItem', content: [p('x')] }] });
+  validateSermonDocument(ol({ start: 3 }));
+  validateSermonDocument(ol({ start: 1, type: null }));
+  validateSermonDocument(ol({ type: '1' }));
+  validateSermonDocument(ol());
+  recusa(ol({ start: 0 }));
+  recusa(ol({ start: 1.5 }));
+  recusa(ol({ type: 'x'.repeat(9) }));
+  recusa(ol({ type: 5 }));
+  recusa(ol({ foo: 1 }));
+  recusa(doc({ type: 'bulletList', attrs: {}, content: [] }));
+  recusa(doc({ type: 'paragraph', attrs: {} }));
+  recusa(doc({ type: 'bulletList', content: [{ type: 'listItem', attrs: {}, content: [p('x')] }] }));
+});

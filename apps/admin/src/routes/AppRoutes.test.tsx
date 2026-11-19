@@ -29,6 +29,8 @@ vi.mock("@/features/worship/pages/SongsListPage", () => ({ default: () => <p>Pá
 vi.mock("@/features/worship/pages/NewSongPage", () => ({ default: () => <p>Página nova música</p> }));
 vi.mock("@/features/worship/pages/SongEditorPage", () => ({ default: () => <p>Editor da música</p> }));
 vi.mock("@/features/worship/pages/ServicePlanPage", () => ({ default: () => <p>Página do roteiro</p> }));
+vi.mock("@/features/sermons/pages/SermonsListPage", () => ({ default: () => <p>Página de palavras</p> }));
+vi.mock("@/features/sermons/pages/SermonEditorPage", () => ({ default: () => <p>Editor da palavra</p> }));
 vi.mock("@/features/events/pages/RegistrationsPage", () => ({
   default: () => <p>Página de inscrições</p>,
 }));
@@ -184,5 +186,25 @@ describe("AppRoutes — Cultos", () => {
     renderAt("/cultos/musicas/nova");
     expect(await screen.findByText("Página nova música")).toBeInTheDocument();
     expect(screen.queryByText("Editor da música")).not.toBeInTheDocument();
+  });
+});
+
+describe("AppRoutes — Palavras", () => {
+  it("sem a permissão SERMONS as rotas de Palavras voltam para o início", async () => {
+    perms.modules = { WORSHIP: "EDIT" };
+    renderAt("/palavras");
+    expect(await screen.findByText("Página inicial")).toBeInTheDocument();
+    act(() => void navigate("/palavras/abc"));
+    expect(await screen.findByText("Página inicial")).toBeInTheDocument();
+    expect(screen.queryByText("Página de palavras")).not.toBeInTheDocument();
+    expect(screen.queryByText("Editor da palavra")).not.toBeInTheDocument();
+  });
+
+  it("com VIEW abre a lista e o editor", async () => {
+    perms.modules = { SERMONS: "VIEW" };
+    renderAt("/palavras");
+    expect(await screen.findByText("Página de palavras")).toBeInTheDocument();
+    act(() => void navigate("/palavras/abc"));
+    expect(await screen.findByText("Editor da palavra")).toBeInTheDocument();
   });
 });

@@ -14,7 +14,7 @@ import {
 } from 'class-validator';
 import { RequiredText } from '../../church/dto/field-decorators';
 
-export const MOMENT_KINDS = ['PRE_SERVICE', 'GENERIC', 'WORSHIP'] as const;
+export const MOMENT_KINDS = ['PRE_SERVICE', 'GENERIC', 'WORSHIP', 'SERMON'] as const;
 export type MomentKind = (typeof MOMENT_KINDS)[number];
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
