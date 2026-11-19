@@ -1,7 +1,8 @@
 // Extensões do editor do sermão. O JSON que sai de editor.getJSON() precisa caber exatamente no esquema que a API
 // valida (apps/api/src/modules/sermons/sermon-document.ts): qualquer nó, atributo ou marca a mais é recusado com 400.
-import { Extension, Node, mergeAttributes, type Extensions } from "@tiptap/core";
+import { Extension, Node, mergeAttributes, type Extensions, type JSONContent } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
+import { sinkListItem } from "@tiptap/pm/schema-list";
 import { Plugin, PluginKey, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -26,6 +27,30 @@ declare module "@tiptap/core" {
 }
 
 const ID_TYPES = new Set(["heading", "point", "verse", "illustration", "application", "privateNote"]);
+// Limites do validador do servidor (DOC_LIMITS em apps/api/src/modules/sermons/sermon-document.ts).
+const ID_MAX = 36;
+const DEPTH_MAX = 8;
+const REFERENCE_MAX = 120;
+const VERSES_MAX = 200;
+const ORDERED_TYPE_MAX = 8;
+
+const isValidId = (id: unknown): id is string => typeof id === "string" && id !== "" && id.length <= ID_MAX;
+
+/**
+ * Nível mais fundo que um texto teria no documento, contado como o servidor conta: a raiz `doc` é o nível 1,
+ * cada nó desce um nível e o texto fica um nível abaixo do seu bloco de texto (mesmo se ele estiver vazio).
+ */
+export function maxTextDepth(doc: JSONContent): number {
+  const TEXTBLOCKS = new Set(["paragraph", "heading", "point"]);
+  let max = 1;
+  const walk = (node: JSONContent, depth: number) => {
+    max = Math.max(max, depth);
+    if (node.type && TEXTBLOCKS.has(node.type)) max = Math.max(max, depth + 1);
+    for (const child of node.content ?? []) walk(child, depth + 1);
+  };
+  walk(doc, 1);
+  return max;
+}
 const INNER_CONTENT = "(paragraph | bulletList | orderedList)";
 
 export function newBlockId(): string {
@@ -61,12 +86,42 @@ const UniqueBlockId = Extension.create({
           newState.doc.descendants((node, pos) => {
             if (ID_TYPES.has(node.type.name)) {
               const id = node.attrs.id;
-              if (typeof id !== "string" || id === "" || seen.has(id)) {
+              if (!isValidId(id) || seen.has(id)) {
                 const fresh = newBlockId();
                 tr.setNodeAttribute(pos, "id", fresh);
                 seen.add(fresh);
               } else {
                 seen.add(id);
+              }
+            }
+            return !node.isTextblock;
+          });
+          return tr.docChanged ? tr : null;
+        },
+      }),
+    ];
+  },
+});
+
+/**
+ * Lista numerada só com atributos que o servidor aceita: `start` inteiro a partir de 1 (o "0. " digitado ou
+ * `<ol start="0">` colado viram 1) e `type` nulo ou texto de até 8 caracteres.
+ */
+const SafeOrderedList = Extension.create({
+  name: "safeOrderedList",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey("safeOrderedList"),
+        appendTransaction(transactions, _oldState, newState) {
+          if (!transactions.some((t) => t.docChanged)) return null;
+          const tr = newState.tr;
+          newState.doc.descendants((node, pos) => {
+            if (node.type.name === "orderedList") {
+              const { start, type } = node.attrs;
+              if (!(Number.isInteger(start) && start >= 1)) tr.setNodeAttribute(pos, "start", 1);
+              if (type !== null && !(typeof type === "string" && type.length <= ORDERED_TYPE_MAX)) {
+                tr.setNodeAttribute(pos, "type", null);
               }
             }
             return !node.isTextblock;
@@ -92,7 +147,14 @@ const SermonListItem = Node.create({
   addKeyboardShortcuts() {
     return {
       Enter: () => this.editor.commands.splitListItem(this.name),
-      Tab: () => this.editor.commands.sinkListItem(this.name),
+      // Recusa (sem tirar o foco do editor) quando descer o item passaria do limite de níveis do servidor.
+      Tab: () => {
+        const { state } = this.editor;
+        let after: PMNode | null = null;
+        if (!sinkListItem(state.schema.nodes[this.name])(state, (tr) => (after = tr.doc))) return false;
+        if (after === null || maxTextDepth((after as PMNode).toJSON()) > DEPTH_MAX) return true;
+        return this.editor.commands.sinkListItem(this.name);
+      },
       "Shift-Tab": () => this.editor.commands.liftListItem(this.name),
     };
   },
@@ -119,13 +181,37 @@ const Point = Node.create({
 
 const VERSE_KEYS = ["reference", "book", "chapter", "verseStart", "verseEnd", "translation", "verses"] as const;
 
-function readVerseData(el: HTMLElement): Record<string, unknown> {
+const intOrNull = (v: unknown, min: number, max = Number.MAX_SAFE_INTEGER) =>
+  typeof v === "number" && Number.isInteger(v) && v >= min && v <= max ? v : null;
+
+/** Lê o `data-verse` colado e o ajusta ao esquema do servidor; null quando não dá para virar um Versículo válido. */
+function readVerseData(el: HTMLElement): Omit<VerseAttrs, "id"> | null {
+  let data: unknown;
   try {
-    const data = JSON.parse(el.getAttribute("data-verse") ?? "{}");
-    return data && typeof data === "object" ? data : {};
+    data = JSON.parse(el.getAttribute("data-verse") ?? "");
   } catch {
-    return {};
+    return null;
   }
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const d = data as Record<string, unknown>;
+  const reference = typeof d.reference === "string" ? d.reference.trim().slice(0, REFERENCE_MAX) : "";
+  if (reference === "" || !Array.isArray(d.verses)) return null;
+  const verses: VerseAttrs["verses"] = [];
+  for (const v of d.verses.slice(0, VERSES_MAX)) {
+    if (!v || typeof v !== "object" || typeof (v as { text?: unknown }).text !== "string") return null;
+    verses.push({ number: intOrNull((v as { number?: unknown }).number, 1), text: (v as { text: string }).text });
+  }
+  const translation =
+    typeof d.translation === "string" && d.translation !== "" && d.translation.length <= ID_MAX ? d.translation : null;
+  return {
+    reference,
+    book: intOrNull(d.book, 1, 66),
+    chapter: intOrNull(d.chapter, 1),
+    verseStart: intOrNull(d.verseStart, 1),
+    verseEnd: intOrNull(d.verseEnd, 1),
+    translation,
+    verses,
+  };
 }
 
 const Verse = Node.create({
@@ -139,13 +225,14 @@ const Verse = Node.create({
       attrs[key] = {
         default: key === "verses" ? [] : key === "reference" ? "" : null,
         rendered: false,
-        parseHTML: (el: HTMLElement) => readVerseData(el)[key] ?? (key === "verses" ? [] : key === "reference" ? "" : null),
+        parseHTML: (el: HTMLElement) => readVerseData(el)?.[key] ?? null,
       };
     }
     return attrs;
   },
   parseHTML() {
-    return [{ tag: 'div[data-type="verse"]' }];
+    // Sem um Versículo válido no `data-verse`, o elemento não vira Versículo (o texto de dentro entra como texto comum).
+    return [{ tag: 'div[data-type="verse"]', getAttrs: (el) => (readVerseData(el) ? null : false) }];
   },
   renderHTML({ node, HTMLAttributes }) {
     const data = Object.fromEntries(VERSE_KEYS.map((k) => [k, node.attrs[k]]));
@@ -287,5 +374,6 @@ export const sermonExtensions: Extensions = [
   callout("application"),
   callout("privateNote"),
   UniqueBlockId,
+  SafeOrderedList,
   SermonCommands,
 ];
