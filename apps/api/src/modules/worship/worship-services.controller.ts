@@ -6,7 +6,7 @@ import { PermissionsGuard } from '../access/permissions.guard';
 import { RequirePermission } from '../access/require-permission.decorator';
 import type { AuthUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { CreateServiceDto, CreateTemplateDto, SetMomentsDto, SetSongsDto, UpdateServiceDto } from './dto/service.dto';
+import { CreateServiceDto, CreateTemplateDto, SetMomentsDto, SetSongsDto, UpdateServiceDto, UpdateTemplateDto } from './dto/service.dto';
 import { WorshipServicesService } from './worship-services.service';
 
 /** Cultos › Roteiro: o culto inteiro e as músicas do louvor. */
@@ -81,6 +81,12 @@ export class WorshipTemplatesController {
   @RequirePermission(PermissionModule.WORSHIP, PermissionLevel.EDIT)
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateTemplateDto) {
     return this.services.createTemplate(user.tenantId, dto);
+  }
+
+  @Put(':id')
+  @RequirePermission(PermissionModule.WORSHIP, PermissionLevel.EDIT)
+  update(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateTemplateDto) {
+    return this.services.updateTemplate(user.tenantId, id, dto);
   }
 
   @Delete(':id')

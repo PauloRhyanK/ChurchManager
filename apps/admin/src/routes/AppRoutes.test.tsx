@@ -29,6 +29,7 @@ vi.mock("@/features/worship/pages/SongsListPage", () => ({ default: () => <p>Pá
 vi.mock("@/features/worship/pages/NewSongPage", () => ({ default: () => <p>Página nova música</p> }));
 vi.mock("@/features/worship/pages/SongEditorPage", () => ({ default: () => <p>Editor da música</p> }));
 vi.mock("@/features/worship/pages/ServicePlanPage", () => ({ default: () => <p>Página do roteiro</p> }));
+vi.mock("@/features/worship/pages/ServiceTemplatesPage", () => ({ default: () => <p>Página dos modelos</p> }));
 vi.mock("@/features/sermons/pages/SermonsListPage", () => ({ default: () => <p>Página de palavras</p> }));
 vi.mock("@/features/sermons/pages/SermonEditorPage", () => ({ default: () => <p>Editor da palavra</p> }));
 vi.mock("@/features/sermons/pages/SermonSlidesPage", () => ({ default: () => <p>Conferência dos slides</p> }));
@@ -176,6 +177,8 @@ describe("AppRoutes — Cultos", () => {
     expect(await screen.findByText("Página de músicas")).toBeInTheDocument();
     act(() => void navigate("/cultos/roteiro"));
     expect(await screen.findByText("Página do roteiro")).toBeInTheDocument();
+    act(() => void navigate("/cultos/roteiro/modelos"));
+    expect(await screen.findByText("Página dos modelos")).toBeInTheDocument();
     act(() => void navigate("/cultos/musicas/abc"));
     expect(await screen.findByText("Editor da música")).toBeInTheDocument();
     act(() => void navigate("/cultos/musicas/nova"));
