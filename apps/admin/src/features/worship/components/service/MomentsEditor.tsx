@@ -1,8 +1,12 @@
-import { Plus, Trash2 } from "lucide-react";
+import { Music, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import type { MomentKind } from "../../api/worship-api";
-import { MAX_MOMENTS, MOMENT_KINDS, MOMENT_KIND_LABEL } from "../../lib/moments";
+import {
+  MAX_MOMENTS,
+  MOMENT_KINDS,
+  MOMENT_KIND_LABEL,
+} from "../../lib/moments";
 import { SortableList } from "./SortableList";
 
 export interface MomentDraft {
@@ -10,6 +14,8 @@ export interface MomentDraft {
   name: string;
   kind: MomentKind;
   durationMinutes: number;
+  /** Só em SONG: a música; nula = espaço reservado. */
+  songId?: string | null;
 }
 
 /** Um momento na tela: o que se edita mais o horário já calculado. */
@@ -19,8 +25,9 @@ export interface EditorMoment {
   kind: MomentKind;
   durationMinutes: number;
   startsAt: string;
-  /** Diferente de `durationMinutes` quando a duração é calculada (louvor pela soma dos áudios). */
+  /** Diferente de `durationMinutes` quando a duração é calculada (música pelo áudio). */
   effectiveMinutes: number;
+  songId?: string | null;
 }
 
 interface MomentsEditorProps {
@@ -39,6 +46,13 @@ interface MomentsEditorProps {
   emptyText: string;
   /** Rodapé à direita (ex.: "7 momentos · termina às 20:17"). */
   footer: ReactNode;
+  /**
+   * Como desenhar um item de música (roteiro do culto). Sem isto, a música é
+   * uma linha como as outras (o espaço reservado dos modelos).
+   */
+  renderSong?: (moment: EditorMoment, index: number) => ReactNode;
+  /** Mostra "+ Música" ao lado de "+ Momento". */
+  onAddSong?: () => void;
 }
 
 const toDraft = (m: EditorMoment): MomentDraft => ({
@@ -46,7 +60,11 @@ const toDraft = (m: EditorMoment): MomentDraft => ({
   name: m.name,
   kind: m.kind,
   durationMinutes: m.durationMinutes,
+  songId: m.songId ?? null,
 });
+
+/** A faixa roxa das músicas no roteiro. */
+const SONG_ROW = "bg-primary/[0.03] shadow-[inset_3px_0_0_hsl(var(--primary))]";
 
 /** Nome e duração de um momento: confirma ao sair do campo, se mudou e é válido. */
 function MomentFields({
@@ -63,7 +81,10 @@ function MomentFields({
   const [name, setName] = useState(moment.name);
   const [minutes, setMinutes] = useState(String(moment.durationMinutes));
   useEffect(() => setName(moment.name), [moment.name]);
-  useEffect(() => setMinutes(String(moment.durationMinutes)), [moment.durationMinutes]);
+  useEffect(
+    () => setMinutes(String(moment.durationMinutes)),
+    [moment.durationMinutes],
+  );
 
   const computed = moment.effectiveMinutes !== moment.durationMinutes;
   return (
@@ -83,7 +104,10 @@ function MomentFields({
         className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1.5 text-[15px] font-semibold hover:border-input focus:border-input focus:outline-none focus:ring-2 focus:ring-ring"
       />
       {computed ? (
-        <span className="flex-none text-sm tabular-nums text-muted-foreground" title="Soma dos áudios das músicas">
+        <span
+          className="flex-none text-sm tabular-nums text-muted-foreground"
+          title="Soma dos áudios das músicas"
+        >
           {moment.effectiveMinutes} min
         </span>
       ) : (
@@ -93,11 +117,15 @@ function MomentFields({
             inputMode="numeric"
             value={minutes}
             disabled={!canEdit}
-            onChange={(e) => setMinutes(e.target.value.replace(/\D/g, "").slice(0, 3))}
+            onChange={(e) =>
+              setMinutes(e.target.value.replace(/\D/g, "").slice(0, 3))
+            }
             onBlur={() => {
               const next = Number(minutes);
-              if (!Number.isInteger(next) || next < 1 || next > 600) setMinutes(String(moment.durationMinutes));
-              else if (next !== moment.durationMinutes) onCommit({ durationMinutes: next });
+              if (!Number.isInteger(next) || next < 1 || next > 600)
+                setMinutes(String(moment.durationMinutes));
+              else if (next !== moment.durationMinutes)
+                onCommit({ durationMinutes: next });
             }}
             onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
             className="w-12 rounded-md border border-transparent bg-transparent px-1.5 py-1.5 text-right tabular-nums text-foreground hover:border-input focus:border-input focus:outline-none focus:ring-2 focus:ring-ring"
@@ -124,6 +152,8 @@ export function MomentsEditor({
   rowExtra,
   emptyText,
   footer,
+  renderSong,
+  onAddSong,
 }: MomentsEditorProps) {
   const drafts = moments.map(toDraft);
   const items = moments.map((m) => ({ ...m, key: m.id }));
@@ -133,28 +163,39 @@ export function MomentsEditor({
   return (
     <div className="flex flex-col gap-4">
       {items.length === 0 ? (
-        <p className="rounded-xl border px-5 py-8 text-center text-sm text-muted-foreground">{emptyText}</p>
+        <p className="rounded-xl border px-5 py-8 text-center text-sm text-muted-foreground">
+          {emptyText}
+        </p>
       ) : (
         <SortableList
           items={items}
           disabled={!canEdit || saving}
           labelOf={(m) => m.name}
           onReorder={(next) => onSave(next.map(toDraft))}
+          rowClassName={(moment) => (moment.kind === "SONG" ? SONG_ROW : "")}
           renderItem={(moment, index) => (
             <>
-              <span className="w-12 flex-none text-sm font-semibold tabular-nums">{moment.startsAt}</span>
-              <MomentFields
-                moment={moment}
-                canEdit={canEdit && !saving}
-                note={durationNote?.(moment)}
-                onCommit={(change) => patch(index, change)}
-              />
+              <span className="w-12 flex-none text-sm font-semibold tabular-nums">
+                {moment.startsAt}
+              </span>
+              {moment.kind === "SONG" && renderSong ? (
+                renderSong(moment, index)
+              ) : (
+                <MomentFields
+                  moment={moment}
+                  canEdit={canEdit && !saving}
+                  note={durationNote?.(moment)}
+                  onCommit={(change) => patch(index, change)}
+                />
+              )}
               {showKind && (
                 <select
                   aria-label={`Tipo de ${moment.name}`}
                   value={moment.kind}
                   disabled={!canEdit || saving}
-                  onChange={(e) => patch(index, { kind: e.target.value as MomentKind })}
+                  onChange={(e) =>
+                    patch(index, { kind: e.target.value as MomentKind })
+                  }
                   className="h-9 flex-none rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   {MOMENT_KINDS.map((kind) => (
@@ -184,16 +225,35 @@ export function MomentsEditor({
       )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         {canEdit ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="gap-2"
-            disabled={saving || drafts.length >= MAX_MOMENTS}
-            onClick={() => onSave([...drafts, { name: "Novo momento", kind: "GENERIC", durationMinutes: 5 }])}
-          >
-            <Plus className="h-4 w-4" />
-            Adicionar momento
-          </Button>
+          <span className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2"
+              disabled={saving || drafts.length >= MAX_MOMENTS}
+              onClick={() =>
+                onSave([
+                  ...drafts,
+                  { name: "Novo momento", kind: "GENERIC", durationMinutes: 5 },
+                ])
+              }
+            >
+              <Plus className="h-4 w-4" />
+              Momento
+            </Button>
+            {onAddSong && (
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                disabled={saving || drafts.length >= MAX_MOMENTS}
+                onClick={onAddSong}
+              >
+                <Music className="h-4 w-4" />
+                Música
+              </Button>
+            )}
+          </span>
         ) : (
           <span />
         )}

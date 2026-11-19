@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { Prisma, WorshipServiceMoment, WorshipServiceTemplate } from '@prisma/client';
+import { Prisma, WorshipServiceTemplate } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SermonDeliveryService, type DeliverySummary } from '../sermons/sermon-delivery.service';
 import {
@@ -12,12 +12,13 @@ import {
   SetSongsDto,
   UpdateServiceDto,
 } from './dto/service.dto';
+import { RoteiroDraft, placeSongs, songMinutes, songMood } from './roteiro';
 import { DEFAULT_TEMPLATE, TemplateMoment, computeSchedule } from './service-schedule';
+import type { WorshipRow } from './worship-document';
 import { toSongSummary } from './worship-songs.service';
 
 const SERVICE_INCLUDE = {
-  moments: { orderBy: { sortOrder: 'asc' } },
-  songs: { orderBy: { sortOrder: 'asc' }, include: { song: { omit: { rawLyrics: true } } } },
+  moments: { orderBy: { sortOrder: 'asc' }, include: { song: { omit: { rawLyrics: true } } } },
 } satisfies Prisma.WorshipServiceInclude;
 
 type ServiceWithAll = Prisma.WorshipServiceGetPayload<{ include: typeof SERVICE_INCLUDE }>;
@@ -42,27 +43,41 @@ function templateMoments(template: Pick<WorshipServiceTemplate, 'moments'>): Tem
   });
 }
 
-function toServiceResponse(service: ServiceWithAll, sermon: DeliverySummary | null = null) {
-  const schedule = computeSchedule(
+const rowsOf = (song: { rows: unknown }): WorshipRow[] => (Array.isArray(song.rows) ? (song.rows as WorshipRow[]) : []);
+
+/** Os itens do roteiro com horário: momentos e músicas na mesma ordem. */
+export function scheduleOf(service: ServiceWithAll) {
+  return computeSchedule(
     service.startTime,
-    service.moments.map((m: WorshipServiceMoment) => ({
+    service.moments.map((m) => ({
       id: m.id,
-      name: m.name,
+      // Item de música mostra o título atual da música.
+      name: m.song?.title ?? m.name,
       kind: m.kind,
       durationMinutes: m.durationMinutes,
+      songId: m.songId,
+      songSeconds: m.song?.audioDurationSeconds ?? null,
+      song: m.song,
     })),
-    service.songs.map((s) => s.song.audioDurationSeconds),
   );
+}
+
+function toServiceResponse(service: ServiceWithAll, sermon: DeliverySummary | null = null) {
+  const schedule = scheduleOf(service);
   return {
     id: service.id,
     date: ymd(service.date),
     startTime: service.startTime,
     name: service.name,
     templateId: service.templateId,
-    moments: schedule.moments,
+    moments: schedule.moments.map(({ song, songSeconds: _seconds, ...m }) => ({
+      ...m,
+      song: song ? { ...toSongSummary(song), mood: songMood(rowsOf(song)) } : null,
+    })),
     endsAt: schedule.endsAt,
     worshipStartsAt: schedule.worshipStartsAt,
-    songs: service.songs.map((s) => ({ entryId: s.id, ...toSongSummary(s.song) })),
+    // A aba "Só as músicas": os itens de música do roteiro, na ordem (a mesma música pode entrar duas vezes).
+    songs: service.moments.flatMap((m) => (m.song ? [{ entryId: m.id, ...toSongSummary(m.song) }] : [])),
     sermon: sermon
       ? {
           title: sermon.title,
@@ -126,7 +141,12 @@ export class WorshipServicesService {
     if (dto.fromServiceId) {
       const service = await this.find(tenantId, dto.fromServiceId);
       startTime = dto.startTime ?? service.startTime;
-      moments = service.moments.map((m) => ({ name: m.name, kind: m.kind, durationMinutes: m.durationMinutes }));
+      // O modelo guarda o lugar da música, não a música: no próximo culto ela muda.
+      moments = service.moments.map((m) =>
+        m.kind === 'SONG'
+          ? { name: 'Música', kind: 'SONG' as const, durationMinutes: m.durationMinutes }
+          : { name: m.name, kind: m.kind, durationMinutes: m.durationMinutes },
+      );
     } else if (dto.moments) {
       moments = dto.moments.map((m) => ({ name: m.name, kind: m.kind, durationMinutes: m.durationMinutes }));
     } else {
@@ -220,6 +240,7 @@ export class WorshipServicesService {
           name: template.name,
           templateId: template.id,
           moments: {
+            // Item de música do modelo vira espaço reservado (sem música).
             create: template.moments.map((m, sortOrder) => ({
               name: m.name,
               kind: m.kind,
@@ -269,40 +290,85 @@ export class WorshipServicesService {
     return { success: true };
   }
 
-  /** Troca a lista inteira de momentos, na ordem recebida. */
-  async setMoments(tenantId: string, id: string, dto: SetMomentsDto) {
-    const service = await this.find(tenantId, id);
+  /** As músicas existem e são desta igreja: devolve título e duração de cada uma. */
+  private async songsOf(tenantId: string, ids: string[]) {
+    const distinct = [...new Set(ids)];
+    const found = distinct.length
+      ? await this.prisma.worshipSong.findMany({
+          where: { tenantId, id: { in: distinct } },
+          select: { id: true, title: true, audioDurationSeconds: true },
+        })
+      : [];
+    if (found.length !== distinct.length) throw new BadRequestException('Música não encontrada no repertório.');
+    return new Map(found.map((s) => [s.id, s]));
+  }
+
+  /**
+   * Grava o roteiro inteiro, na ordem: os momentos (com as músicas como itens)
+   * e o espelho das músicas, numa transação só.
+   */
+  private async writeRoteiro(tenantId: string, service: ServiceWithAll, drafts: RoteiroDraft[]) {
+    for (const m of drafts) {
+      if (m.kind !== 'SONG' && m.songId) throw new BadRequestException('Só item de música leva música.');
+    }
+    if (drafts.length > 40) throw new BadRequestException('O roteiro passa de 40 itens.');
+    const songs = await this.songsOf(tenantId, drafts.flatMap((m) => (m.songId ? [m.songId] : [])));
     const own = new Set(service.moments.map((m) => m.id));
     const used = new Set<string>();
-    const data = dto.moments.map((m, sortOrder) => {
+    const data = drafts.map((m, sortOrder) => {
       // Só reaproveita id que já era deste culto, e uma vez só.
       const keep = m.id && own.has(m.id) && !used.has(m.id) ? m.id : randomUUID();
       used.add(keep);
-      return { id: keep, serviceId: service.id, name: m.name, kind: m.kind, durationMinutes: m.durationMinutes, sortOrder };
+      const song = m.songId ? songs.get(m.songId) : undefined;
+      return {
+        id: keep,
+        serviceId: service.id,
+        name: (song ? song.title : m.name).slice(0, 120),
+        kind: m.kind,
+        durationMinutes: m.durationMinutes,
+        sortOrder,
+        songId: m.kind === 'SONG' ? (m.songId ?? null) : null,
+      };
     });
+    const mirror = data.flatMap((m) => (m.songId ? [m.songId] : [])).map((songId, sortOrder) => ({ serviceId: service.id, songId, sortOrder }));
     await this.prisma.$transaction([
       this.prisma.worshipServiceMoment.deleteMany({ where: { serviceId: service.id } }),
       this.prisma.worshipServiceMoment.createMany({ data }),
+      this.prisma.worshipServiceSong.deleteMany({ where: { serviceId: service.id } }),
+      this.prisma.worshipServiceSong.createMany({ data: mirror }),
       this.prisma.worshipService.update({ where: { id: service.id }, data: { updatedAt: new Date() } }),
     ]);
-    return this.get(tenantId, id);
+    return this.get(tenantId, service.id);
   }
 
-  /** Troca a lista inteira de músicas do culto, na ordem recebida. */
+  /** Troca o roteiro inteiro (momentos e músicas), na ordem recebida. */
+  async setMoments(tenantId: string, id: string, dto: SetMomentsDto) {
+    const service = await this.find(tenantId, id);
+    return this.writeRoteiro(
+      tenantId,
+      service,
+      dto.moments.map((m) => ({ id: m.id, name: m.name, kind: m.kind, durationMinutes: m.durationMinutes, songId: m.songId ?? null })),
+    );
+  }
+
+  /**
+   * A aba "Só as músicas": troca a lista de músicas, na ordem recebida, sem
+   * mexer nos momentos (ver `placeSongs`).
+   */
   async setSongs(tenantId: string, id: string, dto: SetSongsDto) {
     const service = await this.find(tenantId, id);
-    const distinct = [...new Set(dto.songIds)];
-    const found = await this.prisma.worshipSong.count({ where: { tenantId, id: { in: distinct } } });
-    if (found !== distinct.length) {
-      throw new BadRequestException('Música não encontrada no repertório.');
-    }
-    await this.prisma.$transaction([
-      this.prisma.worshipServiceSong.deleteMany({ where: { serviceId: service.id } }),
-      this.prisma.worshipServiceSong.createMany({
-        data: dto.songIds.map((songId, sortOrder) => ({ serviceId: service.id, songId, sortOrder })),
-      }),
-      this.prisma.worshipService.update({ where: { id: service.id }, data: { updatedAt: new Date() } }),
-    ]);
-    return this.get(tenantId, id);
+    const songs = await this.songsOf(tenantId, dto.songIds);
+    const current: RoteiroDraft[] = service.moments.map((m) => ({
+      id: m.id,
+      name: m.name,
+      kind: m.kind,
+      durationMinutes: m.durationMinutes,
+      songId: m.songId,
+    }));
+    const next = placeSongs(current, dto.songIds, (songId) => {
+      const song = songs.get(songId);
+      return { name: song?.title ?? 'Música', kind: 'SONG', durationMinutes: songMinutes(song?.audioDurationSeconds), songId };
+    });
+    return this.writeRoteiro(tenantId, service, next);
   }
 }

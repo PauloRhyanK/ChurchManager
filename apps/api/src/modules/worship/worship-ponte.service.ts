@@ -3,6 +3,7 @@ import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/co
 import { Prisma, WorshipSong } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SermonDeliveryService } from '../sermons/sermon-delivery.service';
+import { songMood, songParts } from './roteiro';
 import { computeSchedule } from './service-schedule';
 import { LEAD_LIMITS } from './timing-learning';
 import { WorshipRow, deriveSong, holyricsText, songStatus } from './worship-document';
@@ -16,8 +17,7 @@ const TIME_ZONE = 'America/Sao_Paulo';
 const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
 const SERVICE_INCLUDE = {
-  moments: { orderBy: { sortOrder: 'asc' } },
-  songs: { orderBy: { sortOrder: 'asc' }, include: { song: { omit: { rawLyrics: true } } } },
+  moments: { orderBy: { sortOrder: 'asc' }, include: { song: { omit: { rawLyrics: true } } } },
 } satisfies Prisma.WorshipServiceInclude;
 type ServiceWithAll = Prisma.WorshipServiceGetPayload<{ include: typeof SERVICE_INCLUDE }>;
 
@@ -139,7 +139,7 @@ export class WorshipPonteService {
       orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
       include: SERVICE_INCLUDE,
     });
-    return service ? this.payload(tenantId, service) : { version: 'vazio', service: null, sermon: null, songs: [] };
+    return service ? this.payload(tenantId, service) : { version: 'vazio', service: null, sermon: null, songs: [], roteiro: [] };
   }
 
   async serviceById(tenantId: string, id: string) {
@@ -154,9 +154,16 @@ export class WorshipPonteService {
     const lead = settings?.slideLeadSeconds ?? LEAD_LIMITS.default;
     const schedule = computeSchedule(
       service.startTime,
-      service.moments.map((m) => ({ name: m.name, kind: m.kind, durationMinutes: m.durationMinutes })),
-      service.songs.map((s) => s.song.audioDurationSeconds),
+      service.moments.map((m) => ({
+        id: m.id,
+        name: m.song?.title ?? m.name,
+        kind: m.kind,
+        durationMinutes: m.durationMinutes,
+        songSeconds: m.song?.audioDurationSeconds ?? null,
+        song: m.song,
+      })),
     );
+    const songs = service.moments.flatMap((m) => (m.song ? [m.song] : []));
     const body = {
       service: {
         id: service.id,
@@ -173,7 +180,41 @@ export class WorshipPonteService {
         })),
       },
       sermon,
-      songs: service.songs.map((s) => toPonteSong(s.song, lead)),
+      songs: songs.map((song) => toPonteSong(song, lead)),
+      // Acrescentado em 24/11/2026: o culto inteiro na ordem, momentos e músicas
+      // intercalados. Contrato em docs/api/ponte-roteiro.md.
+      roteiro: schedule.moments.map((m, i) => ({
+        ordem: i + 1,
+        tipo: m.kind === 'SONG' ? ('musica' as const) : ('momento' as const),
+        id: m.id,
+        nome: m.name,
+        inicio: m.startsAt,
+        duracaoMin: m.effectiveMinutes,
+        ...(m.kind === 'SONG'
+          ? {
+              musica: m.song
+                ? {
+                    id: m.song.id,
+                    titulo: m.song.title,
+                    tom: m.song.musicalKey,
+                    bpm: m.song.bpm,
+                    clima: songMood(rowsOf(m.song)),
+                    holyricsId: m.song.holyricsId,
+                    audioUrl: m.song.audioUrl,
+                    duracaoSeg: m.song.audioDurationSeconds,
+                    partes: songParts(rowsOf(m.song), m.song.audioDurationSeconds),
+                  }
+                : null,
+            }
+          : {
+              momento: {
+                kind: m.kind,
+                ...(m.kind === 'SERMON'
+                  ? { palavra: sermon ? { titulo: sermon.title, pregador: sermon.preacherName } : null }
+                  : {}),
+              },
+            }),
+      })),
     };
     // Impressão digital do conteúdo: a Ponte só refaz o trabalho quando ela muda.
     const version = createHash('sha1').update(JSON.stringify(body)).digest('hex').slice(0, 12);

@@ -963,6 +963,8 @@ enum WorshipMomentKind {
   GENERIC
   WORSHIP
   SERMON
+  /// Uma música do roteiro (song_id); sem música, é um espaço reservado.
+  SONG
 }
 
 model WorshipSong {
@@ -991,6 +993,7 @@ model WorshipSong {
 
   tenant            Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   serviceSongs      WorshipServiceSong[]
+  serviceMoments    WorshipServiceMoment[]
   timingCorrections WorshipTimingCorrection[]
 
   @@index([tenantId, status])
@@ -1101,13 +1104,19 @@ model WorshipServiceMoment {
   kind            WorshipMomentKind @default(GENERIC)
   durationMinutes Int               @map("duration_minutes")
   sortOrder       Int               @default(0) @map("sort_order")
+  /// Só em SONG: a música deste item do roteiro (nula = espaço reservado).
+  songId          String?           @map("song_id") @db.Uuid
 
   service WorshipService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  song    WorshipSong?   @relation(fields: [songId], references: [id], onDelete: Restrict)
 
   @@index([serviceId])
+  @@index([songId])
   @@map("worship_service_moments")
 }
 
+/// Espelho das músicas do roteiro, na ordem: escrito junto com os momentos SONG
+/// (a ordem que vale é a dos momentos). Mantém a trava de não apagar música em uso.
 model WorshipServiceSong {
   id        String @id @default(uuid()) @db.Uuid
   serviceId String @map("service_id") @db.Uuid
