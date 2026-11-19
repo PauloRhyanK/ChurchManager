@@ -1,0 +1,200 @@
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import type { AuthUser } from '../auth/auth-user';
+import { deliveryHasPassed, sermonStatus, type SermonStatus } from './delivery-match';
+import { CreateSermonDto, UpdateSermonDto } from './dto/sermon.dto';
+import { deriveSermon, normalizeSearch } from './sermon-derive';
+import { EMPTY_DOC, validateSermonDocument, type SermonDoc } from './sermon-document';
+
+export interface SermonSummary {
+  id: string;
+  title: string;
+  baseReference: string | null;
+  pointCount: number;
+  estimatedSeconds: number;
+  status: SermonStatus;
+  delivery: { date: string; startTime: string; serviceId: string | null; serviceName: string | null } | null;
+  updatedAt: Date;
+}
+export interface SermonFull extends SermonSummary {
+  document: SermonDoc;
+  revision: number;
+}
+
+const SERMON_INCLUDE = {
+  delivery: { include: { service: { select: { name: true } } } },
+} satisfies Prisma.SermonInclude;
+
+type SermonWithDelivery = Prisma.SermonGetPayload<{ include: typeof SERMON_INCLUDE }>;
+type SermonRow = Omit<SermonWithDelivery, 'document' | 'revision'> & Partial<Pick<SermonWithDelivery, 'document' | 'revision'>>;
+
+const SERMON_TIME_ZONE = 'America/Sao_Paulo';
+const ymd = (date: Date) => date.toISOString().slice(0, 10);
+
+export function toSermonSummary(sermon: SermonRow, now: Date, timeZone: string): SermonSummary {
+  const delivery = sermon.delivery
+    ? {
+        date: ymd(sermon.delivery.date),
+        startTime: sermon.delivery.startTime,
+        serviceId: sermon.delivery.serviceId,
+        serviceName: sermon.delivery.service?.name ?? null,
+      }
+    : null;
+  return {
+    id: sermon.id,
+    title: sermon.title,
+    baseReference: sermon.baseReference,
+    pointCount: sermon.pointCount,
+    estimatedSeconds: sermon.estimatedSeconds,
+    status: sermonStatus(delivery, now, timeZone),
+    delivery,
+    updatedAt: sermon.updatedAt,
+  };
+}
+
+export function toSermonFull(sermon: SermonWithDelivery, now: Date, timeZone: string): SermonFull {
+  return {
+    ...toSermonSummary(sermon, now, timeZone),
+    document: sermon.document as unknown as SermonDoc,
+    revision: sermon.revision,
+  };
+}
+
+@Injectable()
+export class SermonsService {
+  /** Relógio injetável para os testes de situação. */
+  clock: () => Date = () => new Date();
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  /** A palavra do autor ou 404: ninguém mais a vê, nem administrador. */
+  async findOwned(user: AuthUser, id: string, tx: Prisma.TransactionClient | PrismaService = this.prisma) {
+    const sermon = await tx.sermon.findFirst({
+      where: { id, tenantId: user.tenantId, authorId: user.userId },
+      include: SERMON_INCLUDE,
+    });
+    if (!sermon) throw new NotFoundException('Palavra não encontrada.');
+    return sermon;
+  }
+
+  /** O tenant não tem fuso próprio no schema: vale o de Brasília para todas as igrejas. */
+  timeZone(): string {
+    return SERMON_TIME_ZONE;
+  }
+
+  async list(user: AuthUser, query: { q?: string; status?: SermonStatus }) {
+    const timeZone = this.timeZone();
+    const rows = await this.prisma.sermon.findMany({
+      where: { tenantId: user.tenantId, authorId: user.userId },
+      omit: { document: true },
+      include: SERMON_INCLUDE,
+      orderBy: { updatedAt: 'desc' },
+    });
+    const now = this.clock();
+    const term = normalizeSearch(query.q ?? '');
+    const found = term
+      ? rows.filter((s) => normalizeSearch(s.title).includes(term) || s.verseRefs.includes(term))
+      : rows;
+    const all = found.map((s) => toSermonSummary(s, now, timeZone));
+    const counts = {
+      all: all.length,
+      draft: all.filter((s) => s.status === 'DRAFT').length,
+      sent: all.filter((s) => s.status === 'SENT').length,
+      preached: all.filter((s) => s.status === 'PREACHED').length,
+    };
+    return { items: query.status ? all.filter((s) => s.status === query.status) : all, counts };
+  }
+
+  async create(user: AuthUser, dto: CreateSermonDto): Promise<SermonFull> {
+    const sermon = await this.prisma.sermon.create({
+      data: {
+        tenantId: user.tenantId,
+        authorId: user.userId,
+        title: dto.title ?? 'Sem título',
+        document: EMPTY_DOC as unknown as Prisma.InputJsonValue,
+      },
+      include: SERMON_INCLUDE,
+    });
+    return toSermonFull(sermon, this.clock(), this.timeZone());
+  }
+
+  async get(user: AuthUser, id: string): Promise<SermonFull> {
+    const sermon = await this.findOwned(user, id);
+    return toSermonFull(sermon, this.clock(), this.timeZone());
+  }
+
+  async update(user: AuthUser, id: string, dto: UpdateSermonDto): Promise<SermonFull> {
+    const current = await this.findOwned(user, id);
+    const timeZone = this.timeZone();
+    const now = this.clock();
+    const doc = dto.document !== undefined ? validateSermonDocument(dto.document) : null;
+    if (doc && dto.baseRevision !== undefined && dto.baseRevision !== current.revision) {
+      throw new ConflictException('Esta palavra foi alterada em outra aba. Recarregue para continuar.');
+    }
+    const derived = doc ? deriveSermon(doc) : null;
+    const title = dto.title ?? current.title;
+    const estimatedSeconds = derived ? derived.estimatedSeconds : current.estimatedSeconds;
+
+    const saved = await this.prisma.$transaction(async (tx) => {
+      const data: Prisma.SermonUpdateManyMutationInput = { title };
+      if (doc && derived) {
+        Object.assign(data, {
+          document: doc as unknown as Prisma.InputJsonValue,
+          baseReference: derived.baseReference,
+          pointCount: derived.pointCount,
+          verseRefs: derived.verseRefs,
+          estimatedSeconds: derived.estimatedSeconds,
+          revision: { increment: 1 },
+        });
+      }
+      // A revisão lida entra no filtro: duas abas não gravam por cima uma da outra.
+      const done = await tx.sermon.updateMany({
+        where: { id, tenantId: user.tenantId, authorId: user.userId, ...(doc ? { revision: current.revision } : {}) },
+        data,
+      });
+      if (done.count === 0) {
+        throw new ConflictException('Esta palavra foi alterada em outra aba. Recarregue para continuar.');
+      }
+      const delivery = current.delivery;
+      if (delivery && !deliveryHasPassed(ymd(delivery.date), delivery.startTime, now, timeZone)) {
+        await tx.sermonDelivery.update({ where: { id: delivery.id }, data: { title, estimatedSeconds } });
+      }
+      return this.findOwned(user, id, tx);
+    });
+    return toSermonFull(saved, now, timeZone);
+  }
+
+  async duplicate(user: AuthUser, id: string): Promise<SermonFull> {
+    const source = await this.findOwned(user, id);
+    const timeZone = this.timeZone();
+    const copy = await this.prisma.sermon.create({
+      data: {
+        tenantId: user.tenantId,
+        authorId: user.userId,
+        title: `${source.title.slice(0, 255 - ' (cópia)'.length)} (cópia)`,
+        document: source.document as Prisma.InputJsonValue,
+        baseReference: source.baseReference,
+        pointCount: source.pointCount,
+        verseRefs: source.verseRefs,
+        estimatedSeconds: source.estimatedSeconds,
+      },
+      include: SERMON_INCLUDE,
+    });
+    return toSermonFull(copy, this.clock(), timeZone);
+  }
+
+  async remove(user: AuthUser, id: string): Promise<{ success: true }> {
+    const current = await this.findOwned(user, id);
+    const timeZone = this.timeZone();
+    const now = this.clock();
+    await this.prisma.$transaction(async (tx) => {
+      const delivery = current.delivery;
+      if (delivery && !deliveryHasPassed(ymd(delivery.date), delivery.startTime, now, timeZone)) {
+        await tx.sermonDelivery.delete({ where: { id: delivery.id } });
+      }
+      await tx.sermon.delete({ where: { id } });
+    });
+    return { success: true };
+  }
+}
