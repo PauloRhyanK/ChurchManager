@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, LayoutTemplate, Loader2, MoreHorizontal, Music, Plus, Radio } from "lucide-react";
+import { ArrowLeft, CalendarDays, LayoutTemplate, Loader2, MoreHorizontal, Music, Plus, Radio } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -35,6 +35,8 @@ import { AddSongDialog } from "../components/service/AddSongDialog";
 import { MomentsTab } from "../components/service/MomentsTab";
 import { NewServiceDialog } from "../components/service/NewServiceDialog";
 import { PonteKeyDialog } from "../components/service/PonteKeyDialog";
+import { ServicesCalendar } from "../components/service/ServicesCalendar";
+import { parseMonth, todayYmd } from "../lib/calendar";
 import { WorshipTab } from "../components/service/WorshipTab";
 import { formatServiceLabel } from "../lib/format";
 
@@ -49,6 +51,7 @@ export default function ServicePlanPage() {
   const tab: Tab = params.get("aba") === "louvor" ? "louvor" : "culto";
 
   const [newOpen, setNewOpen] = useState(false);
+  const [newDate, setNewDate] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [ponteOpen, setPonteOpen] = useState(false);
@@ -58,10 +61,9 @@ export default function ServicePlanPage() {
 
   const servicesQuery = useQuery({ queryKey: ["worship", "services"], queryFn: fetchServices });
   const services = servicesQuery.data ?? [];
-  const today = new Date().toLocaleDateString("sv-SE");
-  // Sem culto na URL: o próximo que ainda vai acontecer; se não houver, o mais recente.
-  const fallback = [...services].reverse().find((s) => s.date >= today) ?? services[0];
-  const serviceId = params.get("culto") ?? fallback?.id ?? null;
+  // Sem culto na URL: a entrada é o calendário do mês (o da URL ou o atual).
+  const serviceId = params.get("culto");
+  const month = parseMonth(params.get("mes")) ?? todayYmd().slice(0, 7);
 
   const serviceQuery = useQuery({
     queryKey: ["worship", "service", serviceId],
@@ -69,6 +71,12 @@ export default function ServicePlanPage() {
     enabled: !!serviceId,
   });
   const service = serviceQuery.data;
+
+  const openCalendar = (mes: string) => setParams(mes === todayYmd().slice(0, 7) ? {} : { mes });
+  const openNew = (date: string | null) => {
+    setNewDate(date);
+    setNewOpen(true);
+  };
 
   const go = (next: { culto?: string | null; aba?: Tab }) => {
     const culto = next.culto === undefined ? serviceId : next.culto;
@@ -114,7 +122,7 @@ export default function ServicePlanPage() {
       queryClient.removeQueries({ queryKey: ["worship", "service", serviceId] });
       void queryClient.invalidateQueries({ queryKey: ["worship", "services"] });
       void queryClient.invalidateQueries({ queryKey: ["sermons"] });
-      setParams({});
+      openCalendar(service?.date.slice(0, 7) ?? month);
       toast.success("Culto apagado.");
     },
     onError,
@@ -136,7 +144,20 @@ export default function ServicePlanPage() {
     <DashboardLayout>
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <h1 className="text-2xl font-bold tracking-tight">Roteiro</h1>
+          <div className="flex items-center gap-2">
+            {serviceId && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Voltar ao calendário"
+                title="Voltar ao calendário"
+                onClick={() => openCalendar(service?.date.slice(0, 7) ?? month)}
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            )}
+            <h1 className="text-2xl font-bold tracking-tight">{serviceId ? "Roteiro" : "Cultos"}</h1>
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline" className="gap-2">
               <Link to="/cultos/roteiro/modelos">
@@ -151,7 +172,7 @@ export default function ServicePlanPage() {
               </Button>
             )}
             {canEdit && (
-              <Button className="gap-2" onClick={() => setNewOpen(true)}>
+              <Button className="gap-2" onClick={() => openNew(null)}>
                 <Plus className="h-4 w-4" />
                 Novo culto
               </Button>
@@ -169,19 +190,17 @@ export default function ServicePlanPage() {
           <div className="flex justify-center py-16 text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin" aria-label="Carregando" />
           </div>
-        ) : !error && services.length === 0 ? (
-          <div className="rounded-xl border bg-card px-6 py-14 text-center">
-            <p className="font-semibold">Nenhum culto roteirizado ainda.</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Crie o culto a partir de um modelo e escolha as músicas do louvor.
-            </p>
-            {canEdit && (
-              <Button className="mt-5 gap-2" onClick={() => setNewOpen(true)}>
-                <Plus className="h-4 w-4" />
-                Novo culto
-              </Button>
-            )}
-          </div>
+        ) : !serviceId ? (
+          !error && (
+            <ServicesCalendar
+              month={month}
+              services={services}
+              canEdit={canEdit}
+              onMonthChange={openCalendar}
+              onOpen={(id) => go({ culto: id, aba: "culto" })}
+              onCreate={(date) => openNew(date)}
+            />
+          )
         ) : service ? (
           <section className="flex flex-col gap-5 rounded-xl border bg-card p-5">
             <div className="flex flex-wrap items-center gap-3">
@@ -268,7 +287,13 @@ export default function ServicePlanPage() {
 
       {canManagePonte && <PonteKeyDialog open={ponteOpen} onOpenChange={setPonteOpen} />}
 
-      <NewServiceDialog open={newOpen} onOpenChange={setNewOpen} onCreate={(input) => create.mutate(input)} creating={create.isPending} />
+      <NewServiceDialog
+        open={newOpen}
+        onOpenChange={setNewOpen}
+        initialDate={newDate}
+        onCreate={(input) => create.mutate(input)}
+        creating={create.isPending}
+      />
 
       {service && (
         <AddSongDialog

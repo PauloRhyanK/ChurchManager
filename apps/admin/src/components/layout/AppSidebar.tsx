@@ -59,8 +59,8 @@ const mainNav: {
     icon: Music,
     modules: ["WORSHIP"],
     children: [
+      { title: "Calendário", url: "/cultos/roteiro" },
       { title: "Músicas", url: "/cultos/musicas" },
-      { title: "Roteiro", url: "/cultos/roteiro" },
     ],
   },
   { title: "Palavras", url: "/palavras", icon: BookOpen, modules: ["SERMONS"] },

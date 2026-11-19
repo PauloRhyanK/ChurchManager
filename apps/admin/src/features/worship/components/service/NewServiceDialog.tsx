@@ -14,6 +14,8 @@ interface NewServiceDialogProps {
   onOpenChange: (open: boolean) => void;
   onCreate: (input: { date: string; startTime: string; templateId: string | null }) => void;
   creating: boolean;
+  /** Data já escolhida (clique num dia do calendário), em AAAA-MM-DD. */
+  initialDate?: string | null;
 }
 
 /** Próximo domingo (ou hoje, se for domingo), em AAAA-MM-DD no fuso do navegador. */
@@ -23,7 +25,7 @@ function nextSunday(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export function NewServiceDialog({ open, onOpenChange, onCreate, creating }: NewServiceDialogProps) {
+export function NewServiceDialog({ open, onOpenChange, onCreate, creating, initialDate }: NewServiceDialogProps) {
   const templatesQuery = useQuery({ queryKey: ["worship", "templates"], queryFn: fetchTemplates, enabled: open });
   const templates = templatesQuery.data ?? [];
   const [date, setDate] = useState(nextSunday);
@@ -32,11 +34,11 @@ export function NewServiceDialog({ open, onOpenChange, onCreate, creating }: New
 
   useEffect(() => {
     if (open) {
-      setDate(nextSunday());
+      setDate(initialDate || nextSunday());
       setTemplate(BUILT_IN);
       setStartTime("19:00");
     }
-  }, [open]);
+  }, [open, initialDate]);
 
   const chosen = templates.find((t) => (t.id ?? BUILT_IN) === template);
 

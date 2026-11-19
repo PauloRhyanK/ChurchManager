@@ -25,10 +25,19 @@ export type TimeSource = (typeof TIME_SOURCES)[number];
 export const MAX_ROWS = 600;
 export const MAX_ROW_TEXT = 200;
 export const MAX_TIME_SECONDS = 3600;
+export const MAX_PART_NAME = 40;
 
 export interface RowPart {
   kind: PartKind;
   mood: Mood | null;
+  /** Nome dado à mão ("Refrão final", "Tag"). Sem ele, o nome sai do tipo ("Verso 2"). */
+  name?: string;
+}
+
+/** Copia a parte deixando o nome só quando ele tem texto. */
+export function cleanPart(part: RowPart): RowPart {
+  const name = (part.name ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_PART_NAME);
+  return name ? { kind: part.kind, mood: part.mood ?? null, name } : { kind: part.kind, mood: part.mood ?? null };
 }
 
 export interface WorshipRow {
@@ -164,7 +173,7 @@ export function normalizeRows(input: WorshipRow[]): WorshipRow[] {
       text: (raw.text ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_ROW_TEXT),
     };
     if (raw.type === 'cue') row.target = raw.target ?? 'ALL';
-    if (part) row.part = { kind: part.kind, mood: part.mood ?? null };
+    if (part) row.part = cleanPart(part);
     const time = typeof raw.time === 'number' ? raw.time : inherited?.time;
     if (startsSlide && typeof time === 'number' && Number.isFinite(time)) {
       row.time = Math.min(MAX_TIME_SECONDS, Math.max(0, Math.round(time * 100) / 100));
@@ -197,7 +206,7 @@ export function deriveSong(rows: WorshipRow[]): { parts: DerivedPart[]; slides: 
       parts.push({
         index: parts.length,
         kind: part?.kind ?? 'VERSE',
-        name: '',
+        name: (part?.name ?? '').trim(),
         mood: part?.mood ?? null,
         time: null,
         firstSlide: slides.length,
@@ -223,9 +232,10 @@ export function deriveSong(rows: WorshipRow[]): { parts: DerivedPart[]; slides: 
     else slide.lines.push((row.text ?? '').trim().toLocaleUpperCase('pt-BR'));
   }
 
+  // Verso com nome próprio não conta na numeração dos outros.
   let verse = 0;
   for (const part of parts) {
-    part.name = part.kind === 'VERSE' ? `Verso ${++verse}` : PART_KIND_LABEL[part.kind];
+    if (!part.name) part.name = part.kind === 'VERSE' ? `Verso ${++verse}` : PART_KIND_LABEL[part.kind];
     part.time = slides[part.firstSlide]?.time ?? null;
   }
   return { parts, slides };

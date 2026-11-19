@@ -1,6 +1,6 @@
 import { api } from "@/lib/api";
 import type { PublicSlide, SlideStyle } from "@/features/sermons/lib/slides";
-import type { Pending, SongStatus, WorshipRow } from "../lib/document";
+import { MAX_PART_NAME, type Pending, type RowPart, type SongStatus, type WorshipRow } from "../lib/document";
 
 export interface SongAudio {
   url: string;
@@ -77,12 +77,18 @@ export async function updateSongInfo(id: string, info: SongInfoBody): Promise<So
   return (await api.put<Song>(`${SONGS}/${id}`, body)).data;
 }
 
+function partBody(part: RowPart): RowPart {
+  const body: RowPart = { kind: part.kind, mood: part.mood };
+  if (part.name?.trim()) body.name = part.name.trim().slice(0, MAX_PART_NAME);
+  return body;
+}
+
 /** Só os campos de cada linha que a API aceita, montados um a um. */
 function rowBody(row: WorshipRow): WorshipRow {
   const body: WorshipRow = { id: row.id, type: row.type };
   if (row.type === "break") {
     // Linha esvaziada que abria parte ou slide: o servidor passa parte e tempo para a seguinte.
-    if (row.part) body.part = { kind: row.part.kind, mood: row.part.mood };
+    if (row.part) body.part = partBody(row.part);
     if (typeof row.time === "number") {
       body.time = row.time;
       body.timeSource = row.timeSource ?? "MANUAL";
@@ -91,7 +97,7 @@ function rowBody(row: WorshipRow): WorshipRow {
   }
   body.text = (row.text ?? "").slice(0, 200);
   if (row.type === "cue") body.target = row.target ?? "ALL";
-  if (row.part) body.part = { kind: row.part.kind, mood: row.part.mood };
+  if (row.part) body.part = partBody(row.part);
   if (typeof row.time === "number") {
     body.time = row.time;
     body.timeSource = row.timeSource ?? "MANUAL";
@@ -306,4 +312,55 @@ export async function setServiceMoments(
 
 export async function setServiceSongs(id: string, songIds: string[]): Promise<ServicePlan> {
   return (await api.put<ServicePlan>(`${SERVICES}/${id}/songs`, { songIds: [...songIds] })).data;
+}
+
+// --- tempos dos slides: antecipação, ajuste por IA e aprendizado ---------------
+
+const TIMING = "/admin/tenants/me/worship/timing";
+
+export interface TimingSettings {
+  slideLeadSeconds: number;
+  aiEnabled: boolean;
+}
+
+export async function fetchTimingSettings(): Promise<TimingSettings> {
+  return (await api.get<TimingSettings>(`${TIMING}/settings`)).data;
+}
+
+export async function saveTimingSettings(slideLeadSeconds: number): Promise<TimingSettings> {
+  const body: { slideLeadSeconds: number } = { slideLeadSeconds };
+  return (await api.put<TimingSettings>(`${TIMING}/settings`, body)).data;
+}
+
+export interface LearnedTiming {
+  corrections: number;
+  meanFineDeltaSeconds: number | null;
+  slideShifts: { earlier: number; later: number };
+}
+
+export async function fetchLearnedTiming(): Promise<LearnedTiming> {
+  return (await api.get<LearnedTiming>(`${TIMING}/learned`)).data;
+}
+
+export interface TimingSuggestion {
+  before: (number | null)[];
+  times: (number | null)[];
+  summary: string;
+  slideIds: string[];
+}
+
+export async function suggestTiming(songId: string, instruction: string): Promise<TimingSuggestion> {
+  const body: { instruction: string } = { instruction };
+  return (await api.post<TimingSuggestion>(`${TIMING}/songs/${songId}/suggest`, body)).data;
+}
+
+export type TimingCorrectionSource = "DRAG" | "NUDGE" | "SHIFT_SECONDS" | "SHIFT_SLIDES" | "INSTRUCTION";
+
+export async function recordTimingCorrection(
+  songId: string,
+  input: { source: TimingCorrectionSource; before: (number | null)[]; after: (number | null)[]; instruction?: string },
+): Promise<void> {
+  const body: typeof input = { source: input.source, before: input.before, after: input.after };
+  if (input.instruction) body.instruction = input.instruction;
+  await api.post(`${TIMING}/songs/${songId}/corrections`, body);
 }

@@ -40,6 +40,7 @@ function build(options: { keys?: Record<string, string>; lastUsedAt?: Date | nul
       ? { id: `k-${tenantId}`, tenantId, keyHash: keys.get(tenantId), keyHint: 'abcd', createdAt: new Date(), lastUsedAt: options.lastUsedAt ?? null }
       : null;
   const prisma = {
+    worshipSettings: { findUnique: async () => null },
     tenant: {
       findUnique: async ({ where }: { where: { slug?: string; id?: string } }) => {
         const id = where.id ?? slugs[where.slug ?? ''];
@@ -137,8 +138,10 @@ test('próximo culto: formato do contrato, com versão estável', async () => {
     { index: 0, kind: 'VERSE', name: 'Verso 1', mood: 'WORSHIP', time: 14.2, firstSlide: 0, slideCount: 1 },
     { index: 1, kind: 'CHORUS', name: 'Refrão', mood: 'CELEBRATION', time: 44, firstSlide: 1, slideCount: 1 },
   ]);
+  // Sem ajuste salvo, vale a antecipação padrão (0,3 s).
+  assert.equal(song.slideLeadSeconds, 0.3);
   assert.deepEqual(song.slides[0], {
-    index: 0, part: 0, time: 14.2, lines: ['ANTES DO SOL NASCER'], cues: [{ target: 'VOCAL', text: 'solo' }],
+    index: 0, part: 0, time: 13.9, markedTime: 14.2, lines: ['ANTES DO SOL NASCER'], cues: [{ target: 'VOCAL', text: 'solo' }],
   });
   assert.equal(song.holyricsText, '//Vocal: solo\nANTES DO SOL NASCER\n\nÉS A LUZ DA MANHÃ');
   assert.equal('rows' in song, false);
@@ -169,4 +172,17 @@ test('música que não está pronta vai com o que tiver (tempo nulo onde falta)'
   assert.equal(out.slides[1].time, null);
   assert.equal(out.parts[1].time, null);
   assert.equal(out.holyricsId, null);
+});
+
+test('antecipação: o slide vai para a Ponte já adiantado, com o tempo marcado ao lado', () => {
+  const out = toPonteSong({ ...SONG } as never, 0.3);
+  assert.equal(out.slideLeadSeconds, 0.3);
+  assert.equal(out.slides[0].time, 13.9);
+  assert.equal(out.slides[0].markedTime, 14.2);
+  assert.equal(out.slides[1].time, 43.7);
+  // A parte (luz) continua no tempo marcado.
+  assert.equal(out.parts[1].time, 44);
+  // Nunca antes do começo do áudio.
+  const zero = toPonteSong({ ...SONG, rows: ROWS.map((r) => (r.id === 'a' ? { ...r, time: 0.1 } : r)) } as never, 0.3);
+  assert.equal(zero.slides[0].time, 0);
 });
