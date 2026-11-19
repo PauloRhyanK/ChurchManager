@@ -47,6 +47,22 @@ describe("SermonPreviewDialog", () => {
     expect(await screen.findByRole("link", { name: "Abrir a palavra" })).toHaveAttribute("href", "/palavras/s9");
   });
 
+  it("cópia nova (com a face do modelo) e cópia antiga (só kind, text e reference) aparecem na identidade", async () => {
+    api.getServiceSermon.mockResolvedValue({
+      ...PREVIEW,
+      slides: [
+        { kind: "VERSE", text: "Eu sou a luz do mundo", layout: "M04", title: "A luz chama", subtitle: "Ninguém acha o caminho sozinho", verse: "Eu sou a luz do mundo", reference: "João 8:12 · BLIVRE" },
+        { kind: "VERSE", text: "Vós sois a luz do mundo", reference: "Mateus 5:14" },
+      ],
+    });
+    renderDialog();
+    expect(await screen.findAllByTestId("slide-card")).toHaveLength(2);
+    expect(screen.getByText("Ninguém acha o caminho sozinho")).toHaveAttribute("data-slide-role", "subtitle");
+    expect(screen.getByText("João 8:12 · BLIVRE")).toHaveAttribute("data-slide-role", "reference");
+    expect(screen.getByText("Vós sois a luz do mundo")).toHaveAttribute("data-slide-role", "verse");
+    expect(screen.getAllByText("Mateus 5:14").map((e) => e.dataset.slideRole)).toEqual(["title", "reference"]);
+  });
+
   it("ao reabrir, mostra o carregando em vez dos slides antigos enquanto busca de novo", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     client.setQueryData(["worship", "service-sermon", "c1"], PREVIEW);

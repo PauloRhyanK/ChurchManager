@@ -1083,3 +1083,29 @@ web:
 #   # A chave é gerada no painel do ChurchManager, em Cultos › Roteiro ›
 #   # "Ponte do Culto", e aparece uma vez só. É segredo: só neste arquivo.
 #   chave: "COLE-AQUI-A-CHAVE-DA-INTEGRACAO"
+#
+# PASSADOR DE SLIDES (o controle Logitech Spotlight do pregador). Sem este
+# bloco ele já funciona, no PC principal, com os valores abaixo.
+#
+# O passador é um teclado: de fábrica só passa o slide com a janela do
+# Holyrics em foco. A Ponte ouve o passador com QUALQUER janela em foco e pede
+# o próximo slide ao Holyrics. Só reage ao passador (reconhecido pelo receptor
+# USB): as mesmas teclas num teclado comum continuam sendo só teclas.
+#
+# Para saber o que o SEU passador manda: `python descobrir_passador.py`, no PC
+# do Holyrics, e aperte cada botão. Se o Logi Options+ estiver instalado, ele
+# pode ter trocado as teclas.
+#
+# passador:
+#   ativo: true
+#   # trecho do nome do dispositivo no Windows. De fábrica, o receptor USB do
+#   # Spotlight e o Spotlight por Bluetooth:
+#   dispositivo: ["VID_046D&PID_C53E", "VID&02046D_PID&B503"]
+#   proximo: [PageDown, Right]
+#   anterior: [PageUp, Left]
+#   # Com o Holyrics em foco ele já recebe a tecla e passa sozinho; a Ponte
+#   # fica quieta para o slide não andar duas vezes.
+#   ignorar_com_holyrics_em_foco: true
+#
+# Teclas que dá para escrever: PageDown, PageUp, Right, Left, Down, Up, Space,
+# Enter, Escape, Tab, F5, B, Period.

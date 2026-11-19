@@ -26,6 +26,8 @@ from ponte import obs_imagem as mod_obs_imagem
 from ponte import obs_ouvinte as mod_obs_ouvinte
 from ponte import painel_ao_vivo as mod_ao_vivo
 from ponte import palavra as mod_palavra
+from ponte import passador as mod_passador
+from ponte import telao as mod_telao
 from ponte import relogio as mod_relogio
 from ponte import repertorio as mod_repertorio
 from ponte import saude_envio as mod_saude_envio
@@ -2047,7 +2049,7 @@ PACOTE = (
     "iniciar-ponte.bat", "iniciar-ponte.ps1", "iniciar.py", "instalar-do-zero.ps1",
     "ligar-web.py", "ligar-web.bat",
     "gerar_click.py",
-    "verificar.py", "verificar_obs.py", "verificar_palavra.py", "descobrir_holyrics.py", "descobrir_luzes.py",
+    "verificar.py", "verificar_obs.py", "verificar_palavra.py", "descobrir_passador.py", "descobrir_holyrics.py", "descobrir_luzes.py",
 )
 
 
@@ -2789,6 +2791,19 @@ def relogio_avisar():
     return jsonify({"aceito": aceito})
 
 
+@app.post("/api/passador/simular")
+def passador_simular():
+    """So existe com PONTE_SIMULAR=1: faz de conta que o passador mandou uma
+    tecla, para ver o painel reagir sem o aparelho e sem Windows."""
+    if not SIMULAR or _pecas.get("passador") is None:
+        return jsonify({"erro": "só na simulação"}), 404
+    corpo = request.get_json(silent=True) or {}
+    codigo = mod_passador.TECLAS.get(str(corpo.get("tecla") or "PageDown"))
+    feito = _pecas["passador"].tecla(
+        str(corpo.get("dispositivo") or "\\\\?\\HID#VID_046D&PID_C53E&MI_00#simulado"), codigo or 0)
+    return jsonify({"feito": feito})
+
+
 CAMINHO_LOUVOR = os.path.join(RAIZ, "_louvor_atual.json")
 # A palavra de hoje, no formato que o modulo Palavras do ChurchManager propos
 # (ver ponte/palavra.py). Enquanto a rota de la nao existe, e este arquivo.
@@ -3009,6 +3024,18 @@ def _montar_ao_vivo():
         ao_vivo.luz_da_parte, lambda titulo, ok, detalhe: _anotar(titulo, ok, detalhe, "local"),
         lembrado=_lembrar_se_ainda_e_louvor(ao_vivo), guardar=_guardar_louvor)
     _pecas["condutor"].comecar()
+    # O que esta aberto no Holyrics, slide a slide (ponte/telao.py), e o
+    # passador de slides que funciona com qualquer janela em foco
+    # (ponte/passador.py). Os dois so na maquina principal.
+    _pecas["telao"] = mod_telao.Telao(lambda: _contexto.get("holyrics"))
+    _pecas["telao"].comecar()
+    _pecas["passador"] = mod_passador.Passador(
+        _config.get("passador") or {},
+        lambda para: ao_vivo.passar(para, "Passador"),
+        mod_passador.holyrics_em_foco, suportado=mod_passador.no_windows() or SIMULAR)
+    if _pecas["passador"].ativo:
+        if mod_passador.OuvinteDoTeclado(_pecas["passador"].tecla, _pecas["passador"].presentes).comecar():
+            print("  [passador] ouvindo o passador de slides, com qualquer janela em foco")
     telao = mod_palavra.TelaoDaPalavra(lambda: _contexto.get("holyrics"), lambda: _config)
     _pecas["palavra"] = mod_palavra.Palavra(
         _fonte_da_palavra(fonte_cultos), telao.mostrar, telao.tirar,

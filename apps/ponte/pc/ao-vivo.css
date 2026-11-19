@@ -110,6 +110,7 @@ h1, h2, h3, p { margin: 0; }
 .cabeca { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; justify-content: space-between; }
 .empilha { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .grande { font-size: 22px; font-weight: 700; }
+.medio { font-size: 17px; font-weight: 700; }
 .linha { display: flex; align-items: center; gap: 10px; }
 .cresce { flex: 1; min-width: 0; }
 

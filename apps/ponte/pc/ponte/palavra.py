@@ -74,22 +74,27 @@ class FontePalavraLocal:
         self._caminho = caminho
         self._lido = None
         self._palavra = None
+        # Quem pergunta e mais de um fio (o painel, o passador, o celular do
+        # pregador). Sem a tranca, o segundo a chegar no meio de uma leitura
+        # recebia "sem palavra" por um instante.
+        self._tranca = threading.Lock()
 
     def palavra(self):
-        try:
-            marca = os.path.getmtime(self._caminho)
-        except OSError:
-            self._lido, self._palavra = None, None
-            return None
-        if marca != self._lido:
-            self._lido = marca
+        with self._tranca:
             try:
-                with open(self._caminho, "r", encoding="utf-8-sig") as arquivo:
-                    self._palavra = normalizar(json.load(arquivo))
-            except Exception as erro:
-                print("  AVISO: nao consegui ler {}: {}".format(self._caminho, erro))
-                self._palavra = None
-        return self._palavra
+                marca = os.path.getmtime(self._caminho)
+            except OSError:
+                self._lido, self._palavra = None, None
+                return None
+            if marca != self._lido:
+                try:
+                    with open(self._caminho, "r", encoding="utf-8-sig") as arquivo:
+                        self._palavra = normalizar(json.load(arquivo))
+                except Exception as erro:
+                    print("  AVISO: nao consegui ler {}: {}".format(self._caminho, erro))
+                    self._palavra = None
+                self._lido = marca
+            return self._palavra
 
 
 class TelaoDaPalavra:

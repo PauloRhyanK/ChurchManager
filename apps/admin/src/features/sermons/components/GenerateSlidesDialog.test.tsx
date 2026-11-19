@@ -93,7 +93,7 @@ describe("GenerateSlidesDialog", () => {
       </QueryClientProvider>,
     );
     fireEvent.click(screen.getByRole("radio", { name: /Só versículos/ }));
-    fireEvent.click(screen.getByRole("radio", { name: /Com fundo/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Verde profundo/ }));
     rerender(
       <QueryClientProvider client={client}>
         <GenerateSlidesDialog {...props} initialStyle="MINIMAL" initialMode="VERSES_AND_POINTS" />
@@ -110,7 +110,7 @@ describe("GenerateSlidesDialog", () => {
       </QueryClientProvider>,
     );
     expect(screen.getByRole("radio", { name: /Só versículos/ })).toBeChecked();
-    expect(screen.getByRole("radio", { name: /Com fundo/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Verde profundo/ })).toBeChecked();
   });
 
   it("sem aviso, o texto não aparece", () => {
@@ -135,8 +135,8 @@ describe("GenerateSlidesDialog", () => {
     renderDialog({ style: "BACKGROUND" });
     expect(screen.getByRole("radio", { name: /Versículos e pontos/ })).toBeChecked();
     expect(screen.getByRole("radiogroup", { name: "Visual do slide" })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /Com fundo/ })).toBeChecked();
-    expect(screen.getByRole("radio", { name: /Minimalista/ })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: /Verde profundo/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Azul institucional/ })).not.toBeChecked();
   });
 
   it("Montar chama generateSlides com o modo e o visual e devolve a palavra", async () => {
@@ -144,7 +144,7 @@ describe("GenerateSlidesDialog", () => {
     api.generateSlides.mockResolvedValue(generated);
     const { onGenerated, ensureSaved } = renderDialog();
     fireEvent.click(screen.getByRole("radio", { name: /Só versículos/ }));
-    fireEvent.click(screen.getByRole("radio", { name: /Com fundo/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /Verde profundo/ }));
     await clickMontar();
     await waitFor(() => expect(onGenerated).toHaveBeenCalledWith(generated));
     expect(ensureSaved).toHaveBeenCalled();

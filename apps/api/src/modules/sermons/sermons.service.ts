@@ -64,12 +64,12 @@ export function toSermonSummary(sermon: SermonRow, now: Date, timeZone: string):
   };
 }
 
-/** O slide de título (não editado) já não bate com o título da palavra (aparado e cortado como na geração)? */
+/** Os slides de título (nenhum editado) já não batem com o título da palavra (aparado e dividido como na geração)? */
 function titleChanged(slides: SlideItem[], title: string): boolean {
-  const slide = slides.find((s) => s.kind === 'TITLE' && !s.edited);
-  if (!slide) return false;
-  const expected = buildSlides(title, EMPTY_DOC, 'VERSES_AND_POINTS').find((s) => s.kind === 'TITLE')?.text ?? '';
-  return slide.text !== expected;
+  const stored = slides.filter((s) => s.kind === 'TITLE');
+  if (stored.length === 0 || stored.some((s) => s.edited)) return false;
+  const expected = buildSlides(title, EMPTY_DOC, 'VERSES_AND_POINTS').filter((s) => s.kind === 'TITLE');
+  return stored.map((s) => s.text).join('\n') !== expected.map((s) => s.text).join('\n');
 }
 
 export function toSermonFull(sermon: SermonWithDelivery, now: Date, timeZone: string): SermonFull {
@@ -137,6 +137,25 @@ export class SermonsService {
         authorId: user.userId,
         title: dto.title ?? 'Sem título',
         document: EMPTY_DOC as unknown as Prisma.InputJsonValue,
+      },
+      include: SERMON_INCLUDE,
+    });
+    return toSermonFull(sermon, this.clock(), this.timeZone());
+  }
+
+  /** Palavra nova já com o esboço (de "Colar texto"). O documento chega validado; tenant e autor vêm do JWT. */
+  async createWithDocument(user: AuthUser, title: string, doc: SermonDoc): Promise<SermonFull> {
+    const derived = deriveSermon(doc);
+    const sermon = await this.prisma.sermon.create({
+      data: {
+        tenantId: user.tenantId,
+        authorId: user.userId,
+        title,
+        document: doc as unknown as Prisma.InputJsonValue,
+        baseReference: derived.baseReference,
+        pointCount: derived.pointCount,
+        verseRefs: derived.verseRefs,
+        estimatedSeconds: derived.estimatedSeconds,
       },
       include: SERMON_INCLUDE,
     });

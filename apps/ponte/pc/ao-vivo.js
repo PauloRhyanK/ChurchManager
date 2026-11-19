@@ -465,6 +465,49 @@ function htmlPalavra(d) {
   return h;
 }
 
+// O que esta aberto no Holyrics agora, seja o que for (uma musica aberta a
+// mao, um texto, um aviso): o slide atual, o proximo, a lista, e os botoes de
+// passar. Aparece no cartao do momento, quando nem o louvor nem a palavra da
+// Ponte estao com o centro da tela.
+function htmlTelao(d) {
+  const tv = d.telao_ao_vivo, slides = (C && C.telao) || [], pode = podeConduzir();
+  const i = tv.slide == null ? 0 : tv.slide;
+  const atual = slides[i], seguinte = slides[i + 1];
+  const total = tv.total || slides.length;
+  const texto = s => (s && s.linhas && s.linhas.length) ? esc(s.linhas.join('\n')) : '';
+  const preta = d.telao && d.telao.preta;
+  let h = '<div class="cabeca"><div class="empilha"><span class="rotulo">Aberto no telão</span>' +
+    '<span class="medio">' + esc(tv.nome || 'Apresentação') + '</span></div>' +
+    '<span class="resumo">slide ' + (i + 1) + (total ? ' de ' + total : '') + '</span></div>';
+  h += '<div class="slides-agora"><div class="no-telao"><span class="rotulo">' + (preta ? 'Tela preta' : 'No telão') + '</span>' +
+    (texto(atual) ? '<span class="letra' + (preta ? ' fraca' : '') + '">' + texto(atual) + '</span>'
+      : '<span class="letra fraca">slide ' + (i + 1) + (total ? ' de ' + total : '') + '</span>') +
+    (tv.erro ? '<span class="falha">O slide não passou: ' + esc(tv.erro) + '</span>' : '') + '</div>' +
+    '<div class="ao-lado"><div class="a-seguir"><span class="rotulo">A seguir</span><span class="letra">' +
+    (texto(seguinte) || (total && i + 1 >= total ? 'fim' : 'slide ' + (i + 2))) + '</span></div>';
+  const recados = (atual && atual.instrucoes) || [];
+  if (recados.length) h += '<div class="instrucao">' + recados.map(r => esc(r.para) + ' · ' + esc(r.texto)).join('<br>') + '</div>';
+  h += '</div></div>';
+  if (slides.length) {
+    h += '<div class="grade-slides" id="grade-telao">' + slides.map((s, n) => {
+      const corpo = '<span class="n">' + (n + 1) + '</span>' + (texto(s) || (s.instrucoes[0] ? '(' + esc(s.instrucoes[0].texto) + ')' : ''));
+      const classe = 'slide' + (n === i ? ' atual' : n < i ? ' passado' : '');
+      return pode ? '<button type="button" class="' + classe + '" aria-pressed="' + (n === i ? 'true' : 'false') + '"' +
+        ' data-a="' + esc(JSON.stringify({tipo: 'telao_slide', para: n})) + '">' + corpo + '</button>'
+        : '<div class="' + classe + '">' + corpo + '</div>';
+    }).join('') + '</div>';
+  } else {
+    h += '<p class="resumo">O Holyrics não entrega a lista de slides deste item (é assim com versículo). Os botões abaixo passam do mesmo jeito.</p>';
+  }
+  if (pode) {
+    h += '<div class="passar" id="passar-telao">' +
+      botao('← Anterior', {tipo: 'telao_slide', para: 'anterior', visto: tv.slide}, {desligado: tv.slide === 0}) +
+      botao('Próximo slide <span class="tecla">Espaço</span>', {tipo: 'telao_slide', para: 'proximo', visto: tv.slide},
+        {classe: 'bt forte', desligado: !!total && i + 1 >= total}) + '</div>';
+  }
+  return h;
+}
+
 function htmlMomento(d) {
   const o = d.ordem || {momentos: []};
   const atual = o.atual != null ? o.momentos[o.atual] : null;
@@ -487,8 +530,10 @@ function htmlMomento(d) {
     }
     if (atual.resumo) h += '<p class="resumo">' + esc(atual.resumo) + '</p>';
   }
-  const t = d.telao;
-  if (t) {
+  const t = d.telao, tv = d.telao_ao_vivo;
+  if (tv && tv.responde && !tv.vazio) {
+    h += htmlTelao(d);
+  } else if (t) {
     h += '<div class="caixa"><span class="rotulo">No telão</span><span>' + (t.preta ? 'Tela preta'
       : t.vazio ? 'Nada no telão' : esc(t.nome || 'Apresentação') + (t.slide && t.total ? ' · ' + t.slide + ' de ' + t.total : '')) + '</span></div>';
   }
@@ -497,7 +542,8 @@ function htmlMomento(d) {
   if (mic.length) h += '<div class="caixa"><span class="rotulo">Microfone</span>' + mic.map(htmlAudio).join('') + '</div>';
   if (proximo) {
     h += '<div class="botoes">' + botao((atual ? 'Próximo: ' : 'Começar: ') + esc(proximo.nome),
-      {tipo: 'ir', momento: proximo.id, versao: o.versao}, {classe: 'bt forte', confirmar: confirmarMomento(proximo)}) + '</div>';
+      {tipo: 'ir', momento: proximo.id, versao: o.versao},
+      {classe: tv && tv.responde && !tv.vazio ? 'bt' : 'bt forte', confirmar: confirmarMomento(proximo)}) + '</div>';
   }
   return h;
 }
@@ -627,7 +673,8 @@ function desenharTransmissao(d) {
 
 function desenharTelao(d) {
   const t = d.telao, c = d.controles || {}, recados = d.recados || [], rt = d.retorno_tv;
-  const tem = (t && c.tela_preta) || recados.length > 0 || !!rt;
+  const ps = d.passador && d.passador.ativo ? d.passador : null;
+  const tem = (t && c.tela_preta) || recados.length > 0 || !!rt || !!ps;
   mostrar('telao', !!tem);
   if (!tem) return;
   let h = '<h2 class="rotulo">Telão e palco</h2><div class="linha">';
@@ -652,6 +699,19 @@ function desenharTelao(d) {
         : botao('Pausar o vigia', {tipo: 'retorno', acao: 'pausar'}, {classe: 'bt pequeno',
             confirmar: {titulo: 'Pausar o vigia do retorno?', texto: 'Até o fim do dia, a ponte não reabre o retorno sozinha se a TV soltar.', sim: 'Pausar'}})) +
       '</div></div>';
+  }
+  if (ps) {
+    // O passador de slides (ponte/passador.py): se a ponte o enxerga, e o
+    // que ele fez por ultimo. E a prova de que o clique chegou.
+    let estado, cor;
+    if (!ps.suportado) { estado = 'só funciona no Windows'; cor = 'cinza'; }
+    else if (ps.conectado === false) { estado = 'não achei o receptor neste PC'; cor = 'vermelho'; }
+    else if (ps.conectado) { estado = 'conectado'; cor = 'verde'; }
+    else { estado = 'esperando o primeiro clique'; cor = 'cinza'; }
+    const u = ps.ultimo;
+    h += '<div class="equip"><span class="ponto ' + cor + '" aria-hidden="true"></span><span class="cresce">Passador de slides</span>' +
+      '<span class="estado ' + cor + '">' + estado + '</span></div>';
+    if (u) h += '<span class="miudo">Último clique às ' + esc(u.hora) + ' (' + esc(u.tecla) + '): ' + esc(u.texto) + '.</span>';
   }
   pintar('telao', h);
 }
@@ -786,9 +846,9 @@ async function agir(acao) {
   if (ocupado) return;
   // As acoes do louvor levam o nome do aparelho: e o que deixa a tela dizer
   // a todos quem esta no comando.
-  const doLouvor = /^(louvor_(assumir|devolver|segurar|slide|parte|repetir_refrao)|palavra_(slide|assumir|tirar))$/.test(acao.tipo);
+  const doLouvor = /^(louvor_(assumir|devolver|segurar|slide|parte|repetir_refrao)|palavra_(slide|assumir|tirar)|telao_slide)$/.test(acao.tipo);
   if (doLouvor) acao = Object.assign({quem: await garantirNome()}, acao);
-  const rapida = acao.tipo === 'louvor_slide' || acao.tipo === 'louvor_parte' || acao.tipo === 'palavra_slide';
+  const rapida = acao.tipo === 'louvor_slide' || acao.tipo === 'louvor_parte' || acao.tipo === 'palavra_slide' || acao.tipo === 'telao_slide';
   if (!rapida) { ocupado = true; redesenhar(); }
   try {
     const j = await pedir('/api/painel/acao', acao);
@@ -882,14 +942,20 @@ document.addEventListener('keydown', evento => {
   const l = D && D.louvor, p = D && D.palavra;
   const naPalavra = !!$('lista-palavra') && p && p.ativa;
   const noLouvor = !!$('grade-slides') && l && l.musica && l.letra === 'na_mao';
-  if (!podeConduzir() || !(naPalavra || noLouvor)) return;
+  const tv = D && D.telao_ao_vivo;
+  const noTelao = !!$('passar-telao') && tv && !tv.vazio;
+  if (!podeConduzir() || !(naPalavra || noLouvor || noTelao)) return;
   const foco = document.activeElement;
   if (foco && /^(INPUT|SELECT|TEXTAREA|SUMMARY)$/.test(foco.tagName)) return;
   evento.preventDefault();
   if (foco && foco.tagName === 'BUTTON') foco.blur();
   if (naPalavra) {
     if (!(p.visivel && p.slide + 1 >= p.total)) agir({tipo: 'palavra_slide', para: 'proximo', visto: p.slide == null ? -1 : p.slide});
-  } else if (l.slide + 1 < l.total_slides) agir({tipo: 'louvor_slide', para: 'proximo', visto: l.slide});
+  } else if (noLouvor) {
+    if (l.slide + 1 < l.total_slides) agir({tipo: 'louvor_slide', para: 'proximo', visto: l.slide});
+  } else if (!(tv.total && tv.slide != null && tv.slide + 1 >= tv.total)) {
+    agir({tipo: 'telao_slide', para: 'proximo', visto: tv.slide});
+  }
 });
 
 // -------------------------------------------------------------- consultar --

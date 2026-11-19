@@ -75,6 +75,13 @@ export async function createSermon(input: { title?: string } = {}): Promise<Serm
   return (await api.post<Sermon>(SERMONS, body)).data;
 }
 
+/** "Colar texto": a IA organiza o texto colado no formato do esboço e o servidor cria a palavra. */
+export async function createSermonFromText(input: { text: string; model?: string }): Promise<Sermon> {
+  const body: { text: string; model?: string } = { text: input.text };
+  if (input.model !== undefined) body.model = input.model;
+  return (await api.post<Sermon>(`${SERMONS}/from-text`, body)).data;
+}
+
 export async function getSermon(id: string): Promise<Sermon> {
   return (await api.get<Sermon>(`${SERMONS}/${id}`)).data;
 }
@@ -142,6 +149,8 @@ export interface SlideItemInput {
   id: string;
   included: boolean;
   text?: string;
+  /** Subtítulo do ponto (modelo 02) ou do versículo (modelo 04); "" tira. */
+  subtitle?: string;
 }
 
 export async function saveSlides(id: string, input: { style?: SlideStyle; items: SlideItemInput[] }): Promise<Sermon> {
@@ -149,6 +158,7 @@ export async function saveSlides(id: string, input: { style?: SlideStyle; items:
     items: input.items.map((i) => {
       const item: SlideItemInput = { id: i.id, included: i.included };
       if (i.text !== undefined) item.text = i.text;
+      if (i.subtitle !== undefined) item.subtitle = i.subtitle;
       return item;
     }),
   };
