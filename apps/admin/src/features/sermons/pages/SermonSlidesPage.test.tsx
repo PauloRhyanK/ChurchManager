@@ -77,8 +77,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function renderPage() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderPage(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/palavras/s1/slides"]} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
@@ -231,6 +230,72 @@ describe("SermonSlidesPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Gerar slides" }));
     expect(await screen.findByRole("dialog", { name: "Gerar slides" })).toBeInTheDocument();
     expect(screen.queryByText(/refaz a sequência/)).not.toBeInTheDocument();
+  });
+
+  it("vindo do esboço com cache novo (staleTime do app): abre na hora e atualiza com a busca", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } });
+    client.setQueryData(["sermons", "detail", "s1"], sermon());
+    const fresh = deferred<unknown>();
+    api.getSermon.mockReturnValue(fresh.promise);
+    renderPage(client);
+    expect(await screen.findByRole("heading", { name: "Luz que não se apaga", level: 1 })).toBeInTheDocument();
+    expect(box(/João 8:12/)).toBeChecked();
+    expect(api.getSermon).toHaveBeenCalledWith("s1");
+    await act(async () => fresh.resolve(sermon({ slides: SLIDES.map((s) => (s.id === "v1:0" ? { ...s, included: false } : s)) })));
+    await waitFor(() => expect(box(/João 8:12/)).not.toBeChecked());
+  });
+
+  it("depois de um salvamento que falhou, Enviar não segue e avisa", async () => {
+    api.saveSlides.mockRejectedValue(new Error("falhou"));
+    api.sendSermon.mockResolvedValue(sermon());
+    api.listServiceOptions.mockResolvedValue([
+      { id: "c1", date: "2026-11-22", startTime: "19:00", name: "Culto", hasSermon: false, isMine: false },
+    ]);
+    renderPage();
+    fireEvent.click(await screen.findByRole("checkbox", { name: /João 8:12/ }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Não foi possível salvar os slides."));
+    await waitFor(() => expect(box(/João 8:12/)).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: "Enviar para um culto" }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Culto/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Não foi possível salvar os slides. Confira a lista antes de enviar."),
+    );
+    expect(api.sendSermon).not.toHaveBeenCalled();
+  });
+
+  it("depois de um salvamento que falhou, Atualizar não gera; um salvamento bom libera", async () => {
+    api.getSermon.mockResolvedValue(sermon({ slidesStale: true }));
+    api.saveSlides.mockRejectedValueOnce(new Error("falhou")).mockResolvedValue(sermon({ slidesStale: true }));
+    api.generateSlides.mockResolvedValue(sermon());
+    renderPage();
+    fireEvent.click(await screen.findByRole("checkbox", { name: /João 8:12/ }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Não foi possível salvar os slides."));
+    await waitFor(() => expect(box(/João 8:12/)).not.toBeDisabled());
+    fireEvent.click(screen.getByRole("button", { name: "Atualizar" }));
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Não foi possível salvar os slides. Confira a lista antes de enviar."),
+    );
+    expect(api.generateSlides).not.toHaveBeenCalled();
+    fireEvent.click(box(/A luz chama/));
+    await waitFor(() => expect(api.saveSlides).toHaveBeenCalledTimes(2));
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: "Atualizar" }));
+    await waitFor(() => expect(api.generateSlides).toHaveBeenCalled());
+  });
+
+  it("a lista fica travada enquanto volta ao estado do servidor depois de um erro", async () => {
+    const reset = deferred<unknown>();
+    api.saveSlides.mockRejectedValue(new Error("falhou"));
+    renderPage();
+    fireEvent.click(await screen.findByRole("checkbox", { name: /João 8:12/ }));
+    api.getSermon.mockReturnValue(reset.promise);
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(box(/Luz que não se apaga/)).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Minimalista · trocar" })).toBeDisabled();
+    await act(async () => reset.resolve(sermon()));
+    expect(box(/Luz que não se apaga/)).not.toBeDisabled();
+    expect(api.saveSlides).toHaveBeenCalledTimes(1);
   });
 
   it("palavra inexistente ou de outro autor: Palavra não encontrada.", async () => {

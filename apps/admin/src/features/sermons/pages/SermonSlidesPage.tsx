@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeft, ArrowRight, Loader2, RefreshCw, Sparkles } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -19,6 +19,7 @@ import { publicSlides, type SlideItem, type SlideStyle } from "../lib/slides";
 const LIST_PATH = "/palavras";
 const STYLE_NAME: Record<SlideStyle, string> = { MINIMAL: "Minimalista", BACKGROUND: "Com fundo" };
 const SAVE_ERROR = "Não foi possível salvar os slides.";
+const UNSAVED = "Não foi possível salvar os slides. Confira a lista antes de enviar.";
 const REGENERATE_NOTICE = "Trocar o que mostrar refaz a sequência do zero.";
 
 const plural = (n: number) => `${n} ${n === 1 ? "slide" : "slides"}`;
@@ -26,22 +27,38 @@ const detailKey = (id: string) => ["sermons", "detail", id] as const;
 
 type Draft = { items: SlideItem[]; style: SlideStyle };
 
-function SlidesView({ initial, canEdit }: { initial: Sermon; canEdit: boolean }) {
+function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Sermon; canEdit: boolean }) {
   const queryClient = useQueryClient();
   const id = initial.id;
   const [sermon, setSermon] = useState(initial);
   const [draft, setDraft] = useState<Draft>({ items: initial.slides, style: initial.slideStyle });
   const [busy, setBusy] = useState(false);
+  // Voltando ao estado do servidor depois de um erro: a lista fica travada.
+  const [resetting, setResetting] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [generateOpen, setGenerateOpen] = useState(false);
   // Fila de salvamento: um pedido por vez; o que mudar no meio espera e vai inteiro no próximo.
   const pending = useRef<Draft | null>(null);
   const running = useRef<Promise<void> | null>(null);
+  // O último salvamento falhou: nada segue (enviar, gerar) até um salvamento dar certo.
+  const failed = useRef(false);
+  const busyRef = useRef(false);
+  const lastServer = useRef(server);
+
+  // Nova cópia do servidor (a busca da montagem chegou): entra se não há mudança local esperando.
+  useEffect(() => {
+    if (server === lastServer.current) return;
+    lastServer.current = server;
+    if (pending.current || running.current || busyRef.current) return;
+    setSermon(server);
+    setDraft({ items: server.slides, style: server.slideStyle });
+  }, [server]);
 
   /** Guarda a palavra do servidor; a lista só é trocada quando não há mudança local esperando. */
   function adopt(saved: Sermon, withSlides: boolean) {
     setSermon(saved);
     if (withSlides) setDraft({ items: saved.slides, style: saved.slideStyle });
+    lastServer.current = saved;
     queryClient.setQueryData<Sermon>(detailKey(id), saved);
     void queryClient.invalidateQueries({ queryKey: ["sermons", "list"] });
   }
@@ -53,14 +70,21 @@ function SlidesView({ initial, canEdit }: { initial: Sermon; canEdit: boolean })
         pending.current = null;
         try {
           const saved = await saveSlides(id, { style: next.style, items: slidesBody(next.items) });
+          failed.current = false;
           adopt(saved, pending.current === null);
         } catch {
           pending.current = null;
+          failed.current = true;
           toast.error(SAVE_ERROR);
+          setResetting(true);
           try {
             adopt(await getSermon(id), true);
           } catch {
             // Sem a cópia do servidor, a tela fica como está; o próximo salvamento tenta de novo.
+          } finally {
+            // O que mudou nesse meio (não deveria: a lista estava travada) é descartado.
+            pending.current = null;
+            setResetting(false);
           }
         }
       }
@@ -75,25 +99,31 @@ function SlidesView({ initial, canEdit }: { initial: Sermon; canEdit: boolean })
     if (!running.current) running.current = drain();
   }
 
-  /** Espera a fila esvaziar (antes de gerar de novo ou enviar). */
+  /** Espera a fila esvaziar (antes de gerar de novo ou enviar); `false` se o último salvamento falhou. */
   async function whenIdle() {
     while (running.current) await running.current;
-    return true;
+    return !failed.current;
   }
 
   const { items, style } = draft;
   const shown = publicSlides(items);
-  const readOnly = !canEdit || busy;
+  const locked = busy || resetting;
+  const readOnly = !canEdit || locked;
 
   async function refresh() {
     setBusy(true);
+    busyRef.current = true;
     try {
-      await whenIdle();
+      if (!(await whenIdle())) {
+        toast.error(UNSAVED);
+        return;
+      }
       adopt(await generateSlides(id, { mode: sermon.slideMode === "VERSES" ? "VERSES" : "VERSES_AND_POINTS" }), true);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
       setBusy(false);
+      busyRef.current = false;
     }
   }
 
@@ -165,7 +195,7 @@ function SlidesView({ initial, canEdit }: { initial: Sermon; canEdit: boolean })
                   <b>Tirado do esboço</b> <span className="text-muted-foreground">· {plural(shown.length)}</span>
                 </span>
                 {canEdit && (
-                  <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => setGenerateOpen(true)}>
+                  <Button type="button" variant="ghost" size="sm" disabled={locked} onClick={() => setGenerateOpen(true)}>
                     Gerar de novo
                   </Button>
                 )}
@@ -191,7 +221,7 @@ function SlidesView({ initial, canEdit }: { initial: Sermon; canEdit: boolean })
                 {canEdit ? (
                   <button
                     type="button"
-                    disabled={busy}
+                    disabled={locked}
                     onClick={() => change({ items, style: style === "MINIMAL" ? "BACKGROUND" : "MINIMAL" })}
                     className="text-[13px] font-semibold text-primary hover:underline disabled:opacity-60"
                   >
@@ -224,6 +254,7 @@ function SlidesView({ initial, canEdit }: { initial: Sermon; canEdit: boolean })
           subtitle={`${sermon.title.trim() || "Sem título"} · ${plural(shown.length)}`}
           delivery={sermon.delivery}
           ensureSaved={whenIdle}
+          unsavedMessage={UNSAVED}
           onChanged={(saved) => adopt(saved, !running.current)}
         />
       )}
@@ -238,6 +269,7 @@ function SlidesView({ initial, canEdit }: { initial: Sermon; canEdit: boolean })
           initialMode={sermon.slideMode === "VERSES" ? "VERSES" : "VERSES_AND_POINTS"}
           notice={hasSlides ? REGENERATE_NOTICE : undefined}
           ensureSaved={whenIdle}
+          unsavedMessage={UNSAVED}
           onGenerated={(saved) => adopt(saved, true)}
         />
       )}
@@ -248,9 +280,12 @@ function SlidesView({ initial, canEdit }: { initial: Sermon; canEdit: boolean })
 export default function SermonSlidesPage() {
   const { id = "" } = useParams<{ id: string }>();
   const { can } = usePermissions();
+  // O esboço grava a mesma chave e o app tem staleTime de 30 s: aqui a busca da montagem é sempre feita.
   const query = useQuery({
     queryKey: detailKey(id),
     queryFn: () => getSermon(id),
+    staleTime: 0,
+    refetchOnMount: "always",
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -269,8 +304,8 @@ export default function SermonSlidesPage() {
       </DashboardLayout>
     );
   }
-  // Abre com a cópia buscada agora (o cache do esboço pode estar antigo); depois a tela é dona da lista.
-  if (!query.data || !query.isFetchedAfterMount) {
+  // Abre com o que estiver no cache; a busca da montagem atualiza a tela se nada local estiver esperando.
+  if (!query.data) {
     return (
       <DashboardLayout>
         <div className="flex justify-center py-16" role="status" aria-label="Carregando">
@@ -279,5 +314,5 @@ export default function SermonSlidesPage() {
       </DashboardLayout>
     );
   }
-  return <SlidesView key={id} initial={query.data} canEdit={can("SERMONS", "EDIT")} />;
+  return <SlidesView key={id} initial={query.data} server={query.data} canEdit={can("SERMONS", "EDIT")} />;
 }

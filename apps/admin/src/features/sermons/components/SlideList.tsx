@@ -38,20 +38,29 @@ interface SlideListProps {
 /** Texto do título ou ponto: clicar abre a edição no lugar (Enter confirma, Esc cancela). */
 function EditableText({ item, onEdit }: { item: SlideItem; onEdit(text: string): void }) {
   const [draft, setDraft] = useState<string | null>(null);
+  const [emptyHint, setEmptyHint] = useState(false);
   const cancelled = useRef(false);
 
   if (draft === null) {
     return (
-      <button
-        type="button"
-        onClick={() => {
-          cancelled.current = false;
-          setDraft(item.text);
-        }}
-        className="min-w-0 flex-1 truncate rounded px-1 py-1 text-left text-[15px] font-semibold hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        {item.text}
-      </button>
+      <span className="flex min-w-0 flex-1 items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            cancelled.current = false;
+            setEmptyHint(false);
+            setDraft(item.text);
+          }}
+          className="min-w-0 truncate rounded px-1 py-1 text-left text-[15px] font-semibold hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {item.text}
+        </button>
+        {emptyHint && (
+          <span role="status" className="flex-none text-xs text-destructive">
+            O texto não pode ficar vazio.
+          </span>
+        )}
+      </span>
     );
   }
   const commit = () => {
@@ -59,7 +68,9 @@ function EditableText({ item, onEdit }: { item: SlideItem; onEdit(text: string):
     cancelled.current = true;
     const text = draft.trim();
     setDraft(null);
-    if (text && text !== item.text) onEdit(text);
+    // Vazio não vale: o texto antigo fica e a dica aparece ao lado.
+    if (!text) setEmptyHint(true);
+    else if (text !== item.text) onEdit(text);
   };
   return (
     <input

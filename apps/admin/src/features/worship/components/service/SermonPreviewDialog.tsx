@@ -19,6 +19,8 @@ export function SermonPreviewDialog({ serviceId, open, onOpenChange }: SermonPre
     queryKey: ["worship", "service-sermon", serviceId],
     queryFn: () => getServiceSermon(serviceId),
     enabled: open,
+    // Os slides mudam na conferência sem invalidar o roteiro: cada abertura busca de novo (mostrando o cache enquanto isso).
+    staleTime: 0,
   });
   const data = query.data;
 

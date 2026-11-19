@@ -37,6 +37,8 @@ interface GenerateSlidesDialogProps {
   initialStyle: SlideStyle;
   /** Salva o que está na tela; resolve com `true` se não sobrou nada sem salvar. */
   ensureSaved(): Promise<boolean>;
+  /** Aviso quando `ensureSaved` resolve `false` (padrão: pedir para salvar a palavra). */
+  unsavedMessage?: string;
   /** Chamado com a palavra devolvida pelo servidor, já com os slides. */
   onGenerated(sermon: Sermon): void;
   /** Modo marcado ao abrir (padrão: Versículos e pontos). */
@@ -53,6 +55,7 @@ export function GenerateSlidesDialog({
   document,
   initialStyle,
   ensureSaved,
+  unsavedMessage = "Salve a palavra antes de montar os slides.",
   onGenerated,
   initialMode = "VERSES_AND_POINTS",
   notice,
@@ -76,7 +79,7 @@ export function GenerateSlidesDialog({
     setBusy(true);
     try {
       if (!(await ensureSaved())) {
-        toast.error("Salve a palavra antes de montar os slides.");
+        toast.error(unsavedMessage);
         return;
       }
       const sermon = await generateSlides(sermonId, { mode, style });

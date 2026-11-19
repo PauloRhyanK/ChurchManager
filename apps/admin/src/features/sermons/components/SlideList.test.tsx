@@ -69,6 +69,19 @@ describe("SlideList", () => {
     expect(screen.getByText("Luz que não se apaga")).toBeInTheDocument();
   });
 
+  it("texto vazio mantém o texto antigo e avisa", () => {
+    const { onEdit } = renderList();
+    fireEvent.click(screen.getByRole("button", { name: "A luz chama" }));
+    const input = screen.getByLabelText("Texto do slide");
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onEdit).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "A luz chama" })).toBeInTheDocument();
+    expect(screen.getByText("O texto não pode ficar vazio.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "A luz chama" }));
+    expect(screen.queryByText("O texto não pode ficar vazio.")).not.toBeInTheDocument();
+  });
+
   it("versículo não abre edição", () => {
     renderList();
     expect(screen.queryByRole("button", { name: "Eu sou a luz do mundo" })).not.toBeInTheDocument();

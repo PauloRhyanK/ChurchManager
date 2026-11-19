@@ -44,6 +44,8 @@ interface SendToServiceDialogProps {
   delivery: Sermon["delivery"];
   /** Salva o que está na tela; resolve com `true` se não sobrou nada sem salvar. */
   ensureSaved(): Promise<boolean>;
+  /** Aviso quando `ensureSaved` resolve `false` (padrão: pedir para salvar a palavra). */
+  unsavedMessage?: string;
   /** Chamado depois de enviar ou cancelar, com a palavra devolvida pelo servidor. */
   onChanged(sermon: Sermon, action: "sent" | "cancelled"): void;
   /** Texto sob o título do diálogo (padrão: o título da palavra). */
@@ -57,6 +59,7 @@ export function SendToServiceDialog({
   sermonTitle,
   delivery,
   ensureSaved,
+  unsavedMessage = "Salve a palavra antes de enviar.",
   onChanged,
   subtitle,
 }: SendToServiceDialogProps) {
@@ -109,7 +112,7 @@ export function SendToServiceDialog({
     setBusy(true);
     try {
       if (!(await ensureSaved())) {
-        toast.error("Salve a palavra antes de enviar.");
+        toast.error(unsavedMessage);
         return;
       }
       const sent = await sendSermon(sermonId, target, replace);
