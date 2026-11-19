@@ -31,9 +31,9 @@ Basta incluí-lo em `SERMON_AI_MODELS`, com o id exato do provedor e sem sufixo 
 Resume um sermão de exemplo com **cada** modelo de `SERMON_AI_MODELS` e imprime as frases; para o modelo que falhar, imprime `reason`, `status`, `type` e o modelo (os mesmos campos do registro da API) e, no fim, sai com código 1. Sem chave, explica o que configurar e sai com código 1. Faz uma chamada real por modelo: não roda em teste nem no CI.
 
 - **QA e produção** (dentro do contêiner da API, que já recebe as variáveis do ambiente):
-  - produção: `docker compose -f docker-compose.prod.yml exec api npx tsx scripts/sermon-ai-smoke.ts`
-  - QA: `docker compose -f docker-compose.qa.yml exec qa-api npx tsx scripts/sermon-ai-smoke.ts`
-  A imagem de produção (`apps/api/Dockerfile`) instala só as dependências de produção (`npm ci --omit=dev`) e depois `prisma` e `tsx` à parte; copia `scripts/` e `src/`. O `dotenv-cli` é devDependency e **não** está na imagem, por isso o `npm run script:sermon-ai-smoke` não funciona lá.
+  - produção: `docker compose -f docker-compose.prod.yml exec api node dist/tools/scripts/sermon-ai-smoke.js`
+  - QA: `docker compose -f docker-compose.qa.yml exec qa-api node dist/tools/scripts/sermon-ai-smoke.js`
+  A imagem de produção (`apps/api/Dockerfile`) traz só as dependências de produção e os scripts já compilados em `dist/tools/scripts/` (sem `tsx` nem o código-fonte). O `dotenv-cli` é devDependency e **não** está na imagem, por isso o `npm run script:sermon-ai-smoke` não funciona lá.
 - **Local**: `cd apps/api && npm run script:sermon-ai-smoke` (lê o `.env` da raiz pelo `dotenv-cli`).
 
 ## Erros do provedor

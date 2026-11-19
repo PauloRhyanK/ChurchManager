@@ -21,14 +21,14 @@ else
 fi
 
 log "A testar ligação ao PostgreSQL…"
-if ! printf '%s\n' "SELECT 1" | npx prisma db execute --stdin --schema prisma/schema.prisma; then
+if ! printf '%s\n' "SELECT 1" | ./node_modules/.bin/prisma db execute --stdin --schema prisma/schema.prisma; then
   log "ERRO: não foi possível ligar ou executar SQL na base. Verifique DATABASE_URL e se o Postgres aceita ligações."
   exit 1
 fi
 log "Ligação à base de dados OK."
 
 log "A aplicar migrações (prisma migrate deploy)…"
-if npx prisma migrate deploy --schema prisma/schema.prisma; then
+if ./node_modules/.bin/prisma migrate deploy --schema prisma/schema.prisma; then
   log "Migrações aplicadas com sucesso."
 else
   log "ERRO: prisma migrate deploy falhou."
@@ -37,7 +37,7 @@ fi
 
 if [ "$RUN_SEED" = "true" ]; then
   log "A executar seed…"
-  npx tsx prisma/seed.ts
+  node dist/tools/prisma/seed.js
   log "Seed concluído."
 fi
 

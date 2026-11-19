@@ -21,11 +21,11 @@ As tabelas `bible_translations` e `bible_verses` são globais (sem tenant) e vê
 
 ### Em QA e produção (dentro do contêiner da API)
 
-O script npm não serve no contêiner (sem `dotenv-cli`; o `DATABASE_URL` já está no ambiente do contêiner). A imagem de produção (`apps/api/Dockerfile`) instala `tsx` e copia `scripts/` e `src/`, então roda direto:
+O script npm não serve no contêiner (sem `dotenv-cli`; o `DATABASE_URL` já está no ambiente do contêiner). A imagem de produção (`apps/api/Dockerfile`) traz o script já compilado em `dist/tools/scripts/`, então roda direto com `node`:
 
 ```
 docker cp porbr2018_vpl.txt <contêiner-da-api>:/tmp/porbr2018_vpl.txt
-docker exec <contêiner-da-api> npx tsx scripts/import-bible.ts --file /tmp/porbr2018_vpl.txt --code BLIVRE
+docker exec <contêiner-da-api> node dist/tools/scripts/import-bible.js --file /tmp/porbr2018_vpl.txt --code BLIVRE
 docker exec <contêiner-da-api> rm /tmp/porbr2018_vpl.txt
 ```
 

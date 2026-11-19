@@ -94,6 +94,11 @@ jobs:
             type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
+      # Buildx com cache do GitHub Actions: quando só o código muda, a camada de node_modules
+      # sai idêntica (mesmo digest) e a VPS baixa só a camada pequena do dist/.
+      - name: Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Build e push
         uses: docker/build-push-action@v6
         with:
@@ -102,14 +107,25 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
 
-  # Secrets: SSH_HOST, SSH_USER, SSH_PRIVATE_KEY (chave privada PEM com acesso SSH à VPS).
-  # Na VPS: git pull precisa de acesso ao repo; docker pull do GHCR precisa de login ghcr.io (read:packages).
+  # Secrets: SSH_HOST (IP da VPS), SSH_USER (root) e SSH_PRIVATE_KEY (chave privada ed25519 só
+  # deste deploy, inteira, com as linhas BEGIN/END). A chave pública correspondente fica no
+  # ~/.ssh/authorized_keys do SSH_USER na VPS. Na VPS: o git pull precisa de acesso ao repo e o
+  # docker pull do GHCR precisa de login no ghcr.io (read:packages), como no deploy à mão.
+  #
+  # Antes de trocar, a imagem que está rodando ganha a tag api:rollback-AAAAMMDD-HHMMSS (ficam as
+  # 3 últimas). Não há volta automática: migrações podem alterar dados, e voltar a imagem pode
+  # exigir voltar o banco. Para voltar à mão, ver o comando impresso no fim do log do job.
   deploy:
     name: Deploy na VPS
     runs-on: ubuntu-latest
     needs: docker
     if: github.ref == 'refs/heads/main'
+    concurrency:
+      group: deploy-vps-producao
+      cancel-in-progress: false
     steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -117,9 +133,46 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 30m
           script: |
+            set -eu
             cd ~/projetos/churchmanager
-            git pull origin main
-            sudo docker compose -f docker-compose.prod.yml pull api
-            sudo docker compose -f docker-compose.prod.yml up -d api
+            COMPOSE="sudo docker compose -f docker-compose.prod.yml"
+            CONTAINER=churchmanager-api-1
+
+            git pull --ff-only origin main
+
+            # Marca de volta: a imagem que está rodando agora.
+            STAMP=$(date +%Y%m%d-%H%M%S)
+            TARGET=$($COMPOSE config --images api | head -n1)
+            REPO=$(printf '%s' "$TARGET" | sed 's/:[^:/]*$//')
+            CURRENT=$(sudo docker inspect --format '{{.Image}}' "$CONTAINER" 2>/dev/null || true)
+            if [ -n "$CURRENT" ] && [ -n "$REPO" ]; then
+              sudo docker tag "$CURRENT" "$REPO:rollback-$STAMP"
+              echo "Marca de volta: $REPO:rollback-$STAMP ($CURRENT)"
+            else
+              echo "Sem contêiner da API rodando: nada para marcar."
+            fi
+
+            $COMPOSE pull api
+            $COMPOSE up -d api
+
+            # Espera o healthcheck do compose (até ~6 min; a subida aplica as migrações).
+            STATUS=starting
+            for i in $(seq 1 72); do
+              STATUS=$(sudo docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$CONTAINER" 2>/dev/null || echo ausente)
+              [ "$STATUS" = healthy ] && break
+              [ "$STATUS" = unhealthy ] && break
+              sleep 5
+            done
+            echo "API: $STATUS"
+            if [ "$STATUS" != healthy ]; then
+              sudo docker logs --tail 80 "$CONTAINER" || true
+              echo "A API não ficou saudável. Para voltar a imagem (confira antes se as migrações novas alteraram dados):"
+              echo "  sudo docker tag $REPO:rollback-$STAMP $TARGET && $COMPOSE up -d api"
+              exit 1
+            fi
+
+            # Limpeza: imagens sem tag e marcas de volta além das 3 mais recentes.
             sudo docker image prune -f
+            sudo docker images --format '{{.Repository}}:{{.Tag}}' "$REPO" | grep ':rollback-' | sort -r | tail -n +4 | xargs -r sudo docker rmi || true
