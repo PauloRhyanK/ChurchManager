@@ -122,9 +122,19 @@ export async function cancelDelivery(id: string): Promise<Sermon> {
   return (await api.delete<Sermon>(`${SERMONS}/${id}/delivery`)).data;
 }
 
-export async function generateSlides(id: string, input: { mode: SlideMode; style?: SlideStyle }): Promise<Sermon> {
-  const body: { mode: SlideMode; style?: SlideStyle } = { mode: input.mode };
+export interface SermonAi {
+  enabled: boolean;
+  models: { id: string; label: string }[];
+}
+
+export async function getSermonAi(): Promise<SermonAi> {
+  return (await api.get<SermonAi>(`${SERMONS}/ai`)).data;
+}
+
+export async function generateSlides(id: string, input: { mode: SlideMode; style?: SlideStyle; model?: string }): Promise<Sermon> {
+  const body: { mode: SlideMode; style?: SlideStyle; model?: string } = { mode: input.mode };
   if (input.style !== undefined) body.style = input.style;
+  if (input.model !== undefined) body.model = input.model;
   return (await api.post<Sermon>(`${SERMONS}/${id}/slides/generate`, body)).data;
 }
 

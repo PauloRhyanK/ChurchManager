@@ -10,9 +10,9 @@ const ITEMS: SlideItem[] = [
   { id: "n1:0", kind: "PRIVATE", sourceBlockId: "n1", text: "História da lanterna", reference: null, included: false, edited: false },
 ];
 
-function renderList(readOnly = false) {
+function renderList(readOnly = false, items: SlideItem[] = ITEMS) {
   const handlers = { onToggle: vi.fn(), onMove: vi.fn(), onEdit: vi.fn() };
-  render(<SlideList items={ITEMS} readOnly={readOnly} {...handlers} />);
+  render(<SlideList items={items} readOnly={readOnly} {...handlers} />);
   return handlers;
 }
 
@@ -92,5 +92,33 @@ describe("SlideList", () => {
     expect(screen.queryByLabelText("Arrastar para mudar a ordem")).not.toBeInTheDocument();
     for (const box of screen.getAllByRole("checkbox")) expect(box).toBeDisabled();
     expect(screen.queryByRole("button", { name: "A luz chama" })).not.toBeInTheDocument();
+  });
+
+  describe("resumos", () => {
+    const SUMMARY: SlideItem = { id: "i1:0", kind: "SUMMARY", sourceBlockId: "i1", text: "A lanterna mostra o caminho", reference: null, included: true, edited: false };
+
+    it("mostra o rótulo Resumo e o selo IA enquanto não foi editado", () => {
+      renderList(false, [...ITEMS, SUMMARY]);
+      const li = row("A lanterna mostra o caminho");
+      expect(within(li).getByText("Resumo")).toBeInTheDocument();
+      expect(within(li).getByText("IA")).toBeInTheDocument();
+    });
+
+    it("o selo IA some depois de editado", () => {
+      renderList(false, [...ITEMS, { ...SUMMARY, edited: true }]);
+      const li = row("A lanterna mostra o caminho");
+      expect(within(li).getByText("Resumo")).toBeInTheDocument();
+      expect(within(li).queryByText("IA")).not.toBeInTheDocument();
+    });
+
+    it("editar o resumo manda o texto novo (até 300)", () => {
+      const { onEdit } = renderList(false, [...ITEMS, SUMMARY]);
+      fireEvent.click(screen.getByRole("button", { name: "A lanterna mostra o caminho" }));
+      const input = screen.getByLabelText("Texto do slide");
+      expect(input).toHaveAttribute("maxLength", "300");
+      fireEvent.change(input, { target: { value: "A lanterna guia" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(onEdit).toHaveBeenCalledWith("i1:0", "A lanterna guia");
+    });
   });
 });

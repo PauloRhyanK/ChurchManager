@@ -35,7 +35,7 @@ interface SlideListProps {
   onEdit(id: string, text: string): void;
 }
 
-/** Texto do título ou ponto: clicar abre a edição no lugar (Enter confirma, Esc cancela). */
+/** Texto do título, ponto ou resumo: clicar abre a edição no lugar (Enter confirma, Esc cancela). */
 function EditableText({ item, onEdit }: { item: SlideItem; onEdit(text: string): void }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [emptyHint, setEmptyHint] = useState(false);
@@ -125,12 +125,17 @@ function RowBody({ item, readOnly, onToggle, onEdit }: { item: SlideItem; readOn
       />
       <span
         className={cn(
-          "flex w-[76px] flex-none items-center gap-1 text-[11px] font-bold uppercase tracking-[0.06em]",
+          "flex min-w-[76px] flex-none items-center gap-1 text-[11px] font-bold uppercase tracking-[0.06em]",
           item.kind === "VERSE" ? "text-primary" : "text-muted-foreground",
         )}
       >
         {isPrivate && <Lock className="h-3 w-3" aria-hidden="true" />}
         {KIND_LABEL[item.kind]}
+        {item.kind === "SUMMARY" && !item.edited && (
+          <span className="rounded bg-primary/10 px-1 text-[10px] font-bold normal-case tracking-normal text-primary" title="Resumo escrito por IA">
+            IA
+          </span>
+        )}
       </span>
       <ItemText item={item} editable={!readOnly} onEdit={(text) => onEdit(item.id, text)} />
     </>

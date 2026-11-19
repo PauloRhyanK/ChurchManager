@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { AxiosError } from "axios";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SlideItem } from "../lib/slides";
 import { EMPTY_DOC } from "../lib/document";
@@ -16,6 +17,7 @@ const api = vi.hoisted(() => ({
   sendSermon: vi.fn(),
   cancelDelivery: vi.fn(),
   listBibleTranslations: vi.fn(),
+  getSermonAi: vi.fn(),
 }));
 vi.mock("../api/sermons-api", () => api);
 const perms = vi.hoisted(() => ({ canEdit: true }));
@@ -104,6 +106,7 @@ beforeEach(() => {
   api.getSermon.mockResolvedValue(sermon());
   api.listServiceOptions.mockResolvedValue([]);
   api.listBibleTranslations.mockResolvedValue([]);
+  api.getSermonAi.mockResolvedValue({ enabled: false, models: [] });
 });
 
 describe("SermonSlidesPage", () => {
@@ -242,6 +245,64 @@ describe("SermonSlidesPage", () => {
     expect(await screen.findByText("O esboço mudou depois destes slides.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Atualizar" }));
     await waitFor(() => expect(api.generateSlides).toHaveBeenCalledWith("s1", { mode: "VERSES" }));
+    await waitFor(() => expect(screen.queryByText("O esboço mudou depois destes slides.")).not.toBeInTheDocument());
+  });
+
+  const summary = (edited: boolean): SlideItem => ({
+    id: "i1:0", kind: "SUMMARY", sourceBlockId: "i1", text: "A lanterna mostra o passo", reference: null, included: true, edited,
+  });
+
+  it("faixa de aviso dos resumos quando há resumo da IA não editado", async () => {
+    api.getSermon.mockResolvedValue(sermon({ slideMode: "FULL", slides: [...SLIDES.slice(0, 3), summary(false), SLIDES[3]] }));
+    renderPage();
+    expect(await screen.findByText("Os resumos foram escritos por IA. Confira antes de enviar.")).toBeInTheDocument();
+  });
+
+  it("sem a faixa quando todos os resumos foram editados ou não há resumo, mesmo em Slides completos", async () => {
+    api.getSermon.mockResolvedValue(sermon({ slideMode: "FULL", slides: [...SLIDES.slice(0, 3), summary(true), SLIDES[3]] }));
+    renderPage();
+    await screen.findByText("Tirado do esboço");
+    expect(screen.queryByText(/Os resumos foram escritos por IA/)).not.toBeInTheDocument();
+  });
+
+  it("sem a faixa em Slides completos sem nenhum item de resumo", async () => {
+    api.getSermon.mockResolvedValue(sermon({ slideMode: "FULL" }));
+    renderPage();
+    await screen.findByText("Tirado do esboço");
+    expect(screen.queryByText(/Os resumos foram escritos por IA/)).not.toBeInTheDocument();
+  });
+
+  it("Atualizar com erro do servidor mostra a mensagem da API", async () => {
+    api.getSermon.mockResolvedValue(sermon({ slidesStale: true, slideMode: "FULL" }));
+    api.generateSlides.mockRejectedValue(
+      new AxiosError("Request failed with status code 503", "ERR_BAD_RESPONSE", undefined, undefined, {
+        status: 503,
+        data: { message: "O modelo configurado não aceitou o pedido. Avise o administrador." },
+        statusText: "",
+        headers: {},
+        config: { headers: {} } as never,
+      }),
+    );
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Atualizar" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("O modelo configurado não aceitou o pedido. Avise o administrador."));
+  });
+
+  it("sem a faixa dos resumos fora de Slides completos", async () => {
+    renderPage();
+    await screen.findByText("Tirado do esboço");
+    expect(screen.queryByText(/Os resumos foram escritos por IA/)).not.toBeInTheDocument();
+  });
+
+  it("Atualizar em Slides completos gera em FULL (sem model) e mostra Resumindo…", async () => {
+    api.getSermon.mockResolvedValue(sermon({ slidesStale: true, slideMode: "FULL" }));
+    const gen = deferred<ReturnType<typeof sermon>>();
+    api.generateSlides.mockReturnValue(gen.promise);
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Atualizar" }));
+    expect(await screen.findByRole("button", { name: "Resumindo…" })).toBeDisabled();
+    expect(api.generateSlides).toHaveBeenCalledWith("s1", { mode: "FULL" });
+    gen.resolve(sermon({ slidesStale: false, slideMode: "FULL" }));
     await waitFor(() => expect(screen.queryByText("O esboço mudou depois destes slides.")).not.toBeInTheDocument());
   });
 

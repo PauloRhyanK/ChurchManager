@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsIn, IsOptional, MaxLength, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsIn, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
 import { RequiredText, StrictBoolean } from '../../church/dto/field-decorators';
 import { SLIDE_LIMITS } from '../sermon-slides';
 
@@ -13,6 +13,12 @@ export class GenerateSlidesDto {
   @IsOptional()
   @IsIn(STYLES, { message: 'estilo de slides inválido' })
   style?: (typeof STYLES)[number];
+
+  /** Id de um modelo de GET /sermons/ai; só vale em "Slides completos". */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  model?: string;
 }
 
 /** Só o que o pregador decide em cada item; tipo, referência e origem vêm do que está gravado. */

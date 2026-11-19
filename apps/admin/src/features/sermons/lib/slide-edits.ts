@@ -2,7 +2,7 @@ import type { SlideItemInput } from "../api/sermons-api";
 import { SLIDE_LIMITS, type SlideItem } from "./slides";
 
 /** Tipos cujo texto o pregador pode trocar na conferência. */
-export const EDITABLE_KINDS: SlideItem["kind"][] = ["TITLE", "POINT"];
+export const EDITABLE_KINDS: SlideItem["kind"][] = ["TITLE", "POINT", "SUMMARY"];
 
 const privateLast = (items: SlideItem[]) => [...items.filter((i) => i.kind !== "PRIVATE"), ...items.filter((i) => i.kind === "PRIVATE")];
 

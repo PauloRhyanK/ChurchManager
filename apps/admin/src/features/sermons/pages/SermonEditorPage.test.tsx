@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   sendSermon: vi.fn(),
   cancelDelivery: vi.fn(),
   generateSlides: vi.fn(),
+  getSermonAi: vi.fn(),
   saveSlides: vi.fn(),
   listBibleTranslations: vi.fn(),
 }));
@@ -104,6 +105,7 @@ describe("SermonEditorPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     perms.canEdit = true;
+    api.getSermonAi.mockResolvedValue({ enabled: false, models: [] });
   });
   afterEach(() => vi.restoreAllMocks());
 

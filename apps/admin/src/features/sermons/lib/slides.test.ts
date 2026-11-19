@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SermonBlock, SermonDoc } from "./document";
-import { buildSlides, countSlides, publicSlides, SLIDE_LIMITS } from "./slides";
+import { buildSlides, countSlides, publicSlides, SLIDE_LIMITS, summaryTargets } from "./slides";
 import { EXAMPLE_DOC } from "./sermon-example";
 
 const doc = (...content: SermonBlock[]): SermonDoc => ({ type: "doc", content });
@@ -31,7 +31,7 @@ describe("buildSlides (cópia da API)", () => {
   });
 
   it("countSlides não conta PRIVATE", () => {
-    expect(countSlides("Luz", EXAMPLE_DOC)).toEqual({ VERSES: 2, VERSES_AND_POINTS: 5 });
+    expect(countSlides("Luz", EXAMPLE_DOC)).toEqual({ VERSES: 2, VERSES_AND_POINTS: 5, FULL: 8 });
   });
 
   it("título vazio não gera TITLE; documento vazio dá []", () => {
@@ -81,5 +81,74 @@ describe("publicSlides", () => {
     s[1] = { ...s[1], included: false };
     expect(publicSlides(s).map((x) => x.kind)).toEqual(["TITLE", "POINT", "VERSE", "POINT"]);
     expect(publicSlides(s)[0]).toEqual({ kind: "TITLE", text: "Luz", reference: null });
+  });
+});
+
+const para = (text: string): SermonBlock => ({ type: "paragraph", content: [{ type: "text", text }] });
+const inner = (type: "illustration" | "application" | "privateNote", id: string, text: string): SermonBlock => ({
+  type,
+  attrs: { id },
+  content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+});
+const heading = (id: string, text: string, level: 2 | 3 = 2): SermonBlock => ({ type: "heading", attrs: { id, level }, content: [{ type: "text", text }] });
+
+const OPENING = "Quando eu era criança a luz acabava toda semana e a casa inteira ficava parada esperando alguém achar a vela.";
+const CONCLUSION = "Saia daqui hoje sabendo que a luz que chama é a mesma que mostra o caminho de cada dia.";
+const SECRET = "SEGREDO do pregador que nunca sai daqui";
+const FULL_DOC: SermonDoc = {
+  type: "doc",
+  content: [
+    para(OPENING),
+    ...EXAMPLE_DOC.content,
+    inner("illustration", "i2", "Uma vela acesa."),
+    heading("h1", "Conclusão"),
+    para(CONCLUSION),
+    inner("privateNote", "n2", SECRET),
+    heading("h3", "Subtítulo de nível três", 3),
+    { type: "bulletList", content: [{ type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "Lembre disso." }] }] }] },
+  ],
+};
+
+describe("summaryTargets e FULL (mesmos valores da API)", () => {
+  const summaries = { "opening:0": "Abre", "i1:0": "Lanterna", "a1:0": "Aplica", "h1:0": "Conclui" };
+
+  it("alvos na ordem do documento, sem texto de 'Só para mim'", () => {
+    const t = summaryTargets(FULL_DOC);
+    expect(t.map((x) => [x.id, x.sourceBlockId, x.part, x.label])).toEqual([
+      ["opening:0", null, "OPENING", "Abertura"],
+      ["i1:0", "i1", "ILLUSTRATION", "Ilustração"],
+      ["a1:0", "a1", "APPLICATION", "Aplicação"],
+      ["h1:0", "h1", "SECTION", "Conclusão"],
+    ]);
+    expect(t[3].text).toBe(`${CONCLUSION} Lembre disso.`);
+    expect(t.every((x) => !x.text.includes("SEGREDO"))).toBe(true);
+  });
+
+  it("cada SUMMARY fica na posição do alvo", () => {
+    const s = buildSlides("Luz", FULL_DOC, "FULL", summaries);
+    expect(s.map((x) => [x.id, x.kind])).toEqual([
+      ["title", "TITLE"],
+      ["opening:0", "SUMMARY"],
+      ["v1:0", "VERSE"],
+      ["pt1:0", "POINT"],
+      ["v2:0", "VERSE"],
+      ["i1:0", "SUMMARY"],
+      ["pt2:0", "POINT"],
+      ["a1:0", "SUMMARY"],
+      ["h1:0", "SUMMARY"],
+      ["n1:0", "PRIVATE"],
+      ["n2:0", "PRIVATE"],
+    ]);
+    expect(s.find((x) => x.id === "h1:0")).toEqual({ id: "h1:0", kind: "SUMMARY", sourceBlockId: "h1", text: "Conclui", reference: null, included: true, edited: false });
+  });
+
+  it("sem summaries, FULL é igual a versículos e pontos; frase de id que não é alvo é ignorada", () => {
+    expect(buildSlides("Luz", FULL_DOC, "FULL")).toEqual(buildSlides("Luz", FULL_DOC, "VERSES_AND_POINTS"));
+    expect(buildSlides("Luz", FULL_DOC, "FULL", { "pt1:0": "não" }).some((x) => x.kind === "SUMMARY")).toBe(false);
+  });
+
+  it("countSlides.FULL = versículos e pontos + alvos", () => {
+    const c = countSlides("Luz", FULL_DOC);
+    expect(c.FULL).toBe(c.VERSES_AND_POINTS + 4);
   });
 });

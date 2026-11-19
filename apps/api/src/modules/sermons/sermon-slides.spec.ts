@@ -4,11 +4,15 @@ import { EXAMPLE_DOC } from './sermon-example';
 import type { SermonBlock, SermonDoc } from './sermon-document';
 import {
   buildSlides,
+  cleanSummaries,
   countSlides,
   mergeSlides,
   parseStoredSlides,
   publicSlides,
+  summaryTargets,
+  SUMMARY_MAX,
   type SlideItem,
+  type SummaryTarget,
 } from './sermon-slides';
 
 const verseBlock = (id: string, reference: string, verses: { number: number | null; text: string }[]): SermonBlock => ({
@@ -52,7 +56,7 @@ describe('buildSlides', () => {
   });
 
   it('countSlides não conta PRIVATE', () => {
-    assert.deepEqual(countSlides('Luz', EXAMPLE_DOC), { VERSES: 2, VERSES_AND_POINTS: 5 });
+    assert.deepEqual(countSlides('Luz', EXAMPLE_DOC), { VERSES: 2, VERSES_AND_POINTS: 5, FULL: 8 });
   });
 
   it('bloco com vários versículos numera a referência e os ids', () => {
@@ -249,5 +253,173 @@ describe('casos de borda', () => {
     assert.equal(buildSlides('', doc(n(emoji)), 'VERSES')[0].text, '😀'.repeat(80) + '…');
     const spaced = 'a'.repeat(79) + ' ' + 'b'.repeat(50);
     assert.equal(buildSlides('', doc(n(spaced)), 'VERSES')[0].text, 'a'.repeat(79) + '…');
+  });
+});
+
+const para = (text: string): SermonBlock => ({ type: 'paragraph', content: [{ type: 'text', text }] });
+const inner = (type: 'illustration' | 'application' | 'privateNote', id: string, text: string): SermonBlock => ({
+  type, attrs: { id }, content: [{ type: 'paragraph', content: [{ type: 'text', text }] }],
+});
+const heading = (id: string, text: string, level: 2 | 3 = 2): SermonBlock => ({ type: 'heading', attrs: { id, level }, content: [{ type: 'text', text }] });
+
+const OPENING = 'Quando eu era criança a luz acabava toda semana e a casa inteira ficava parada esperando alguém achar a vela.';
+const CONCLUSION = 'Saia daqui hoje sabendo que a luz que chama é a mesma que mostra o caminho de cada dia.';
+const SECRET = 'SEGREDO do pregador que nunca sai daqui';
+const FULL_DOC: SermonDoc = {
+  type: 'doc',
+  content: [
+    para(OPENING),
+    ...EXAMPLE_DOC.content,
+    inner('illustration', 'i2', 'Uma vela acesa.'),
+    heading('h1', 'Conclusão'),
+    para(CONCLUSION),
+    inner('privateNote', 'n2', SECRET),
+    heading('h3', 'Subtítulo de nível três', 3),
+    { type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Lembre disso.' }] }] }] },
+  ],
+};
+
+describe('summaryTargets', () => {
+  it('alvos na ordem do documento, com ids, partes e rótulos', () => {
+    const t = summaryTargets(FULL_DOC);
+    assert.deepEqual(t.map((x) => [x.id, x.sourceBlockId, x.part, x.label]), [
+      ['opening:0', null, 'OPENING', 'Abertura'],
+      ['i1:0', 'i1', 'ILLUSTRATION', 'Ilustração'],
+      ['a1:0', 'a1', 'APPLICATION', 'Aplicação'],
+      ['h1:0', 'h1', 'SECTION', 'Conclusão'],
+    ]);
+  });
+
+  it('abertura junta parágrafos antes da primeira seção, sem versículo; seção junta parágrafos e listas até a próxima', () => {
+    const [opening, , , conclusion] = summaryTargets(FULL_DOC);
+    assert.equal(opening.text, `${OPENING} Todo mundo já ficou sem luz em casa. A primeira coisa que a gente faz é procurar onde está a vela.`);
+    assert.equal(opening.text.includes('Eu sou a luz do mundo'), false);
+    assert.equal(conclusion.text, `${CONCLUSION} Lembre disso.`);
+  });
+
+  it('nenhum texto contém a anotação "Só para mim"', () => {
+    for (const x of summaryTargets(FULL_DOC)) {
+      assert.equal(x.text.includes('SEGREDO'), false);
+      assert.equal(x.text.includes('Dois minutos nessa história'), false);
+    }
+  });
+
+  it('ilustração com menos de 6 palavras e abertura/seção com menos de 12 não são alvo; ponto nunca é alvo', () => {
+    const d = doc(
+      para('Pouca coisa antes do ponto aqui.'),
+      point('p', 'Um ponto com muitas palavras para resumir aqui e ali e acolá também'),
+      inner('illustration', 'i', 'um dois três quatro cinco'),
+      inner('application', 'a', 'um dois três quatro cinco seis'),
+      heading('h', 'Fim'),
+      para('um dois três quatro cinco seis sete oito nove dez onze'),
+    );
+    assert.deepEqual(summaryTargets(d).map((x) => x.id), ['a:0']);
+  });
+
+  it('o ponto encerra a abertura e a seção do título', () => {
+    const twelve = 'um dois três quatro cinco seis sete oito nove dez onze doze';
+    const d = doc(heading('h', 'Começo'), para(twelve), point('p', 'Ponto'), para(twelve));
+    const t = summaryTargets(d);
+    assert.deepEqual(t.map((x) => [x.id, x.text]), [['h:0', twelve]]);
+  });
+
+  it('texto cortado em 6.000 caracteres e no máximo 60 alvos', () => {
+    const long = 'palavra '.repeat(1000);
+    assert.equal(summaryTargets(doc(para(long)))[0].text.length, 6000);
+    const many: SermonBlock[] = [];
+    for (let i = 0; i < 70; i++) many.push(inner('application', `a${i}`, 'um dois três quatro cinco seis'));
+    const t = summaryTargets(doc(...many));
+    assert.equal(t.length, 60);
+    assert.equal(t[59].id, 'a59:0');
+  });
+
+  it('documento vazio não tem alvos', () => {
+    assert.deepEqual(summaryTargets(doc()), []);
+  });
+});
+
+describe('buildSlides FULL', () => {
+  const summaries = { 'opening:0': 'Abre', 'i1:0': 'Lanterna', 'a1:0': 'Aplica', 'h1:0': 'Conclui' };
+
+  it('põe cada SUMMARY na posição do alvo', () => {
+    const s = buildSlides('Luz', FULL_DOC, 'FULL', summaries);
+    assert.deepEqual(s.map((x) => [x.id, x.kind]), [
+      ['title', 'TITLE'],
+      ['opening:0', 'SUMMARY'],
+      ['v1:0', 'VERSE'],
+      ['pt1:0', 'POINT'],
+      ['v2:0', 'VERSE'],
+      ['i1:0', 'SUMMARY'],
+      ['pt2:0', 'POINT'],
+      ['a1:0', 'SUMMARY'],
+      ['h1:0', 'SUMMARY'],
+      ['n1:0', 'PRIVATE'],
+      ['n2:0', 'PRIVATE'],
+    ]);
+    const conclusion = s.find((x) => x.id === 'h1:0')!;
+    assert.deepEqual(conclusion, { id: 'h1:0', kind: 'SUMMARY', sourceBlockId: 'h1', text: 'Conclui', reference: null, included: true, edited: false });
+    assert.equal(s.find((x) => x.id === 'opening:0')!.sourceBlockId, null);
+  });
+
+  it('alvo sem frase não vira item; sem summaries é igual a versículos e pontos', () => {
+    const s = buildSlides('Luz', FULL_DOC, 'FULL', { 'i1:0': 'Lanterna', 'a1:0': '   ' });
+    assert.deepEqual(s.filter((x) => x.kind === 'SUMMARY').map((x) => x.id), ['i1:0']);
+    assert.deepEqual(buildSlides('Luz', FULL_DOC, 'FULL'), buildSlides('Luz', FULL_DOC, 'VERSES_AND_POINTS'));
+  });
+
+  it('frase de id que não é alvo é ignorada', () => {
+    const s = buildSlides('Luz', FULL_DOC, 'FULL', { 'pt1:0': 'não', 'i2:0': 'não' });
+    assert.equal(s.some((x) => x.kind === 'SUMMARY'), false);
+  });
+
+  it('countSlides.FULL = versículos e pontos + alvos', () => {
+    const c = countSlides('Luz', FULL_DOC);
+    assert.equal(c.FULL, c.VERSES_AND_POINTS + 4);
+    assert.equal(c.FULL, buildSlides('Luz', FULL_DOC, 'FULL', summaries).filter((x) => x.kind !== 'PRIVATE').length);
+  });
+});
+
+describe('cleanSummaries', () => {
+  const targets: SummaryTarget[] = [
+    { id: 'opening:0', sourceBlockId: null, part: 'OPENING', label: 'Abertura', text: 'x' },
+    { id: 'i1:0', sourceBlockId: 'i1', part: 'ILLUSTRATION', label: 'Ilustração', text: 'x' },
+    { id: 'a1:0', sourceBlockId: 'a1', part: 'APPLICATION', label: 'Aplicação', text: 'x' },
+  ];
+
+  it('ignora id desconhecido e repetido (fica o primeiro)', () => {
+    const r = cleanSummaries(targets, [
+      { id: 'zz:0', text: 'fora' },
+      { id: 'i1:0', text: 'primeira' },
+      { id: 'i1:0', text: 'segunda' },
+    ]);
+    assert.deepEqual(r, { 'i1:0': 'primeira' });
+  });
+
+  it('frase de 300 caracteres vira até 90, cortada num espaço, sem reticências', () => {
+    const long = 'palavra '.repeat(40).trim();
+    assert.equal(long.length > 300, true);
+    const r = cleanSummaries(targets, [{ id: 'a1:0', text: long }])['a1:0'];
+    assert.equal(SUMMARY_MAX, 90);
+    assert.ok(r.length <= 90);
+    assert.equal(r, Array(11).fill('palavra').join(' '));
+    assert.equal(r.endsWith('…'), false);
+  });
+
+  it('apara, troca quebras de linha por espaço e tira aspas envolventes; vazia é descartada', () => {
+    const r = cleanSummaries(targets, [
+      { id: 'opening:0', text: '  "A luz\nchama\r\ntodos"  ' },
+      { id: 'i1:0', text: '“A lanterna mostra o passo”' },
+      { id: 'a1:0', text: ' \n "" ' },
+    ]);
+    assert.deepEqual(r, { 'opening:0': 'A luz chama todos', 'i1:0': 'A lanterna mostra o passo' });
+  });
+
+  it('aspas envolventes só saem quando a mesma aspa não aparece dentro do texto', () => {
+    const r = cleanSummaries(targets, [
+      { id: 'opening:0', text: '"A" e "B"' },
+      { id: 'i1:0', text: '“Luz” que “guia”' },
+      { id: 'a1:0', text: "'Olhe' para a luz" },
+    ]);
+    assert.deepEqual(r, { 'opening:0': '"A" e "B"', 'i1:0': '“Luz” que “guia”', 'a1:0': "'Olhe' para a luz" });
   });
 });
