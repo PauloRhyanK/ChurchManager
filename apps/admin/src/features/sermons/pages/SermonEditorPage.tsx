@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Editor } from "@tiptap/react";
-import { ArrowLeft, Check, Clock, ListTree, Loader2, MoreHorizontal, Send } from "lucide-react";
+import { ArrowLeft, Check, Clock, ListTree, Loader2, MoreHorizontal, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -20,7 +20,7 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from 
 import { usePermissions } from "@/features/access/hooks/use-permissions";
 import { getApiErrorMessage } from "@/lib/api";
 import { deleteSermon, duplicateSermon, getSermon, updateSermon, type Sermon } from "../api/sermons-api";
-import { SendToServiceDialog } from "../components/SendToServiceDialog";
+import { GenerateSlidesDialog } from "../components/GenerateSlidesDialog";
 import { StructurePanel } from "../components/StructurePanel";
 import { SermonSheet } from "../editor/SermonSheet";
 import { SermonToolbar } from "../editor/SermonToolbar";
@@ -131,10 +131,15 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [sendOpen, setSendOpen] = useState(false);
+  const [slidesOpen, setSlidesOpen] = useState(false);
   const queryClient = useQueryClient();
-  // Situação do envio: vive à parte do texto, que depois de aberto é do editor.
-  const [situation, setSituation] = useState({ status: sermon.status, delivery: sermon.delivery });
+  // Situação do envio (só leitura aqui) e slides: vivem à parte do texto, que depois de aberto é do editor.
+  const situation = { status: sermon.status, delivery: sermon.delivery };
+  const [slidesInfo, setSlidesInfo] = useState({
+    count: sermon.slideCount,
+    has: sermon.slides.length > 0,
+    style: sermon.slideStyle,
+  });
 
   const autosave = useAutosave({
     sermonId: sermon.id,
@@ -230,39 +235,60 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
       ? `Ela também sai do culto de ${formatDay(delivery.date)}, ${formatHour(delivery.startTime)}.`
       : "Esta ação não pode ser desfeita.";
 
-  /** Salva o que está na tela; só libera o envio se nada ficou sem salvar. */
+  /** Salva o que está na tela; só libera a geração se nada ficou sem salvar. */
   async function ensureSaved() {
     await autosave.flush();
     return !autosave.isDirty();
   }
-  function handleSendChanged(updated: Sermon) {
-    const next = { status: updated.status, delivery: updated.delivery };
-    setSituation(next);
-    // Só a situação muda na cópia em cache; o texto e a revisão ficam como estão.
-    queryClient.setQueryData<Sermon>(["sermons", "detail", sermon.id], (old) => (old ? { ...old, ...next } : old));
-    if (updated.status === "DRAFT") return;
-    navigate(LIST_PATH);
+  function handleGenerated(updated: Sermon) {
+    setSlidesInfo({ count: updated.slideCount, has: updated.slides.length > 0, style: updated.slideStyle });
+    // Só os slides mudam na cópia em cache; o texto e a revisão ficam como estão.
+    queryClient.setQueryData<Sermon>(["sermons", "detail", sermon.id], (old) =>
+      old
+        ? {
+            ...old,
+            slideMode: updated.slideMode,
+            slideStyle: updated.slideStyle,
+            slides: updated.slides,
+            slidesStale: updated.slidesStale,
+            slideCount: updated.slideCount,
+          }
+        : old,
+    );
+    void queryClient.invalidateQueries({ queryKey: LIST_KEY });
+    navigate(`${LIST_PATH}/${sermon.id}/slides`);
   }
 
-  // Pregada: o envio é o registro do que foi pregado e não muda mais (a API recusa), então não abre o diálogo.
-  const headerActions =
-    canEdit &&
-    (situation.status === "PREACHED" && delivery ? (
-      <span className="flex h-8 items-center rounded-md border border-[#E5E7EB] px-3 text-sm text-[#6B7280]">
-        Pregada · {formatDay(delivery.date)}
-      </span>
-    ) : (
-      <Button
-        type="button"
-        variant={delivery ? "outline" : "default"}
-        size="sm"
-        className="gap-1.5"
-        onClick={() => setSendOpen(true)}
-      >
-        <Send aria-hidden="true" />
-        {delivery ? `Enviada · ${formatDay(delivery.date)}, ${formatHour(delivery.startTime)}` : "Enviar para um culto"}
-      </Button>
-    ));
+  // O envio para o culto fica na conferência dos slides; aqui só a situação aparece, como texto.
+  const situationText =
+    delivery && situation.status === "PREACHED"
+      ? `Pregada · ${formatDay(delivery.date)}`
+      : delivery
+        ? `Enviada · ${formatDay(delivery.date)}, ${formatHour(delivery.startTime)}`
+        : null;
+  const headerActions = (
+    <>
+      {situationText && (
+        <span className="flex h-8 items-center rounded-md border border-[#E5E7EB] px-3 text-sm text-[#6B7280]">{situationText}</span>
+      )}
+      {slidesInfo.has ? (
+        <Button asChild size="sm" className="gap-1.5">
+          <Link to={`${LIST_PATH}/${sermon.id}/slides`}>
+            <Sparkles aria-hidden="true" />
+            Slides · {slidesInfo.count}
+          </Link>
+        </Button>
+      ) : (
+        canEdit &&
+        situation.status !== "PREACHED" && (
+          <Button type="button" size="sm" className="gap-1.5" onClick={() => setSlidesOpen(true)}>
+            <Sparkles aria-hidden="true" />
+            Gerar slides
+          </Button>
+        )
+      )}
+    </>
+  );
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F3F4F6]">
@@ -339,14 +365,15 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
         </main>
       </div>
 
-      <SendToServiceDialog
-        open={sendOpen}
-        onOpenChange={setSendOpen}
+      <GenerateSlidesDialog
+        open={slidesOpen}
+        onOpenChange={setSlidesOpen}
         sermonId={sermon.id}
-        sermonTitle={title}
-        delivery={delivery}
+        title={title}
+        document={doc}
+        initialStyle={slidesInfo.style}
         ensureSaved={ensureSaved}
-        onChanged={handleSendChanged}
+        onGenerated={handleGenerated}
       />
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>

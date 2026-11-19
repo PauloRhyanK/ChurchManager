@@ -10,6 +10,7 @@ const sermon = (over: Partial<SermonSummary>): SermonSummary => ({
   estimatedSeconds: 1680,
   status: "DRAFT",
   delivery: null,
+  slideCount: 0,
   updatedAt: "2026-11-19T00:00:00.000Z",
   ...over,
 });
