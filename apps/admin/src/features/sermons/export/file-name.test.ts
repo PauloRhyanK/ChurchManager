@@ -6,6 +6,10 @@ describe('exportFileName', () => {
     expect(exportFileName('Luz que não se apaga', 'pptx')).toBe('luz-que-nao-se-apaga.pptx');
     expect(exportFileName('  --Ação & Fé!!  ', 'txt')).toBe('acao-fe.txt');
   });
+  it('barras, pontos e acentos', () => {
+    expect(exportFileName('../Luz/que.não', 'pptx')).toBe('luz-que-nao.pptx');
+    expect(exportFileName('../../..///', 'txt')).toBe('palavra.txt');
+  });
   it('vazio vira palavra', () => {
     expect(exportFileName('', 'pptx')).toBe('palavra.pptx');
     expect(exportFileName('!!!', 'txt')).toBe('palavra.txt');

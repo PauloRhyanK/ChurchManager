@@ -46,6 +46,13 @@ describe('buildVersesText', () => {
   });
 });
 
+describe('linhas únicas', () => {
+  it('colapsa quebras e tabs no título e na referência', () => {
+    const doc: SermonDoc = { type: 'doc', content: [{ type: 'verse', attrs: { id: 'v', reference: 'A\r\n1:1\tx', book: null, chapter: null, verseStart: null, verseEnd: null, translation: null, verses: [{ number: null, text: 't' }] } }] };
+    expect(buildVersesText({ title: 'a\nb\t c', document: doc, credits: [] })).toBe(['a b c', '', 'A 1:1 x', 't', ''].join('\r\n'));
+  });
+});
+
 describe('usedTranslations', () => {
   it('lista sem repetir, na ordem', () => {
     expect(usedTranslations(EXAMPLE_DOC)).toEqual(['BLIVRE']);
@@ -58,8 +65,16 @@ describe('downloadText', () => {
     URL.createObjectURL = vi.fn((b: Blob) => { blob = b; return 'blob:x'; });
     URL.revokeObjectURL = vi.fn();
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    vi.useFakeTimers();
+    const append = vi.spyOn(document.body, 'appendChild');
     downloadText('a.txt', 'olá');
     expect(click).toHaveBeenCalled();
+    expect(append).toHaveBeenCalled();
+    expect(document.querySelector('a[download]')).toBeNull();
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    vi.runAllTimers();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:x');
+    vi.useRealTimers();
     expect(blob!.type).toBe('text/plain;charset=utf-8');
     const read = await new Promise<ArrayBuffer>((resolve) => {
       const r = new FileReader();

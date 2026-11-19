@@ -1,5 +1,7 @@
 import type { SermonDoc, VerseAttrs } from '../lib/document';
 
+const oneLine = (t: string) => t.replace(/\s+/g, ' ').trim();
+
 function verseBlocks(document: SermonDoc): VerseAttrs[] {
   const out: VerseAttrs[] = [];
   for (const b of document.content) if (b.type === 'verse') out.push(b.attrs);
@@ -12,12 +14,12 @@ function verseBody(verses: VerseAttrs['verses']): string {
 }
 
 export function buildVersesText(input: { title: string; document: SermonDoc; credits: string[] }): string {
-  const lines: string[] = [input.title, ''];
+  const lines: string[] = [oneLine(input.title), ''];
   const verses = verseBlocks(input.document);
   if (verses.length === 0) {
     lines.push('Nenhum versículo nesta palavra.');
   } else {
-    for (const v of verses) lines.push(v.reference, verseBody(v.verses), '');
+    for (const v of verses) lines.push(oneLine(v.reference), verseBody(v.verses), '');
     lines.pop();
   }
   lines.push('', ...input.credits);
@@ -30,8 +32,10 @@ export function downloadText(fileName: string, text: string): void {
   const link = document.createElement('a');
   link.href = url;
   link.download = fileName;
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(url);
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export function usedTranslations(document: SermonDoc): string[] {

@@ -76,4 +76,34 @@ describe('buildSermonHtml', () => {
     expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt; &amp; &quot;x&quot;');
     expect(html).not.toContain('<script');
   });
+
+  it('nível de título hostil não vira tag', () => {
+    const bad = { type: 'heading', attrs: { id: 'h', level: '2><img src=x onerror=alert(1)>' }, content: [{ type: 'text', text: 'T' }] };
+    const doc = { type: 'doc', content: [bad] } as unknown as SermonDoc;
+    const html = buildSermonHtml({ ...base, document: doc });
+    expect(html).not.toContain('<img');
+    expect(html).toContain('<h2>T</h2>');
+  });
+  it('escapa texto hostil em títulos, listas, ilustração, aplicação e start', () => {
+    const ev = (s: string) => `<img src=x onerror=alert(1)>${s}<script>`;
+    const t = (s: string) => [{ type: 'text' as const, text: ev(s) }];
+    const para = (s: string) => ({ type: 'paragraph' as const, content: t(s) });
+    const item = (s: string) => ({ type: 'listItem' as const, content: [para(s)] });
+    const doc = {
+      type: 'doc',
+      content: [
+        { type: 'heading', attrs: { id: 'a', level: 2 }, content: t('h2') },
+        { type: 'heading', attrs: { id: 'b', level: 3 }, content: t('h3') },
+        { type: 'bulletList', content: [item('bl')] },
+        { type: 'orderedList', attrs: { start: '1"><img src=x>' }, content: [item('ol')] },
+        { type: 'illustration', attrs: { id: 'i' }, content: [para('il')] },
+        { type: 'application', attrs: { id: 'p' }, content: [para('ap')] },
+      ],
+    } as unknown as SermonDoc;
+    const html = buildSermonHtml({ ...base, document: doc });
+    expect(html).not.toContain('<script');
+    expect(html).not.toContain('<img');
+    expect(html).not.toMatch(/<[^>]*onerror=/i);
+    for (const k of ['h2', 'h3', 'bl', 'ol', 'il', 'ap']) expect(html).toContain(`&gt;${k}&lt;script&gt;`);
+  });
 });

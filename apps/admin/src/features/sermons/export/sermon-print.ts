@@ -69,7 +69,10 @@ export function buildSermonHtml(input: {
       case 'orderedList':
         return inner([b]);
       case 'heading':
-        return `<h${b.attrs.level}>${inline(b.content)}</h${b.attrs.level}>`;
+        {
+        const tag = b.attrs.level === 3 ? 'h3' : 'h2';
+        return `<${tag}>${inline(b.content)}</${tag}>`;
+      }
       case 'point':
         pointNumber += 1;
         return `<h2>${pointNumber}. ${inline(b.content)}</h2>`;
