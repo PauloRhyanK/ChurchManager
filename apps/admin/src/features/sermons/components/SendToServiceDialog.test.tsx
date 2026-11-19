@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SendToServiceDialog } from "./SendToServiceDialog";
 
@@ -27,11 +27,13 @@ function conflict() {
   });
 }
 
-function renderDialog(over: { delivery?: unknown; ensureSaved?: () => Promise<boolean> } = {}) {
+function renderDialog(
+  over: { delivery?: unknown; ensureSaved?: () => Promise<boolean>; client?: QueryClient } = {},
+) {
   const onChanged = vi.fn();
   const onOpenChange = vi.fn();
   const ensureSaved = over.ensureSaved ?? vi.fn().mockResolvedValue(true);
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = over.client ?? new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
       <SendToServiceDialog
@@ -168,5 +170,34 @@ describe("SendToServiceDialog", () => {
     fireEvent.click(buttons[buttons.length - 1]);
     await waitFor(() => expect(api.cancelDelivery).toHaveBeenCalledWith("s1"));
     await waitFor(() => expect(onChanged).toHaveBeenCalledWith(SENT, "cancelled"));
+  });
+
+  it("Outra data não deixa escolher dia antes de hoje", async () => {
+    renderDialog();
+    fireEvent.click(await screen.findByRole("radio", { name: "Outra data" }));
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    expect(screen.getByLabelText("Data")).toHaveAttribute("min", today);
+  });
+
+  it("enviar e cancelar invalidam também os cultos", async () => {
+    for (const run of ["send", "cancel"] as const) {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const spy = vi.spyOn(client, "invalidateQueries");
+      const delivery = run === "cancel" ? { date: "2026-11-22", startTime: "19:00", serviceId: "c1", serviceName: "Culto" } : null;
+      const view = renderDialog({ client, delivery });
+      if (run === "send") {
+        fireEvent.click(await screen.findByRole("radio", { name: /Domingo, 22\/11/ }));
+        fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+        await waitFor(() => expect(view.onChanged).toHaveBeenCalled());
+      } else {
+        fireEvent.click(await screen.findByRole("button", { name: "Cancelar o envio" }));
+        const buttons = await screen.findAllByRole("button", { name: "Cancelar o envio" });
+        fireEvent.click(buttons[buttons.length - 1]);
+        await waitFor(() => expect(view.onChanged).toHaveBeenCalled());
+      }
+      expect(spy).toHaveBeenCalledWith({ queryKey: ["worship"] });
+      cleanup();
+    }
   });
 });

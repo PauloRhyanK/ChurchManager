@@ -24,11 +24,13 @@ import { SendToServiceDialog } from "../components/SendToServiceDialog";
 import { StructurePanel } from "../components/StructurePanel";
 import { SermonSheet } from "../editor/SermonSheet";
 import { SermonToolbar } from "../editor/SermonToolbar";
-import { deriveSermon, type SermonDoc } from "../lib/document";
+import { deriveSermon, sameJson, type SermonDoc } from "../lib/document";
 import { formatDay, formatHour, formatSpeech } from "../lib/format";
 import { useAutosave } from "../lib/use-autosave";
 
 const LIST_PATH = "/palavras";
+const UNTITLED = "Sem título";
+const LIST_KEY = ["sermons", "list"] as const;
 
 /** Id da seção onde está o cursor: o último Ponto ou Título de seção até a posição; nulo na Abertura. */
 function sectionAtCursor(editor: Editor): string | null {
@@ -63,7 +65,23 @@ function scrollToBlock(editor: Editor | null, id: string | null) {
   if (dom instanceof HTMLElement) dom.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function SaveIndicator({ state, onRetry, onReload }: { state: string; onRetry(): void; onReload(): void }) {
+function errorMessage(status: number | null): string {
+  if (status === 413) return "A palavra ficou grande demais para salvar.";
+  if (status === 400) return "O servidor recusou este conteúdo. Desfaça a última alteração.";
+  return "Não foi possível salvar.";
+}
+
+function SaveIndicator({
+  state,
+  errorStatus,
+  onRetry,
+  onReload,
+}: {
+  state: string;
+  errorStatus: number | null;
+  onRetry(): void;
+  onReload(): void;
+}) {
   if (state === "saving")
     return (
       <span role="status" className="flex items-center gap-1.5 text-sm text-[#6B7280]">
@@ -81,7 +99,7 @@ function SaveIndicator({ state, onRetry, onReload }: { state: string; onRetry():
   if (state === "error")
     return (
       <span role="alert" className="flex items-center gap-2 text-sm text-destructive">
-        Não foi possível salvar.
+        {errorMessage(errorStatus)}
         <Button type="button" variant="outline" size="sm" onClick={onRetry}>
           Tentar de novo
         </Button>
@@ -90,7 +108,7 @@ function SaveIndicator({ state, onRetry, onReload }: { state: string; onRetry():
   if (state === "conflict")
     return (
       <span role="alert" className="flex items-center gap-2 text-sm text-destructive">
-        Esta palavra foi alterada em outra aba.
+        Esta palavra foi alterada em outra aba. Recarregar descarta o que você escreveu aqui desde o último salvamento.
         <Button type="button" variant="outline" size="sm" onClick={onReload}>
           Recarregar
         </Button>
@@ -125,6 +143,13 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
       const saved = await updateSermon(sermon.id, body);
       return { revision: saved.revision };
     },
+    // O envio gravou mas a resposta se perdeu? Se o servidor tem exatamente o que foi mandado, segue dali.
+    resolveConflict: async (sent) => {
+      const server = await getSermon(sermon.id);
+      if (sent.document !== undefined && !sameJson(server.document, sent.document)) return null;
+      if (sent.title !== undefined && server.title !== sent.title.trim()) return null;
+      return { revision: server.revision };
+    },
   });
 
   const derived = useMemo(() => deriveSermon(doc), [doc]);
@@ -144,7 +169,8 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
   const handleTitle = useCallback(
     (value: string) => {
       setTitle(value);
-      if (canEdit) autosave.setTitle(value);
+      // O servidor recusa título vazio: enquanto o campo está vazio, a palavra fica "Sem título".
+      if (canEdit) autosave.setTitle(value.trim() === "" ? UNTITLED : value);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [canEdit, autosave.setTitle],
@@ -160,12 +186,17 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
 
   async function goBack() {
     await autosave.flush();
-    if (!autosave.isDirty()) navigate(LIST_PATH);
+    if (autosave.isDirty()) return;
+    void queryClient.invalidateQueries({ queryKey: LIST_KEY });
+    navigate(LIST_PATH);
   }
 
   const duplicate = useMutation({
     mutationFn: () => duplicateSermon(sermon.id),
-    onSuccess: (copy) => navigate(`${LIST_PATH}/${copy.id}`),
+    onSuccess: (copy) => {
+      void queryClient.invalidateQueries({ queryKey: LIST_KEY });
+      navigate(`${LIST_PATH}/${copy.id}`);
+    },
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
   /** Só duplica o que o servidor já tem: com texto sem salvar, fica na página. */
@@ -179,7 +210,10 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
   }
   const remove = useMutation({
     mutationFn: () => deleteSermon(sermon.id),
-    onSuccess: () => navigate(LIST_PATH),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: LIST_KEY });
+      navigate(LIST_PATH);
+    },
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
 
@@ -210,18 +244,25 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
     navigate(LIST_PATH);
   }
 
-  const headerActions = canEdit && (
-    <Button
-      type="button"
-      variant={delivery ? "outline" : "default"}
-      size="sm"
-      className="gap-1.5"
-      onClick={() => setSendOpen(true)}
-    >
-      <Send aria-hidden="true" />
-      {delivery ? `Enviada · ${formatDay(delivery.date)}, ${formatHour(delivery.startTime)}` : "Enviar para um culto"}
-    </Button>
-  );
+  // Pregada: o envio é o registro do que foi pregado e não muda mais (a API recusa), então não abre o diálogo.
+  const headerActions =
+    canEdit &&
+    (situation.status === "PREACHED" && delivery ? (
+      <span className="flex h-8 items-center rounded-md border border-[#E5E7EB] px-3 text-sm text-[#6B7280]">
+        Pregada · {formatDay(delivery.date)}
+      </span>
+    ) : (
+      <Button
+        type="button"
+        variant={delivery ? "outline" : "default"}
+        size="sm"
+        className="gap-1.5"
+        onClick={() => setSendOpen(true)}
+      >
+        <Send aria-hidden="true" />
+        {delivery ? `Enviada · ${formatDay(delivery.date)}, ${formatHour(delivery.startTime)}` : "Enviar para um culto"}
+      </Button>
+    ));
 
   return (
     <div className="flex min-h-screen flex-col bg-[#F3F4F6]">
@@ -230,8 +271,15 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
           <Button type="button" variant="ghost" size="icon" aria-label="Voltar para Palavras" onClick={goBack}>
             <ArrowLeft aria-hidden="true" />
           </Button>
-          <h1 className="min-w-0 truncate text-base font-semibold text-[#030712]">{title.trim() || "Sem título"}</h1>
-          {canEdit && <SaveIndicator state={autosave.state} onRetry={autosave.retry} onReload={onReload} />}
+          <h1 className="min-w-0 truncate text-base font-semibold text-[#030712]">{title.trim() || UNTITLED}</h1>
+          {canEdit && (
+            <SaveIndicator
+              state={autosave.state}
+              errorStatus={autosave.errorStatus}
+              onRetry={autosave.retry}
+              onReload={onReload}
+            />
+          )}
           <div className="ml-auto flex items-center gap-2">
             <span className="flex items-center gap-1.5 rounded-full bg-[#F3F4F6] px-3 py-1 text-sm text-[#1F2937]">
               <Clock className="h-3.5 w-3.5" aria-hidden="true" />

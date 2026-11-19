@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, ChevronRight, Loader2, Plus, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -34,9 +34,13 @@ export default function SermonsListPage() {
     queryFn: () => listSermons({ q, status }),
     placeholderData: (previous) => previous,
   });
+  const queryClient = useQueryClient();
   const createMutation = useMutation({
     mutationFn: () => createSermon({}),
-    onSuccess: (created) => navigate(`/palavras/${created.id}`),
+    onSuccess: (created) => {
+      void queryClient.invalidateQueries({ queryKey: ["sermons", "list"] });
+      navigate(`/palavras/${created.id}`);
+    },
   });
 
   const items = sermonsQuery.data?.items ?? [];

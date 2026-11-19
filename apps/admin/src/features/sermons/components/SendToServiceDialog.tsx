@@ -29,6 +29,12 @@ import { formatServiceLine, formatServiceSentence } from "../lib/format";
 
 const OTHER = "other";
 
+/** Hoje (AAAA-MM-DD) no relógio de quem usa o painel. */
+function todayYmd(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
 interface SendToServiceDialogProps {
   open: boolean;
   onOpenChange(open: boolean): void;
@@ -106,6 +112,8 @@ export function SendToServiceDialog({
       const sent = await sendSermon(sermonId, target, replace);
       await queryClient.invalidateQueries({ queryKey: ["sermons", "list"] });
       await queryClient.invalidateQueries({ queryKey: ["sermons", "service-options"] });
+      // O roteiro do culto mostra a palavra enviada.
+      await queryClient.invalidateQueries({ queryKey: ["worship"] });
       toast.success("Palavra enviada.");
       setConfirmReplace(false);
       onOpenChange(false);
@@ -127,6 +135,8 @@ export function SendToServiceDialog({
       const back = await cancelDelivery(sermonId);
       await queryClient.invalidateQueries({ queryKey: ["sermons", "list"] });
       await queryClient.invalidateQueries({ queryKey: ["sermons", "service-options"] });
+      // O roteiro do culto mostra a palavra enviada.
+      await queryClient.invalidateQueries({ queryKey: ["worship"] });
       toast.success("Envio cancelado.");
       setConfirmCancel(false);
       onOpenChange(false);
@@ -192,6 +202,7 @@ export function SendToServiceDialog({
                     <input
                       type="date"
                       aria-label="Data"
+                      min={todayYmd()}
                       value={date}
                       onChange={(e) => setDate(e.target.value)}
                       className="rounded-md border border-input bg-background px-2 py-1.5 text-sm"

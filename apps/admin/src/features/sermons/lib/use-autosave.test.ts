@@ -161,4 +161,110 @@ describe("useAutosave", () => {
     expect(result.current.state).toBe("error");
     expect(save).toHaveBeenCalledTimes(1);
   });
+
+  describe("409 depois de um envio que gravou mas cuja resposta se perdeu", () => {
+    it("resolveConflict com o mesmo conteúdo no servidor: adota a revisão e segue salvando", async () => {
+      const save = vi
+        .fn()
+        .mockRejectedValueOnce({ response: { status: 409 } })
+        .mockResolvedValueOnce({ revision: 8 });
+      const resolveConflict = vi.fn().mockResolvedValue({ revision: 7 });
+      const { result } = renderHook(() =>
+        useAutosave({ sermonId: "s1", initialRevision: 3, save, resolveConflict, delayMs: 1500 }),
+      );
+      act(() => result.current.setTitle("Novo"));
+      act(() => result.current.setDocument(docA));
+      await act(() => vi.advanceTimersByTimeAsync(1500));
+      expect(resolveConflict).toHaveBeenCalledWith({ title: "Novo", document: docA });
+      expect(result.current.state).toBe("saved");
+      expect(result.current.isDirty()).toBe(false);
+      act(() => result.current.setDocument(docB));
+      await act(() => vi.advanceTimersByTimeAsync(1500));
+      expect(save).toHaveBeenNthCalledWith(2, { document: docB, baseRevision: 7 });
+      expect(result.current.state).toBe("saved");
+    });
+
+    it("mudança feita enquanto resolvia vai no envio seguinte", async () => {
+      let resolve: (v: { revision: number }) => void = () => {};
+      const save = vi
+        .fn()
+        .mockRejectedValueOnce({ response: { status: 409 } })
+        .mockResolvedValueOnce({ revision: 8 });
+      const resolveConflict = vi.fn().mockImplementation(() => new Promise((r) => (resolve = r)));
+      const { result } = renderHook(() =>
+        useAutosave({ sermonId: "s1", initialRevision: 3, save, resolveConflict, delayMs: 1500 }),
+      );
+      act(() => result.current.setDocument(docA));
+      await act(() => vi.advanceTimersByTimeAsync(1500));
+      act(() => result.current.setDocument(docB));
+      await act(() => vi.advanceTimersByTimeAsync(1500));
+      await act(async () => resolve({ revision: 7 }));
+      await act(() => vi.advanceTimersByTimeAsync(0));
+      expect(save).toHaveBeenNthCalledWith(2, { document: docB, baseRevision: 7 });
+      expect(result.current.state).toBe("saved");
+    });
+
+    it("resolveConflict sem acordo (null) ou com falha: entra em conflict", async () => {
+      for (const resolveConflict of [vi.fn().mockResolvedValue(null), vi.fn().mockRejectedValue(new Error("rede"))]) {
+        const save = vi.fn().mockRejectedValue({ response: { status: 409 } });
+        const { result, unmount } = renderHook(() =>
+          useAutosave({ sermonId: "s1", initialRevision: 3, save, resolveConflict, delayMs: 1500 }),
+        );
+        act(() => result.current.setDocument(docA));
+        await act(() => vi.advanceTimersByTimeAsync(1500));
+        expect(resolveConflict).toHaveBeenCalledWith({ document: docA });
+        expect(result.current.state).toBe("conflict");
+        expect(result.current.isDirty()).toBe(true);
+        unmount();
+      }
+    });
+  });
+
+  it("errorStatus diz o status HTTP do último erro (null em erro de rede)", async () => {
+    for (const [error, status] of [
+      [{ response: { status: 413 } }, 413],
+      [{ response: { status: 400 } }, 400],
+      [new Error("rede"), null],
+    ] as const) {
+      const save = vi.fn().mockRejectedValue(error);
+      const { result, unmount } = setup(save);
+      act(() => result.current.setDocument(docA));
+      await act(() => vi.advanceTimersByTimeAsync(1500));
+      expect(result.current.state).toBe("error");
+      expect(result.current.errorStatus).toBe(status);
+      unmount();
+    }
+  });
+
+  it("429 espera 5 s e tenta de novo sozinho uma vez", async () => {
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce({ response: { status: 429 } })
+      .mockResolvedValueOnce({ revision: 4 });
+    const { result } = setup(save);
+    act(() => result.current.setDocument(docA));
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    expect(result.current.state).toBe("saving");
+    // Digitar durante a espera não adianta a nova tentativa.
+    act(() => result.current.setDocument(docB));
+    await act(() => vi.advanceTimersByTimeAsync(4900));
+    expect(save).toHaveBeenCalledTimes(1);
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenNthCalledWith(2, { document: docB, baseRevision: 3 });
+    expect(result.current.state).toBe("saved");
+  });
+
+  it("429 de novo depois da nova tentativa vira error", async () => {
+    const save = vi.fn().mockRejectedValue({ response: { status: 429 } });
+    const { result } = setup(save);
+    act(() => result.current.setDocument(docA));
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(result.current.state).toBe("error");
+    expect(result.current.errorStatus).toBe(429);
+    await act(() => vi.advanceTimersByTimeAsync(20000));
+    expect(save).toHaveBeenCalledTimes(2);
+  });
 });

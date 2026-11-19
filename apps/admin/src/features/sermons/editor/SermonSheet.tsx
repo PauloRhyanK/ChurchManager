@@ -72,7 +72,7 @@ export function SermonSheet({
       <input
         type="text"
         aria-label="Título da palavra"
-        placeholder="Título"
+        placeholder="Sem título"
         value={title}
         maxLength={TITLE_MAX}
         readOnly={!editable}

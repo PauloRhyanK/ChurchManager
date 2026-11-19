@@ -51,8 +51,7 @@ const ALL = [
 ];
 const COUNTS = { all: 3, draft: 1, sent: 1, preached: 1 };
 
-function renderPage() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderPage(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter future={ROUTER_FUTURE}>
@@ -110,6 +109,16 @@ describe("SermonsListPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Nova palavra/ }));
     expect(await screen.findByText("Editor aberto")).toBeInTheDocument();
     expect(api.createSermon).toHaveBeenCalledWith({});
+  });
+
+  it("Nova palavra invalida a lista (a volta do editor não mostra a lista velha)", async () => {
+    api.createSermon.mockResolvedValue(sermon({ id: "novo" }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const spy = vi.spyOn(client, "invalidateQueries");
+    renderPage(client);
+    fireEvent.click(await screen.findByRole("button", { name: /Nova palavra/ }));
+    await screen.findByText("Editor aberto");
+    expect(spy).toHaveBeenCalledWith({ queryKey: ["sermons", "list"] });
   });
 
   it("sem permissão de edição não oferece Nova palavra", async () => {

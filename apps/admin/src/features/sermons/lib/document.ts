@@ -165,3 +165,14 @@ export function deriveSermon(doc: SermonDoc): DerivedSermon {
     estimatedSeconds: sections.reduce((n, s) => n + s.seconds, 0),
   };
 }
+
+/** Igualdade profunda de JSON sem olhar a ordem das chaves (o banco devolve o jsonb com as chaves reordenadas). */
+export function sameJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((x, i) => sameJson(x, b[i]));
+  const ka = Object.keys(a as object).filter((k) => (a as Record<string, unknown>)[k] !== undefined);
+  const kb = Object.keys(b as object).filter((k) => (b as Record<string, unknown>)[k] !== undefined);
+  return ka.length === kb.length && ka.every((k) => sameJson((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+}
