@@ -39,6 +39,7 @@ tela com o retrato velho.
 
 import base64
 import collections
+import hashlib
 import hmac
 import importlib.util
 import io
@@ -51,7 +52,7 @@ import time
 import zipfile
 from datetime import timedelta
 
-from flask import (Flask, jsonify, redirect, request, send_file,
+from flask import (Flask, Response, jsonify, redirect, request, send_file,
                    send_from_directory, session)
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
@@ -98,7 +99,10 @@ ARQUIVOS = _mod_versao.impressoes(PASTA_PC)
 SUBIU_EM = time.time()
 
 _tranca = threading.Lock()
-_igreja = {"chegada": None, "painel": None, "em": 0.0, "maquina": ""}
+_igreja = {"chegada": None, "painel": None, "em": 0.0, "maquina": "",
+           # a letra das musicas do dia: grande e muda pouco, entao a igreja
+           # so manda quando muda (ver pc/ponte/espelho.py)
+           "conteudo": None}
 _fila = collections.deque(maxlen=50)
 _tentativas = {}          # ip -> [quantas erradas, ate quando esta bloqueado]
 _codigos = {}             # codigo de instalacao -> [vale ate, usos que restam]
@@ -150,6 +154,11 @@ def _porteiro():
              # atualizacao nao levam segredo nenhum, e os PCs secundarios, que
              # nao guardam chave, precisam alcanca-los.
              "/api/versao", "/api/atualizacao/pacote")
+    # O celular do pregador entra SEM a senha da equipe: quem autoriza e o
+    # codigo do link, conferido em cada rota contra o resumo que a igreja
+    # mandou. /api/espelho/pedidos confere a chave da igreja, como /api/espelho.
+    if request.path.startswith(("/pregador/", "/api/pregador/")) or request.path == "/api/espelho/pedidos":
+        return None
     if request.path in livre or _logado():
         return None
     if request.path.startswith("/api/"):
@@ -276,10 +285,36 @@ def raiz():
     return redirect("/painel")
 
 
+def _painel_novo():
+    """A igreja ja manda o retrato do painel ao vivo? Um PC com codigo antigo
+    nao manda `versao_do_painel`, e para ele a tela certa e a antiga."""
+    with _tranca:
+        painel = _igreja["painel"] or {}
+    try:
+        return int(painel.get("versao_do_painel") or 1) >= 2
+    except (TypeError, ValueError):
+        return False
+
+
 @app.get("/painel")
 def pagina_painel():
     """O painel do culto: o MESMO arquivo que o PC da igreja usa."""
+    return send_from_directory(PASTA_PC, "ao-vivo.html" if _painel_novo() else "painel.html")
+
+
+@app.get("/painel-antigo")
+def pagina_painel_antigo():
     return send_from_directory(PASTA_PC, "painel.html")
+
+
+@app.get("/ao-vivo.css")
+def ao_vivo_css():
+    return send_from_directory(PASTA_PC, "ao-vivo.css")
+
+
+@app.get("/ao-vivo.js")
+def ao_vivo_js():
+    return send_from_directory(PASTA_PC, "ao-vivo.js")
 
 
 @app.get("/chegada")
@@ -370,7 +405,10 @@ def aqui_imagem():
 # (_acao_do_painel no pc/app.py) e pode recusar tudo com uma chave no painel
 # local. "ordem" (trocar a ordem do culto inteira) fica de fora de proposito.
 ACOES_DO_PAINEL = ("ir", "gravar", "transmitir", "tela_preta", "recado", "cena_luz",
-                   "apagar_luz", "modo_luz", "cortar", "visibilidade", "retorno")
+                   "apagar_luz", "modo_luz", "cortar", "visibilidade", "retorno",
+                   # do painel ao vivo. Passar slide do louvor NAO entra: entre
+                   # o toque e o telao haveria ate 4 segundos.
+                   "cena_transmissao", "clima")
 
 
 @app.get("/api/painel")
@@ -406,6 +444,20 @@ def painel_acao():
                     "titulo": "Pedido enviado para a igreja", "detalhe": "acompanhe na tela"})
 
 
+@app.get("/api/painel/conteudo")
+def painel_conteudo():
+    with _tranca:
+        conteudo = _igreja["conteudo"]
+    return jsonify(conteudo or {"versao": None, "musicas": []})
+
+
+@app.get("/api/painel/imagem")
+def painel_imagem():
+    """A imagem ao vivo do OBS nao vem para a web, de proposito: pesaria a
+    internet da igreja durante a transmissao."""
+    return Response(status=204)
+
+
 @app.get("/api/versao")
 def versao():
     return jsonify({"versao": VERSAO, "em": SUBIU_EM, "arquivos": ARQUIVOS})
@@ -416,6 +468,97 @@ def atualizacao_pacote():
     """So o projeto. E o que um PC busca para se atualizar."""
     return send_file(_zip_pc(), mimetype="application/zip", as_attachment=True,
                      download_name="ponte-do-culto-pc.zip")
+
+
+# -- o celular do pregador ------------------------------------------------------
+#
+# A igreja entrega, junto do retrato, o RESUMO (SHA-256) do codigo do link e a
+# validade. Aqui so se confere: o codigo que o celular apresenta tem esse
+# resumo? A web nunca chama a igreja: o toque entra na fila e a igreja busca.
+
+_chegou_toque = threading.Condition(_tranca)
+
+
+def _link_do_pregador(codigo):
+    """True se o codigo confere com o que a igreja anunciou e ainda vale."""
+    with _tranca:
+        if not _igreja_viva():
+            return False
+        link = ((_igreja["painel"] or {}).get("palavra") or {}).get("link") or {}
+    resumo, expira = link.get("resumo"), link.get("expira_em")
+    if not resumo or not isinstance(expira, (int, float)) or time.time() >= expira:
+        return False
+    return hmac.compare_digest(hashlib.sha256(str(codigo).encode("utf-8")).hexdigest(), str(resumo))
+
+
+def _porteiro_do_pregador(codigo):
+    """None se pode passar; senao a resposta de recusa. Cinco codigos errados
+    do mesmo endereco travam por um minuto, como no login."""
+    ip = _ip()
+    if _bloqueado(ip):
+        return jsonify({"erro": "muitas tentativas. Espere um minuto."}), 429
+    if not _link_do_pregador(codigo):
+        _errou(ip)
+        return jsonify({"erro": "este link não vale mais, ou a igreja está sem internet. "
+                                "Peça outro à equipe."}), 404
+    return None
+
+
+@app.get("/pregador/<codigo>")
+def pagina_pregador(codigo):
+    if _porteiro_do_pregador(codigo) is not None:
+        return Response("Este link não vale mais, ou a igreja está sem internet. "
+                        "Peça outro à equipe de multimídia.",
+                        status=404, mimetype="text/plain; charset=utf-8")
+    return send_from_directory(PASTA_PC, "pregador.html")
+
+
+@app.get("/api/pregador/<codigo>")
+def pregador_retrato(codigo):
+    recusa = _porteiro_do_pregador(codigo)
+    if recusa is not None:
+        return recusa
+    with _tranca:
+        retrato = dict((_igreja["painel"] or {}).get("palavra") or {})
+        slides = (_igreja["conteudo"] or {}).get("palavra") or []
+        agora = (_igreja["painel"] or {}).get("agora")
+    retrato.pop("link", None)
+    retrato.update({"slides": slides, "agora": agora, "local": False})
+    return jsonify(retrato)
+
+
+@app.post("/api/pregador/<codigo>")
+def pregador_passar(codigo):
+    recusa = _porteiro_do_pregador(codigo)
+    if recusa is not None:
+        return recusa
+    dados = request.get_json(silent=True) or {}
+    if dados.get("para") not in ("proximo", "anterior"):
+        return jsonify({"erro": "o celular do pregador só passa os slides"}), 400
+    with _chegou_toque:
+        _fila.append({"tipo": "pregador", "passo": None, "em": time.time(),
+                      "corpo": {"codigo": codigo, "para": dados["para"], "visto": dados.get("visto")}})
+        _chegou_toque.notify_all()
+    return jsonify({"ok": True, "enviado": True})
+
+
+@app.post("/api/espelho/pedidos")
+def espelho_pedidos():
+    """A igreja pendurada esperando o toque do pregador (ate 20 s). So entrega
+    pedidos do tipo "pregador"; os outros continuam indo pela volta normal."""
+    if not hmac.compare_digest(request.headers.get("X-Ponte-Chave", ""), CHAVE):
+        return jsonify({"erro": "chave errada"}), 403
+    limite = time.time() + 20.0
+    with _chegou_toque:
+        while True:
+            agora = time.time()
+            dele = [c for c in _fila if c["tipo"] == "pregador" and agora - c["em"] <= 60]
+            if dele or agora >= limite:
+                for comando in [c for c in _fila if c["tipo"] == "pregador"]:
+                    _fila.remove(comando)
+                break
+            _chegou_toque.wait(timeout=limite - agora)
+    return jsonify({"comandos": [{k: c[k] for k in ("tipo", "passo", "corpo")} for c in dele]})
 
 
 # -- a igreja ligando ---------------------------------------------------------
@@ -434,11 +577,19 @@ def espelho():
         painel = dados.get("painel")
         _igreja.update({"chegada": chegada, "em": agora, "maquina": str(dados.get("maquina") or ""),
                         "painel": painel if isinstance(painel, dict) else None})
+        conteudo = dados.get("conteudo")
+        if isinstance(conteudo, dict) and conteudo.get("versao"):
+            _igreja["conteudo"] = conteudo
+        # Se a igreja anuncia uma versao do conteudo que nao esta aqui (a web
+        # reiniciou, por exemplo), pede: ela manda na proxima volta.
+        anunciada = (painel or {}).get("conteudo_versao") if isinstance(painel, dict) else None
+        quer_conteudo = bool(anunciada) and (_igreja["conteudo"] or {}).get("versao") != anunciada
         # Pedido velho nao e entregue: "abrir o retorno na TV" de 10 minutos
         # atras, chegando agora porque a internet voltou, e uma surpresa ruim.
         comandos = [c for c in _fila if agora - c["em"] <= 60]
         _fila.clear()
-    return jsonify({"comandos": [{k: c[k] for k in ("tipo", "passo", "corpo")} for c in comandos]})
+    return jsonify({"comandos": [{k: c[k] for k in ("tipo", "passo", "corpo")} for c in comandos],
+                    "quer_conteudo": quer_conteudo})
 
 
 @app.get("/saude")

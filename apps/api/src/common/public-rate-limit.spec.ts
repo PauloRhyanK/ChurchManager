@@ -28,6 +28,7 @@ import { TenantsMeEventsDashboardController } from '../modules/events/tenants-me
 import { TenantsMeSchedulesController } from '../modules/events/tenants-me-schedules.controller';
 import { TenantsMeRegistrationsController } from '../modules/events/tenants-me-registrations.controller';
 import { TenantsMeEventTagsController } from '../modules/events/tenants-me-event-tags.controller';
+import { SermonsController } from '../modules/sermons/sermons.controller';
 
 /** Mesmos throttlers de `ThrottlerModule.forRoot` em app.module.ts. */
 const THROTTLERS = [
@@ -173,5 +174,12 @@ test('rotas do painel: 30/min por rota (o throttler platform só vale para criar
         key,
       );
     }
+  }
+});
+
+test('palavras: o autosave (PUT :id) aguenta 120/min; as outras rotas ficam em 30/min', async () => {
+  assert.equal(await allowedPerMinute(SermonsController, 'update'), 120);
+  for (const handler of ['list', 'create', 'get', 'duplicate', 'remove', 'send', 'cancel', 'serviceOptions']) {
+    assert.equal(await allowedPerMinute(SermonsController, handler), 30, handler);
   }
 });

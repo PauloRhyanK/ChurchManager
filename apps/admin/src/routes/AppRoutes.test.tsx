@@ -25,6 +25,13 @@ vi.mock("@/features/church/pages/ChurchPage", async () => {
   }
   return { default: ChurchPageMock };
 });
+vi.mock("@/features/worship/pages/SongsListPage", () => ({ default: () => <p>Página de músicas</p> }));
+vi.mock("@/features/worship/pages/NewSongPage", () => ({ default: () => <p>Página nova música</p> }));
+vi.mock("@/features/worship/pages/SongEditorPage", () => ({ default: () => <p>Editor da música</p> }));
+vi.mock("@/features/worship/pages/ServicePlanPage", () => ({ default: () => <p>Página do roteiro</p> }));
+vi.mock("@/features/sermons/pages/SermonsListPage", () => ({ default: () => <p>Página de palavras</p> }));
+vi.mock("@/features/sermons/pages/SermonEditorPage", () => ({ default: () => <p>Editor da palavra</p> }));
+vi.mock("@/features/sermons/pages/SermonSlidesPage", () => ({ default: () => <p>Conferência dos slides</p> }));
 vi.mock("@/features/events/pages/RegistrationsPage", () => ({
   default: () => <p>Página de inscrições</p>,
 }));
@@ -152,5 +159,67 @@ describe("AppRoutes — Site dentro de Igreja", () => {
     perms.modules = { EVENTS: "VIEW" };
     renderAt("/igreja");
     expect(await screen.findByText("Página inicial")).toBeInTheDocument();
+  });
+});
+
+describe("AppRoutes — Cultos", () => {
+  it("sem a permissão WORSHIP as rotas de Cultos voltam para o início", async () => {
+    perms.modules = { EVENTS: "EDIT", CHURCH: "EDIT" };
+    renderAt("/cultos/musicas");
+    expect(await screen.findByText("Página inicial")).toBeInTheDocument();
+    expect(screen.queryByText("Página de músicas")).not.toBeInTheDocument();
+  });
+
+  it("com VIEW abre Músicas, o editor e o Roteiro, mas não a criação", async () => {
+    perms.modules = { WORSHIP: "VIEW" };
+    renderAt("/cultos");
+    expect(await screen.findByText("Página de músicas")).toBeInTheDocument();
+    act(() => void navigate("/cultos/roteiro"));
+    expect(await screen.findByText("Página do roteiro")).toBeInTheDocument();
+    act(() => void navigate("/cultos/musicas/abc"));
+    expect(await screen.findByText("Editor da música")).toBeInTheDocument();
+    act(() => void navigate("/cultos/musicas/nova"));
+    expect(await screen.findByText("Página inicial")).toBeInTheDocument();
+  });
+
+  it("com EDIT abre Nova música (e não confunde com o editor)", async () => {
+    perms.modules = { WORSHIP: "EDIT" };
+    renderAt("/cultos/musicas/nova");
+    expect(await screen.findByText("Página nova música")).toBeInTheDocument();
+    expect(screen.queryByText("Editor da música")).not.toBeInTheDocument();
+  });
+});
+
+describe("AppRoutes — Palavras", () => {
+  it("sem a permissão SERMONS as rotas de Palavras voltam para o início", async () => {
+    perms.modules = { WORSHIP: "EDIT" };
+    renderAt("/palavras");
+    expect(await screen.findByText("Página inicial")).toBeInTheDocument();
+    act(() => void navigate("/palavras/abc"));
+    expect(await screen.findByText("Página inicial")).toBeInTheDocument();
+    expect(screen.queryByText("Página de palavras")).not.toBeInTheDocument();
+    expect(screen.queryByText("Editor da palavra")).not.toBeInTheDocument();
+  });
+
+  it("com VIEW abre a lista e o editor", async () => {
+    perms.modules = { SERMONS: "VIEW" };
+    renderAt("/palavras");
+    expect(await screen.findByText("Página de palavras")).toBeInTheDocument();
+    act(() => void navigate("/palavras/abc"));
+    expect(await screen.findByText("Editor da palavra")).toBeInTheDocument();
+  });
+
+  it("/palavras/:id/slides abre a conferência (não o editor) e exige SERMONS", async () => {
+    perms.modules = { SERMONS: "VIEW" };
+    renderAt("/palavras/abc/slides");
+    expect(await screen.findByText("Conferência dos slides")).toBeInTheDocument();
+    expect(screen.queryByText("Editor da palavra")).not.toBeInTheDocument();
+  });
+
+  it("sem SERMONS a conferência volta para o início", async () => {
+    perms.modules = { WORSHIP: "EDIT" };
+    renderAt("/palavras/abc/slides");
+    expect(await screen.findByText("Página inicial")).toBeInTheDocument();
+    expect(screen.queryByText("Conferência dos slides")).not.toBeInTheDocument();
   });
 });

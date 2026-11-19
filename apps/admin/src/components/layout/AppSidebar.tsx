@@ -13,6 +13,8 @@ import {
   ShieldCheck,
   Link2,
   QrCode,
+  Music,
+  BookOpen,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -28,6 +30,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarFooter,
   SidebarHeader,
   useSidebar,
@@ -42,10 +47,23 @@ const mainNav: {
   icon: typeof LayoutDashboard;
   /** Basta ter VIEW em qualquer um. */
   modules?: PermissionModule[];
+  /** Sub-itens aninhados (o item em si leva ao primeiro). */
+  children?: { title: string; url: string }[];
 }[] = [
   { title: "Visão Geral", url: "/", icon: LayoutDashboard, modules: ["DASHBOARD"] },
   { title: "Financeiro", url: "/financeiro", icon: DollarSign, modules: ["FINANCIAL"] },
   { title: "Eventos", url: "/eventos", icon: CalendarDays, modules: ["EVENTS"] },
+  {
+    title: "Cultos",
+    url: "/cultos",
+    icon: Music,
+    modules: ["WORSHIP"],
+    children: [
+      { title: "Músicas", url: "/cultos/musicas" },
+      { title: "Roteiro", url: "/cultos/roteiro" },
+    ],
+  },
+  { title: "Palavras", url: "/palavras", icon: BookOpen, modules: ["SERMONS"] },
   // Igreja inclui a aba Site.
   { title: "Igreja", url: "/igreja", icon: Church, modules: ["CHURCH", "SITE"] },
 ];
@@ -138,15 +156,28 @@ export function AppSidebar() {
                     tooltip={item.title}
                   >
                     <NavLink
-                      to={item.url}
+                      to={item.children?.[0]?.url ?? item.url}
                       end={item.url === "/"}
                       className="rounded-lg px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                      activeClassName={
+                        item.children ? "" : "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                      }
                     >
                       <item.icon className="h-4 w-4" />
                       {!collapsed && <span>{item.title}</span>}
                     </NavLink>
                   </SidebarMenuButton>
+                  {item.children && !collapsed && (
+                    <SidebarMenuSub>
+                      {item.children.map((child) => (
+                        <SidebarMenuSubItem key={child.url}>
+                          <SidebarMenuSubButton asChild isActive={isActive(child.url)}>
+                            <NavLink to={child.url}>{child.title}</NavLink>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  )}
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>

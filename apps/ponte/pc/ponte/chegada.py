@@ -420,6 +420,12 @@ class Chegada:
 
     # -- a TV, para o vigia (ponte/vigia_tv.py) -------------------------------
 
+    def culto(self):
+        """O que o voluntario respondeu no formulario de hoje, ou None."""
+        with self._tranca:
+            self._virar_o_dia()
+            return dict(self._culto) if self._culto else None
+
     def tem_tv(self):
         conf = self._roteiro["rede"].get("tv") or {}
         return bool(conf.get("script"))

@@ -153,3 +153,53 @@ test('falha no R2: o log do servidor traz a mensagem e a causa do erro, sem a ch
   assert.match(logged[0], /ENOTFOUND/);
   assert.ok(!logged[0].includes('secret)'), logged[0]);
 }));
+
+// --- áudio-guia das músicas ---------------------------------------------------
+
+const pad = (head: Buffer) => Buffer.concat([head, Buffer.alloc(64)]);
+const WAV = pad(Buffer.concat([Buffer.from('RIFF'), Buffer.from([0x24, 0, 0, 0]), Buffer.from('WAVEfmt ')]));
+const MP3_ID3 = pad(Buffer.from('ID3\x04\x00\x00\x00\x00\x00\x00', 'latin1'));
+const MP3_FRAME = pad(Buffer.from([0xff, 0xfb, 0x90, 0x64]));
+const OGG = pad(Buffer.from('OggS\x00\x02', 'latin1'));
+const FLAC = pad(Buffer.from('fLaC\x00\x00\x00\x22', 'latin1'));
+const M4A = pad(Buffer.concat([Buffer.from([0, 0, 0, 0x20]), Buffer.from('ftypM4A ')]));
+const AUDIO_FOLDER = `tenants/${TENANT}/worship/audio`;
+
+test('áudio: aceita MP3, WAV, M4A, OGG e FLAC pela assinatura', withEnv(FULL_ENV, async () => {
+  const cases: Array<[Buffer, string, string]> = [
+    [WAV, 'audio/wav', '.wav'],
+    [MP3_ID3, 'audio/mpeg', '.mp3'],
+    [MP3_FRAME, 'audio/mpeg', '.mp3'],
+    [OGG, 'audio/ogg', '.ogg'],
+    [FLAC, 'audio/flac', '.flac'],
+    [M4A, 'audio/mp4', '.m4a'],
+  ];
+  for (const [buf, type, ext] of cases) {
+    const { service, sent } = createService();
+    const out = await service.uploadAudio(buf, AUDIO_FOLDER);
+    assert.equal(sent[0].ContentType, type);
+    assert.ok((sent[0].Key as string).startsWith(`${AUDIO_FOLDER}/`));
+    assert.ok((sent[0].Key as string).endsWith(ext));
+    assert.equal(out.sizeBytes, buf.length);
+    assert.ok(out.url.startsWith(`https://cdn.exemplo.org/${AUDIO_FOLDER}/`));
+  }
+}));
+
+test('áudio: recusa o que não é áudio (imagem, WebP em RIFF, texto) e arquivo ausente', withEnv(FULL_ENV, async () => {
+  const { service, sent } = createService();
+  const UTF16 = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('texto qualquer', 'utf16le')]);
+  const VIDEO = pad(Buffer.concat([Buffer.from([0, 0, 0, 0x20]), Buffer.from('ftypqt  ')]));
+  for (const buf of [PNG, WEBP, SVG, UTF16, VIDEO, Buffer.from('isto não é um mp3, só tem a extensão')]) {
+    await assert.rejects(() => service.uploadAudio(buf, AUDIO_FOLDER), BadRequestException);
+  }
+  await assert.rejects(() => service.uploadAudio(undefined, AUDIO_FOLDER), BadRequestException);
+  assert.equal(sent.length, 0);
+}));
+
+test('áudio: acima de 90 MB resulta em 413 e nada é gravado', withEnv(FULL_ENV, async () => {
+  const { service, sent } = createService();
+  const big = Buffer.alloc(90 * 1024 * 1024 + 1);
+  WAV.copy(big);
+  await assert.rejects(() => service.uploadAudio(big, AUDIO_FOLDER), PayloadTooLargeException);
+  assert.equal(sent.length, 0);
+}));

@@ -1,0 +1,526 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { Editor } from "@tiptap/react";
+import { ArrowLeft, Check, Clock, Download, ListTree, Loader2, MoreHorizontal, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { usePermissions } from "@/features/access/hooks/use-permissions";
+import { getApiErrorMessage } from "@/lib/api";
+import { deleteSermon, duplicateSermon, getSermon, updateSermon, type Sermon } from "../api/sermons-api";
+import { ExportDialog } from "../components/ExportDialog";
+import { GenerateSlidesDialog } from "../components/GenerateSlidesDialog";
+import { SendToServiceDialog } from "../components/SendToServiceDialog";
+import { StructurePanel } from "../components/StructurePanel";
+import { SermonSheet } from "../editor/SermonSheet";
+import { SermonToolbar } from "../editor/SermonToolbar";
+import { deriveSermon, sameJson, type SermonDoc } from "../lib/document";
+import { formatDay, formatHour, formatSpeech } from "../lib/format";
+import { useAutosave } from "../lib/use-autosave";
+
+const LIST_PATH = "/palavras";
+const UNTITLED = "Sem título";
+const LIST_KEY = ["sermons", "list"] as const;
+const detailKey = (id: string) => ["sermons", "detail", id] as const;
+
+/** Id da seção onde está o cursor: o último Ponto ou Título de seção até a posição; nulo na Abertura. */
+function sectionAtCursor(editor: Editor): string | null {
+  const { from } = editor.state.selection;
+  let active: string | null = null;
+  editor.state.doc.forEach((node, offset) => {
+    if (offset > from) return;
+    const opens = node.type.name === "point" || (node.type.name === "heading" && node.attrs.level === 2);
+    if (opens) active = (node.attrs.id as string) ?? null;
+  });
+  return active;
+}
+
+/** Rola a folha até o bloco com esse id (nulo = topo). */
+function scrollToBlock(editor: Editor | null, id: string | null) {
+  if (!editor) return;
+  if (id === null) {
+    editor.view.dom.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  let found: number | null = null;
+  editor.state.doc.descendants((node, pos) => {
+    if (found !== null) return false;
+    if (node.attrs?.id === id) {
+      found = pos;
+      return false;
+    }
+    return true;
+  });
+  if (found === null) return;
+  const dom = editor.view.nodeDOM(found);
+  if (dom instanceof HTMLElement) dom.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function errorMessage(status: number | null): string {
+  if (status === 413) return "A palavra ficou grande demais para salvar.";
+  if (status === 400) return "O servidor recusou este conteúdo. Desfaça a última alteração.";
+  return "Não foi possível salvar.";
+}
+
+function SaveIndicator({
+  state,
+  errorStatus,
+  onRetry,
+  onReload,
+}: {
+  state: string;
+  errorStatus: number | null;
+  onRetry(): void;
+  onReload(): void;
+}) {
+  if (state === "saving")
+    return (
+      <span role="status" className="flex items-center gap-1.5 text-sm text-[#6B7280]">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        Salvando…
+      </span>
+    );
+  if (state === "saved")
+    return (
+      <span role="status" className="flex items-center gap-1.5 text-sm text-[#6B7280]">
+        <Check className="h-3.5 w-3.5" aria-hidden="true" />
+        Salvo
+      </span>
+    );
+  if (state === "error")
+    return (
+      <span role="alert" className="flex items-center gap-2 text-sm text-destructive">
+        {errorMessage(errorStatus)}
+        <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+          Tentar de novo
+        </Button>
+      </span>
+    );
+  if (state === "conflict")
+    return (
+      <span role="alert" className="flex items-center gap-2 text-sm text-destructive">
+        Esta palavra foi alterada em outra aba. Recarregar descarta o que você escreveu aqui desde o último salvamento.
+        <Button type="button" variant="outline" size="sm" onClick={onReload}>
+          Recarregar
+        </Button>
+      </span>
+    );
+  return null;
+}
+
+interface EditorViewProps {
+  sermon: Sermon;
+  canEdit: boolean;
+  onReload(): void;
+}
+
+function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
+  const navigate = useNavigate();
+  const [title, setTitle] = useState(sermon.title);
+  const [doc, setDoc] = useState<SermonDoc>(sermon.document);
+  const [editor, setEditor] = useState<Editor | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [slidesOpen, setSlidesOpen] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const queryClient = useQueryClient();
+  // Situação do envio e slides: vivem à parte do texto, que depois de aberto é do editor.
+  const [situation, setSituation] = useState({ status: sermon.status, delivery: sermon.delivery });
+  const [slidesInfo, setSlidesInfo] = useState({
+    count: sermon.slideCount,
+    has: sermon.slides.length > 0,
+    style: sermon.slideStyle,
+    items: sermon.slides,
+  });
+
+  const autosave = useAutosave({
+    sermonId: sermon.id,
+    initialRevision: sermon.revision,
+    save: async (body) => {
+      const saved = await updateSermon(sermon.id, body);
+      // A cópia em cache acompanha o servidor (o editor aberto não relê dela; quem abrir depois parte daqui).
+      queryClient.setQueryData<Sermon>(detailKey(sermon.id), (old) =>
+        old
+          ? {
+              ...old,
+              title: saved.title,
+              document: saved.document,
+              revision: saved.revision,
+              baseReference: saved.baseReference,
+              pointCount: saved.pointCount,
+              estimatedSeconds: saved.estimatedSeconds,
+              slidesStale: saved.slidesStale,
+              updatedAt: saved.updatedAt,
+            }
+          : saved,
+      );
+      return { revision: saved.revision };
+    },
+    // O envio gravou mas a resposta se perdeu? Se o servidor tem exatamente o que foi mandado, segue dali.
+    resolveConflict: async (sent) => {
+      const server = await getSermon(sermon.id);
+      if (sent.document !== undefined && !sameJson(server.document, sent.document)) return null;
+      if (sent.title !== undefined && server.title !== sent.title.trim()) return null;
+      return { revision: server.revision };
+    },
+  });
+
+  const derived = useMemo(() => deriveSermon(doc), [doc]);
+
+  useEffect(() => {
+    if (!editor) return;
+    const sync = () => setActiveId(sectionAtCursor(editor));
+    sync();
+    editor.on("selectionUpdate", sync);
+    editor.on("update", sync);
+    return () => {
+      editor.off("selectionUpdate", sync);
+      editor.off("update", sync);
+    };
+  }, [editor]);
+
+  const handleTitle = useCallback(
+    (value: string) => {
+      setTitle(value);
+      // O servidor recusa título vazio: enquanto o campo está vazio, a palavra fica "Sem título".
+      if (canEdit) autosave.setTitle(value.trim() === "" ? UNTITLED : value);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [canEdit, autosave.setTitle],
+  );
+  const handleDocument = useCallback(
+    (next: SermonDoc) => {
+      setDoc(next);
+      if (canEdit) autosave.setDocument(next);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [canEdit, autosave.setDocument],
+  );
+
+  async function goBack() {
+    await autosave.flush();
+    if (autosave.isDirty()) return;
+    void queryClient.invalidateQueries({ queryKey: LIST_KEY });
+    navigate(LIST_PATH);
+  }
+
+  const duplicate = useMutation({
+    mutationFn: () => duplicateSermon(sermon.id),
+    onSuccess: (copy) => {
+      void queryClient.invalidateQueries({ queryKey: LIST_KEY });
+      navigate(`${LIST_PATH}/${copy.id}`);
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
+  /** Só duplica o que o servidor já tem: com texto sem salvar, fica na página. */
+  async function handleDuplicate() {
+    await autosave.flush();
+    if (autosave.isDirty()) {
+      toast.error("Salve a palavra antes de duplicar.");
+      return;
+    }
+    duplicate.mutate();
+  }
+  const remove = useMutation({
+    mutationFn: () => deleteSermon(sermon.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: LIST_KEY });
+      navigate(LIST_PATH);
+    },
+    onError: (error) => toast.error(getApiErrorMessage(error)),
+  });
+
+  const select = (id: string | null) => {
+    setDrawerOpen(false);
+    // Espera a gaveta fechar para o foco não puxar a rolagem de volta.
+    setTimeout(() => scrollToBlock(editor, id), 0);
+  };
+
+  const { delivery } = situation;
+  const sentNotPreached = situation.status === "SENT" && delivery !== null;
+  const deleteDescription =
+    sentNotPreached && delivery
+      ? `Ela também sai do culto de ${formatDay(delivery.date)}, ${formatHour(delivery.startTime)}.`
+      : "Esta ação não pode ser desfeita.";
+
+  /** Salva o que está na tela; só libera a geração se nada ficou sem salvar. */
+  async function ensureSaved() {
+    await autosave.flush();
+    return !autosave.isDirty();
+  }
+  /** Só abre a conferência com tudo salvo: ela lê do servidor (e o aviso de esboço alterado depende disso). */
+  async function openSlides() {
+    await autosave.flush();
+    if (autosave.isDirty()) {
+      toast.error("Salve a palavra antes de abrir os slides.");
+      return;
+    }
+    navigate(`${LIST_PATH}/${sermon.id}/slides`);
+  }
+  /** Salva o que está na tela e abre o diálogo; a exportação usa o texto da tela, esteja salvo ou não. */
+  async function openExport() {
+    await autosave.flush();
+    setExportOpen(true);
+  }
+  function handleSent(updated: Sermon) {
+    setSituation({ status: updated.status, delivery: updated.delivery });
+    queryClient.setQueryData<Sermon>(detailKey(sermon.id), (old) =>
+      old ? { ...old, status: updated.status, delivery: updated.delivery } : old,
+    );
+  }
+  function handleGenerated(updated: Sermon) {
+    setSlidesInfo({ count: updated.slideCount, has: updated.slides.length > 0, style: updated.slideStyle, items: updated.slides });
+    // Só os slides mudam na cópia em cache; o texto e a revisão ficam como estão.
+    queryClient.setQueryData<Sermon>(["sermons", "detail", sermon.id], (old) =>
+      old
+        ? {
+            ...old,
+            slideMode: updated.slideMode,
+            slideStyle: updated.slideStyle,
+            slides: updated.slides,
+            slidesStale: updated.slidesStale,
+            slideCount: updated.slideCount,
+          }
+        : old,
+    );
+    void queryClient.invalidateQueries({ queryKey: LIST_KEY });
+    void openSlides();
+  }
+
+  // Com slides, o envio fica na conferência; sem slides (ou palavra antiga), o envio abre aqui mesmo.
+  const situationText =
+    delivery && situation.status === "PREACHED"
+      ? `Pregada · ${formatDay(delivery.date)}`
+      : delivery
+        ? `Enviada · ${formatDay(delivery.date)}, ${formatHour(delivery.startTime)}`
+        : null;
+  const preached = situation.status === "PREACHED";
+  const canSendHere = canEdit && !slidesInfo.has && !preached;
+  const plainSituation = situationText && (
+    <span className="flex h-8 items-center rounded-md border border-[#E5E7EB] px-3 text-sm text-[#6B7280]">{situationText}</span>
+  );
+  const headerActions = (
+    <>
+      {slidesInfo.has ? (
+        <>
+          {situationText && !preached ? (
+            <Button type="button" variant="outline" size="sm" onClick={() => void openSlides()}>
+              {situationText}
+            </Button>
+          ) : (
+            plainSituation
+          )}
+          <Button type="button" size="sm" className="gap-1.5" onClick={() => void openSlides()}>
+            <Sparkles aria-hidden="true" />
+            Slides · {slidesInfo.count}
+          </Button>
+        </>
+      ) : canSendHere ? (
+        <>
+          <Button type="button" variant="outline" size="sm" onClick={() => setSendOpen(true)}>
+            {situationText ?? "Enviar para um culto"}
+          </Button>
+          <Button type="button" size="sm" className="gap-1.5" onClick={() => setSlidesOpen(true)}>
+            <Sparkles aria-hidden="true" />
+            Gerar slides
+          </Button>
+        </>
+      ) : (
+        plainSituation
+      )}
+    </>
+  );
+
+  return (
+    <div className="flex min-h-screen flex-col bg-[#F3F4F6]">
+      <header className="sticky top-0 z-20 border-b border-[#E5E7EB] bg-white">
+        <div className="flex h-14 items-center gap-3 px-4">
+          <Button type="button" variant="ghost" size="icon" aria-label="Voltar para Palavras" onClick={goBack}>
+            <ArrowLeft aria-hidden="true" />
+          </Button>
+          <h1 className="min-w-0 truncate text-base font-semibold text-[#030712]">{title.trim() || UNTITLED}</h1>
+          {canEdit && (
+            <SaveIndicator
+              state={autosave.state}
+              errorStatus={autosave.errorStatus}
+              onRetry={autosave.retry}
+              onReload={onReload}
+            />
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            <span className="flex items-center gap-1.5 rounded-full bg-[#F3F4F6] px-3 py-1 text-sm text-[#1F2937]">
+              <Clock className="h-3.5 w-3.5" aria-hidden="true" />
+              {formatSpeech(derived.estimatedSeconds)}
+            </span>
+            <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+              <SheetTrigger asChild>
+                <Button type="button" variant="outline" size="sm" className="gap-1.5 lg:hidden">
+                  <ListTree aria-hidden="true" />
+                  Estrutura
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-[280px] bg-[#F3F4F6]">
+                <SheetTitle className="sr-only">Estrutura</SheetTitle>
+                <SheetDescription className="sr-only">Seções e versículos da palavra.</SheetDescription>
+                <StructurePanel derived={derived} activeId={activeId} onSelect={select} className="mt-6" />
+              </SheetContent>
+            </Sheet>
+            <Button type="button" variant="ghost" size="icon" aria-label="Exportar" onClick={() => void openExport()}>
+              <Download aria-hidden="true" />
+            </Button>
+            {canEdit && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" variant="ghost" size="icon" aria-label="Mais ações">
+                    <MoreHorizontal aria-hidden="true" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={handleDuplicate}>Duplicar</DropdownMenuItem>
+                  <DropdownMenuItem className="text-destructive" onSelect={() => setDeleteOpen(true)}>
+                    Apagar
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {headerActions}
+          </div>
+        </div>
+        {canEdit && editor && (
+          <div className="border-t border-[#E5E7EB] px-4 py-1.5">
+            <SermonToolbar editor={editor} />
+          </div>
+        )}
+      </header>
+
+      <div className="mx-auto flex w-full max-w-[1100px] flex-1 items-start gap-6 px-4 py-8">
+        <aside className="sticky top-32 hidden w-[220px] shrink-0 lg:block">
+          <StructurePanel derived={derived} activeId={activeId} onSelect={select} />
+        </aside>
+        <main className="min-w-0 flex-1">
+          <SermonSheet
+            title={title}
+            document={sermon.document}
+            editable={canEdit}
+            onTitleChange={handleTitle}
+            onDocumentChange={handleDocument}
+            onEditor={setEditor}
+          />
+        </main>
+      </div>
+
+      <GenerateSlidesDialog
+        open={slidesOpen}
+        onOpenChange={setSlidesOpen}
+        sermonId={sermon.id}
+        title={title}
+        document={doc}
+        initialStyle={slidesInfo.style}
+        ensureSaved={ensureSaved}
+        onGenerated={handleGenerated}
+      />
+
+      <ExportDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        title={title.trim() || UNTITLED}
+        document={doc}
+        speech={formatSpeech(derived.estimatedSeconds)}
+        slides={slidesInfo.items}
+        slideStyle={slidesInfo.style}
+      />
+
+      {canSendHere && (
+        <SendToServiceDialog
+          open={sendOpen}
+          onOpenChange={setSendOpen}
+          sermonId={sermon.id}
+          sermonTitle={title}
+          delivery={delivery}
+          ensureSaved={ensureSaved}
+          onChanged={handleSent}
+        />
+      )}
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apagar esta palavra?</AlertDialogTitle>
+            <AlertDialogDescription>{deleteDescription}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => remove.mutate()}>Apagar palavra</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+export default function SermonEditorPage() {
+  const { id = "" } = useParams<{ id: string }>();
+  const { can } = usePermissions();
+  const canEdit = can("SERMONS", "EDIT");
+  // O editor sempre abre de uma leitura feita agora (o cache pode ter vindo de outra tela); depois quem manda é o editor.
+  const sermonQuery = useQuery({
+    queryKey: detailKey(id),
+    queryFn: () => getSermon(id),
+    staleTime: 0,
+    refetchOnMount: "always",
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    retry: false,
+  });
+  const [loadKey, setLoadKey] = useState(0);
+  // A cópia que abriu o editor desta montagem (troca só ao recarregar): o cache pode mudar sem remontar o editor.
+  const opened = useRef<{ key: number; sermon: Sermon } | null>(null);
+
+  const reload = useCallback(async () => {
+    const result = await sermonQuery.refetch();
+    if (result.data) setLoadKey((k) => k + 1);
+  }, [sermonQuery]);
+
+  if (!sermonQuery.isError && (!opened.current || opened.current.key !== loadKey)) {
+    if (sermonQuery.data && sermonQuery.isFetchedAfterMount && !sermonQuery.isFetching) {
+      opened.current = { key: loadKey, sermon: sermonQuery.data };
+    }
+  }
+
+  if (!sermonQuery.isError && !opened.current) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#F3F4F6]" role="status" aria-label="Carregando">
+        <Loader2 className="h-6 w-6 animate-spin text-[#6B7280]" aria-hidden="true" />
+      </div>
+    );
+  }
+  if (sermonQuery.isError || !opened.current) {
+    const notFound = (sermonQuery.error as { response?: { status?: number } } | null)?.response?.status === 404;
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#F3F4F6] p-6 text-center">
+        <p className="text-lg font-semibold text-[#030712]">
+          {notFound ? "Palavra não encontrada." : getApiErrorMessage(sermonQuery.error)}
+        </p>
+        <Link to={LIST_PATH} className="text-sm font-medium text-primary underline">
+          Voltar para Palavras
+        </Link>
+      </div>
+    );
+  }
+  return <EditorView key={loadKey} sermon={opened.current.sermon} canEdit={canEdit} onReload={reload} />;
+}
