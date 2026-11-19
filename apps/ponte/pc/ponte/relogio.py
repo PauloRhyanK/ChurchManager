@@ -71,6 +71,26 @@ class Relogio:
             self._em = self._agora()
         return True
 
+    def posicionar(self, musica, posicao, tocando=True):
+        """Poe a musica num segundo (pular ou repetir uma parte, soltar o VS).
+
+        So tem efeito no cronometro, que e contado aqui. Com outra fonte quem
+        diz onde a musica esta e quem toca o audio: ele obedece ao pedido do
+        VS e avisa a posicao nova.
+        """
+        if self._fonte != "cronometro":
+            return False
+        try:
+            posicao = max(0.0, float(posicao))
+        except (TypeError, ValueError):
+            return False
+        with self._tranca:
+            self._musica = str(musica) if musica is not None else None
+            self._posicao = posicao
+            self._tocando = bool(tocando)
+            self._em = self._agora()
+        return True
+
     def acertar(self, segundos):
         """Adianta (positivo) ou atrasa (negativo) o cronometro."""
         if self._fonte != "cronometro":

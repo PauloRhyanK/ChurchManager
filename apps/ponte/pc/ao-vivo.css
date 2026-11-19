@@ -140,6 +140,8 @@ h1, h2, h3, p { margin: 0; }
 .momento.agora .hora, .momento.agora .resta { color: #E4DEFB; }
 .momento .resta.passou { color: var(--ambar-texto); }
 .momento:disabled { opacity: 1; cursor: default; }
+.momento.e-musica { min-height: 40px; padding-left: 22px; font-size: 13px; }
+.momento.e-musica:not(.agora):not(.feito) { color: var(--roxo-claro); }
 .vazio { padding: 12px; color: var(--suave); }
 
 /* equipamentos */

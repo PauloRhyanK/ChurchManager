@@ -97,6 +97,38 @@ slide com a janela do Holyrics em foco. A Ponte, no PC principal, ouve o passado
 - **Nunca foi testado com o passador nem em Windows.** Ver a seção 15 de
   `docs/PARA-A-SESSAO-DO-PC.md`.
 
+## O celular do músico e o roteiro intercalado
+
+**O celular do músico.** No painel, em "Celular do músico", o operador gera um link que
+vale só naquele culto (como o do pregador). Quem conduz o louvor abre no celular e vê a
+música de agora, com tom, bpm e as partes em lista; entre músicas, vê o momento e o cartão
+"Preparem" com a próxima música. Os botões: Próximo, Voltar, Repetir (a parte de agora),
+tocar numa parte para pular para ela, e Próxima música, que precisa ser segurado por um
+segundo porque **solta o VS**. Depois de cada toque aparece "Desfazer". Tudo o que o
+músico faz fica no "Aconteceu agora" do painel ("Músico: repetiu o refrão").
+
+**O VS e o interruptor.** Hoje o VS toca no Reaper do PC do som e quem dá o play é uma
+pessoa. A Ponte passa a saber pedir "toque esta música", "vá para tal segundo" e "pare"
+(`pc/ponte/vs.py`), mas isso vem **desligado** (`vs: { ativo: false }` no `config.yaml`):
+
+- **Desligado:** os botões do músico mexem só no que é da Ponte. Com o tempo contado por
+  ela (`relogio: { fonte: cronometro }`), pular e repetir movem esse tempo e a letra
+  segue; senão, passam a letra do telão à mão.
+- **Ligado para o navegador** (`driver: navegador`): a tela do painel que toca o áudio em
+  ensaio obedece. É o que dá para ver funcionando sem a igreja.
+- **Ligado para o Reaper** (`driver: reaper`): a ponte do PC do som busca os pedidos e
+  manda no Reaper pela interface web dele (`pc/ponte/vs_reaper.py`). **Nunca rodou com um
+  Reaper**, e o PC do som ainda roda a versão antiga da Ponte.
+
+**O roteiro intercalado.** Quando o ChurchManager manda o campo `roteiro` (momentos e
+músicas na ordem do culto), a coluna da ordem no painel passa a mostrar essa fila, com as
+músicas entre os momentos, e "Próximo" segue por ela. Um momento de lá aciona o momento
+daqui (câmera e luz) quando os nomes batem, ou pelo par escrito em `roteiro.momentos` do
+config; sem par, o roteiro anda e nada é acionado. Sem o campo `roteiro`, o painel mostra
+a ordem do culto de sempre. `pc/roteiro.exemplo.json` tem o formato, e
+`cultos: { arquivo: roteiro.exemplo.json }` faz a Ponte ler dele, para ensaiar sem
+internet.
+
 ## Estado em 12/11/2026
 
 - **No ar no PC do Holyrics:** papéis, página por PC, guia pelo celular, letras por
