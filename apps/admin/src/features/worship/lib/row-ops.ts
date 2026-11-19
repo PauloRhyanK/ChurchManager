@@ -19,6 +19,16 @@ const isBreak = (row: WorshipRow | undefined) => !row || row.type === "break";
 const startsSlide = (rows: WorshipRow[], index: number) =>
   index === 0 || !!rows[index].part || isBreak(rows[index - 1]);
 
+/**
+ * Instruções logo acima de uma linha pertencem a ela (são o recado daquele
+ * trecho): devolve o índice da primeira instrução colada acima de `index`.
+ */
+function withLeadingCues(rows: WorshipRow[], index: number): number {
+  let start = index;
+  while (start > 0 && rows[start - 1].type === "cue" && !rows[start].part) start -= 1;
+  return start;
+}
+
 /** A parte em vigor na linha `index` (a última aberta até ali). */
 export function partAt(rows: WorshipRow[], index: number): RowPart {
   for (let i = Math.min(index, rows.length - 1); i >= 0; i--) {
@@ -35,6 +45,7 @@ export function setPartKind(rows: WorshipRow[], from: number, to: number, kind: 
   while (from <= to && isBreak(rows[from])) from += 1;
   while (to >= from && isBreak(rows[to])) to -= 1;
   if (from > to || !rows[from]) return rows;
+  from = withLeadingCues(rows, from);
 
   const out = rows.map((r) => ({ ...r }));
   const current = out[from].part;
@@ -122,7 +133,10 @@ export function repeatRange(rows: WorshipRow[], from: number, to: number): Worsh
 /** O slide passa a começar na linha `index` (põe uma linha em branco antes dela). */
 export function splitSlideAt(rows: WorshipRow[], index: number): WorshipRow[] {
   if (index <= 0 || index >= rows.length) return rows;
-  if (isBreak(rows[index]) || startsSlide(rows, index)) return rows;
+  if (isBreak(rows[index]) || rows[index].type === "cue") return rows;
+  // A instrução acima da linha vai junto com ela para o slide novo.
+  index = withLeadingCues(rows, index);
+  if (startsSlide(rows, index)) return rows;
   const out = rows.map((r) => ({ ...r }));
   out.splice(index, 0, { id: newRowId(), type: "break" });
   return out;

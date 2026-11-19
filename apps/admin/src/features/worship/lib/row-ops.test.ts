@@ -104,6 +104,24 @@ describe("repeatRange / splitSlideAt / insertEmptyPart", () => {
     expect(splitSlideAt(rows, 2)).toBe(rows);
   });
 
+  it("a instrução acima de uma linha vai junto com ela: dividir e marcar parte não a separam", () => {
+    const first = insertCue(verse(), 0, "VOCAL", "solo");
+    expect(splitSlideAt(first, 1)).toBe(first);
+    const middle = insertCue(verse(), 4, "DRUMS", "entra");
+    expect(texts(splitSlideAt(middle, 5))).toEqual([
+      "ANTES DO SOL NASCER / TUA VOZ ME CHAMOU",
+      "ÉS A LUZ DA MANHÃ",
+      "QUE NÃO VAI SE APAGAR",
+      "QUANDO A NOITE PESAR",
+    ]);
+    expect(deriveSong(splitSlideAt(middle, 5)).slides[2].cues).toEqual([{ target: "DRUMS", text: "entra" }]);
+    const cueFirst = insertCue(verse(), 3, "KEYS", "pad");
+    const chorus = setPartKind(cueFirst, 4, 5, "CHORUS");
+    expect(names(chorus)).toEqual(["Verso 1", "Refrão", "Verso 2"]);
+    expect(deriveSong(chorus).slides[1].cues).toEqual([{ target: "KEYS", text: "pad" }]);
+    expect(deriveSong(chorus).slides[1].time).toBe(20);
+  });
+
   it("parte sem letra: Intro no começo, Final no fim, Instrumental depois da parte do cursor", () => {
     expect(names(insertEmptyPart(verse(), 4, "INTRO"))).toEqual(["Intro", "Verso 1"]);
     expect(names(insertEmptyPart(verse(), 0, "ENDING"))).toEqual(["Verso 1", "Final"]);

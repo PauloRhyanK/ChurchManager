@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/api";
 import { uploadSongAudio, type Song } from "../../api/worship-api";
 import { formatClock, readAudioDuration } from "../../lib/format";
-import { AUDIO_ACCEPT, validateAudioFile } from "../AudioDropField";
+import { AUDIO_ACCEPT, validateAudioFile } from "../../lib/audio";
 
 interface AudioCardProps {
   song: Song;

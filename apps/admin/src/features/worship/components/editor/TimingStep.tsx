@@ -41,22 +41,30 @@ export function TimingStep({ song, rows, canEdit, onChange, onAudioUploaded }: T
   const [selectedId, setSelectedId] = useState<string | null>(
     () => (slides.find((s) => s.time === null) ?? slides[0])?.rowId ?? null,
   );
+  // Com tudo marcado, Espaço toca e pausa; só remarca o slide em que a pessoa clicou.
+  const [picked, setPicked] = useState(false);
   const selected = slides.find((s) => s.rowId === selectedId) ?? slides[0] ?? null;
   const next = selected ? slides[selected.index + 1] : undefined;
 
   // Com tudo marcado, a seleção acompanha o áudio: é a conferência.
   const playingIndex = currentSlideIndex(slides, player.time);
   useEffect(() => {
-    if (allTimed && player.playing && playingIndex >= 0) setSelectedId(slides[playingIndex].rowId);
-  }, [allTimed, player.playing, playingIndex, slides]);
+    if (allTimed && !picked && player.playing && playingIndex >= 0) setSelectedId(slides[playingIndex].rowId);
+  }, [allTimed, picked, player.playing, playingIndex, slides]);
 
   const mark = () => {
     if (!canEdit || !selected || !song.audio) return;
     onChange(markSlide(rows, selected.rowId, player.now()));
-    if (next) setSelectedId(next.rowId);
+    setPicked(false);
+    if (next && !allTimed) setSelectedId(next.rowId);
   };
-  const markRef = useRef(mark);
-  markRef.current = mark;
+  /** O que a barra de espaço faz: marcar enquanto falta tempo (ou num slide escolhido); depois, tocar e pausar. */
+  const onSpace = () => {
+    if (canEdit && (!allTimed || picked)) mark();
+    else player.toggle();
+  };
+  const markRef = useRef(onSpace);
+  markRef.current = onSpace;
 
   // Barra de espaço marca, em qualquer lugar da tela que não seja um campo de texto.
   useEffect(() => {
@@ -194,8 +202,9 @@ export function TimingStep({ song, rows, canEdit, onChange, onAudioUploaded }: T
             </div>
           )}
           <p className="text-[13px] text-muted-foreground">
-            Toque o áudio e aperte Espaço no instante em que cada slide deve entrar. Clique num slide da lista para
-            voltar a ele.
+            {allTimed
+              ? "Todos os slides têm tempo: agora Espaço toca e pausa. Para remarcar um, clique nele na lista e use Marcar aqui."
+              : "Toque o áudio e aperte Espaço no instante em que cada slide deve entrar. Clique num slide da lista para voltar a ele."}
           </p>
         </section>
 
@@ -232,6 +241,7 @@ export function TimingStep({ song, rows, canEdit, onChange, onAudioUploaded }: T
                     }}
                     onClick={() => {
                       setSelectedId(s.rowId);
+                      setPicked(true);
                       if (s.time !== null) player.seek(s.time);
                     }}
                     className={`flex w-full items-center gap-3 border-l-4 px-4 py-2.5 text-left ${

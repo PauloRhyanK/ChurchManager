@@ -25,12 +25,12 @@ export function SlidesPreview({ slides, selected }: SlidesPreviewProps) {
                 el.scrollIntoView({ block: "nearest" });
               }
             }}
-            className={`flex aspect-video items-center justify-center rounded-lg bg-[#05070B] p-2 ${
+            className={`flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-[#05070B] p-1.5 ${
               s.index === selected ? "outline outline-[3px] outline-offset-2 outline-primary" : ""
             }`}
           >
             {s.lines.length ? (
-              <span className="whitespace-pre-line text-center text-[11px] font-bold leading-tight text-[#F5F6FA]">
+              <span className="whitespace-pre-line text-center text-[10px] font-bold leading-tight text-[#F5F6FA]">
                 {s.lines.join("\n")}
               </span>
             ) : (
