@@ -14,6 +14,7 @@ import { printHtml } from "@/lib/print";
 import { listBibleTranslations } from "../api/sermons-api";
 import { buildSermonHtml } from "../export/sermon-print";
 import { buildDeck } from "../export/slides-deck";
+import { SLIDE_FONTS } from "../lib/slide-identity";
 import { downloadPptx } from "../export/slides-pptx";
 import { exportFileName } from "../export/file-name";
 import {
@@ -39,17 +40,22 @@ interface ExportDialogProps {
   slideStyle: SlideStyle;
 }
 
+const PPT_FONTS_NOTE = `Para abrir com a identidade, o computador precisa ter as fontes ${SLIDE_FONTS.title} e ${SLIDE_FONTS.body} instaladas.`;
+
 function Option({
   badge,
   name,
   text,
   disabled,
   busy,
+  note,
   onClick,
 }: {
   badge: string;
   name: string;
   text: string;
+  /** Observação curta embaixo do texto. */
+  note?: string;
   disabled?: boolean;
   busy?: boolean;
   onClick(): void;
@@ -69,6 +75,7 @@ function Option({
         <span className="text-[13px] text-muted-foreground">
           {busy ? "Gerando…" : text}
         </span>
+        {note && <span className="text-xs text-muted-foreground">{note}</span>}
       </span>
       {busy ? (
         <Loader2
@@ -189,6 +196,7 @@ export function ExportDialog({
                 ? "Gere os slides primeiro."
                 : `${deck.length} ${deck.length === 1 ? "slide" : "slides"}, no visual escolhido`
             }
+            note={PPT_FONTS_NOTE}
             disabled={deck.length === 0}
             busy={generating}
             onClick={() => void exportPptx()}

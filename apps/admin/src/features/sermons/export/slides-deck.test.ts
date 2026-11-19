@@ -61,4 +61,14 @@ describe("buildDeck", () => {
     expect(two.map((d) => d.blocks.map((b) => b.role))).toEqual([["title", "subtitle"], ["title", "subtitle"]]);
     expect(two.map((d) => d.blocks[1].text).join(" ")).toBe(summary);
   });
+
+  it("fidelidade: o bloco do versículo é o texto do item e a referência leva a tradução, em negrito", () => {
+    const verse = "Vós sois a luz do mundo; não se pode esconder a cidade edificada sobre um monte. Nem se acende a candeia e se coloca debaixo do alqueire, mas no velador, e dá luz a todos que estão na casa.";
+    expect(verse.length).toBeLessThanOrEqual(220);
+    const [d] = buildDeck([item({ id: "v:0", text: `  ${verse}  `, reference: "Mateus 5:14", version: "BLIVRE" })], "MINIMAL");
+    const v = d.blocks.find((b) => b.role === "verse")!;
+    const ref = d.blocks.find((b) => b.role === "reference")!;
+    expect(v.text).toBe(verse);
+    expect(ref).toMatchObject({ text: "Mateus 5:14 · BLIVRE", fontWeight: 700 });
+  });
 });

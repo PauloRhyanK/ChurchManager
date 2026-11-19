@@ -10,6 +10,7 @@ import {
   SLIDE_SAFE_AREA,
   SLIDE_SPACING,
   SLIDE_THEMES,
+  SLIDE_TITLE_VERSE_MAX_GAP,
   SLIDE_TRACKING,
   SLIDE_WEIGHTS,
   type FontRange,
@@ -31,8 +32,10 @@ export type SlideBlock = {
   width: number;
   height: number; // caixa estimada, para a exportação
   gapBefore: number; // espaço até o bloco anterior, para a prévia
-  /** Linhas estimadas; texto acima do limite do modelo é cortado aqui na prévia. */
+  /** Linhas estimadas (no texto cortado, as que ficam). */
   maxLines: number;
+  /** Só texto acima do limite do modelo: a prévia corta em `maxLines` linhas. Dentro do limite nada é cortado. */
+  clamped: boolean;
 };
 
 export type SlideDrawing = {
@@ -96,33 +99,42 @@ function gapBetween(previous: Role, role: Role): number {
   return SLIDE_SPACING.verseReference;
 }
 
-/** Linhas estimadas: quebra por palavra com a largura média de caractere; palavra maior que a linha ocupa várias. */
+const isUpper = (c: string) => c !== c.toLowerCase() && c === c.toUpperCase();
+
+/**
+ * Linhas estimadas: quebra por palavra somando a largura de cada caractere (maiúscula mais larga); palavra maior
+ * que a linha ocupa várias.
+ */
 function countLines(text: string, fontSize: number, glyphEm: number, tracking: number): number {
-  const charWidth = fontSize * (glyphEm + tracking / 1000);
-  const perLine = Math.max(1, Math.floor(BOX_WIDTH / charWidth));
+  const widthOf = (c: string) => fontSize * ((isUpper(c) ? SLIDE_GLYPH_WIDTH.upper : glyphEm) + tracking / 1000);
+  const space = widthOf(" ");
   let lines = 1;
   let used = 0;
   for (const word of text.split(/\s+/).filter(Boolean)) {
-    let n = chars(word);
-    if (used > 0 && used + 1 + n <= perLine) {
-      used += 1 + n;
+    const glyphs = Array.from(word).map(widthOf);
+    const width = glyphs.reduce((a, b) => a + b, 0);
+    if (used > 0 && used + space + width <= BOX_WIDTH) {
+      used += space + width;
       continue;
     }
     if (used > 0) {
       lines += 1;
       used = 0;
     }
-    while (n > perLine) {
-      n -= perLine;
-      lines += 1;
+    for (const g of glyphs) {
+      if (used > 0 && used + g > BOX_WIDTH) {
+        lines += 1;
+        used = 0;
+      }
+      used += g;
     }
-    used = n;
   }
   return lines;
 }
 
-type Draft = Omit<SlideBlock, "x" | "y" | "width" | "height" | "gapBefore">;
-const heightOf = (b: Draft) => b.maxLines * b.fontSize * b.lineHeight;
+type Draft = Omit<SlideBlock, "x" | "y" | "width" | "height" | "gapBefore"> & { reserve: number };
+/** Altura da caixa: as linhas estimadas e, no título com bloco abaixo, uma linha de reserva (a estimativa pode errar). */
+const heightOf = (b: Draft) => (b.maxLines + b.reserve) * b.fontSize * b.lineHeight;
 
 /** Desenho do slide no modelo do manual: cores do visual, fontes, tamanhos dentro da faixa e posições na área segura. */
 export function drawSlide(face: SlideFace, style: SlideStyle): SlideDrawing {
@@ -151,6 +163,8 @@ export function drawSlide(face: SlideFace, style: SlideStyle): SlideDrawing {
         lineHeight: SLIDE_LINE_HEIGHT[role],
         align,
         maxLines: countLines(text, fontSize, SLIDE_GLYPH_WIDTH[fontFamily], tracking),
+        clamped: role !== "reference" && chars(text) > limitOf(layout, role),
+        reserve: 0,
       };
     });
 
@@ -161,6 +175,12 @@ export function drawSlide(face: SlideFace, style: SlideStyle): SlideDrawing {
     const next = SHRINK_ORDER.map((role) => drafts.find((b) => b.role === role && b.maxLines > 1)).find(Boolean);
     if (!next) break;
     next.maxLines -= 1;
+    next.clamped = true;
+  }
+  // Reserva de uma linha no título que tem bloco abaixo, só quando ainda cabe na área segura.
+  if (drafts.length > 1 && drafts[0].role === "title") {
+    drafts[0].reserve = 1;
+    if (total() > SAFE_HEIGHT) drafts[0].reserve = 0;
   }
 
   const tops: number[] = [];
@@ -174,7 +194,9 @@ export function drawSlide(face: SlideFace, style: SlideStyle): SlideDrawing {
     const titleBottom = SAFE_TOP + heightOf(drafts[0]);
     const rest = drafts.slice(1).reduce((sum, b, i) => sum + heightOf(b) + (i === 0 ? 0 : gaps[i + 1]), 0);
     const start = titleBottom + gaps[1];
-    let y = start + Math.max(0, (SAFE_BOTTOM - start - rest) / 2);
+    // Centralizado no que sobra, mas o espaço até o título não passa de 90: o resto fica abaixo da referência.
+    const extra = Math.min(Math.max(0, (SAFE_BOTTOM - start - rest) / 2), SLIDE_TITLE_VERSE_MAX_GAP - gaps[1]);
+    let y = start + extra;
     before[1] = y - titleBottom;
     tops.push(SAFE_TOP);
     drafts.slice(1).forEach((b, i) => {
@@ -191,8 +213,13 @@ export function drawSlide(face: SlideFace, style: SlideStyle): SlideDrawing {
     });
   }
 
-  const blocks: SlideBlock[] = drafts.map((b, i) => {
-    return { ...b, x: BOX_X, y: tops[i], width: BOX_WIDTH, height: heightOf(b), gapBefore: before[i] };
-  });
+  const blocks: SlideBlock[] = drafts.map(({ reserve: _reserve, ...b }, i) => ({
+    ...b,
+    x: BOX_X,
+    y: tops[i],
+    width: BOX_WIDTH,
+    height: heightOf(drafts[i]),
+    gapBefore: before[i],
+  }));
   return { width: SLIDE_CANVAS.width, height: SLIDE_CANVAS.height, background, color, layout, align, blocks };
 }

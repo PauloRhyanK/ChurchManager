@@ -85,6 +85,18 @@ describe("SlidePreview", () => {
     const lines = Number(p.dataset.lines);
     expect(lines).toBeGreaterThanOrEqual(1);
     expect(lines * 100 * parseFloat(p.style.lineHeight)).toBeLessThanOrEqual(700);
-    expect(p).toHaveClass("overflow-hidden");
+    expect(p).toHaveStyle({ display: "-webkit-box", overflow: "hidden" });
+    expect(p.dataset.clamped).toBe("true");
+  });
+
+  it("texto dentro do limite nunca é cortado: sem line-clamp; a caixa tem a altura do desenho", () => {
+    render(<SlidePreview slide={M04} style="MINIMAL" />);
+    for (const text of ["A luz chama", "Ninguém acha o caminho sozinho", "Eu sou a luz do mundo.", "João 8:12 · BLIVRE"]) {
+      const p = screen.getByText(text);
+      expect(p.style.display).not.toBe("-webkit-box");
+      expect(p.style.overflow).not.toBe("hidden");
+      expect(p.dataset.clamped).toBeUndefined();
+      expect(parseFloat(p.style.minHeight)).toBeGreaterThan(0);
+    }
   });
 });

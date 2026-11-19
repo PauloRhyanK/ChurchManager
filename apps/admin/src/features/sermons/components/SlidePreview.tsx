@@ -60,9 +60,11 @@ export function SlidePreview({ slide, style, size = "md" }: SlidePreviewProps) {
             key={b.role}
             data-slide-role={b.role}
             data-lines={b.maxLines}
-            className="m-0 shrink-0 overflow-hidden break-words"
+            data-clamped={b.clamped || undefined}
+            className="m-0 shrink-0 break-words"
             style={{
               marginTop: b.gapBefore,
+              minHeight: b.height,
               fontFamily: FAMILIES[b.fontFamily],
               fontSize: `${b.fontSize}px`,
               fontWeight: b.fontWeight,
@@ -70,9 +72,10 @@ export function SlidePreview({ slide, style, size = "md" }: SlidePreviewProps) {
               letterSpacing: `${b.tracking / 1000}em`,
               lineHeight: b.lineHeight,
               textAlign: b.align,
-              display: "-webkit-box",
-              WebkitBoxOrient: "vertical",
-              WebkitLineClamp: b.maxLines,
+              // Só o texto acima do limite do modelo é cortado em linhas; dentro do limite a caixa cresce.
+              ...(b.clamped
+                ? { display: "-webkit-box", WebkitBoxOrient: "vertical" as const, WebkitLineClamp: b.maxLines, overflow: "hidden" }
+                : {}),
             }}
           >
             {b.text}
