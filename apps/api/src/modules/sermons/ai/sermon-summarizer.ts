@@ -1,10 +1,13 @@
-// Interface neutra de provedor para resumir as partes do sermão em "Slides completos".
-import type { SummaryTarget } from '../sermon-slides';
+// Interface neutra de provedor para os "Slides completos": o modelo de cada slide e as frases/subtítulos.
+import type { AiTarget } from '../sermon-slides';
 
-export type SummarizeInput = { title: string; targets: SummaryTarget[]; model: string; effort: 'low' | 'medium' | 'high' };
+export type SummarizeInput = { title: string; targets: AiTarget[]; model: string; effort: 'low' | 'medium' | 'high' };
+
+/** Uma decisão por alvo: `model` é '01'–'04' e `text` a frase ou subtítulo ('' quando o modelo não tem). */
+export type SummarizeOutput = { id: string; model: string; text: string }[];
 
 export interface SermonSummarizer {
-  summarize(input: SummarizeInput): Promise<{ id: string; text: string }[]>;
+  summarize(input: SummarizeInput): Promise<SummarizeOutput>;
 }
 
 /**
