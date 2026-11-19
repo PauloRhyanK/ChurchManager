@@ -35,8 +35,9 @@ describe("SermonSheet", () => {
     expect(await screen.findByText("João 8:12")).toBeInTheDocument();
     expect(screen.getByText("Ilustração")).toBeInTheDocument();
     expect(screen.getByText("Aplicação")).toBeInTheDocument();
-    const numbers = Array.from(document.querySelectorAll(".sermon-point > span")).map((s) => s.textContent);
-    expect(numbers).toEqual(["1.", "2."]);
+    // O número vem de um contador de CSS (sermon-editor.css); no documento fica só o texto do Ponto.
+    const points = Array.from(document.querySelectorAll('.sermon-editor h2[data-type="point"]')).map((p) => p.textContent);
+    expect(points).toEqual(["A luz chama", "A luz mostra"]);
   });
 
   it("avisa a mudança do documento e a barra marca o bloco ativo", async () => {

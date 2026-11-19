@@ -379,4 +379,124 @@ describe("sermonExtensions", () => {
     });
     expect(allowedShape(editor.getJSON())).toEqual([]);
   });
+
+  describe("cursor depois de inserir um bloco", () => {
+    // Documento do caso observado: [Versículo, Ponto, Só para mim], cursor no fim do Ponto.
+    function observed() {
+      const editor = makeEditor({
+        type: "doc",
+        content: [
+          EXAMPLE_DOC.content[0],
+          { type: "point", attrs: { id: "pt1" }, content: [{ type: "text", text: "A luz chama" }] },
+          { type: "privateNote", attrs: { id: "n1" }, content: [{ type: "paragraph", content: [{ type: "text", text: "nota" }] }] },
+        ],
+      });
+      let end = 0;
+      editor.state.doc.forEach((node, offset) => {
+        if (node.type.name === "point") end = offset + node.nodeSize - 1;
+      });
+      editor.commands.setTextSelection(end);
+      return editor;
+    }
+    const where = (editor: Editor) => ({
+      parent: editor.state.selection.$from.parent.type.name,
+      block: editor.state.selection.$from.node(1).type.name,
+      index: editor.state.selection.$from.index(0),
+    });
+
+    for (const kind of ["illustration", "application", "privateNote"] as const) {
+      it(`insertCallout('${kind}') deixa o cursor no parágrafo do bloco novo`, () => {
+        const editor = observed();
+        editor.commands.insertCallout(kind);
+        expect(where(editor)).toEqual({ parent: "paragraph", block: kind, index: 2 });
+        editor.commands.insertContent("x");
+        expect(top(editor)[2]).toMatchObject({ type: kind, content: [{ type: "paragraph", content: [{ type: "text", text: "x" }] }] });
+        expect(top(editor)[1].content).toEqual([{ type: "text", text: "A luz chama" }]);
+      });
+    }
+
+    it("insertPoint dentro de um bloco deixa o cursor no Ponto novo", () => {
+      const editor = observed();
+      editor.commands.setTextSelection(editor.state.doc.content.size - 2);
+      editor.commands.insertPoint();
+      expect(where(editor)).toEqual({ parent: "point", block: "point", index: 3 });
+      editor.commands.insertContent("x");
+      expect(top(editor)[3]).toMatchObject({ type: "point", content: [{ type: "text", text: "x" }] });
+    });
+
+    it("insertVerse deixa o cursor no bloco depois do Versículo (cria parágrafo se for o último)", () => {
+      const editor = observed();
+      editor.commands.setTextSelection(editor.state.doc.content.size - 2);
+      editor.commands.insertVerse(MANUAL_VERSE);
+      expect(top(editor).map((n) => n.type)).toEqual(["verse", "point", "privateNote", "verse", "paragraph"]);
+      expect(where(editor)).toEqual({ parent: "paragraph", block: "paragraph", index: 4 });
+      editor.commands.insertContent("x");
+      expect(top(editor)[4]).toEqual({ type: "paragraph", content: [{ type: "text", text: "x" }] });
+
+      const middle = observed();
+      middle.commands.insertVerse(MANUAL_VERSE);
+      // (o parágrafo final, se houver, é o trailingNode do StarterKit)
+      expect(top(middle).map((n) => n.type).slice(0, 4)).toEqual(["verse", "point", "verse", "privateNote"]);
+      expect(where(middle)).toMatchObject({ block: "privateNote", index: 3 });
+    });
+  });
+
+  describe("Enter em Ponto e título", () => {
+    const blocks: [string, JSONContent][] = [
+      ["Ponto", { type: "point", attrs: { id: "p" }, content: [{ type: "text", text: "Abcd" }] }],
+      ["título", { type: "heading", attrs: { id: "h", level: 2 }, content: [{ type: "text", text: "Abcd" }] }],
+    ];
+    for (const [label, node] of blocks) {
+      const enterAt = (offset: number) => {
+        const editor = makeEditor({ type: "doc", content: [node, { type: "paragraph", content: [{ type: "text", text: "depois" }] }] });
+        editor.commands.setTextSelection(1 + offset);
+        // Como o navegador: keydown direto na view (o comando keyboardShortcut só repassa os passos, não a seleção).
+        const handled = editor.view.someProp("handleKeyDown", (f) =>
+          f(editor.view, new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })),
+        );
+        expect(handled).toBe(true);
+        return editor;
+      };
+
+      it(`no fim do ${label}: parágrafo vazio abaixo, com o cursor`, () => {
+        const editor = enterAt(4);
+        expect(top(editor).map((n) => n.type)).toEqual([node.type, "paragraph", "paragraph"]);
+        expect(top(editor)[0].content).toEqual([{ type: "text", text: "Abcd" }]);
+        expect(top(editor)[1]).toEqual({ type: "paragraph" });
+        expect(editor.state.selection.$from.index(0)).toBe(1);
+        editor.commands.insertContent("x");
+        expect(top(editor)[1]).toEqual({ type: "paragraph", content: [{ type: "text", text: "x" }] });
+      });
+
+      it(`no começo do ${label}: parágrafo vazio acima, cursor fica no ${label}`, () => {
+        const editor = enterAt(0);
+        expect(top(editor).map((n) => n.type)).toEqual(["paragraph", node.type, "paragraph"]);
+        expect(top(editor)[0]).toEqual({ type: "paragraph" });
+        expect(editor.state.selection.$from.parent.type.name).toBe(node.type);
+        expect(editor.state.selection.$from.parentOffset).toBe(0);
+        expect(top(editor)[1].attrs!.id).toBe(node.attrs!.id);
+      });
+
+      it(`no meio do ${label}: divide`, () => {
+        const editor = enterAt(2);
+        const json = top(editor);
+        expect(json[0].content).toEqual([{ type: "text", text: "Ab" }]);
+        expect(json[1].content).toEqual([{ type: "text", text: "cd" }]);
+        expect(json[0].attrs!.id).not.toBe(json[1].attrs!.id);
+        expect(allowedShape(editor.getJSON())).toEqual([]);
+      });
+    }
+  });
+
+  it("sem foco, a seleção não fica num Versículo inteiro (documento começando por Versículo)", async () => {
+    const editor = makeEditor(EXAMPLE_DOC);
+    await new Promise((resolve) => setTimeout(resolve, 0)); // o Tiptap emite "create" num setTimeout
+    // Selection.atStart daria a seleção de nó do Versículo; o editor troca pelo começo do primeiro texto.
+    expect(editor.state.selection.constructor.name).toBe("TextSelection");
+    expect(editor.state.selection.$from.parent.type.name).toBe("paragraph");
+    editor.commands.setNodeSelection(0);
+    expect(editor.state.selection.constructor.name).toBe("NodeSelection");
+    editor.view.dom.dispatchEvent(new FocusEvent("blur"));
+    expect(editor.state.selection.constructor.name).toBe("TextSelection");
+  });
 });

@@ -1,6 +1,6 @@
 import { useEditorState, type Editor } from "@tiptap/react";
 import { ChevronDown, List } from "lucide-react";
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -59,6 +59,8 @@ export function SermonToolbar({ editor, className }: { editor: Editor; className
       .run();
   }
 
+  // Clicar num botão não tira o foco nem a seleção do editor.
+  const keepSelection = (e: MouseEvent) => e.preventDefault();
   const iconButton = "h-10 w-10 text-base text-[#030712]";
 
   return (
@@ -89,6 +91,7 @@ export function SermonToolbar({ editor, className }: { editor: Editor; className
         variant="ghost"
         size="icon"
         aria-label="Negrito"
+        onMouseDown={keepSelection}
         aria-pressed={state.bold}
         disabled={disabled}
         className={cn(iconButton, "font-bold", state.bold && "bg-accent")}
@@ -101,6 +104,7 @@ export function SermonToolbar({ editor, className }: { editor: Editor; className
         variant="ghost"
         size="icon"
         aria-label="Itálico"
+        onMouseDown={keepSelection}
         aria-pressed={state.italic}
         disabled={disabled}
         className={cn(iconButton, "font-semibold italic", state.italic && "bg-accent")}
@@ -113,6 +117,7 @@ export function SermonToolbar({ editor, className }: { editor: Editor; className
         variant="ghost"
         size="icon"
         aria-label="Lista"
+        onMouseDown={keepSelection}
         aria-pressed={state.bulletList}
         disabled={disabled}
         className={cn(iconButton, state.bulletList && "bg-accent")}
@@ -127,6 +132,7 @@ export function SermonToolbar({ editor, className }: { editor: Editor; className
           type="button"
           variant="ghost"
           aria-pressed={state[kind]}
+          onMouseDown={keepSelection}
           disabled={disabled}
           className={cn("h-10 gap-2 px-3 font-semibold text-[#030712]", state[kind] && "bg-accent")}
           onClick={() => insertBlock(kind)}

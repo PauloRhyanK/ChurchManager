@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import type { SermonDoc } from "../lib/document";
 import { sermonExtensions } from "./extensions";
+import "./sermon-editor.css";
 
 interface SermonSheetProps {
   title: string;
@@ -84,7 +85,7 @@ export function SermonSheet({
         }}
         className="mb-4 w-full bg-transparent text-[34px] font-bold leading-tight tracking-[-0.01em] text-[#030712] outline-none placeholder:text-[#9CA3AF]"
       />
-      <EditorContent editor={editor} className={contentStyles} />
+      <EditorContent editor={editor} className={cn("sermon-editor", contentStyles)} />
     </article>
   );
 }

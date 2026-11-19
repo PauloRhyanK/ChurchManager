@@ -3,13 +3,13 @@
 import { Extension, Node, mergeAttributes, type Extensions, type JSONContent } from "@tiptap/core";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { sinkListItem } from "@tiptap/pm/schema-list";
-import { Plugin, PluginKey, TextSelection, type Transaction } from "@tiptap/pm/state";
+import type { EditorView } from "@tiptap/pm/view";
+import { NodeSelection, Plugin, PluginKey, TextSelection, type Transaction } from "@tiptap/pm/state";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import type { VerseAttrs } from "../lib/document";
 import type { CalloutKind } from "./block-colors";
 import { CalloutView } from "./blocks/CalloutView";
-import { PointView } from "./blocks/PointView";
 import { VerseView } from "./blocks/VerseView";
 
 export type ManualVerseAttrs = Omit<VerseAttrs, "id">;
@@ -160,6 +160,8 @@ const SermonListItem = Node.create({
   },
 });
 
+// Sem node view: o número ("1.", "2.") é um contador de CSS (sermon-editor.css), não texto do documento.
+// Um h2 simples deixa o navegador posicionar o cursor no clique como em qualquer texto.
 const Point = Node.create({
   name: "point",
   group: "block",
@@ -169,13 +171,43 @@ const Point = Node.create({
     return idAttribute;
   },
   parseHTML() {
-    return [{ tag: 'div[data-type="point"]' }];
+    // Antes da regra de h2 do título (prioridade 50).
+    return [{ tag: 'h2[data-type="point"]', priority: 100 }, { tag: 'div[data-type="point"]' }];
   },
   renderHTML({ HTMLAttributes }) {
-    return ["div", mergeAttributes({ "data-type": "point" }, HTMLAttributes), 0];
+    return ["h2", mergeAttributes({ "data-type": "point" }, HTMLAttributes), 0];
   },
-  addNodeView() {
-    return ReactNodeViewRenderer(PointView);
+});
+
+/**
+ * Enter em Ponto e título: no fim cria um parágrafo vazio abaixo (com o cursor); no começo de um bloco
+ * com texto cria um parágrafo vazio acima e o cursor fica no bloco. No meio, divide como de costume.
+ */
+const TitleEnter = Extension.create({
+  name: "titleEnter",
+  priority: 1000,
+  addKeyboardShortcuts() {
+    return {
+      Enter: () =>
+        this.editor.commands.command(({ tr, state }) => {
+          const { selection } = tr;
+          const { $from } = selection;
+          if (!selection.empty || $from.depth !== 1) return false;
+          const parent = $from.parent;
+          if (parent.type.name !== "point" && parent.type.name !== "heading") return false;
+          const paragraph = state.schema.nodes.paragraph.create();
+          if ($from.parentOffset === parent.content.size) {
+            const after = $from.after(1);
+            tr.insert(after, paragraph).setSelection(TextSelection.create(tr.doc, after + 1)).scrollIntoView();
+            return true;
+          }
+          if ($from.parentOffset === 0) {
+            tr.insert($from.before(1), paragraph).scrollIntoView();
+            return true;
+          }
+          return false;
+        }),
+    };
   },
 });
 
@@ -302,6 +334,29 @@ function cursorAfter(tr: Transaction, at: number) {
   tr.setSelection(TextSelection.near(tr.doc.resolve(end + 1)));
 }
 
+/**
+ * Sem foco, a seleção nunca fica num Versículo inteiro (seleção de nó). Com ela, o primeiro clique no texto ao
+ * voltar ao editor era desfeito: o ProseMirror redesenha a seleção de nó ao receber o foco e o cursor caía no
+ * começo do bloco seguinte ao Versículo (no Chromium, com o documento começando por um Versículo).
+ */
+const TextSelectionWhenBlurred = Extension.create({
+  name: "textSelectionWhenBlurred",
+  onCreate() {
+    leaveNodeSelection(this.editor.view);
+  },
+  onBlur() {
+    leaveNodeSelection(this.editor.view);
+  },
+});
+
+function leaveNodeSelection(view: EditorView) {
+  const { state } = view;
+  if (!(state.selection instanceof NodeSelection)) return;
+  const $after = state.doc.resolve(state.selection.to);
+  const text = TextSelection.findFrom($after, 1, true) ?? TextSelection.findFrom($after, -1, true);
+  if (text) view.dispatch(state.tr.setSelection(text).setMeta("addToHistory", false));
+}
+
 const SermonCommands = Extension.create({
   name: "sermonCommands",
   addCommands() {
@@ -369,11 +424,13 @@ export const sermonExtensions: Extensions = [
   }),
   SermonListItem,
   Point,
+  TitleEnter,
   Verse,
   callout("illustration"),
   callout("application"),
   callout("privateNote"),
   UniqueBlockId,
   SafeOrderedList,
+  TextSelectionWhenBlurred,
   SermonCommands,
 ];
