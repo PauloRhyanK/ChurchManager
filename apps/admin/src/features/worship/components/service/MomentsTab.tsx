@@ -81,7 +81,7 @@ function MomentFields({
             className="w-12 rounded-md border border-transparent bg-transparent px-1.5 py-1.5 text-right tabular-nums text-foreground hover:border-input focus:border-input focus:outline-none focus:ring-2 focus:ring-ring"
           />
           min
-          {sermon && <span className="whitespace-nowrap">· palavra estimada em {sermon.estimatedMinutes}</span>}
+          {sermon && sermon.estimatedMinutes >= 1 && <span className="whitespace-nowrap">· palavra estimada em {sermon.estimatedMinutes}</span>}
         </label>
       )}
     </>

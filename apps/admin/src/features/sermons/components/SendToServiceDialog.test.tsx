@@ -63,8 +63,27 @@ describe("SendToServiceDialog", () => {
     expect(await screen.findByText("Domingo, 22/11 · 19h")).toBeInTheDocument();
     expect(screen.getByRole("radiogroup", { name: "Qual culto" })).toBeInTheDocument();
     expect(screen.getByText("Culto de domingo · já tem uma palavra")).toBeInTheDocument();
-    expect(screen.getByText("Culto da manhã · esta palavra")).toBeInTheDocument();
+    // isMine sozinho não basta: sem envio desta palavra, é "já tem uma palavra".
+    expect(screen.getByText("Culto da manhã · já tem uma palavra")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Enviar" })).toBeDisabled();
+  });
+
+  it("esta palavra só no culto do envio atual", async () => {
+    renderDialog({ delivery: { date: "2026-12-06", startTime: "09:30", serviceId: "c3", serviceName: "Culto da manhã" } });
+    expect(await screen.findByText("Culto da manhã · esta palavra")).toBeInTheDocument();
+    expect(screen.getAllByText("Culto de domingo · já tem uma palavra")).toHaveLength(1);
+  });
+
+  it("a prévia da data anterior some enquanto a nova espera", async () => {
+    renderDialog();
+    fireEvent.click(await screen.findByRole("radio", { name: "Outra data" }));
+    api.previewDelivery.mockResolvedValue({ service: null, occupied: false });
+    fireEvent.change(screen.getByLabelText("Data"), { target: { value: "2026-12-13" } });
+    const text = "Ainda não há culto nesse dia. A palavra fica guardada e entra sozinha quando ele for criado.";
+    expect(await screen.findByText(text)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Data"), { target: { value: "2026-12-14" } });
+    expect(screen.queryByText(text)).not.toBeInTheDocument();
+    expect(await screen.findByText(text)).toBeInTheDocument();
   });
 
   it("sem cultos mostra o aviso", async () => {

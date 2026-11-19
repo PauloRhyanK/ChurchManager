@@ -140,7 +140,7 @@ export function SendToServiceDialog({
 
   const services = options.data ?? [];
   const previewText =
-    other && debounced && preview.data
+    other && debounced && debounced.date === date && debounced.time === time && preview.data
       ? preview.data.service
         ? preview.data.occupied
           ? `O culto de ${formatServiceSentence(preview.data.service.date, preview.data.service.startTime)} já tem uma palavra.`
@@ -163,7 +163,7 @@ export function SendToServiceDialog({
               <p className="text-sm text-muted-foreground">Nenhum culto criado ainda.</p>
             )}
             {services.map((s) => {
-              const note = s.isMine ? " · esta palavra" : s.hasSermon ? " · já tem uma palavra" : "";
+              const note = s.id === delivery?.serviceId ? " · esta palavra" : s.hasSermon ? " · já tem uma palavra" : "";
               return (
                 <label
                   key={s.id}

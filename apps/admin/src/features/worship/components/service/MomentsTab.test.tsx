@@ -43,6 +43,12 @@ describe("MomentsTab: palavra do culto", () => {
     expect(screen.queryByText(/não tem o momento Palavra/)).not.toBeInTheDocument();
   });
 
+  it("palavra vazia não mostra a estimativa", () => {
+    renderTab(plan({ sermon: { ...SERMON, estimatedMinutes: 0 } }));
+    expect(screen.getByText("A luz do mundo")).toBeInTheDocument();
+    expect(screen.queryByText(/estimada em/)).not.toBeInTheDocument();
+  });
+
   it("sem palavra não mostra nada", () => {
     renderTab(plan({}));
     expect(screen.queryByText("A luz do mundo")).not.toBeInTheDocument();
