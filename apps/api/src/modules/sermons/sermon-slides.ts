@@ -14,7 +14,8 @@ export type SlideItem = {
   text: string; // TITLE/POINT: o título; VERSE: o texto bíblico; SUMMARY: a frase (vai como subtítulo)
   reference: string | null; // só VERSE
   included: boolean;
-  edited: boolean;
+  edited: boolean; // o pregador mudou o `text`
+  subtitleEdited: boolean; // o pregador mudou o subtítulo (e com ele o modelo)
   layout: SlideLayout;
   heading: string | null; // título de contexto de VERSE e SUMMARY
   subtitle: string | null; // POINT em M02; VERSE em M04
@@ -191,6 +192,7 @@ export function slideFace(item: SlideFaceInput): SlideFace {
     sourceBlockId: null,
     included: true,
     edited: false,
+    subtitleEdited: false,
     kind: item.kind,
     text: item.text,
     reference: item.reference,
@@ -207,7 +209,37 @@ export function slideFace(item: SlideFaceInput): SlideFace {
   return { layout: s.layout, title: s.text, subtitle: s.subtitle, verse: null, reference: null };
 }
 
-const base = { included: true, edited: false, heading: null, subtitle: null, version: null } as const;
+/**
+ * Divide uma face acima do limite em faces seguidas do mesmo modelo, no último espaço (pontos de código), como
+ * `buildSlides`: título de M01 acima de 75 e subtítulo de M02 acima de 150. Serve para linhas gravadas antes dos
+ * limites (ex.: ponto de até 300): a fonte nunca encolhe, o texto vai para mais slides.
+ */
+export function splitFaceForLimits(face: SlideFace): SlideFace[] {
+  if (face.layout === 'M01' && codePoints(face.title) > SLIDE_MODEL_LIMITS.M01.title) {
+    return splitText(face.title, SLIDE_MODEL_LIMITS.M01.title).map((title) => ({ ...face, title }));
+  }
+  if (face.layout === 'M02' && face.subtitle !== null && codePoints(face.subtitle) > SLIDE_MODEL_LIMITS.M02.subtitle) {
+    return splitText(face.subtitle, SLIDE_MODEL_LIMITS.M02.subtitle).map((subtitle) => ({ ...face, subtitle }));
+  }
+  return [face];
+}
+
+/** Limite do `text` editável no modelo do item (TITLE/POINT título; SUMMARY a frase). */
+function textFits(s: SlideItem): boolean {
+  if (s.kind === 'SUMMARY') return codePoints(s.text) <= SLIDE_MODEL_LIMITS.M02.subtitle;
+  if (s.kind === 'TITLE' || s.kind === 'POINT') return codePoints(s.text) <= SLIDE_MODEL_LIMITS.M01.title;
+  return true;
+}
+
+/** O subtítulo cabe no modelo, junto do texto que o item tem? */
+function subtitleFits(s: SlideItem): boolean {
+  if (!s.subtitle) return true;
+  if (s.kind === 'POINT') return s.layout === 'M02' && codePoints(s.subtitle) <= SLIDE_MODEL_LIMITS.M02.subtitle && codePoints(s.text) <= SLIDE_MODEL_LIMITS.M02.title;
+  if (s.kind === 'VERSE') return s.layout === 'M04' && codePoints(s.subtitle) <= SLIDE_MODEL_LIMITS.M04.subtitle && s.text.length <= SLIDE_MODEL_LIMITS.M04.verse;
+  return false;
+}
+
+const base = { included: true, edited: false, subtitleEdited: false, heading: null, subtitle: null, version: null } as const;
 
 function titleItems(title: string): SlideItem[] {
   return splitText(title, SLIDE_MODEL_LIMITS.M01.title).map((text, i) => ({
@@ -518,11 +550,20 @@ export function mergeSlides(previous: SlideItem[], fresh: SlideItem[]): SlideIte
   const merge = (f: SlideItem): SlideItem => {
     const p = prevById.get(f.id);
     if (!p) return f;
-    // Do item editado ficam o subtítulo e o modelo; o texto também, menos no VERSE, que vem sempre do bloco.
-    const kept = p.edited && p.kind === f.kind
-      ? { ...(f.kind === 'VERSE' ? {} : { text: p.text }), subtitle: p.subtitle, layout: p.layout, edited: true }
-      : {};
-    return coherent({ ...f, included: f.kind === 'PRIVATE' ? false : p.included, ...kept });
+    let next: SlideItem = { ...f, included: f.kind === 'PRIVATE' ? false : p.included };
+    if (p.kind !== f.kind) return next;
+    // Texto editado fica (nunca no VERSE, que vem sempre do bloco), se ainda couber no modelo.
+    if (p.edited && f.kind !== 'VERSE') {
+      const withText = { ...next, text: p.text, edited: true };
+      if (textFits(withText)) next = withText;
+    }
+    // Subtítulo editado fica com o seu modelo, se couber junto do texto que ficou.
+    if (p.subtitleEdited && (f.kind === 'POINT' || f.kind === 'VERSE')) {
+      const withSub = { ...next, subtitle: p.subtitle, layout: p.layout, subtitleEdited: true };
+      if (subtitleFits(withSub)) next = withSub;
+      else if (!subtitleFits(next)) next = { ...next, subtitle: null, layout: DEFAULT_LAYOUT[f.kind] };
+    }
+    return coherent(next);
   };
   const result: SlideItem[] = [];
   const seen = new Set<string>();
@@ -542,10 +583,17 @@ export function mergeSlides(previous: SlideItem[], fresh: SlideItem[]): SlideIte
   return result;
 }
 
+/** Slides públicos de uma face, já divididos nos limites; `text` acompanha o pedaço (título ou frase). */
+export function publicFaces(kind: PublicSlide['kind'], text: string, face: SlideFace): PublicSlide[] {
+  const faces = splitFaceForLimits(face);
+  if (faces.length === 1) return [{ kind, text, ...face }];
+  return faces.map((f) => ({ kind, text: kind === 'SUMMARY' ? (f.subtitle ?? text) : kind === 'VERSE' ? text : f.title, ...f }));
+}
+
 export function publicSlides(items: SlideItem[]): PublicSlide[] {
   const out: PublicSlide[] = [];
   for (const s of items) {
-    if (s.included && s.kind !== 'PRIVATE') out.push({ kind: s.kind, text: s.text, ...slideFace(s) });
+    if (s.included && s.kind !== 'PRIVATE') out.push(...publicFaces(s.kind, s.text, slideFace(s)));
   }
   return out;
 }
@@ -584,6 +632,7 @@ export function parseStoredSlides(value: unknown): SlideItem[] {
         reference: o.reference as string | null,
         included: kind === 'PRIVATE' ? false : o.included,
         edited: o.edited,
+        subtitleEdited: o.subtitleEdited === true,
         layout: (o.layout as SlideLayout | undefined) ?? DEFAULT_LAYOUT[kind],
         heading: text('heading', SLIDE_MODEL_LIMITS.M02.title),
         subtitle: text('subtitle', SLIDE_MODEL_LIMITS.M02.subtitle),

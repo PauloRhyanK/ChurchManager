@@ -11,6 +11,7 @@ import {
   parseStoredSlides,
   publicSlides,
   slideFace,
+  splitFaceForLimits,
   summaryTargets,
   SLIDE_MODEL_LIMITS,
   SUMMARY_MAX,
@@ -33,6 +34,7 @@ const item = (id: string, over: Partial<SlideItem> = {}): SlideItem => ({
   reference: null,
   included: true,
   edited: false,
+  subtitleEdited: false,
   layout: 'M01',
   heading: null,
   subtitle: null,
@@ -318,7 +320,7 @@ describe('buildSlides FULL', () => {
     ]);
     const conclusion = s.find((x) => x.id === 'h1:0')!;
     assert.deepEqual(conclusion, {
-      id: 'h1:0', kind: 'SUMMARY', sourceBlockId: 'h1', text: 'Conclui', reference: null, included: true, edited: false,
+      id: 'h1:0', kind: 'SUMMARY', sourceBlockId: 'h1', text: 'Conclui', reference: null, included: true, edited: false, subtitleEdited: false,
       layout: 'M02', heading: 'Conclusão', subtitle: null, version: null,
     });
     assert.equal(s.find((x) => x.id === 'opening:0')!.sourceBlockId, null);
@@ -503,18 +505,93 @@ describe('slideFace', () => {
 describe('modelos: mergeSlides, publicSlides e parseStoredSlides', () => {
   it('mergeSlides preserva subtítulo e modelo de item editado; o texto do VERSE vem sempre do novo', () => {
     const prev = [
-      item('p:0', { text: 'meu ponto', layout: 'M02', subtitle: 'meu sub', edited: true }),
-      item('v:0', { kind: 'VERSE', text: 'TEXTO ANTIGO', reference: 'João 1:1', layout: 'M04', heading: 'X', subtitle: 'liga', edited: true }),
+      item('p:0', { text: 'meu ponto', layout: 'M02', subtitle: 'meu sub', edited: true, subtitleEdited: true }),
+      item('v:0', { kind: 'VERSE', text: 'TEXTO ANTIGO', reference: 'João 1:1', layout: 'M04', heading: 'X', subtitle: 'liga', subtitleEdited: true }),
     ];
     const fresh = [
       item('p:0', { text: 'novo ponto' }),
       item('v:0', { kind: 'VERSE', text: 'Texto do bloco.', reference: 'João 1:1', layout: 'M03', heading: 'X' }),
     ];
     const m = mergeSlides(prev, fresh);
-    assert.deepEqual(m.map((x) => [x.text, x.layout, x.subtitle, x.edited]), [
-      ['meu ponto', 'M02', 'meu sub', true],
-      ['Texto do bloco.', 'M04', 'liga', true],
+    assert.deepEqual(m.map((x) => [x.text, x.layout, x.subtitle, x.edited, x.subtitleEdited]), [
+      ['meu ponto', 'M02', 'meu sub', true, true],
+      ['Texto do bloco.', 'M04', 'liga', false, true],
     ]);
+  });
+
+  it('mergeSlides: só o subtítulo editado não congela o título; só o texto editado não congela o subtítulo', () => {
+    const subOnly = mergeSlides([item('p:0', { text: 'velho', layout: 'M02', subtitle: 'meu sub', subtitleEdited: true })], [item('p:0', { text: 'novo' })]);
+    assert.deepEqual(subOnly.map((x) => [x.text, x.layout, x.subtitle, x.edited, x.subtitleEdited]), [['novo', 'M02', 'meu sub', false, true]]);
+    const textOnly = mergeSlides(
+      [item('p:0', { text: 'meu', layout: 'M02', subtitle: 'sub da IA', edited: true })],
+      [item('p:0', { text: 'novo', layout: 'M01', subtitle: null })],
+    );
+    assert.deepEqual(textOnly.map((x) => [x.text, x.layout, x.subtitle, x.edited, x.subtitleEdited]), [['meu', 'M01', null, true, false]]);
+  });
+
+  it('mergeSlides: texto ou subtítulo guardado acima do limite do modelo cede para o novo e perde a marca', () => {
+    const m = mergeSlides(
+      [
+        item('a:0', { text: 'x'.repeat(120), edited: true }),
+        item('b:0', { layout: 'M02', subtitle: 's'.repeat(200), subtitleEdited: true }),
+        item('c:0', { text: 'y'.repeat(70), edited: true, layout: 'M02', subtitle: 'sub', subtitleEdited: true }),
+        item('v:0', { kind: 'VERSE', reference: 'João 1:1', layout: 'M04', heading: 'X', subtitle: 'liga', subtitleEdited: true }),
+        item('t:0', { kind: 'SUMMARY', text: 'z'.repeat(151), layout: 'M02', heading: 'H', edited: true }),
+      ],
+      [
+        item('a:0', { text: 'novo a' }),
+        item('b:0', { text: 'novo b' }),
+        item('c:0', { text: 'novo c' }),
+        item('v:0', { kind: 'VERSE', text: 'w'.repeat(200), reference: 'João 1:1', layout: 'M03', heading: 'X' }),
+        item('t:0', { kind: 'SUMMARY', text: 'frase nova', layout: 'M02', heading: 'H' }),
+      ],
+    );
+    assert.deepEqual(m.map((x) => [x.id, x.text.slice(0, 6), x.layout, x.subtitle, x.edited, x.subtitleEdited]), [
+      ['a:0', 'novo a', 'M01', null, false, false],
+      ['b:0', 'novo b', 'M01', null, false, false],
+      ['c:0', 'yyyyyy', 'M01', null, true, false],
+      ['v:0', 'wwwwww', 'M03', null, false, false],
+      ['t:0', 'frase ', 'M02', null, false, false],
+    ]);
+  });
+
+  it('parseStoredSlides lê subtitleEdited; ausente ou de outro tipo vira false', () => {
+    const [a, b, c] = parseStoredSlides([
+      { ...item('a:0', { layout: 'M02', subtitle: 'S', subtitleEdited: true }) },
+      { id: 'b:0', kind: 'POINT', sourceBlockId: 'b', text: 'B', reference: null, included: true, edited: false },
+      { ...item('c:0'), subtitleEdited: 'sim' },
+    ]);
+    assert.deepEqual([a.subtitleEdited, b.subtitleEdited, c.subtitleEdited], [true, false, false]);
+  });
+
+  it('splitFaceForLimits divide título acima de 75 (M01) e subtítulo acima de 150 (M02), no último espaço', () => {
+    const title = Array(25).fill('palavra').join(' ');
+    const m01 = splitFaceForLimits({ layout: 'M01', title, subtitle: null, verse: null, reference: null });
+    assert.deepEqual(m01.map((f) => [f.layout, Array.from(f.title).length <= 75]), [['M01', true], ['M01', true], ['M01', true]]);
+    assert.equal(m01.map((f) => f.title).join(' '), title);
+    const sub = Array(35).fill('palavra').join(' ');
+    const m02 = splitFaceForLimits({ layout: 'M02', title: 'T', subtitle: sub, verse: null, reference: null });
+    assert.deepEqual(m02.map((f) => [f.layout, f.title, f.subtitle!.length <= 150]), [['M02', 'T', true], ['M02', 'T', true]]);
+    assert.equal(m02.map((f) => f.subtitle).join(' '), sub);
+    const ok = { layout: 'M03' as const, title: 'T', subtitle: null, verse: 'v', reference: 'r' };
+    assert.deepEqual(splitFaceForLimits(ok), [ok]);
+  });
+
+  it('publicSlides divide linhas antigas acima do limite: ponto de 120 e resumo de 280', () => {
+    const point = Array(15).fill('palavra').join(' ');
+    const summary = Array(35).fill('palavra').join(' ');
+    assert.equal(point.length, 119);
+    assert.equal(summary.length, 279);
+    const stored = parseStoredSlides([
+      { id: 'p:0', kind: 'POINT', sourceBlockId: 'p', text: point, reference: null, included: true, edited: true },
+      { id: 's:0', kind: 'SUMMARY', sourceBlockId: 's', text: summary, reference: null, included: true, edited: false },
+    ]);
+    const pub = publicSlides(stored);
+    assert.deepEqual(pub.map((x) => [x.kind, x.layout]), [['POINT', 'M01'], ['POINT', 'M01'], ['SUMMARY', 'M02'], ['SUMMARY', 'M02']]);
+    assert.ok(pub.filter((x) => x.kind === 'POINT').every((x) => Array.from(x.title).length <= 75 && x.text === x.title));
+    assert.ok(pub.filter((x) => x.kind === 'SUMMARY').every((x) => x.subtitle!.length <= 150 && x.text === x.subtitle));
+    assert.equal(pub.filter((x) => x.kind === 'POINT').map((x) => x.title).join(' '), point);
+    assert.equal(pub.filter((x) => x.kind === 'SUMMARY').map((x) => x.subtitle).join(' '), summary);
   });
 
   it('publicSlides devolve kind, text e os campos de slideFace (referência com a versão)', () => {
@@ -729,6 +806,18 @@ describe('cleanDecisions', () => {
       assert.ok(d.text.length <= 90);
       assert.equal(d.text, Array(11).fill('palavra').join(' '));
     }
+  });
+
+  it('aspas envolventes só saem quando a mesma aspa não aparece dentro do texto', () => {
+    const r = cleanDecisions(targets, [
+      { id: 'opening:0', model: '02', text: '"A" e "B"' },
+      { id: 'i1:0', model: '02', text: '“Luz” que “guia”' },
+      { id: 'a1:0', model: '02', text: "'Olhe' para a luz" },
+    ]);
+    assert.deepEqual(
+      Object.fromEntries(Object.entries(r).map(([k, v]) => [k, v.text])),
+      { 'opening:0': '"A" e "B"', 'i1:0': '“Luz” que “guia”', 'a1:0': "'Olhe' para a luz" },
+    );
   });
 
   it('apara, troca quebras de linha por espaço e tira aspas envolventes', () => {

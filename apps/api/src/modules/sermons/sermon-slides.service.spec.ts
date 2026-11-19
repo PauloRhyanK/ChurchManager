@@ -687,9 +687,9 @@ test('save com subtitle em ponto e em versículo; vazio remove e volta a M01/M03
     }));
   const out = await service.save(user(), S1, { items: withSubs('  Antes de procurar  ', 'Lâmpada para o caminho') });
   const pt = out.slides.find((s) => s.id === 'pt1:0')!;
-  assert.deepEqual([pt.layout, pt.subtitle, pt.edited, pt.text], ['M02', 'Antes de procurar', true, 'A luz chama']);
+  assert.deepEqual([pt.layout, pt.subtitle, pt.edited, pt.subtitleEdited, pt.text], ['M02', 'Antes de procurar', false, true, 'A luz chama']);
   const v = out.slides.find((s) => s.id === 'v2:0')!;
-  assert.deepEqual([v.layout, v.subtitle, v.edited, v.heading], ['M04', 'Lâmpada para o caminho', true, 'A luz chama']);
+  assert.deepEqual([v.layout, v.subtitle, v.edited, v.subtitleEdited, v.heading], ['M04', 'Lâmpada para o caminho', false, true, 'A luz chama']);
   assert.equal(v.text, 'Lâmpada para os meus pés é a tua palavra, e luz para o meu caminho.');
   const title = out.slides.find((s) => s.id === 'title')!;
   assert.deepEqual([title.layout, title.subtitle, title.edited], ['M01', null, false]);
@@ -723,6 +723,7 @@ test('limites do modelo no save: 400 com a mensagem e nada escrito', async () =>
     ['pt1:0', { subtitle: 's'.repeat(151) }, LIMIT],
     ['i1:0', { text: 'x'.repeat(151) }, LIMIT],
     ['v1:0', { subtitle: 's'.repeat(91) }, LIMIT],
+    ['vl:1', { subtitle: 'Liga' }, LIMIT],
     ['vl:0', { subtitle: 'Liga' }, 'Este versículo passa de 160 caracteres e não cabe no modelo com subtítulo.'],
   ];
   for (const [id, change, message] of cases) {
@@ -781,4 +782,54 @@ test('readDeliverySlides aceita a linha gravada antes dos modelos e completa com
 
 test('aiTargets do exemplo: nenhum alvo leva a nota privada', () => {
   assert.equal(JSON.stringify(aiTargets(EXAMPLE_DOC)).includes('Dois minutos'), false);
+});
+
+// --- Correções da revisão ---------------------------------------------------
+
+const renamePoint = (doc: any, id: string, text: string) => ({
+  ...doc,
+  content: doc.content.map((b: any) => (b.type === 'point' && b.attrs.id === id ? { ...b, content: [{ type: 'text', text }] } : b)),
+});
+
+test('subtítulo editado não congela o título: renomear o ponto e Atualizar traz o título novo e mantém o subtítulo', async () => {
+  const { service, sermons } = build({ sermons: [sermonRow()] });
+  const gen = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
+  await service.save(user(), S1, { items: gen.slides.map((s) => ({ id: s.id, included: s.included, ...(s.id === 'pt1:0' ? { subtitle: 'Meu subtítulo' } : {}) })) });
+  sermons[0].document = renamePoint(EXAMPLE_DOC, 'pt1', 'A luz convida');
+  const again = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
+  const pt = again.slides.find((s) => s.id === 'pt1:0')!;
+  assert.deepEqual([pt.text, pt.layout, pt.subtitle, pt.edited, pt.subtitleEdited], ['A luz convida', 'M02', 'Meu subtítulo', false, true]);
+});
+
+test('Atualizar em Só versículos também passa pelo merge: subtítulo do versículo continua', async () => {
+  const { service } = build({ sermons: [sermonRow()] });
+  const gen = await service.generate(user(), S1, { mode: 'VERSES' });
+  await service.save(user(), S1, { items: gen.slides.map((s) => ({ id: s.id, included: s.included, ...(s.id === 'v2:0' ? { subtitle: 'Liga' } : {}) })) });
+  const again = await service.generate(user(), S1, { mode: 'VERSES' });
+  const v = again.slides.find((s) => s.id === 'v2:0')!;
+  assert.deepEqual([v.layout, v.subtitle, v.subtitleEdited], ['M04', 'Liga', true]);
+});
+
+test('tirar o subtítulo do versículo (M04 → M03) recalcula o título de contexto com o limite 50', async () => {
+  const context = 'Quarenta e oito letras cabem no título do três';
+  assert.ok(context.length > 45 && context.length <= 50);
+  const { service } = build({ sermons: [sermonRow({ document: renamePoint(EXAMPLE_DOC, 'pt1', context) })] });
+  const gen = await service.generate(user(), S1, { mode: 'VERSES' });
+  assert.equal(gen.slides.find((s) => s.id === 'v2:0')!.heading, context);
+  const withSub = (sub: string) => gen.slides.map((s) => ({ id: s.id, included: s.included, ...(s.id === 'v2:0' ? { subtitle: sub } : {}) }));
+  const m04 = await service.save(user(), S1, { items: withSub('Liga') });
+  const cutHeading = m04.slides.find((s) => s.id === 'v2:0')!.heading!;
+  assert.ok(Array.from(cutHeading).length <= 45 && cutHeading.endsWith('…'));
+  const m03 = await service.save(user(), S1, { items: withSub('') });
+  const v = m03.slides.find((s) => s.id === 'v2:0')!;
+  assert.deepEqual([v.layout, v.heading], ['M03', context]);
+});
+
+test('linha antiga do envio com ponto de 300 caracteres sai em vários M01 de até 75', () => {
+  const long = Array(37).fill('palavra').join(' ') + ' fim';
+  assert.ok(long.length >= 295 && long.length <= 300);
+  const out = readDeliverySlides([{ kind: 'POINT', text: long, reference: null }]);
+  assert.ok(out.length >= 4);
+  assert.ok(out.every((x) => x.kind === 'POINT' && x.layout === 'M01' && Array.from(x.title).length <= 75 && x.text === x.title));
+  assert.equal(out.map((x) => x.title).join(' '), long);
 });
