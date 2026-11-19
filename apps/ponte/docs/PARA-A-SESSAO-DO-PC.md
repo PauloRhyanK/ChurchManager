@@ -193,9 +193,260 @@ arquivo solto na pasta da ponte. Agora só sai o que uma atualização anterior 
   - a confirmação pelas portas UDP 47998-48010 não foi feita: só o registro decide;
   - os cinco passos do teste com a TV, da seção 7 da sua especificação.
 
+### 12. Painel do culto ao vivo (19/11/2026)
+
+Especificação: `docs/superpowers/specs/2026-11-19-ponte-painel-ao-vivo-design.md`, na
+raiz do repositório. Feito num Mac, com OBS e Holyrics de mentira.
+
+**O que mudou**
+
+- **A tela de `/` agora é `ao-vivo.html`** (mais `ao-vivo.css` e `ao-vivo.js`): tema
+  escuro, ordem do culto com horários e atraso, equipamentos, louvor no centro,
+  transmissão à direita. **`painel.html` não foi tocado** e continua em
+  `/painel-antigo` (há um atalho no menu Mais da tela nova). Se a tela nova der
+  problema num culto, é para lá que se vai.
+- **`/api/painel` só cresceu.** Todas as chaves antigas continuam. As novas:
+  `versao_do_painel: 2`, `agenda`, `equipamentos`, `internet`, `louvor`, `imagem`,
+  `conteudo_versao`, e dentro de `transmissao`: `cenas`, `audios`, `numeros`; dentro de
+  `luz`: `climas`, `seguindo`.
+- **Quem conduz o louvor agora é a ponte, não a aba do navegador.** `ponte/condutor.py`
+  roda no PC principal e é o único que passa letra e troca luz durante uma música. A
+  tela só mostra e pede. A `/louvor` continua igual e serve para **marcar os tempos**;
+  no culto usa-se uma ou outra, não as duas.
+- **Ações novas** (lista fechada, em `ponte/painel_ao_vivo.py`): `cena_transmissao`,
+  `clima`, `luz_seguir`, `louvor_assumir`, `louvor_devolver`, `louvor_segurar`,
+  `louvor_slide`, `louvor_parte`, `louvor_repetir_refrao`, `louvor_musica`,
+  `louvor_comecou`, `louvor_acertar`, `imagem`. **Pela web só `cena_transmissao` e
+  `clima`**; passar slide pela web não existe.
+- **Clicar numa cena da transmissão põe no ar na hora** (`SetCurrentProgramScene`), sem
+  o passo de preparar. O botão "Pôr no ar" continua aparecendo quando o OBS tem uma cena
+  preparada diferente.
+- **Imagem do OBS no painel**: `GetSourceScreenshot`, 480 px, no máximo uma por segundo
+  e só com alguém olhando (`ponte/obs_imagem.py`, rota `GET /api/painel/imagem`).
+  **Não vai para a web.** Desliga no menu Mais.
+- **Nível de áudio**: uma conexão separada com o OBS, só para o evento
+  `InputVolumeMeters` (`ponte/obs_ouvinte.py`). O cliente das cues continua sem eventos.
+- **Números**: tempo de gravação e espaço no disco (`GetRecordStatus`, `GetStats`),
+  qualidade do envio pelos quadros perdidos dos últimos 30 s (`ponte/saude_envio.py`),
+  e, na consulta de 2 minutos ao YouTube, quantos assistem e como o YouTube diz que
+  está recebendo.
+- **Horários e atraso** (`ponte/agenda.py`): a hora do culto é a do formulário do guia
+  de chegada; os minutos de cada momento vêm de fábrica para os ids do
+  `config.exemplo.yaml` e podem ser escritos na cue (`minutos:`, `antes: true`). A ponte
+  passou a guardar a hora de entrada em cada momento, em `_ordem_atual.json`.
+- **Climas de luz**: cinco nomes fixos que apontam para uma cena e um movimento que já
+  existem (bloco `climas` do config; há valores de fábrica).
+- **O tempo da música** (`ponte/relogio.py`, rota `POST /api/relogio`): hoje a fonte é
+  o áudio tocando num navegador (ensaio) ou o botão **"Começou"** (fonte `cronometro`).
+  O Reaper vai entrar como mais uma fonte, pela mesma rota.
+- **Espelho**: mede quanto cada volta leva (é daí que sai "Internet lenta") e manda a
+  letra das músicas do dia só quando ela muda.
+- **Sair do momento do louvor encerra a música**: o condutor larga letra e luz.
+- **`PONTE_SIMULAR=1`** no ambiente troca OBS e Holyrics por versões de mentira
+  (`ponte/simulados.py`) e a tela mostra a faixa "SIMULAÇÃO". Só pelo ambiente, nunca
+  pelo config. Para ver o painel sem equipamento:
+  `PONTE_SIMULAR=1 PONTE_CONFIG=config.exemplo.yaml PONTE_PORTA=8711 python app.py`.
+- Chaves novas e opcionais do `config.yaml`: ver o fim do `config.exemplo.yaml`
+  ("PAINEL DO CULTO AO VIVO").
+- Arquivos novos em `PACOTE`: `ao-vivo.html`, `ao-vivo.css`, `ao-vivo.js`. Arquivo de
+  estado novo: `_louvor_atual.json` (fica fora do Git e do pacote, como os outros
+  `_*.json`). Nenhuma dependência nova, nenhum `.ps1` alterado.
+
+**O que não foi construído** (está na especificação, etapa C): a tela da palavra, o
+celular do pregador, os versículos e a leitura das músicas pelo módulo Cultos. Na hora
+da palavra o centro da tela mostra o momento, o tempo e o que o Holyrics diz que está
+no telão.
+
+**Testes novos**, todos sem equipamento: `_testar_agenda.py`, `_testar_saude_envio.py`,
+`_testar_audio_obs.py`, `_testar_relogio.py`, `_testar_repertorio.py`,
+`_testar_condutor.py`, `_testar_painel_ao_vivo.py` (este sobe o `app.py` e a versão web
+dentro do teste).
+
+**O que só dá para conferir aí, e como**
+
+1. **A imagem pesa no notebook?** Num dia sem culto, com a transmissão ligada para um
+   destino de teste: 10 minutos com o painel aberto e a imagem ligada, 10 com ela
+   desligada (menu Mais). Comparar "Quadros perdidos" nas estatísticas do OBS. Se pesar,
+   aumentar `painel.imagem.intervalo` ou desligar.
+2. **A imagem chega?** A chamada é a mesma do guia de chegada, em tamanho menor. Conferir
+   se aparece e se troca quando a cena troca.
+3. **O nível de áudio chega?** As barras aparecem em "Transmissão". Se não aparecerem em
+   15 segundos: o evento `InputVolumeMeters` não está chegando pela rede. Anotar a versão
+   do obs-websocket. Conferir os **nomes reais das entradas** e escrevê-los em
+   `obs.audios`. Conferir se "bom" e "estourando" batem com o que se ouve; os limites
+   estão em `palavra()` de `ponte/obs_ouvinte.py`. **Não sei se uma entrada no mudo vem
+   com nível zero**; se vier com nível, "fechado" não vai aparecer para ela.
+4. **Trocar de cena pelo painel**, com o OBS em modo estúdio e fora dele. A ação usa
+   `SetCurrentProgramScene`; em modo estúdio isso troca o programa direto, sem passar
+   pela prévia.
+5. **Os números**: "Gravação" andando, "Espaço no disco" (é o do disco onde o OBS grava;
+   conferir com o Explorer), "Qualidade" numa transmissão de teste (derrubar a internet
+   por 20 segundos deve dar "Oscilando" ou "Ruim" e depois voltar a "Boa"), e
+   "Assistindo" com alguém assistindo de verdade.
+6. **A ordem das cenas** nos botões. O código inverte a lista do `GetSceneList` para
+   ficar como no OBS; se sair de trás para a frente, é essa linha em `_ler_estado_obs`.
+7. **Os cinco climas no refletor**, com alguém olhando o palco: cada um parece o nome
+   que tem? Ajustar no bloco `climas`.
+8. **O louvor com o Holyrics de verdade**:
+   - `GetSong` devolve o texto dos slides com o token da igreja? (A `/louvor` já usa
+     essa ação, então deve.) Sem isso a tela mostra "slide 3 de 34" no lugar da letra.
+   - Escolher uma música no painel põe a letra no telão (`ShowLyrics`) no primeiro slide?
+   - Na tela manual, Próximo e Anterior chegam ao telão? Quanto demora entre o toque e a
+     letra? Esse atraso vai em `relogio.adiantar_ms`.
+   - Com `relogio.fonte: cronometro`, marcar uma música na `/louvor`, tocar o mesmo áudio
+     no som, apertar "Começou" na primeira batida e ver se a letra acompanha até o fim.
+9. **Duas pessoas**: o PC e um celular na rede da igreja, um assume, o outro passa slide.
+   A faixa amarela tem que dizer o nome certo nos dois.
+10. **A tela** no monitor do PC do telão e num celular.
+11. **A atualização em dois tempos**: PC principal novo com a VPS ainda antiga (a web
+    tem que continuar mostrando o painel antigo, funcionando), e depois a VPS nova.
+12. **Internet**: com a igreja ligada à web, tirar o cabo do roteador: em até 20
+    segundos a luz "Internet" fica vermelha e o "Aconteceu agora" anota; o resto do
+    painel continua.
+
+### 13. Palavra, celular do pregador e músicas do ChurchManager (19/11/2026, depois da seção 12)
+
+A seção 12 diz que isto "não foi construído". Foi, em seguida, na branch
+`claude/ponte-palavra-etapa-c`.
+
+**O que mudou**
+
+- **`ponte/palavra.py`** (novo): os slides do sermão no formato que o módulo Palavras
+  propôs (`TITLE`, `VERSE`, `POINT`, `SUMMARY`), quem está passando, e o link do
+  pregador. Hoje a palavra vem de `_palavra_do_dia.json` na pasta da ponte (formato no
+  fim do `config.exemplo.yaml`); sem o arquivo, não há palavra e nada muda na tela.
+- **No painel**, no momento `pregacao` (ou nos de `painel.momento_da_palavra`), o centro
+  vira a palavra: slide no telão, o próximo, a lista, Anterior / Tirar do telão /
+  Próximo (barra de espaço), e quem está passando. Ações novas, só locais:
+  `palavra_slide`, `palavra_assumir`, `palavra_tirar`, `pregador_link`.
+- **Versículo vai ao Holyrics só pela referência** (`ShowVerse` com `references`); título
+  e ponto vão como texto (`ShowQuickPresentation` com `text`); tirar é
+  `CloseCurrentPresentation`. Os nomes são configuráveis no bloco `palavra`.
+  **Eu não tenho como confirmar os dois primeiros nomes nem o formato do pedido**: saíram
+  do que lembro da documentação do API Server, não de um teste.
+- **`verificar_palavra.py`** (novo, no `PACOTE`): diz, para cada ação, "liberada",
+  "falta liberar", "não existe" ou "token errado". Sem `--mostrar` manda o pedido vazio,
+  para nada aparecer no telão; com `--mostrar` exibe um versículo e um texto de teste.
+- **Sem permissão ou com o nome errado**, a lista segue: o painel marca o slide com
+  "Abra no Holyrics: João 8:12" e o operador abre à mão.
+- **Celular do pregador** (`pregador.html`, novo, no `PACOTE`): o operador toca em
+  "Celular do pregador", a ponte sorteia um código e mostra o endereço
+  (`http://<ip>:8700/pregador/<código>`). A página só tem Anterior e Próximo. O link
+  morre em 6 horas, em "Encerrar o acesso", quando outro é gerado, ou quando a ordem do
+  culto é trocada. **Não desenhei o QR code**: a tela mostra o endereço para copiar.
+- **Pela internet**: a igreja manda à web só o resumo (SHA-256) do código. A web abre
+  `/pregador/<código>` sem a senha da equipe se o resumo confere; o toque entra na fila
+  com o tipo `pregador`, e a igreja confere o código de novo antes de passar. Enquanto
+  há link valendo, a ponte mantém um segundo pedido de saída pendurado
+  (`POST /api/espelho/pedidos`, até 20 s) para o toque chegar na hora. A chave "Só
+  mostra" não corta o pregador.
+- **Músicas do ChurchManager** (`FonteCultos`, no fim de `ponte/repertorio.py`): liga com
+  `repertorio: { fonte: cultos }` e o bloco `cultos: { url, slug, chave }` no config. A
+  rota existe no ChurchManager desde 20/11/2026 (PR #27, ainda fora da `qa`), mas **este
+  código só foi testado contra o formato, nunca contra o servidor**. A chave é gerada no
+  painel, em Cultos › Roteiro › "Ponte do Culto". Guarda a última resposta em `_culto_do_dia.json` para o caso de a internet
+  cair. O id da música no Holyrics vem da ficha dela no ChurchManager (`holyricsId`);
+  quando está vazio, é procurado pelo título (`GetSongs`), o que não foi testado. **A
+  ponte supõe que o slide N do ChurchManager é o slide N da música no Holyrics**, o que
+  só vale se a letra foi colada lá pelo "Letra para o Holyrics". Música antiga do
+  Holyrics, com outra divisão, sai com a letra fora do lugar.
+- A agenda passou a dizer quanto falta do momento atual mesmo sem a hora do culto.
+
+**Testes novos:** `_testar_palavra.py` (ponta a ponta do toque do pregador, pelo Wi-Fi e
+pela web, dentro do teste) e mais casos em `_testar_repertorio.py`.
+
+**O que só dá para conferir aí**
+
+1. `python verificar_palavra.py`, fora do culto. Se disser "não existe", abrir a lista
+   de ações do API Server do Holyrics, achar a que mostra versículo pela referência e a
+   que mostra um texto livre, e escrever os nomes no bloco `palavra` do config. Se disser
+   "falta liberar", marcar as permissões no token.
+2. `python verificar_palavra.py --mostrar`, com o telão à vista: o versículo aparece com
+   a Bíblia e o tema certos? O texto aparece legível? "Tirar" limpa o telão?
+3. **Um versículo que o ChurchManager dividiu em dois slides** tem a mesma referência
+   nos dois: a ponte pede uma vez e o Holyrics mostra o versículo inteiro. Conferir se é
+   isso que o pregador espera, ou se ele precisa do versículo em pedaços (aí a referência
+   não basta).
+4. **O celular do pregador no Wi-Fi da igreja**: abrir o endereço num celular, passar os
+   slides, ver o painel dizer "O pregador está passando". O celular tem que estar na
+   mesma rede do PC do Holyrics.
+5. **Pela internet**, com a igreja ligada à web e o celular no 4G: quanto demora entre o
+   toque e o telão? Se passar de um segundo, anotar.
+6. Duas pessoas ao mesmo tempo: pregador e operador tocando em Próximo no mesmo instante
+   não podem pular dois slides.
+
+### 14. Como isto chega à igreja, e como voltar atrás (20/11/2026)
+
+As seções 12 e 13 entram juntas. **Nada delas foi visto com equipamento.** Antes de um
+culto, o caminho seguro é o de baixo.
+
+**Como chega**
+
+1. O código entra na `main`. Isso **não** atualiza a Ponte sozinho: a versão web roda de
+   um clone próprio na VPS (`/opt/ponte-do-culto`) e só muda quando alguém roda lá
+   `git pull --ff-only && cd apps/ponte && docker compose up -d --build`
+   (ver `IMPLANTAR-NA-VPS.md`). O CI do repositório cuida só da API.
+2. Com a web nova no ar, cada PC compara os seus arquivos com os dela:
+   - **ao ligar** (pelo `iniciar.py`): atualiza sozinho, **menos** se o papel é `som`, se
+     o `maquina.yaml` tem `atualizar: nunca`, ou se `_ordem_atual.json` indica culto em
+     andamento nas últimas 6 horas;
+   - **ligado**: só aparece a faixa "Há uma atualização da Ponte"; ninguém é atualizado
+     sem alguém tocar em "Atualizar agora".
+3. O **PC do som** não muda (ele roda a versão antiga, fora do instalador). Nada do que
+   foi feito depende dele: clima é cena e movimento que ele já conhece.
+
+**Antes do primeiro culto com este código (recomendado)**
+
+- Ponha `atualizar: nunca` no `maquina.yaml` do PC principal **antes** de a VPS ser
+  atualizada, ou atualize a VPS só depois do culto. Assim quem decide o dia da troca é
+  uma pessoa, não o botão de ligar no domingo.
+- Num dia sem culto: tire o `atualizar: nunca`, ligue, deixe atualizar, e faça os itens
+  1 a 6 da seção 12 e 1 a 4 da seção 13.
+
+**O que este código faz a mais sem ninguém pedir**, e que pode pesar: uma conexão extra
+com o OBS para o nível de áudio; uma chamada `GetStats` a cada 3 segundos; uma captura de
+imagem por segundo **enquanto o painel novo estiver aberto** (desliga no menu Mais, ou
+`painel: { imagem: { ativo: false } }` no config); duas consultas a mais ao YouTube a
+cada 2 minutos durante a transmissão. O louvor e a palavra não mandam nada ao Holyrics
+nem à luz enquanto ninguém escolher uma música ou passar um slide.
+
+**Voltar atrás, do mais leve ao mais pesado**
+
+1. **Só a tela:** abrir `/painel-antigo` (está no menu Mais). É o painel de 12/11,
+   intocado, falando com o mesmo servidor.
+2. **Só a imagem:** menu Mais › "Não mostrar".
+3. **O PC inteiro, para a versão anterior:** fechar a ponte e, na pasta dela,
+   `python -c "from ponte import atualizar; print(atualizar.restaurar('.'))"`. Isso
+   devolve os arquivos guardados em `_versao_anterior/`. Depois ponha
+   `atualizar: nunca` no `maquina.yaml`, senão ele atualiza de novo ao ligar. (Se a
+   versão nova morrer em menos de 45 segundos ao subir, o `iniciar.py` já faz essa volta
+   sozinho.)
+4. **Todo mundo:** na VPS, voltar o clone para o commit anterior e reconstruir
+   (`git checkout <commit> && docker compose up -d --build`). Os PCs comparam "diferente",
+   não "mais novo": ao ligar, ou no botão Atualizar, trazem a versão antiga de volta.
+
+**Músicas do ChurchManager: o que precisa existir**
+
+- Na **API de produção**: o código do PR #27 (rota
+  `GET /api/public/tenants/igreja-paraiso/worship/services/next`) com a migração dele.
+- Uma **chave da integração**, gerada no painel em Cultos › Roteiro › "Ponte do Culto"
+  (aparece uma vez).
+- No **`config.yaml` do PC principal** (não na VPS, que não participa disto):
+  `repertorio: { fonte: cultos }` e `cultos: { url: https://api.igrejaparaiso.com.br,
+  slug: igreja-paraiso, chave: "..." }`.
+- **Sem nada disso, nada quebra**: a função fica desligada e as músicas continuam vindo
+  do `config.yaml` e das marcas da `/louvor`, como hoje. Com o bloco escrito e a API fora
+  do ar ou a chave errada, a lista de músicas fica vazia (ou com a última resposta
+  guardada em `_culto_do_dia.json`) e o resto do painel segue.
+
 ## O que NÃO foi testado
 
-Tudo foi verificado num Mac, com OBS, Holyrics e YouTube desligados e a luz no driver
+Do painel do culto ao vivo (seções 12 e 13): nada rodou contra OBS, Holyrics, YouTube ou
+refletor de verdade, nem em Windows. O que foi visto no Mac: os testes novos, a tela
+no navegador em tela larga e em 375 px contra os simuladores, a versão web local
+recebendo o retrato pelo espelho, e o painel antigo funcionando contra o código novo.
+
+O restante, de 12/11: tudo foi verificado num Mac, com OBS, Holyrics e YouTube desligados e a luz no driver
 `agente`. Nunca rodou em Windows nem com equipamento:
 
 - `instalar-do-zero.ps1` e o `instalar-ponte.bat` gerado pela web;

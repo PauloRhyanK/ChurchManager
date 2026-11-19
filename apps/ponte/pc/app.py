@@ -20,6 +20,14 @@ import yaml
 from flask import Flask, Response, jsonify, request, send_from_directory
 
 from ponte import atualizar as mod_atualizar
+from ponte import condutor as mod_condutor
+from ponte import obs_imagem as mod_obs_imagem
+from ponte import obs_ouvinte as mod_obs_ouvinte
+from ponte import painel_ao_vivo as mod_ao_vivo
+from ponte import palavra as mod_palavra
+from ponte import relogio as mod_relogio
+from ponte import repertorio as mod_repertorio
+from ponte import saude_envio as mod_saude_envio
 from ponte import chegada as mod_chegada
 from ponte import cofre as mod_cofre
 from ponte import espelho as mod_espelho
@@ -213,7 +221,24 @@ def indexar_cues(config):
 
 @app.get("/")
 def painel():
+    """O painel do culto ao vivo. O antigo continua em /painel-antigo, para o
+    domingo em que este der problema."""
+    return send_from_directory(RAIZ, "ao-vivo.html")
+
+
+@app.get("/painel-antigo")
+def painel_antigo():
     return send_from_directory(RAIZ, "painel.html")
+
+
+@app.get("/ao-vivo.css")
+def ao_vivo_css():
+    return send_from_directory(RAIZ, "ao-vivo.css")
+
+
+@app.get("/ao-vivo.js")
+def ao_vivo_js():
+    return send_from_directory(RAIZ, "ao-vivo.js")
 
 
 @app.get("/api/cues")
@@ -275,7 +300,10 @@ def rodar_cue(cue_id):
 #  recarregar a pagina nao perder o lugar, e o que faz o celular e o PC verem
 #  a mesma coisa.
 # ---------------------------------------------------------------------------
-_ordem = {"id": None, "nome": None, "momentos": [], "atual": None, "versao": 0}
+_ordem = {"id": None, "nome": None, "momentos": [], "atual": None, "versao": 0,
+          # momento -> instante em que o operador entrou nele. E o que deixa o
+          # painel dizer "2 min atrasado" e quanto falta do momento atual.
+          "entradas": {}}
 _tranca_ordem = threading.Lock()
 CAMINHO_PONTEIRO = os.path.join(RAIZ, "_ordem_atual.json")
 
@@ -308,7 +336,8 @@ def _salvar_ponteiro():
     """
     try:
         with open(CAMINHO_PONTEIRO, "w", encoding="utf-8") as arquivo:
-            json.dump({"ordem": _ordem["id"], "atual": _ordem["atual"]}, arquivo)
+            json.dump({"ordem": _ordem["id"], "atual": _ordem["atual"],
+                       "entradas": _ordem.get("entradas") or {}}, arquivo)
     except Exception:
         pass
 
@@ -324,7 +353,12 @@ def _carregar_ordem(ordem_id, atual=None):
         "momentos": list(ordem["momentos"]),
         "atual": atual,
         "versao": _ordem["versao"] + 1,
+        "entradas": {},
     })
+    # Trocar ou recomecar a ordem e comecar outro culto: o link do celular do
+    # pregador valia so para o anterior.
+    if _pecas.get("palavra") is not None:
+        _pecas["palavra"].encerrar_link()
     return True
 
 
@@ -387,9 +421,15 @@ def _transicionar(indice_alvo, versao_cliente=None):
             _ordem["atual"] = indice_alvo
             _ordem["versao"] += 1
             momento_id = momentos[indice_alvo]
+            _ordem.setdefault("entradas", {})[momento_id] = time.time()
             retrato = _retrato_da_ordem()
 
         _salvar_ponteiro()
+        if _ao_vivo["valor"] is not None:
+            try:
+                _ao_vivo["valor"].momento_mudou(momento_id)
+            except Exception as erro:
+                print("  [painel] nao consegui encerrar o louvor: {}".format(erro))
         cue = _cues_por_id.get(momento_id) or {}
         resultados = executar(cue, _contexto)
     finally:
@@ -574,13 +614,35 @@ def _ler_estado_obs():
         transmissao = cliente.pedir("GetStreamStatus")
     except Exception:
         return None
-    return {
+    dados = {
         "no_ar": cenas.get("currentProgramSceneName"),
         "preview": cenas.get("currentPreviewSceneName"),
         "gravando": bool(gravacao.get("outputActive")),
         "transmitindo": bool(transmissao.get("outputActive")),
         "tempo_ms": transmissao.get("outputDuration") if transmissao.get("outputActive") else None,
+        # O OBS lista as cenas de baixo para cima; a tela mostra como no OBS.
+        "cenas": [c.get("sceneName") for c in reversed(cenas.get("scenes") or [])
+                  if c.get("sceneName")],
+        "gravacao_ms": gravacao.get("outputDuration") if gravacao.get("outputActive") else None,
+        "disco_mb": None,
     }
+    try:
+        # Separado de proposito: se esta chamada falhar numa versao do OBS,
+        # a tela perde so o espaco no disco, nao o estado inteiro.
+        dados["disco_mb"] = cliente.pedir("GetStats").get("availableDiskSpace")
+    except Exception:
+        pass
+    try:
+        _saude_do_envio.ler(
+            time.time(), dados["transmitindo"],
+            perdidos=transmissao.get("outputSkippedFrames"),
+            total=transmissao.get("outputTotalFrames"),
+            bytes_=transmissao.get("outputBytes"),
+            congestao=transmissao.get("outputCongestion"),
+            reconectando=transmissao.get("outputReconnecting"))
+    except Exception:
+        pass
+    return dados
 
 
 def _atualizar_estado():
@@ -594,6 +656,8 @@ def _atualizar_estado():
             }
             with _tranca_estado:
                 _estado.update(novo)
+            if _ao_vivo["valor"] is not None:
+                _ao_vivo["valor"].vigiar_viradas(_sistemas_do_painel())
         except Exception:
             # Esta thread nao pode morrer: se ela cair, o painel congela
             # mostrando um estado velho como se fosse atual, que e pior que
@@ -1499,6 +1563,8 @@ def _trocar_host_obs(host):
     argumentos = _args_obs()
     _contexto["obs"] = ClienteOBS(*argumentos)
     _contexto["obs_saude"] = ClienteOBS(*argumentos, timeout=3.5, tentativas=1)
+    if _pecas.get("imagem") is not None:
+        _pecas["imagem"].trocar_cliente(ClienteOBS(*argumentos, timeout=3.5, tentativas=1))
 
 
 def _cue_interna(cue_id):
@@ -1762,8 +1828,22 @@ def _pedido_da_web(comando):
         # mesma do painel local (_acao_do_painel), e a chave "aceitar comandos
         # pela web" e conferida la dentro.
         _acao_do_painel(corpo, "web")
+    elif tipo == "pregador":
+        # O toque do pregador pelo celular, vindo pela internet. Nao passa
+        # pela chave "aceita comandos": o link dele e uma autorizacao a parte,
+        # dada neste culto, e o codigo e conferido de novo aqui.
+        if _ao_vivo["valor"] is not None:
+            _ao_vivo["valor"].pregador_passar(
+                str(corpo.get("codigo") or ""), corpo.get("para"), corpo.get("visto"))
     else:
         print("  [espelho] pedido desconhecido ignorado: {!r}".format(tipo))
+
+
+def _conteudo_para_a_web():
+    if _ao_vivo["valor"] is None:
+        return None, None
+    conteudo = _ao_vivo["valor"].conteudo()
+    return conteudo["versao"], conteudo
 
 
 def _montar_espelho():
@@ -1779,7 +1859,8 @@ def _montar_espelho():
         return None
     return mod_espelho.Espelho(url, chave, _chegada.retrato, _pedido_da_web,
                                nome=_maquina["nome"],
-                               extra=lambda: {"painel": _retrato_do_painel()})
+                               extra=lambda: {"painel": _retrato_do_painel()},
+                               conteudo=_conteudo_para_a_web)
 
 
 # -- o cofre na versao web ----------------------------------------------------
@@ -1912,7 +1993,7 @@ def aqui_imagem():
 # viaja se alguem escrever o nome dele abaixo.
 PACOTE = (
     "app.py", "requirements.txt", "INSTALAR.md",
-    "painel.html", "louvor.html", "luzes.html", "cenas.html", "youtube.html",
+    "painel.html", "ao-vivo.html", "ao-vivo.css", "ao-vivo.js", "pregador.html", "louvor.html", "luzes.html", "cenas.html", "youtube.html",
     "chegada.html", "aqui.html", "letras.html", "guia.js", "guia.css",
     "estudio.html",
     "chegada.yaml", "looks_salvas.yaml", "patch.yaml",
@@ -1921,7 +2002,7 @@ PACOTE = (
     "iniciar-ponte.bat", "iniciar-ponte.ps1", "iniciar.py", "instalar-do-zero.ps1",
     "ligar-web.py", "ligar-web.bat",
     "gerar_click.py",
-    "verificar.py", "verificar_obs.py", "descobrir_holyrics.py", "descobrir_luzes.py",
+    "verificar.py", "verificar_obs.py", "verificar_palavra.py", "descobrir_holyrics.py", "descobrir_luzes.py",
 )
 
 
@@ -2060,6 +2141,12 @@ def _retomar_ordem(config):
             if not (isinstance(atual, int) and 0 <= atual < quantos):
                 atual = None
             _carregar_ordem(salvo["ordem"], atual)
+            # As horas de entrada so valem para o culto de hoje.
+            entradas = salvo.get("entradas")
+            if isinstance(entradas, dict):
+                _ordem["entradas"] = {
+                    str(m): float(quando) for m, quando in entradas.items()
+                    if isinstance(quando, (int, float)) and time.time() - quando < 12 * 3600}
             if atual is not None:
                 print("  retomando: {} no momento {}".format(
                     _ordem["nome"], _ordem["momentos"][atual]))
@@ -2088,6 +2175,34 @@ _historico = collections.deque(maxlen=40)
 _vigia = {"valor": None}      # o vigia do retorno na TV (ponte/vigia_tv.py)
 _remoto = {"aceita": True}
 _luz_escolhida = {"cena": None}
+_ao_vivo = {"valor": None}    # ponte/painel_ao_vivo.py, montado no main()
+_saude_do_envio = mod_saude_envio.SaudeDoEnvio()
+# PONTE_SIMULAR=1 troca OBS e Holyrics pelos de ponte/simulados.py. So pelo
+# ambiente, nunca pelo config: um culto nao pode ir ao ar contra um OBS
+# inventado porque alguem esqueceu uma linha ligada.
+SIMULAR = os.environ.get("PONTE_SIMULAR") == "1"
+# O que o painel ao vivo precisa desta casa, como funcoes (ele nao importa o
+# app.py). As pecas que so existem depois do main() entram la.
+_pecas = {
+    "config": lambda: _config,
+    "simulacao": SIMULAR,
+    "estado_obs": lambda: _estado.get("obs"),
+    "obs": lambda: _contexto.get("obs"),
+    "luz": lambda: _contexto.get("luzes"),
+    "looks": lambda: _contexto.get("looks"),
+    "motor": lambda: _contexto.get("movimento"),
+    "cues": lambda: _cues_por_id,
+    "entradas": lambda: dict(_ordem.get("entradas") or {}),
+    "hora_do_culto": lambda: _hora_do_culto(),
+    "luz_vista": lambda: _luz_vista.get("em"),
+    "espelho": lambda: _espelho["valor"].retrato() if _espelho["valor"] else None,
+    "saude": _saude_do_envio,
+    "nome_de_cena": lambda nome: _nome_de_cena(nome),
+    "luz_escolhida": lambda cena: _escolher_luz(cena),
+    "reler_obs": lambda: _pedir_estado_ja(),
+    "anotar": lambda titulo, ok, detalhe, origem: _anotar(titulo, ok, detalhe, origem),
+    "ordem_agora": lambda: _ordem_agora(),
+}
 _maquinas_vistas = {}
 _yt_painel = {"em": 0.0, "dados": None, "pedir": True}
 _atualizacao = {"aqui": None, "la": None, "em": None, "erro": None, "aplicando": False,
@@ -2295,7 +2410,7 @@ def _retrato_do_painel():
     controles["cortar"] = _contexto.get("obs") is not None
     recados = [{"id": c["id"], "nome": c.get("nome", c["id"])} for c in _cues_por_id.values()
                if str(c["id"]).startswith("recado_") and c["id"] != "recado_limpar"]
-    return {
+    corpo = {
         "maquina": _maquina["nome"],
         "papel": _maquina["papel"],
         "hora": time.strftime("%H:%M"),
@@ -2314,6 +2429,14 @@ def _retrato_do_painel():
         "atualizacao": _retrato_da_atualizacao(),
         "maquinas": _maquinas_do_painel(),
     }
+    # Daqui para baixo so se ACRESCENTA: o painel antigo e uma versao web
+    # antiga leem as chaves de cima e ignoram o resto.
+    if _ao_vivo["valor"] is not None:
+        try:
+            _ao_vivo["valor"].completar(corpo)
+        except Exception as erro:
+            print("  [painel] a parte nova do retrato falhou: {}".format(erro))
+    return corpo
 
 
 def _anotar(titulo, ok, detalhe, origem):
@@ -2415,6 +2538,8 @@ def _acao_do_painel(dados, origem):
                     canais[int(canal)] = int(valor)
             cliente.aplicar(canais)
             _luz_escolhida["cena"] = nome
+            if _ao_vivo["valor"] is not None:
+                _ao_vivo["valor"].luz_mexida()
             titulo = "Luz apagada" if tipo == "apagar_luz" else "Luz: " + _nome_de_luz(nome)
             resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
         elif tipo == "modo_luz":
@@ -2434,6 +2559,8 @@ def _acao_do_painel(dados, origem):
                     cliente.reenviar()
                 except Exception:
                     pass
+            if _ao_vivo["valor"] is not None:
+                _ao_vivo["valor"].luz_mexida()
             titulo = "Movimento da luz: " + (escolhido or "parado")
             resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
         elif tipo == "cortar":
@@ -2494,6 +2621,14 @@ def _acao_do_painel(dados, origem):
             _salvar_ponteiro()
             titulo = "Ordem do culto: " + (_ordem["nome"] or "")
             resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
+        elif _ao_vivo["valor"] is not None and tipo in mod_ao_vivo.ACOES:
+            # As acoes do painel ao vivo (ponte/painel_ao_vivo.py). Continua
+            # sendo lista fechada: so entra aqui o que esta em ACOES.
+            resultado, codigo = _ao_vivo["valor"].acao(tipo, dados, origem)
+            if codigo != 200:
+                return resultado, codigo
+            if resultado.pop("silencioso", False):
+                return resultado, 200
         else:
             return {"erro": "o painel não sabe fazer isso"}, 400
     except Exception as erro:
@@ -2559,6 +2694,288 @@ def painel_remoto():
     _anotar("Comandos pela web " + ("ligados" if _remoto["aceita"] else "desligados"),
             True, "tudo certo", "local")
     return jsonify(_remoto)
+
+
+# -- o painel ao vivo ----------------------------------------------------------
+#
+# As pecas moram em ponte/ (condutor, relogio, repertorio, obs_imagem,
+# obs_ouvinte, saude_envio, painel_ao_vivo). Aqui fica so a cola.
+
+@app.get("/api/painel/conteudo")
+def painel_conteudo():
+    """O que e grande e muda pouco: a letra das musicas do dia. A tela so
+    busca de novo quando `conteudo_versao` do retrato muda."""
+    if _ao_vivo["valor"] is None:
+        return jsonify({"versao": None, "musicas": []})
+    return jsonify(_ao_vivo["valor"].conteudo())
+
+
+@app.get("/api/painel/imagem")
+def painel_imagem():
+    """A imagem ao vivo do OBS. So existe aqui, na rede da igreja: a versao
+    web nao a recebe, para nao pesar a internet durante a transmissao."""
+    imagem = _pecas.get("imagem")
+    dados, tipo, idade = imagem.pegar() if imagem is not None else (None, "", None)
+    if not dados or idade is None or idade > 5:
+        return Response(status=204)
+    resposta = Response(dados, mimetype=tipo)
+    resposta.headers["Cache-Control"] = "no-store"
+    return resposta
+
+
+@app.post("/api/relogio")
+def relogio_avisar():
+    """Uma FONTE dizendo em que segundo a musica esta (ver ponte/relogio.py).
+
+    Hoje quem avisa e a tela tocando o audio no ensaio; depois sera a ponte do
+    PC do som, lendo o Reaper. A rota e a mesma.
+    """
+    relogio = _pecas.get("relogio")
+    if relogio is None:
+        return jsonify({"erro": "este PC não conduz o louvor"}), 400
+    corpo = request.get_json(silent=True) or {}
+    aceito = relogio.avisar(str(corpo.get("fonte") or ""), corpo.get("musica"),
+                            corpo.get("posicao"), bool(corpo.get("tocando")))
+    return jsonify({"aceito": aceito})
+
+
+CAMINHO_LOUVOR = os.path.join(RAIZ, "_louvor_atual.json")
+# A palavra de hoje, no formato que o modulo Palavras do ChurchManager propos
+# (ver ponte/palavra.py). Enquanto a rota de la nao existe, e este arquivo.
+CAMINHO_PALAVRA = os.path.join(RAIZ, "_palavra_do_dia.json")
+
+
+def _ordem_agora():
+    with _tranca_ordem:
+        return _retrato_da_ordem()
+
+
+# -- o celular do pregador ----------------------------------------------------
+#
+# Uma pagina que so sabe passar os slides da palavra, aberta por um link que
+# vale so naquele culto. Aqui e o caminho pelo Wi-Fi da igreja: o celular fala
+# direto com este PC, sem atraso e sem internet. O caminho pela internet passa
+# pela versao web, que entrega o toque na fila de pedidos (tipo "pregador").
+
+def _pregador(codigo):
+    ao_vivo = _ao_vivo["valor"]
+    return ao_vivo.pregador_retrato(codigo) if ao_vivo is not None else None
+
+
+@app.get("/pregador/<codigo>")
+def pagina_pregador(codigo):
+    if _pregador(codigo) is None:
+        return Response("Este link não vale mais. Peça outro à equipe de multimídia.",
+                        status=404, mimetype="text/plain; charset=utf-8")
+    return send_from_directory(RAIZ, "pregador.html")
+
+
+@app.get("/api/pregador/<codigo>")
+def pregador_retrato(codigo):
+    retrato = _pregador(codigo)
+    if retrato is None:
+        return jsonify({"erro": "este link não vale mais. Peça outro à equipe."}), 404
+    retrato["local"] = True
+    return jsonify(retrato)
+
+
+@app.post("/api/pregador/<codigo>")
+def pregador_passar(codigo):
+    if _ao_vivo["valor"] is None:
+        return jsonify({"erro": "este PC não conduz a palavra"}), 400
+    corpo = request.get_json(silent=True) or {}
+    resultado, status = _ao_vivo["valor"].pregador_passar(codigo, corpo.get("para"), corpo.get("visto"))
+    return jsonify(resultado), status
+
+
+@app.get("/api/painel/pregador")
+def painel_pregador():
+    """Os enderecos do link do pregador, para o operador mostrar ou copiar.
+    So existe AQUI: o codigo nunca viaja para a versao web por esta rota."""
+    palavra = _pecas.get("palavra")
+    codigo = palavra.codigo() if palavra is not None else None
+    if codigo is None:
+        return jsonify({"ativo": False})
+    web = (_config.get("web") or {})
+    return jsonify({
+        "ativo": True,
+        "local": "http://{}:{}/pregador/{}".format(_ip_da_rede(), _porta["valor"], codigo),
+        "web": ("{}/pregador/{}".format(str(web.get("url")).rstrip("/"), codigo)
+                if _espelho["valor"] is not None and web.get("url") else None),
+    })
+
+
+def _guardar_louvor(musica_id):
+    try:
+        with open(CAMINHO_LOUVOR, "w", encoding="utf-8") as arquivo:
+            json.dump({"musica": musica_id, "dia": time.strftime("%Y-%m-%d")}, arquivo)
+    except OSError:
+        pass
+
+
+def _louvor_lembrado():
+    try:
+        with open(CAMINHO_LOUVOR, "r", encoding="utf-8-sig") as arquivo:
+            dados = json.load(arquivo) or {}
+    except (OSError, ValueError):
+        return None
+    return dados.get("musica") if dados.get("dia") == time.strftime("%Y-%m-%d") else None
+
+
+def _lembrar_se_ainda_e_louvor(ao_vivo):
+    """A musica em que o louvor estava, se a ponte reiniciou NO MEIO dele. Se
+    o culto ja esta em outro momento, nao ha o que retomar."""
+    with _tranca_ordem:
+        momentos, atual = _ordem["momentos"], _ordem["atual"]
+        momento = momentos[atual] if atual is not None and atual < len(momentos) else None
+    if momento not in ao_vivo.momentos_do_louvor():
+        return None
+    return _louvor_lembrado()
+
+
+def _slides_do_holyrics(identificador):
+    """O texto dos slides de uma musica. None se o Holyrics nao respondeu."""
+    cliente = _contexto.get("holyrics_saude")
+    if cliente is None:
+        return None
+    corpo = cliente.pedir("GetSong", {"id": str(identificador)})
+    dados = corpo.get("data") if isinstance(corpo, dict) and "data" in corpo else corpo
+    return (dados or {}).get("slides") or None
+
+
+_musicas_do_holyrics = {"em": 0.0, "por_titulo": {}}
+
+
+def _achar_no_holyrics(titulo):
+    """O id, no Holyrics, da musica que tem este titulo. None se nao achar.
+
+    As musicas do ChurchManager nao trazem o id do Holyrics, e e por ele que a
+    letra vai ao telao. A lista do Holyrics e lida uma vez a cada 10 minutos.
+    NAO TESTADO NA IGREJA: supoe que GetSongs devolve [{id, title}] e que o
+    token tem permissao para ela.
+    """
+    cliente = _contexto.get("holyrics_saude")
+    if cliente is None:
+        return None
+    if time.time() - _musicas_do_holyrics["em"] > 600:
+        _musicas_do_holyrics["em"] = time.time()
+        corpo = cliente.pedir("GetSongs")
+        lista = corpo.get("data") if isinstance(corpo, dict) else corpo
+        _musicas_do_holyrics["por_titulo"] = {
+            _sem_acento(str(m.get("title") or "")).strip().lower(): m.get("id")
+            for m in (lista or []) if isinstance(m, dict) and m.get("id")}
+    return _musicas_do_holyrics["por_titulo"].get(_sem_acento(titulo).strip().lower())
+
+
+def _fonte_da_palavra(fonte_cultos):
+    """O arquivo local vale primeiro (e o que a equipe consegue corrigir a
+    mao na hora); sem ele, a palavra que veio do ChurchManager."""
+    local = mod_palavra.FontePalavraLocal(CAMINHO_PALAVRA).palavra
+
+    def palavra():
+        dela = local()
+        if dela is None and fonte_cultos is not None:
+            dela = fonte_cultos.palavra()
+        return dela
+    return palavra
+
+
+def _musica_no_telao(musica):
+    cliente = _contexto.get("holyrics")
+    if cliente is None:
+        raise RuntimeError("o telão está desligado neste PC")
+    if not musica.get("holyrics_id"):
+        raise RuntimeError("esta música não tem letra no Holyrics")
+    cliente.pedir("ShowLyrics", {"id": musica["holyrics_id"]})
+
+
+def _slide_no_telao(musica, slide):
+    cliente = _contexto.get("holyrics")
+    if cliente is None:
+        raise RuntimeError("o telão está desligado neste PC")
+    cliente.pedir("ActionGoToIndex", {"index": int(slide["indice"])})
+
+
+def _hora_do_culto():
+    culto = _chegada.culto() if _chegada is not None else None
+    return (culto or {}).get("hora")
+
+
+def _escolher_luz(cena):
+    _luz_escolhida["cena"] = cena
+
+
+def _pedir_estado_ja():
+    """Depois de trocar de cena, nao esperar 3 segundos para a tela saber."""
+    def ler():
+        novo = _ler_estado_obs()
+        if novo is not None:
+            with _tranca_estado:
+                _estado["obs"] = novo
+    threading.Thread(target=ler, daemon=True).start()
+
+
+def _alimentar_medidor_simulado():
+    while True:
+        try:
+            _pecas["medidor"].receber(_contexto["obs"].niveis())
+        except Exception:
+            pass
+        time.sleep(0.1)
+
+
+def _montar_ao_vivo():
+    """Monta as pecas do painel ao vivo. So na maquina principal: e ela que
+    fala com o Holyrics e conduz a ordem do culto."""
+    if _maquina["principal"] is not None:
+        return None
+    conf_painel = _config.get("painel") or {}
+    conf_relogio = _config.get("relogio") or {}
+    conf_imagem = conf_painel.get("imagem") or {}
+
+    _pecas["relogio"] = mod_relogio.Relogio(
+        str(conf_relogio.get("fonte") or "navegador"), conf_relogio.get("adiantar_ms") or 0)
+    _pecas["medidor"] = mod_obs_ouvinte.Medidor()
+    ao_vivo = mod_ao_vivo.PainelAoVivo(_pecas)
+    conf_rep = dict(_config.get("repertorio") or {})
+    # Endereco, slug e chave moram no bloco `cultos`; `repertorio.fonte` diz
+    # de onde ler.
+    for chave, valor in (_config.get("cultos") or {}).items():
+        conf_rep.setdefault(chave, valor)
+    fonte_cultos = None
+    if conf_rep.get("fonte") == "cultos" and conf_rep.get("url") and conf_rep.get("slug"):
+        # As musicas montadas no ChurchManager; ver o fim de ponte/repertorio.py.
+        fonte_cultos = mod_repertorio.FonteCultos(
+            conf_rep["url"], conf_rep["slug"], conf_rep.get("chave"),
+            os.path.join(RAIZ, "_culto_do_dia.json"), ao_vivo.tabela, _achar_no_holyrics)
+        fonte_cultos.comecar()
+        _pecas["repertorio"] = fonte_cultos
+        print("  [louvor] musicas vindas do ChurchManager")
+    else:
+        _pecas["repertorio"] = mod_repertorio.FonteLocal(
+            _config, _ler_marcas, _slides_do_holyrics, ao_vivo.tabela)
+    _pecas["condutor"] = mod_condutor.Condutor(
+        _pecas["relogio"], _pecas["repertorio"].musicas, _musica_no_telao, _slide_no_telao,
+        ao_vivo.luz_da_parte, lambda titulo, ok, detalhe: _anotar(titulo, ok, detalhe, "local"),
+        lembrado=_lembrar_se_ainda_e_louvor(ao_vivo), guardar=_guardar_louvor)
+    _pecas["condutor"].comecar()
+    telao = mod_palavra.TelaoDaPalavra(lambda: _contexto.get("holyrics"), lambda: _config)
+    _pecas["palavra"] = mod_palavra.Palavra(
+        _fonte_da_palavra(fonte_cultos), telao.mostrar, telao.tirar,
+        lambda titulo, ok, detalhe: _anotar(titulo, ok, detalhe, "local"))
+
+    if _contexto.get("obs") is not None:
+        if SIMULAR:
+            cliente_da_imagem = _contexto["obs"]
+            threading.Thread(target=_alimentar_medidor_simulado, daemon=True).start()
+        else:
+            cliente_da_imagem = ClienteOBS(*_args_obs(), timeout=3.5, tentativas=1)
+            mod_obs_ouvinte.OuvinteOBS(_args_obs, _pecas["medidor"]).comecar()
+        _pecas["imagem"] = mod_obs_imagem.ImagemDoOBS(
+            cliente_da_imagem, lambda: (_estado.get("obs") or {}).get("no_ar"),
+            intervalo=conf_imagem.get("intervalo", 1.0), largura=conf_imagem.get("largura", 480))
+        _pecas["imagem"].ativo = conf_imagem.get("ativo", True) is not False
+    return ao_vivo
 
 
 # -- atualizacao ---------------------------------------------------------------
@@ -2659,7 +3076,21 @@ def _vigiar_youtube():
                         t = retrato["transmissao"]
                         dados = {"titulo": t.get("titulo"), "link": t.get("link"),
                                  "publica": t.get("privacidade") == "public",
-                                 "estado": t.get("estado")}
+                                 "estado": t.get("estado"),
+                                 "assistindo": None, "saude": None,
+                                 "lido_em": time.strftime("%H:%M")}
+                        if t.get("estado") == "active":
+                            # Duas consultas a mais, so com a transmissao no
+                            # ar. Falhar aqui nao pode apagar titulo e link.
+                            try:
+                                dados["assistindo"] = canal["cliente"].espectadores(t["id"])
+                            except Exception:
+                                pass
+                            try:
+                                if t.get("chave_presa"):
+                                    dados["saude"] = canal["cliente"].saude_do_envio(t["chave_presa"])
+                            except Exception:
+                                pass
                         break
             except Exception:
                 dados = _yt_painel["dados"]
@@ -2673,6 +3104,11 @@ def main():
 
     _config = carregar_config()
     _contexto = montar_contexto(_config)
+    if SIMULAR:
+        from ponte import simulados
+        _contexto["obs"] = _contexto["obs_saude"] = simulados.ObsSimulado()
+        _contexto["holyrics"] = _contexto["holyrics_saude"] = simulados.HolyricsSimulado()
+        print("\n  *** SIMULACAO: o OBS e o Holyrics deste painel sao de mentira ***")
     _cues_por_id = indexar_cues(_config)
     _ordens_por_id = indexar_ordens(_config)
     _retomar_ordem(_config)
@@ -2710,6 +3146,10 @@ def main():
     _espelho["valor"] = _montar_espelho()
     if _espelho["valor"] is not None:
         _espelho["valor"].comecar()
+        # Enquanto houver link de pregador valendo, um segundo pedido fica
+        # pendurado na web para o toque dele chegar na hora, e nao em ate 2 s.
+        _espelho["valor"].comecar_espera_longa(
+            lambda: _pecas.get("palavra") is not None and _pecas["palavra"].tem_link())
         print("  [espelho] ligado: entregando o estado para a versao web")
     # O vigia do retorno na TV: so no PC principal, e so se o chegada.yaml
     # diz onde esta o script que fala com a TV.
@@ -2727,6 +3167,12 @@ def main():
             _remoto["aceita"] = bool(json.load(arq).get("aceita", True))
     except (OSError, ValueError):
         pass
+    try:
+        _ao_vivo["valor"] = _montar_ao_vivo()
+    except Exception as erro:
+        # O painel antigo nao depende de nada disto: se a parte nova nao
+        # montar, a ponte sobe mesmo assim e /painel-antigo continua valendo.
+        print("  [aviso] painel ao vivo desligado: {}".format(erro))
     threading.Thread(target=_vigiar_atualizacao, daemon=True).start()
     if _contexto.get("youtube"):
         threading.Thread(target=_vigiar_youtube, daemon=True).start()

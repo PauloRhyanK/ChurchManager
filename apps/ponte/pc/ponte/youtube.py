@@ -575,6 +575,27 @@ class ClienteYouTube:
             "videos": it.get("statistics", {}).get("videoCount"),
         }
 
+    def espectadores(self, id_video):
+        """Quantas pessoas estao assistindo agora. None quando o YouTube nao
+        informa (contador escondido, transmissao ainda sem ninguem)."""
+        corpo = self._pedir("GET", API + "/videos", params={
+            "part": "liveStreamingDetails", "id": id_video})
+        itens = corpo.get("items") or []
+        valor = ((itens[0].get("liveStreamingDetails") or {}).get("concurrentViewers")
+                 if itens else None)
+        try:
+            return int(valor)
+        except (TypeError, ValueError):
+            return None
+
+    def saude_do_envio(self, id_stream):
+        """Como o YOUTUBE diz que esta recebendo: 'good', 'ok', 'bad', 'noData'."""
+        corpo = self._pedir("GET", API + "/liveStreams", params={"part": "status", "id": id_stream})
+        itens = corpo.get("items") or []
+        if not itens:
+            return None
+        return ((itens[0].get("status") or {}).get("healthStatus") or {}).get("status")
+
     @staticmethod
     def link(transmissao):
         if not transmissao or not transmissao.get("id"):

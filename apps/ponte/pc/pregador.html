@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex">
+<title>Slides da palavra</title>
+<!--
+  O celular do pregador. Esta pagina so sabe fazer duas coisas: Anterior e
+  Proximo. Abre por um link que vale so naquele culto (o codigo e o fim do
+  endereco) e funciona igual pelo Wi-Fi da igreja e pela versao web. Sozinha
+  num arquivo, sem depender de mais nada: tem que abrir inteira no celular de
+  quem nunca viu a Ponte.
+-->
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0B0F17; }
+  body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #F3F5F9; font-size: 15px; line-height: 1.4;
+    -webkit-text-size-adjust: 100%; touch-action: manipulation; }
+  button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  button:disabled { opacity: .4; }
+  :focus-visible { outline: 3px solid #C4B8F7; outline-offset: 2px; }
+  [hidden] { display: none !important; }
+  .tela { min-height: 100%; max-width: 520px; margin: 0 auto; padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; gap: 14px; }
+  .tempo { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  .tempo b { font-size: 30px; font-variant-numeric: tabular-nums; }
+  .tempo b.passou { color: #FCD34D; }
+  .suave { color: #9AA3B5; }
+  .rotulo { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #9AA3B5; }
+  .telao { aspect-ratio: 16 / 9; background: #000; border: 1px solid #232B3A; border-radius: 12px; position: relative;
+    display: flex; flex-direction: column; gap: 6px; align-items: center; justify-content: center; padding: 26px 18px 18px; text-align: center; }
+  .telao .rotulo { position: absolute; top: 10px; left: 12px; font-size: 10px; }
+  .telao .texto { font-size: 16px; line-height: 1.4; }
+  .telao .texto.forte { font-weight: 700; font-size: 20px; }
+  .telao .ref { font-size: 12px; font-weight: 700; color: #9AA3B5; }
+  .telao .fora { color: #9AA3B5; }
+  .aviso { padding: 10px 12px; border-radius: 10px; background: #2A2110; border: 1px solid #5C4813; color: #FCD34D; font-weight: 600; }
+  .aviso.grave { background: #3A1518; border-color: #EF4444; color: #fff; }
+  .cartao { background: #141A26; border: 1px solid #232B3A; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .cresce { flex: 1; min-height: 0; }
+  .seguinte { font-size: 17px; font-weight: 600; }
+  .botoes { display: flex; gap: 10px; }
+  .botoes button { min-height: 96px; border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; gap: 12px; }
+  #anterior { flex: none; width: 84px; border: 1px solid #343E52; background: #1B2333; font-size: 26px; }
+  #proximo { flex: 1; border: none; background: #8B77E8; color: #0B0F17; font-size: 22px; font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="tela">
+  <div class="tempo"><b id="passou">—</b><span class="suave" id="de"></span></div>
+  <div class="aviso" id="aviso" hidden></div>
+  <div class="telao">
+    <span class="rotulo" id="onde">No telão</span>
+    <span class="texto" id="texto"></span>
+    <span class="ref" id="ref"></span>
+  </div>
+  <div class="cartao cresce">
+    <span class="rotulo" id="titulo"></span>
+    <span class="suave" id="quem"></span>
+  </div>
+  <div class="cartao">
+    <span class="rotulo">A seguir</span>
+    <span class="seguinte" id="seguinte"></span>
+  </div>
+  <div class="botoes">
+    <button type="button" id="anterior" aria-label="Slide anterior">←</button>
+    <button type="button" id="proximo">Próximo →</button>
+  </div>
+</div>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const CODIGO = location.pathname.split('/').filter(Boolean).pop();
+const ROTA = '/api/pregador/' + encodeURIComponent(CODIGO);
+let D = null, lidoEm = 0, falhas = 0, enviando = false, morto = false;
+
+function relogio(segundos) {
+  const s = Math.max(0, Math.floor(segundos));
+  return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+}
+
+function desenhar() {
+  const d = D;
+  if (!d) return;
+  const aviso = $('aviso');
+  if (morto) { aviso.hidden = false; aviso.className = 'aviso grave'; aviso.textContent = 'Este link não vale mais. Peça outro à equipe de multimídia.'; }
+  else if (falhas > 2) { aviso.hidden = false; aviso.className = 'aviso grave';
+    aviso.textContent = d.local === false ? 'Sem contato com a igreja. Se estiver no templo, conecte no Wi-Fi da igreja e peça o endereço local à equipe.' : 'Sem contato com a igreja. Confira o Wi-Fi.'; }
+  else if (d.erro) { aviso.hidden = false; aviso.className = 'aviso'; aviso.textContent = 'Este slide não chegou ao telão. A equipe está abrindo à mão.'; }
+  else if (d.quem && !d.quem_e_o_pregador) { aviso.hidden = false; aviso.className = 'aviso'; aviso.textContent = 'A equipe está passando os slides. Tocar em Próximo devolve o comando a você.'; }
+  else aviso.hidden = true;
+
+  const slides = d.slides || [];
+  const atual = d.slide != null ? slides[d.slide] : null;
+  const seguinte = slides[d.slide == null ? 0 : d.slide + 1];
+  const noTelao = atual && d.visivel;
+  $('onde').textContent = noTelao ? 'No telão · ' + (d.slide + 1) + ' de ' + d.total : 'Fora do telão';
+  $('texto').textContent = noTelao ? (atual.texto || atual.referencia) : (atual ? 'O slide ' + (d.slide + 1) + ' está guardado.' : 'Nenhum slide foi ao telão ainda.');
+  $('texto').className = 'texto' + (noTelao ? (atual.tipo === 'VERSE' ? '' : ' forte') : ' fora');
+  $('ref').textContent = noTelao && atual.referencia && atual.texto ? atual.referencia : '';
+  $('titulo').textContent = d.titulo || 'Palavra';
+  $('quem').textContent = d.pregador || '';
+  $('seguinte').textContent = seguinte ? (seguinte.tipo === 'VERSE' && seguinte.referencia ? seguinte.referencia : seguinte.texto) : 'fim dos slides';
+  $('de').textContent = d.de_minutos ? 'de ' + d.de_minutos + ' min' : '';
+  $('anterior').disabled = enviando || morto || d.slide == null || (d.slide === 0 && d.visivel);
+  $('proximo').disabled = enviando || morto || !slides.length || (d.visivel && d.slide + 1 >= d.total);
+  andar();
+}
+
+function andar() {
+  if (!D || D.passou_s == null) { $('passou').textContent = '—'; return; }
+  const passou = D.passou_s + (performance.now() - lidoEm) / 1000;
+  $('passou').textContent = relogio(passou);
+  $('passou').className = D.de_minutos && passou > D.de_minutos * 60 ? 'passou' : '';
+}
+setInterval(andar, 1000);
+
+async function consultar() {
+  if (morto) return;
+  try {
+    const r = await fetch(ROTA, {cache: 'no-store'});
+    if (r.status === 404) { morto = true; D = D || {slides: []}; desenhar(); return; }
+    if (!r.ok) throw new Error('erro ' + r.status);
+    D = await r.json();
+    lidoEm = performance.now();
+    falhas = 0;
+  } catch (e) { falhas++; D = D || {slides: []}; }
+  desenhar();
+}
+
+async function passar(para) {
+  if (enviando || !D || morto) return;
+  enviando = true; desenhar();
+  try {
+    const r = await fetch(ROTA, {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({para: para, visto: D.slide == null ? -1 : D.slide})});
+    if (r.status === 404) morto = true;
+    if (navigator.vibrate) navigator.vibrate(15);
+  } catch (e) { falhas = 3; }
+  enviando = false;
+  // Pela internet o toque leva um instante para chegar a igreja e voltar.
+  await consultar();
+  if (D && D.local === false) setTimeout(consultar, 700);
+}
+$('proximo').onclick = () => passar('proximo');
+$('anterior').onclick = () => passar('anterior');
+
+(async function laco() {
+  await consultar();
+  setTimeout(laco, D && D.local === false ? 2000 : 1000);
+})();
+</script>
+</body>
+</html>
