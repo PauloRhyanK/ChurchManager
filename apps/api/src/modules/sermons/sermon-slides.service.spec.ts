@@ -443,6 +443,7 @@ test('cada SummarizerError vira a resposta combinada e nada é gravado', async (
     ['REFUSED', 422, 'O modelo não pôde resumir esta palavra. Use “Versículos e pontos”.'],
     ['TRUNCATED', 502, 'A resposta do modelo veio incompleta. Tente de novo.'],
     ['INVALID', 502, 'A resposta do modelo veio incompleta. Tente de novo.'],
+    ['CONFIG', 503, 'O modelo configurado não aceitou o pedido. Avise o administrador.'],
   ];
   for (const [reason, status, message] of table) {
     const f = fakeSummarizer(async () => {
@@ -539,10 +540,80 @@ test('aiOptions devolve só enabled e models com id e label', () => {
       { id: 'anthropic:claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
     ],
   });
-  assert.deepEqual(build({ sermons: [], config: AI_OFF }).service.aiOptions().enabled, false);
+  assert.deepEqual(build({ sermons: [], config: AI_OFF }).service.aiOptions(), { enabled: false, models: [] });
 });
 
 test('DTO de gerar aceita model de até 80 caracteres e recusa 81', async () => {
   assert.equal((await parse(GenerateSlidesDto, { mode: 'FULL', model: 'm'.repeat(80) })).model?.length, 80);
   await rejects(GenerateSlidesDto, { mode: 'FULL', model: 'm'.repeat(81) });
+});
+
+test('falha do provedor registra só reason, status, type e o modelo; outra falha só o nome do erro', async () => {
+  const logs: string[] = [];
+  const err = new SummarizerError('CONFIG', 'sk-ant-segredo corpo do pedido', { status: 400, type: 'invalid_request_error' });
+  const f = fakeSummarizer(async () => {
+    throw err;
+  });
+  const { service } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
+  (service as any).logger = { warn: (m: string) => logs.push(m), log: (m: string) => logs.push(m), error: (m: string) => logs.push(m) };
+  await rejectsWith(service.generate(user(), S1, { mode: 'FULL' }), 503, 'O modelo configurado não aceitou o pedido. Avise o administrador.');
+  assert.deepEqual(logs, ['Resumo por IA falhou: reason=CONFIG status=400 type=invalid_request_error model=claude-opus-5-5']);
+
+  logs.length = 0;
+  const bug = new TypeError('Dois minutos sk-ant-segredo');
+  const g = fakeSummarizer(async () => {
+    throw bug;
+  });
+  const other = build({ sermons: [sermonRow()], config: AI_ON, summarizer: g.summarizer });
+  (other.service as any).logger = { warn: (m: string) => logs.push(m), log: (m: string) => logs.push(m), error: (m: string) => logs.push(m) };
+  await rejectsWith(other.service.generate(user(), S1, { mode: 'FULL' }), 503, 'O provedor de IA não respondeu. Tente de novo em instantes.');
+  assert.deepEqual(logs, ['Resumo por IA falhou: TypeError model=claude-opus-5-5']);
+});
+
+test('gerar FULL de novo: frase editada continua mesmo se o modelo omitir o alvo', async () => {
+  let omit = false;
+  const f = fakeSummarizer(async (input) =>
+    input.targets.filter((t) => !(omit && (t.id === 'opening:0' || t.id === 'a1:0'))).map((t) => ({ id: t.id, text: `Resumo de ${t.id}` })),
+  );
+  const { service } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
+  const first = await service.generate(user(), S1, { mode: 'FULL' });
+  await service.save(user(), S1, {
+    items: first.slides.map((s) => ({ id: s.id, included: s.included, ...(s.id === 'opening:0' ? { text: 'Minha abertura' } : {}) })),
+  });
+  omit = true;
+  const again = await service.generate(user(), S1, { mode: 'FULL' });
+  const opening = again.slides.find((s) => s.id === 'opening:0');
+  assert.deepEqual([opening?.text, opening?.edited, opening?.kind], ['Minha abertura', true, 'SUMMARY']);
+  assert.equal(again.slides.some((s) => s.id === 'a1:0'), false, 'omitido e não editado: some');
+  assert.deepEqual(again.slides.filter((s) => s.kind === 'SUMMARY').map((s) => s.id), ['opening:0', 'i1:0']);
+});
+
+test('FULL: id não pedido (o da nota privada), id repetido e frase de 300 caracteres', async () => {
+  const long = 'palavra '.repeat(40).trim() + ' ' + 'x'.repeat(20);
+  const f = fakeSummarizer(async () => [
+    { id: 'n1:0', text: 'Dois minutos nessa história' },
+    { id: 'i1:0', text: 'Primeira' },
+    { id: 'i1:0', text: 'Segunda' },
+    { id: 'a1:0', text: long },
+  ]);
+  const { service, deliveries } = build({
+    sermons: [sermonRow()],
+    deliveries: [deliveryRow('2026-11-22')],
+    config: AI_ON,
+    summarizer: f.summarizer,
+  });
+  const out = await service.generate(user(), S1, { mode: 'FULL' });
+  const summaries = out.slides.filter((s) => s.kind === 'SUMMARY');
+  assert.deepEqual(summaries.map((s) => [s.id, s.text]), [
+    ['i1:0', 'Primeira'],
+    ['a1:0', Array(11).fill('palavra').join(' ')],
+  ]);
+  assert.ok(summaries.every((s) => s.text.length <= 90));
+  assert.equal(out.slides.filter((s) => s.id === 'n1:0').length, 1);
+  assert.equal(out.slides.find((s) => s.id === 'n1:0')!.kind, 'PRIVATE');
+  assert.equal(out.slides.some((s) => s.kind === 'PRIVATE' && s.included), false);
+  assert.equal(JSON.stringify(out.slides.filter((s) => s.kind !== 'PRIVATE')).includes('Dois minutos'), false);
+  const copy = deliveries[0].slides as Row[];
+  assert.equal(copy.some((s) => s.kind === 'PRIVATE'), false);
+  assert.equal(JSON.stringify(copy).includes('Dois minutos'), false);
 });

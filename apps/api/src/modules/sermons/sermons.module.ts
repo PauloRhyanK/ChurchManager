@@ -1,12 +1,12 @@
-import { Module } from '@nestjs/common';
+import { Logger, Module } from '@nestjs/common';
 import { AccessModule } from '../access/access.module';
 import { AuthModule } from '../auth/auth.module';
 import { BibleController } from './bible/bible.controller';
 import { BIBLE_SOURCE, BibleService, PrismaBibleSource } from './bible/bible.service';
 import Anthropic from '@anthropic-ai/sdk';
-import { AnthropicSummarizer } from './ai/anthropic-summarizer';
+import { ANTHROPIC_CLIENT_OPTIONS, AnthropicSummarizer } from './ai/anthropic-summarizer';
 import { GenerationLimiter } from './ai/generation-limiter';
-import { readSermonAiConfig, type SermonAiConfig } from './ai/sermon-ai.config';
+import { describeSermonAiConfig, readSermonAiConfig, type SermonAiConfig } from './ai/sermon-ai.config';
 import { SUMMARIZERS } from './ai/sermon-summarizer';
 import { SermonDeliveryService } from './sermon-delivery.service';
 import { SERMON_AI_CONFIG, SermonSlidesService } from './sermon-slides.service';
@@ -24,13 +24,21 @@ import { SermonsService } from './sermons.service';
     SermonSlidesService,
     BibleService,
     { provide: BIBLE_SOURCE, useClass: PrismaBibleSource },
-    { provide: SERMON_AI_CONFIG, useFactory: () => readSermonAiConfig(process.env) },
+    {
+      provide: SERMON_AI_CONFIG,
+      useFactory: () => {
+        // Uma vez na subida: ligada ou não, quantos modelos e as entradas ignoradas (nunca a chave).
+        const logger = new Logger('SermonsModule');
+        for (const line of describeSermonAiConfig(process.env)) logger.log(line);
+        return readSermonAiConfig(process.env);
+      },
+    },
     // Sem chave não se cria o cliente do SDK: a API sobe sem nenhuma variável de IA.
     {
       provide: SUMMARIZERS,
       inject: [SERMON_AI_CONFIG],
       useFactory: (config: SermonAiConfig) =>
-        config.enabled ? { anthropic: new AnthropicSummarizer(new Anthropic({ maxRetries: 1, timeout: 60_000 })) } : {},
+        config.enabled ? { anthropic: new AnthropicSummarizer(new Anthropic(ANTHROPIC_CLIENT_OPTIONS)) } : {},
     },
     // Singleton: o limite por usuário vale para a API toda (em memória, por processo).
     { provide: GenerationLimiter, useFactory: () => new GenerationLimiter() },

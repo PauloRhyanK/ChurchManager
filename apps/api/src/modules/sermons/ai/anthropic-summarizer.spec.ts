@@ -4,7 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { BetaMessage, MessageCreateParamsNonStreaming } from '@anthropic-ai/sdk/resources/beta/messages';
 import type { SermonBlock, SermonDoc } from '../sermon-document';
 import { summaryTargets } from '../sermon-slides';
-import { AnthropicSummarizer, SUMMARY_SYSTEM_PROMPT, type AnthropicMessagesClient } from './anthropic-summarizer';
+import { ANTHROPIC_CLIENT_OPTIONS, AnthropicSummarizer, SUMMARY_SYSTEM_PROMPT, type AnthropicMessagesClient } from './anthropic-summarizer';
 import { SummarizerError } from './sermon-summarizer';
 
 // O cliente real do SDK precisa caber no tipo que o resumidor recebe.
@@ -44,7 +44,7 @@ function fakeClient(reply: () => Promise<BetaMessage>) {
   return { client, calls };
 }
 
-const INPUT = { title: 'Luz', targets: TARGETS, model: 'claude-haiku-5-5', effort: 'medium' as const };
+const INPUT = { title: 'Luz', targets: TARGETS, model: 'claude-opus-5-5', effort: 'medium' as const };
 const OK = JSON.stringify({ summaries: [{ id: 'opening:0', text: 'Abre' }, { id: 'i1:0', text: 'Lanterna' }] });
 
 describe('AnthropicSummarizer: pedido', () => {
@@ -54,7 +54,7 @@ describe('AnthropicSummarizer: pedido', () => {
     await new AnthropicSummarizer(client).summarize(INPUT);
     assert.equal(calls.length, 1);
     const p = calls[0];
-    assert.equal(p.model, 'claude-haiku-5-5');
+    assert.equal(p.model, 'claude-opus-5-5');
     assert.equal(p.max_tokens, 16000);
     assert.equal(p.stream, undefined);
     assert.deepEqual(p.betas, ['server-side-fallback-2026-07-01']);
@@ -139,7 +139,7 @@ describe('AnthropicSummarizer: resposta', () => {
     await rejectsWith(async () => message({ content: [] }), 'INVALID');
   });
 
-  it('erros do SDK: autenticação/permissão → AUTH; limite → RATE_LIMIT; conexão e demais → UNAVAILABLE', async () => {
+  it('erros do SDK: autenticação/permissão → AUTH; limite → RATE_LIMIT; 400 → CONFIG; conexão e demais → UNAVAILABLE', async () => {
     const headers = new Headers();
     const auth = Anthropic.APIError.generate(401, { error: { type: 'authentication_error', message: 'x' } }, 'chave sk-ant-NAO-VAZA', headers);
     const perm = Anthropic.APIError.generate(403, { error: { type: 'permission_error', message: 'x' } }, 'x', headers);
@@ -151,7 +151,7 @@ describe('AnthropicSummarizer: resposta', () => {
     assert.ok(rate instanceof Anthropic.RateLimitError);
     const conn = new Anthropic.APIConnectionError({ message: 'rede' });
     const cases: [unknown, SummarizerError['reason']][] = [
-      [auth, 'AUTH'], [perm, 'AUTH'], [rate, 'RATE_LIMIT'], [conn, 'UNAVAILABLE'], [server, 'UNAVAILABLE'], [bad, 'UNAVAILABLE'],
+      [auth, 'AUTH'], [perm, 'AUTH'], [rate, 'RATE_LIMIT'], [conn, 'UNAVAILABLE'], [server, 'UNAVAILABLE'], [bad, 'CONFIG'],
     ];
     for (const [err, reason] of cases) await rejectsWith(async () => { throw err; }, reason);
     await assert.rejects(run(async () => { throw auth; }), (e: unknown) => e instanceof SummarizerError && !e.message.includes('sk-ant') && !e.message.includes('SEGREDO'));
@@ -160,5 +160,116 @@ describe('AnthropicSummarizer: resposta', () => {
   it('erro que não é do SDK passa adiante sem disfarce', async () => {
     const bug = new TypeError('defeito');
     await assert.rejects(run(async () => { throw bug; }), (e: unknown) => e === bug);
+  });
+});
+
+const apiError = (status: number, type: string) =>
+  Anthropic.APIError.generate(status, { type: 'error', error: { type, message: 'mensagem do provedor sk-ant-x' } }, 'mensagem', new Headers());
+
+describe('AnthropicSummarizer: fallbacks só onde existem', () => {
+  const sendTo = async (model: string) => {
+    const { client, calls } = fakeClient(async () => textReply(OK));
+    await new AnthropicSummarizer(client).summarize({ ...INPUT, model });
+    return calls[0];
+  };
+
+  it('Haiku e modelos sem fallback: sem betas nem fallbacks', async () => {
+    for (const model of ['claude-haiku-5-5', 'claude-sonnet-5', 'modelo-novo']) {
+      const p = await sendTo(model);
+      assert.equal('fallbacks' in p, false, model);
+      assert.equal('betas' in p, false, model);
+      assert.ok(p.output_config?.format, model);
+    }
+  });
+
+  it('Opus 5.x, Fable 5, Mythos 5 e Sonnet 5.5: com fallbacks default e o header beta', async () => {
+    for (const model of ['claude-opus-5-5', 'claude-opus-5', 'claude-fable-5-2', 'claude-mythos-5-2', 'claude-sonnet-5-5']) {
+      const p = await sendTo(model);
+      assert.equal(p.fallbacks, 'default', model);
+      assert.deepEqual(p.betas, ['server-side-fallback-2026-07-01'], model);
+    }
+  });
+
+  it('400 com fallbacks: uma nova tentativa sem betas/fallbacks', async () => {
+    let n = 0;
+    const { client, calls } = fakeClient(async () => {
+      n++;
+      if (n === 1) throw apiError(400, 'invalid_request_error');
+      return textReply(OK);
+    });
+    assert.equal((await new AnthropicSummarizer(client).summarize(INPUT)).length, 2);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].fallbacks, 'default');
+    assert.equal('fallbacks' in calls[1], false);
+    assert.equal('betas' in calls[1], false);
+    assert.equal(calls[1].model, 'claude-opus-5-5');
+  });
+
+  it('400 de novo: CONFIG com status e type, sem a mensagem do provedor', async () => {
+    const { client, calls } = fakeClient(async () => {
+      throw apiError(400, 'invalid_request_error');
+    });
+    await assert.rejects(new AnthropicSummarizer(client).summarize(INPUT), (e: unknown) => {
+      assert.ok(e instanceof SummarizerError);
+      assert.equal(e.reason, 'CONFIG');
+      assert.equal(e.status, 400);
+      assert.equal(e.type, 'invalid_request_error');
+      assert.equal(e.message.includes('sk-ant'), false);
+      assert.equal(e.message.includes('mensagem do provedor'), false);
+      return true;
+    });
+    assert.equal(calls.length, 2);
+  });
+
+  it('sem fallbacks não há nova tentativa; 404 → CONFIG; 429 com fallbacks não repete', async () => {
+    const haiku = fakeClient(async () => {
+      throw apiError(404, 'not_found_error');
+    });
+    await assert.rejects(new AnthropicSummarizer(haiku.client).summarize({ ...INPUT, model: 'claude-haiku-5-5' }), (e: unknown) =>
+      e instanceof SummarizerError && e.reason === 'CONFIG' && e.status === 404 && e.type === 'not_found_error');
+    assert.equal(haiku.calls.length, 1);
+    const rate = fakeClient(async () => {
+      throw apiError(429, 'rate_limit_error');
+    });
+    await assert.rejects(new AnthropicSummarizer(rate.client).summarize(INPUT), (e: unknown) =>
+      e instanceof SummarizerError && e.reason === 'RATE_LIMIT' && e.status === 429 && e.type === 'rate_limit_error');
+    assert.equal(rate.calls.length, 1);
+  });
+
+  it('status e type nos demais erros; AnthropicError solto → UNAVAILABLE', async () => {
+    const auth = fakeClient(async () => {
+      throw apiError(401, 'authentication_error');
+    });
+    await assert.rejects(new AnthropicSummarizer(auth.client).summarize(INPUT), (e: unknown) =>
+      e instanceof SummarizerError && e.reason === 'AUTH' && e.status === 401 && e.type === 'authentication_error');
+    const bare = fakeClient(async () => {
+      throw new Anthropic.AnthropicError('cliente sem chave');
+    });
+    await assert.rejects(new AnthropicSummarizer(bare.client).summarize(INPUT), (e: unknown) =>
+      e instanceof SummarizerError && e.reason === 'UNAVAILABLE' && e.status === undefined && e.type === undefined);
+    const conn = fakeClient(async () => {
+      throw new Anthropic.APIConnectionError({ message: 'rede' });
+    });
+    await assert.rejects(new AnthropicSummarizer(conn.client).summarize(INPUT), (e: unknown) =>
+      e instanceof SummarizerError && e.reason === 'UNAVAILABLE' && e.status === undefined && e.type === undefined);
+  });
+});
+
+describe('AnthropicSummarizer: limites de custo do pedido', () => {
+  it('rótulo de seção até 120 pontos de código e título até 200', async () => {
+    const { client, calls } = fakeClient(async () => textReply(OK));
+    const longLabel = '😀'.repeat(150);
+    const targets = [{ ...TARGETS[0], label: longLabel }];
+    await new AnthropicSummarizer(client).summarize({ ...INPUT, title: 'T'.repeat(250), targets });
+    const user = JSON.parse(calls[0].messages[0].content as string) as { title: string; parts: { label: string; text: string }[] };
+    assert.equal(user.title, 'T'.repeat(200));
+    assert.equal(user.parts[0].label, '😀'.repeat(120));
+    assert.equal(user.parts[0].text, TARGETS[0].text);
+  });
+});
+
+describe('cliente do SDK', () => {
+  it('uma tentativa de até 45 s, sem novas tentativas (cabe nos 60 s do proxy)', () => {
+    assert.deepEqual(ANTHROPIC_CLIENT_OPTIONS, { timeout: 45_000, maxRetries: 0 });
   });
 });

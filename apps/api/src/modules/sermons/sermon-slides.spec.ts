@@ -413,4 +413,13 @@ describe('cleanSummaries', () => {
     ]);
     assert.deepEqual(r, { 'opening:0': 'A luz chama todos', 'i1:0': 'A lanterna mostra o passo' });
   });
+
+  it('aspas envolventes só saem quando a mesma aspa não aparece dentro do texto', () => {
+    const r = cleanSummaries(targets, [
+      { id: 'opening:0', text: '"A" e "B"' },
+      { id: 'i1:0', text: '“Luz” que “guia”' },
+      { id: 'a1:0', text: "'Olhe' para a luz" },
+    ]);
+    assert.deepEqual(r, { 'opening:0': '"A" e "B"', 'i1:0': '“Luz” que “guia”', 'a1:0': "'Olhe' para a luz" });
+  });
 });

@@ -251,7 +251,12 @@ export function cleanSummaries(targets: SummaryTarget[], raw: { id: string; text
     if (!ids.has(r.id) || seen.has(r.id)) continue;
     seen.add(r.id);
     let text = collapse(r.text);
-    while (text.length >= 2 && QUOTE_PAIRS[text[0]] === text[text.length - 1]) text = text.slice(1, -1).trim();
+    // Só tira o par de fora quando a mesma aspa não aparece dentro: '"A" e "B"' fica como está.
+    while (text.length >= 2 && QUOTE_PAIRS[text[0]] === text[text.length - 1]) {
+      const inner = text.slice(1, -1);
+      if (inner.includes(text[0]) || inner.includes(text[text.length - 1])) break;
+      text = inner.trim();
+    }
     if (text.length === 1 && QUOTE_PAIRS[text]) text = '';
     const chars = Array.from(text);
     if (chars.length > SUMMARY_MAX) {

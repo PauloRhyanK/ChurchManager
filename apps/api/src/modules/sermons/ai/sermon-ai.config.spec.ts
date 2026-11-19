@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readSermonAiConfig } from './sermon-ai.config';
+import { describeSermonAiConfig, ignoredSermonAiEntries, readSermonAiConfig } from './sermon-ai.config';
 
 const KEY = { ANTHROPIC_API_KEY: 'x' };
 
@@ -45,5 +45,31 @@ describe('readSermonAiConfig', () => {
     assert.equal(readSermonAiConfig({ ...KEY, SERMON_AI_EFFORT: 'medium' }).effort, 'medium');
     assert.equal(readSermonAiConfig({ ...KEY, SERMON_AI_EFFORT: 'max' }).effort, 'low');
     assert.equal(readSermonAiConfig({ ...KEY, SERMON_AI_EFFORT: 'turbo' }).effort, 'low');
+  });
+});
+
+describe('readSermonAiConfig: provedor sem diferença de maiúsculas e registro na subida', () => {
+  it('Anthropic:claude-… vale como anthropic', () => {
+    const c = readSermonAiConfig({ ...KEY, SERMON_AI_MODELS: 'Anthropic:claude-opus-5-5,ANTHROPIC:claude-haiku-5-5' });
+    assert.deepEqual(c.models.map((m) => [m.id, m.provider, m.model]), [
+      ['anthropic:claude-opus-5-5', 'anthropic', 'claude-opus-5-5'],
+      ['anthropic:claude-haiku-5-5', 'anthropic', 'claude-haiku-5-5'],
+    ]);
+  });
+
+  it('ignoredSermonAiEntries devolve só o texto das entradas ignoradas', () => {
+    assert.deepEqual(ignoredSermonAiEntries({ SERMON_AI_MODELS: ' openai:gpt-x , anthropic:ok, lixo,, anthropic: ' }), ['openai:gpt-x', 'lixo', 'anthropic:']);
+    assert.deepEqual(ignoredSermonAiEntries({}), []);
+  });
+
+  it('describeSermonAiConfig: ligada/desligada, quantos modelos e as entradas ignoradas; nunca a chave', () => {
+    const env = { ANTHROPIC_API_KEY: 'sk-ant-segredo', SERMON_AI_MODELS: 'anthropic:claude-opus-5-5,openai:gpt-x' };
+    const lines = describeSermonAiConfig(env);
+    assert.deepEqual(lines, [
+      'IA dos slides completos: ligada, 1 modelo(s).',
+      'SERMON_AI_MODELS: entradas ignoradas: openai:gpt-x',
+    ]);
+    assert.equal(lines.join('\n').includes('sk-ant'), false);
+    assert.deepEqual(describeSermonAiConfig({}), ['IA dos slides completos: desligada, 1 modelo(s).']);
   });
 });

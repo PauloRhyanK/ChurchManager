@@ -41,6 +41,8 @@ const providerError = (error: unknown): HttpException => {
   switch (reason) {
     case 'AUTH':
       return new ServiceUnavailableException('A chave do provedor de IA não foi aceita. Avise o administrador.');
+    case 'CONFIG':
+      return new ServiceUnavailableException('O modelo configurado não aceitou o pedido. Avise o administrador.');
     case 'REFUSED':
       return new UnprocessableEntityException('O modelo não pôde resumir esta palavra. Use “Versículos e pontos”.');
     case 'TRUNCATED':
@@ -67,7 +69,8 @@ export class SermonSlidesService {
 
   /** O que o painel precisa saber da IA: se há e quais modelos. Nunca a chave nem a configuração interna. */
   aiOptions(): { enabled: boolean; models: { id: string; label: string }[] } {
-    return { enabled: this.ai.enabled, models: this.ai.models.map(({ id, label }) => ({ id, label })) };
+    if (!this.ai.enabled) return { enabled: false, models: [] };
+    return { enabled: true, models: this.ai.models.map(({ id, label }) => ({ id, label })) };
   }
 
   async generate(user: AuthUser, sermonId: string, dto: GenerateSlidesDto): Promise<SermonFull> {
@@ -104,9 +107,11 @@ export class SermonSlidesService {
         const raw = await summarizer.summarize({ title: read.title, targets, model: option.model, effort: this.ai.effort });
         summaries = cleanSummaries(targets, raw);
       } catch (error) {
-        const status = (error as { status?: unknown } | null)?.status;
+        // Só reason, status, type e o modelo; de outro erro, só o nome. Nunca mensagem, corpo ou chave.
         this.logger.warn(
-          `Resumo por IA falhou: ${error instanceof SummarizerError ? error.reason : 'UNAVAILABLE'}${typeof status === 'number' ? ` (HTTP ${status})` : ''}`,
+          error instanceof SummarizerError
+            ? `Resumo por IA falhou: reason=${error.reason} status=${error.status ?? '-'} type=${error.type ?? '-'} model=${option.model}`
+            : `Resumo por IA falhou: ${error instanceof Error ? error.name : 'erro desconhecido'} model=${option.model}`,
         );
         throw providerError(error);
       }
@@ -115,8 +120,14 @@ export class SermonSlidesService {
       if (current.revision !== read.revision) {
         throw new ConflictException('A palavra mudou enquanto os slides eram gerados. Gere de novo.');
       }
-      const fresh = buildSlides(current.title, doc, 'FULL', summaries);
       const previous = parseStoredSlides(current.slides);
+      // Frase editada pelo pregador continua mesmo se o modelo, desta vez, não devolver aquele alvo.
+      const targetIds = new Set(targets.map((t) => t.id));
+      const kept = { ...summaries };
+      for (const p of previous) {
+        if (p.kind === 'SUMMARY' && p.edited && targetIds.has(p.id) && !(p.id in kept)) kept[p.id] = p.text;
+      }
+      const fresh = buildSlides(current.title, doc, 'FULL', kept);
       const slides = current.slideMode === 'FULL' && previous.length > 0 ? mergeSlides(previous, fresh) : fresh;
       return { slides, slideMode: 'FULL', slidesRevision: current.revision, ...(dto.style ? { slideStyle: dto.style } : {}) };
     });

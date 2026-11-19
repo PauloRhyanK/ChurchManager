@@ -14,23 +14,47 @@ const LABELS: Record<string, string> = {
   'claude-fable-5-2': 'Claude Fable 5.2',
 };
 
-function parseModels(raw: string): AiModelOption[] {
-  const out: AiModelOption[] = [];
-  for (const entry of raw.split(',')) {
-    const m = /^([a-z]+):([A-Za-z0-9._-]+)$/.exec(entry.trim());
-    if (!m || !(PROVIDERS as readonly string[]).includes(m[1])) continue;
-    const id = `${m[1]}:${m[2]}`;
-    if (out.some((o) => o.id === id)) continue;
-    out.push({ id, provider: m[1] as AiModelOption['provider'], model: m[2], label: LABELS[m[2]] ?? m[2] });
+function parseModels(raw: string): { models: AiModelOption[]; ignored: string[] } {
+  const models: AiModelOption[] = [];
+  const ignored: string[] = [];
+  for (const piece of raw.split(',')) {
+    const entry = piece.trim();
+    if (!entry) continue;
+    const m = /^([a-z]+):([A-Za-z0-9._-]+)$/i.exec(entry);
+    const provider = m?.[1].toLowerCase();
+    if (!m || !provider || !(PROVIDERS as readonly string[]).includes(provider)) {
+      ignored.push(entry);
+      continue;
+    }
+    const id = `${provider}:${m[2]}`;
+    if (models.some((o) => o.id === id)) continue;
+    models.push({ id, provider: provider as AiModelOption['provider'], model: m[2], label: LABELS[m[2]] ?? m[2] });
   }
-  return out;
+  return { models, ignored };
 }
 
+const modelList = (env: Record<string, string | undefined>) => env.SERMON_AI_MODELS?.trim() || DEFAULT_MODELS;
+
 export function readSermonAiConfig(env: Record<string, string | undefined>): SermonAiConfig {
-  const models = parseModels(env.SERMON_AI_MODELS?.trim() || DEFAULT_MODELS);
+  const { models } = parseModels(modelList(env));
   const effort = (EFFORTS as readonly string[]).includes(env.SERMON_AI_EFFORT?.trim() ?? '')
     ? (env.SERMON_AI_EFFORT!.trim() as SermonAiConfig['effort'])
     : 'low';
   const hasKey = !!env.ANTHROPIC_API_KEY?.trim();
   return { enabled: hasKey && models.length > 0, models, effort };
+}
+
+/** Entradas de SERMON_AI_MODELS que não viraram modelo (provedor desconhecido ou formato errado), como foram escritas. */
+export function ignoredSermonAiEntries(env: Record<string, string | undefined>): string[] {
+  return parseModels(modelList(env)).ignored;
+}
+
+/** Linhas do registro na subida: se a IA está ligada, quantos modelos e o que foi ignorado. Nunca a chave. */
+export function describeSermonAiConfig(env: Record<string, string | undefined>): string[] {
+  const config = readSermonAiConfig(env);
+  const ignored = ignoredSermonAiEntries(env);
+  return [
+    `IA dos slides completos: ${config.enabled ? 'ligada' : 'desligada'}, ${config.models.length} modelo(s).`,
+    ...(ignored.length > 0 ? [`SERMON_AI_MODELS: entradas ignoradas: ${ignored.join(', ')}`] : []),
+  ];
 }
