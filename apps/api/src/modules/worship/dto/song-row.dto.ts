@@ -14,6 +14,7 @@ import {
 import {
   CUE_TARGETS,
   CueTarget,
+  MAX_PART_NAME,
   MAX_ROW_TEXT,
   MAX_TIME_SECONDS,
   MOODS,
@@ -31,6 +32,11 @@ export class RowPartDto {
   @ValidateIf((_, v) => v !== null)
   @IsIn(MOODS, { message: 'clima inválido' })
   mood!: Mood | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_PART_NAME)
+  name?: string;
 }
 
 /** Uma linha do documento da letra. Ver `worship-document.ts`. */

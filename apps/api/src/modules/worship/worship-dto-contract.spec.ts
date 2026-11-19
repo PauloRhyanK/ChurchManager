@@ -99,3 +99,10 @@ test('roteiro: data, hora, momentos e músicas', async () => {
   await parse(SetSongsDto, { songIds: ['11111111-1111-4111-8111-111111111111'] });
   await rejects(SetSongsDto, { songIds: ['abc'] });
 });
+
+test('UpdateSongDto: a parte aceita nome próprio curto', async () => {
+  const dto = await parse(UpdateSongDto, { rows: [{ id: 'a', type: 'lyric', text: 'x', part: { kind: 'CHORUS', mood: null, name: 'Refrão final' } }] });
+  assert.equal(dto.rows?.[0].part?.name, 'Refrão final');
+  await rejects(UpdateSongDto, { rows: [{ id: 'a', type: 'lyric', text: 'x', part: { kind: 'CHORUS', mood: null, name: 'x'.repeat(41) } }] });
+  await rejects(UpdateSongDto, { rows: [{ id: 'a', type: 'lyric', text: 'x', part: { kind: 'CHORUS', mood: null, name: 7 } }] });
+});

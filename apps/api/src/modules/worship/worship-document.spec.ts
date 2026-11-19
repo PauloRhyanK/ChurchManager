@@ -104,3 +104,18 @@ test('holyricsText: recado com // antes das linhas em maiúsculas', () => {
     '//Vocal: solo\nANTES DO SOL NASCER\n\nTUA VOZ ME CHAMOU\n\nÉS A LUZ DA MANHÃ',
   );
 });
+
+test('nome próprio da parte: vale no lugar do tipo e não conta na numeração dos versos', () => {
+  const rows: WorshipRow[] = [
+    { id: 'a', type: 'lyric', text: 'um', part: { kind: 'VERSE', mood: null } },
+    { id: 'b', type: 'lyric', text: 'dois', part: { kind: 'VERSE', mood: null, name: 'Verso 1' } },
+    { id: 'c', type: 'lyric', text: 'tres', part: { kind: 'VERSE', mood: null } },
+    { id: 'd', type: 'lyric', text: 'quatro', part: { kind: 'CHORUS', mood: null, name: '  Refrão   final ' } },
+  ];
+  assert.deepEqual(deriveSong(rows).parts.map((p) => p.name), ['Verso 1', 'Verso 1', 'Verso 2', 'Refrão   final']);
+  const out = normalizeRows(rows);
+  assert.equal(out[3].part?.name, 'Refrão final');
+  assert.equal(out[0].part?.name, undefined);
+  // Nome só com espaços some.
+  assert.equal(normalizeRows([{ id: 'x', type: 'lyric', text: 'a', part: { kind: 'BRIDGE', mood: null, name: '   ' } }])[0].part?.name, undefined);
+});

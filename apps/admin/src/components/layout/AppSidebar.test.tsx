@@ -40,6 +40,6 @@ describe("AppSidebar — Palavras", () => {
     const palavras = screen.getByRole("link", { name: "Palavras" });
     expect(palavras).toHaveAttribute("href", "/palavras");
     const links = screen.getAllByRole("link").map((a) => a.textContent);
-    expect(links.indexOf("Palavras")).toBe(links.indexOf("Roteiro") + 1);
+    expect(links.indexOf("Palavras")).toBe(links.indexOf("Músicas") + 1);
   });
 });

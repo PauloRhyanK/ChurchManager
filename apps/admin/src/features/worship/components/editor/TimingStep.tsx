@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import type { Song } from "../../api/worship-api";
 import { deriveSong, type DerivedSlide, type WorshipRow } from "../../lib/document";
 import { formatClock, formatClockTenths } from "../../lib/format";
+import { revealInside } from "../../lib/scroll";
 import { currentSlideIndex, markSlide, nudgeSlide, slideStates, type SlideState } from "../../lib/timing";
 import { AudioCard } from "./AudioCard";
 import { PartsTimeline } from "./PartsTimeline";
@@ -45,6 +46,13 @@ export function TimingStep({ song, rows, canEdit, onChange, onAudioUploaded }: T
   const [picked, setPicked] = useState(false);
   const selected = slides.find((s) => s.rowId === selectedId) ?? slides[0] ?? null;
   const next = selected ? slides[selected.index + 1] : undefined;
+  const listRef = useRef<HTMLOListElement>(null);
+  const selectedRowId = selected?.rowId;
+  // Acompanha o slide selecionado só dentro da lista, sem rolar a página.
+  useEffect(() => {
+    if (!selectedRowId) return;
+    revealInside(listRef.current, listRef.current?.querySelector<HTMLElement>(`[data-slide-row="${selectedRowId}"]`));
+  }, [selectedRowId]);
 
   // Com tudo marcado, a seleção acompanha o áudio: é a conferência.
   const playingIndex = currentSlideIndex(slides, player.time);
@@ -227,7 +235,7 @@ export function TimingStep({ song, rows, canEdit, onChange, onAudioUploaded }: T
               </Button>
             </span>
           </div>
-          <ol className="max-h-[520px] overflow-y-auto">
+          <ol ref={listRef} className="max-h-[520px] overflow-y-auto">
             {slides.map((s, i) => {
               const isSelected = selected?.rowId === s.rowId;
               const state = STATE_META[states[i]];
@@ -236,9 +244,7 @@ export function TimingStep({ song, rows, canEdit, onChange, onAudioUploaded }: T
                   <button
                     type="button"
                     aria-current={isSelected ? "true" : undefined}
-                    ref={(el) => {
-                      if (el && isSelected && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "nearest" });
-                    }}
+                    data-slide-row={s.rowId}
                     onClick={() => {
                       setSelectedId(s.rowId);
                       setPicked(true);
