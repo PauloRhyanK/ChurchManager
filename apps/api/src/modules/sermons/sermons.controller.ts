@@ -7,7 +7,9 @@ import { RequirePermission } from '../access/require-permission.decorator';
 import type { AuthUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { SermonStatus } from './delivery-match';
+import { DeliveryPreviewQuery, SendSermonDto } from './dto/delivery.dto';
 import { CreateSermonDto, UpdateSermonDto } from './dto/sermon.dto';
+import { SermonDeliveryService } from './sermon-delivery.service';
 import { SermonsService } from './sermons.service';
 
 const STATUSES: SermonStatus[] = ['DRAFT', 'SENT', 'PREACHED'];
@@ -18,7 +20,10 @@ const STATUSES: SermonStatus[] = ['DRAFT', 'SENT', 'PREACHED'];
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.SERMONS, PermissionLevel.VIEW)
 export class SermonsController {
-  constructor(private readonly sermons: SermonsService) {}
+  constructor(
+    private readonly sermons: SermonsService,
+    private readonly deliveries: SermonDeliveryService,
+  ) {}
 
   @Get()
   list(@CurrentUser() user: AuthUser, @Query('q') q?: string, @Query('status') status?: string) {
@@ -32,6 +37,16 @@ export class SermonsController {
   @RequirePermission(PermissionModule.SERMONS, PermissionLevel.EDIT)
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateSermonDto) {
     return this.sermons.create(user, dto);
+  }
+
+  @Get('service-options')
+  serviceOptions(@CurrentUser() user: AuthUser) {
+    return this.deliveries.serviceOptions(user);
+  }
+
+  @Get('delivery-preview')
+  deliveryPreview(@CurrentUser() user: AuthUser, @Query() query: DeliveryPreviewQuery) {
+    return this.deliveries.preview(user.tenantId, query.date, query.startTime);
   }
 
   @Get(':id')
@@ -55,5 +70,17 @@ export class SermonsController {
   @RequirePermission(PermissionModule.SERMONS, PermissionLevel.EDIT)
   remove(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.sermons.remove(user, id);
+  }
+
+  @Put(':id/delivery')
+  @RequirePermission(PermissionModule.SERMONS, PermissionLevel.EDIT)
+  send(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SendSermonDto) {
+    return this.deliveries.send(user, id, dto);
+  }
+
+  @Delete(':id/delivery')
+  @RequirePermission(PermissionModule.SERMONS, PermissionLevel.EDIT)
+  cancel(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.deliveries.cancel(user, id);
   }
 }
