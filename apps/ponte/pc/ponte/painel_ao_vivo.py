@@ -17,6 +17,7 @@ import time
 
 from . import agenda as mod_agenda
 from . import repertorio as mod_repertorio
+from . import roteiro as mod_roteiro
 
 VERSAO_DO_PAINEL = 2
 
@@ -27,8 +28,9 @@ ACOES = (
     "imagem",
     "palavra_slide", "palavra_assumir", "palavra_tirar", "pregador_link",
     "telao_slide",
+    "roteiro_ir", "musico_link",
 )
-ACOES_DA_WEB = ("cena_transmissao", "clima")
+ACOES_DA_WEB = ("cena_transmissao", "clima", "roteiro_ir")
 
 DISCO_AMARELO_GB = 20
 DISCO_VERMELHO_GB = 5
@@ -49,6 +51,7 @@ class PainelAoVivo:
         self._d = dep
         self._agora = dep.get("agora") or time.time
         self._antes = {}          # nome do sistema -> estado da ultima olhada
+        self._visto_no_roteiro = None   # (momento, musica) da ultima vez que o roteiro foi acertado
         self._internet_antes = None
 
     def _dep(self, nome, padrao=None):
@@ -289,7 +292,132 @@ class PainelAoVivo:
         base["telao_ao_vivo"] = telao.retrato() if telao is not None else None
         passador = self._dep("passador")
         base["passador"] = passador.retrato() if passador is not None else None
+        # O roteiro com as musicas intercaladas so aparece para o operador
+        # quando vem do ChurchManager; sem ele a tela segue a ordem do culto.
+        roteiro = self._roteiro_em_dia()
+        base["roteiro"] = roteiro.retrato() if roteiro is not None and roteiro.origem == "cultos" else None
+        musico = self._dep("musico")
+        base["musico"] = None
+        if musico is not None:
+            link = musico.link.retrato()
+            # A tela do musico viaja junto so enquanto ha link: e dela que a
+            # versao web tira o que mostrar no celular.
+            base["musico"] = {"link": link, "tela": musico.tela() if link else None}
+        transporte = self._dep("transporte")
+        base["vs"] = transporte.retrato() if transporte is not None else None
         return base
+
+    # -- o roteiro (momentos e musicas intercalados) ---------------------------
+
+    def _roteiro_em_dia(self):
+        """Carrega a fila (do ChurchManager, ou montada aqui) e acerta o
+        ponteiro quando o culto andou por outro caminho (o operador trocou de
+        momento ou de musica pelo painel)."""
+        roteiro = self._dep("roteiro")
+        if roteiro is None:
+            return None
+        repertorio = self._dep("repertorio")
+        ordem = self._dep("ordem_agora") or {}
+        do_cultos = repertorio.roteiro() if repertorio is not None and hasattr(repertorio, "roteiro") else None
+        versao = repertorio.versao() if repertorio is not None else ""
+        if do_cultos:
+            roteiro.carregar(do_cultos, "cultos", ("cultos", versao, repr([(i["tipo"], i["id"]) for i in do_cultos])))
+        else:
+            momentos = ordem.get("momentos") or []
+            cues = self._dep("cues") or {}
+            roteiro.carregar(
+                mod_roteiro.do_local(momentos, repertorio.musicas() if repertorio is not None else [],
+                                     self.momentos_do_louvor(),
+                                     lambda cue_id: mod_agenda.minutos_de(cue_id, cues.get(cue_id))[0]),
+                "local", ("local", ordem.get("id"), tuple(m["id"] for m in momentos), versao))
+        condutor = self._dep("condutor")
+        musica = (condutor.retrato().get("musica") or {}).get("id") if condutor is not None else None
+        visto = (ordem.get("atual_id"), musica)
+        if visto != self._visto_no_roteiro:
+            self._visto_no_roteiro = visto
+            alvo = None
+            if musica is not None:
+                alvo = roteiro.achar("musica", musica)
+            elif visto[0] is not None:
+                for indice, item in enumerate(roteiro.itens()):
+                    if item["tipo"] == "momento" and self._cue_do_item(item) == visto[0]:
+                        alvo = indice
+                        if roteiro.atual() is None or indice >= roteiro.atual():
+                            break
+            if alvo is not None:
+                roteiro.ir(alvo)
+        return roteiro
+
+    def _cue_do_item(self, item):
+        config = self._dep("config") or {}
+        return mod_roteiro.achar_cue(item, self._dep("cues") or {}, (config.get("roteiro") or {}).get("momentos"),
+                                     self._momentos_da_palavra(), self.momentos_do_louvor())
+
+    def entrar_no_item(self, indice, quem, soltar_vs=False):
+        """Leva o culto para um item do roteiro e FAZ o que ele pede: num
+        momento, troca camera e luz (a cue dele); numa musica, entra no louvor
+        e poe a letra no telao. `soltar_vs` manda o audio comecar.
+
+        Devolve (corpo, codigo_http)."""
+        roteiro = self._roteiro_em_dia()
+        if roteiro is None:
+            return {"erro": "o roteiro não está disponível neste PC"}, 400
+        try:
+            indice = int(indice)
+        except (TypeError, ValueError):
+            return {"erro": "item desconhecido do roteiro"}, 400
+        item = roteiro.ir(indice)
+        if item is None:
+            return {"erro": "item desconhecido do roteiro"}, 404
+        condutor, transporte = self._dep("condutor"), self._dep("transporte")
+        ir_para_cue = self._d.get("ir_para_cue")
+        ordem = self._dep("ordem_agora") or {}
+        detalhe, ok = "tudo certo", True
+        if item["tipo"] == "musica":
+            if ordem.get("atual_id") not in self.momentos_do_louvor() and ir_para_cue is not None:
+                cues = self._dep("cues") or {}
+                louvor = next((c for c in self.momentos_do_louvor() if c in cues), None)
+                if louvor is not None:
+                    ir_para_cue(louvor)
+            if condutor is not None:
+                corpo, codigo = condutor.ir_musica(item["id"])
+                if codigo != 200:
+                    ok, detalhe = False, corpo.get("erro") or "a música não entrou"
+                elif corpo.get("ok") is False:
+                    ok, detalhe = False, corpo.get("detalhe") or ""
+                elif soltar_vs and transporte is not None:
+                    transporte.tocar(item["id"], 0.0, item["nome"])
+        else:
+            if condutor is not None and condutor.tem_musica():
+                condutor.encerrar()
+                if transporte is not None:
+                    transporte.parar()
+            cue = self._cue_do_item(item)
+            if cue is not None and ir_para_cue is not None and ordem.get("atual_id") != cue:
+                resultado = ir_para_cue(cue)
+                if isinstance(resultado, dict) and resultado.get("ok") is False:
+                    ok, detalhe = False, resultado.get("detalhe") or ""
+        ordem = self._dep("ordem_agora") or {}
+        musica = (condutor.retrato().get("musica") or {}).get("id") if condutor is not None else None
+        self._visto_no_roteiro = (ordem.get("atual_id"), musica)
+        return {"ok": ok, "titulo": ("Música: " if item["tipo"] == "musica" else "") + item["nome"],
+                "detalhe": detalhe}, 200
+
+    # -- o celular do musico ---------------------------------------------------
+
+    def musico_retrato(self, codigo):
+        musico = self._dep("musico")
+        if musico is None or not musico.link.confere(codigo):
+            return None
+        return musico.tela()
+
+    def musico_agir(self, codigo, acao, dados):
+        musico = self._dep("musico")
+        if musico is None or not musico.link.confere(codigo):
+            return {"erro": "este link não vale mais. Peça outro à equipe."}, 404
+        if acao not in ("proximo", "voltar", "repetir", "pular", "proxima_musica", "desfazer"):
+            return {"erro": "o celular do músico não faz isso"}, 400
+        return musico.agir(acao, dados)
 
     # -- passar o slide que esta no telao --------------------------------------
 
@@ -468,6 +596,21 @@ class PainelAoVivo:
             imagem.ativo = bool(dados.get("mostrar"))
             return {"ok": True, "detalhe": "tudo certo",
                     "titulo": "Imagem da transmissão " + ("ligada" if imagem.ativo else "desligada")}, 200
+
+        if tipo == "roteiro_ir":
+            return self.entrar_no_item(dados.get("indice"), quem, False)
+
+        if tipo == "musico_link":
+            musico = self._dep("musico")
+            if musico is None:
+                return {"erro": "o celular do músico não está disponível neste PC"}, 400
+            if dados.get("acao") == "encerrar":
+                musico.link.encerrar()
+                return {"ok": True, "titulo": "Acesso do músico encerrado", "detalhe": "tudo certo"}, 200
+            if dados.get("acao") == "gerar":
+                musico.link.gerar()
+                return {"ok": True, "titulo": "Link do músico criado", "detalhe": "vale só neste culto"}, 200
+            return {"erro": "o painel não sabe fazer isso"}, 400
 
         if tipo == "telao_slide":
             corpo, codigo = self.passar(dados.get("para"), quem, dados.get("visto"))

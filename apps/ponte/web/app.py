@@ -160,7 +160,8 @@ def _porteiro():
     # O celular do pregador entra SEM a senha da equipe: quem autoriza e o
     # codigo do link, conferido em cada rota contra o resumo que a igreja
     # mandou. /api/espelho/pedidos confere a chave da igreja, como /api/espelho.
-    if request.path.startswith(("/pregador/", "/api/pregador/")) or request.path == "/api/espelho/pedidos":
+    if request.path.startswith(("/pregador/", "/api/pregador/", "/musico/", "/api/musico/")) \
+            or request.path == "/api/espelho/pedidos":
         return None
     if request.path in livre or _logado():
         return None
@@ -411,7 +412,9 @@ ACOES_DO_PAINEL = ("ir", "gravar", "transmitir", "tela_preta", "recado", "cena_l
                    "apagar_luz", "modo_luz", "cortar", "visibilidade", "retorno",
                    # do painel ao vivo. Passar slide do louvor NAO entra: entre
                    # o toque e o telao haveria ate 4 segundos.
-                   "cena_transmissao", "clima")
+                   "cena_transmissao", "clima",
+                   # ir para um item do roteiro (momento ou musica), como o "ir"
+                   "roteiro_ir")
 
 
 @app.get("/api/painel")
@@ -482,16 +485,65 @@ def atualizacao_pacote():
 _chegou_toque = threading.Condition(_tranca)
 
 
-def _link_do_pregador(codigo):
-    """True se o codigo confere com o que a igreja anunciou e ainda vale."""
+def _link_do_pregador(codigo, de="palavra"):
+    """True se o codigo confere com o que a igreja anunciou e ainda vale.
+    `de` e o bloco do retrato que traz o link: "palavra" (o pregador) ou
+    "musico"."""
     with _tranca:
         if not _igreja_viva():
             return False
-        link = ((_igreja["painel"] or {}).get("palavra") or {}).get("link") or {}
+        link = ((_igreja["painel"] or {}).get(de) or {}).get("link") or {}
     resumo, expira = link.get("resumo"), link.get("expira_em")
     if not resumo or not isinstance(expira, (int, float)) or time.time() >= expira:
         return False
     return hmac.compare_digest(hashlib.sha256(str(codigo).encode("utf-8")).hexdigest(), str(resumo))
+
+
+def _porteiro_do_musico(codigo):
+    ip = _ip()
+    if _bloqueado(ip):
+        return jsonify({"erro": "muitas tentativas. Espere um minuto."}), 429
+    if not _link_do_pregador(codigo, "musico"):
+        _errou(ip)
+        return jsonify({"erro": "este link não vale mais, ou a igreja está sem internet. "
+                                "Peça outro à equipe."}), 404
+    return None
+
+
+@app.get("/musico/<codigo>")
+def pagina_musico(codigo):
+    if _porteiro_do_musico(codigo) is not None:
+        return Response("Este link não vale mais, ou a igreja está sem internet. "
+                        "Peça outro à equipe de multimídia.",
+                        status=404, mimetype="text/plain; charset=utf-8")
+    return send_from_directory(PASTA_PC, "musico.html")
+
+
+@app.get("/api/musico/<codigo>")
+def musico_retrato(codigo):
+    recusa = _porteiro_do_musico(codigo)
+    if recusa is not None:
+        return recusa
+    with _tranca:
+        tela = dict(((_igreja["painel"] or {}).get("musico") or {}).get("tela") or {})
+    tela["local"] = False
+    return jsonify(tela)
+
+
+@app.post("/api/musico/<codigo>")
+def musico_agir(codigo):
+    recusa = _porteiro_do_musico(codigo)
+    if recusa is not None:
+        return recusa
+    dados = request.get_json(silent=True) or {}
+    if dados.get("acao") not in ("proximo", "voltar", "repetir", "pular", "proxima_musica", "desfazer"):
+        return jsonify({"erro": "o celular do músico não faz isso"}), 400
+    with _chegou_toque:
+        _fila.append({"tipo": "musico", "passo": None, "em": time.time(),
+                      "corpo": {"codigo": codigo, "acao": dados["acao"], "parte": dados.get("parte"),
+                                "visto": dados.get("visto")}})
+        _chegou_toque.notify_all()
+    return jsonify({"ok": True, "enviado": True})
 
 
 def _porteiro_do_pregador(codigo):
@@ -555,9 +607,9 @@ def espelho_pedidos():
     with _chegou_toque:
         while True:
             agora = time.time()
-            dele = [c for c in _fila if c["tipo"] == "pregador" and agora - c["em"] <= 60]
+            dele = [c for c in _fila if c["tipo"] in ("pregador", "musico") and agora - c["em"] <= 60]
             if dele or agora >= limite:
-                for comando in [c for c in _fila if c["tipo"] == "pregador"]:
+                for comando in [c for c in _fila if c["tipo"] in ("pregador", "musico")]:
                     _fila.remove(comando)
                 break
             _chegou_toque.wait(timeout=limite - agora)

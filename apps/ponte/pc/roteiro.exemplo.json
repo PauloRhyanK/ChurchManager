@@ -1,0 +1,511 @@
+{
+ "version": "exemplo00001",
+ "service": {
+  "id": "culto-exemplo",
+  "date": "2026-11-22",
+  "startTime": "19:00",
+  "name": "Domingo à noite",
+  "moments": [
+   {
+    "name": "Louvor",
+    "kind": "WORSHIP",
+    "startsAt": "19:05",
+    "durationMinutes": 17
+   }
+  ]
+ },
+ "sermon": {
+  "title": "Luz que não se apaga",
+  "preacherName": "Pr. Exemplo",
+  "estimatedMinutes": 40
+ },
+ "songs": [
+  {
+   "id": "m1",
+   "title": "Nada nos separa",
+   "status": "READY",
+   "musicalKey": "G",
+   "bpm": 72,
+   "timeSignature": "4/4",
+   "holyricsId": "9111",
+   "audio": {
+    "url": "https://exemplo.invalid/audio/m1.mp3",
+    "fileName": "m1.mp3",
+    "durationSeconds": 60,
+    "sizeBytes": 1
+   },
+   "parts": [
+    {
+     "index": 0,
+     "kind": "VERSE",
+     "name": "Verso 1",
+     "mood": "WORSHIP",
+     "time": 0,
+     "firstSlide": 0,
+     "slideCount": 1
+    },
+    {
+     "index": 1,
+     "kind": "CHORUS",
+     "name": "Refrão",
+     "mood": "CELEBRATION",
+     "time": 20,
+     "firstSlide": 1,
+     "slideCount": 1
+    },
+    {
+     "index": 2,
+     "kind": "ENDING",
+     "name": "Final",
+     "mood": "CONTEMPLATIVE",
+     "time": 40,
+     "firstSlide": 2,
+     "slideCount": 1
+    }
+   ],
+   "slides": [
+    {
+     "index": 0,
+     "part": 0,
+     "time": 0.0,
+     "lines": [
+      "NEM A ALTURA",
+      "NEM O ABISMO"
+     ],
+     "cues": []
+    },
+    {
+     "index": 1,
+     "part": 1,
+     "time": 20.0,
+     "lines": [
+      "NADA NOS SEPARA",
+      "DO TEU AMOR"
+     ],
+     "cues": []
+    },
+    {
+     "index": 2,
+     "part": 2,
+     "time": 40.0,
+     "lines": [],
+     "cues": [
+      {
+       "target": "ALL",
+       "text": "só instrumental"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "m2",
+   "title": "Rio de paz",
+   "status": "READY",
+   "musicalKey": "D",
+   "bpm": 68,
+   "timeSignature": "4/4",
+   "holyricsId": "9222",
+   "audio": {
+    "url": "https://exemplo.invalid/audio/m2.mp3",
+    "fileName": "m2.mp3",
+    "durationSeconds": 150,
+    "sizeBytes": 1
+   },
+   "parts": [
+    {
+     "index": 0,
+     "kind": "VERSE",
+     "name": "Verso 1",
+     "mood": "WORSHIP",
+     "time": 0,
+     "firstSlide": 0,
+     "slideCount": 1
+    },
+    {
+     "index": 1,
+     "kind": "CHORUS",
+     "name": "Refrão",
+     "mood": "CELEBRATION",
+     "time": 20,
+     "firstSlide": 1,
+     "slideCount": 1
+    },
+    {
+     "index": 2,
+     "kind": "VERSE",
+     "name": "Verso 2",
+     "mood": "WORSHIP",
+     "time": 40,
+     "firstSlide": 2,
+     "slideCount": 1
+    },
+    {
+     "index": 3,
+     "kind": "CHORUS",
+     "name": "Refrão",
+     "mood": "CELEBRATION",
+     "time": 60,
+     "firstSlide": 3,
+     "slideCount": 1
+    },
+    {
+     "index": 4,
+     "kind": "BRIDGE",
+     "name": "Ponte",
+     "mood": "BUILD",
+     "time": 80,
+     "firstSlide": 4,
+     "slideCount": 2
+    },
+    {
+     "index": 5,
+     "kind": "CHORUS",
+     "name": "Refrão",
+     "mood": "EXPLOSION",
+     "time": 110,
+     "firstSlide": 6,
+     "slideCount": 1
+    },
+    {
+     "index": 6,
+     "kind": "ENDING",
+     "name": "Final",
+     "mood": "CONTEMPLATIVE",
+     "time": 130,
+     "firstSlide": 7,
+     "slideCount": 1
+    }
+   ],
+   "slides": [
+    {
+     "index": 0,
+     "part": 0,
+     "time": 0.0,
+     "lines": [
+      "QUANDO A NOITE VEM",
+      "E O MEDO CHAMA"
+     ],
+     "cues": [
+      {
+       "target": "VOCAL",
+       "text": "começa só voz e violão"
+      }
+     ]
+    },
+    {
+     "index": 1,
+     "part": 1,
+     "time": 20.0,
+     "lines": [
+      "CORRE, RIO DE PAZ",
+      "DENTRO DE MIM"
+     ],
+     "cues": [
+      {
+       "target": "DRUMS",
+       "text": "bateria entra no refrão"
+      }
+     ]
+    },
+    {
+     "index": 2,
+     "part": 2,
+     "time": 40.0,
+     "lines": [
+      "NA MARGEM DO TEU RIO",
+      "EU DESCANSO"
+     ],
+     "cues": []
+    },
+    {
+     "index": 3,
+     "part": 3,
+     "time": 60.0,
+     "lines": [
+      "TEU RIO CORRE EM MIM",
+      "E A SEDE VAI EMBORA"
+     ],
+     "cues": []
+    },
+    {
+     "index": 4,
+     "part": 4,
+     "time": 80.0,
+     "lines": [
+      "LEVA-ME MAIS FUNDO"
+     ],
+     "cues": []
+    },
+    {
+     "index": 5,
+     "part": 4,
+     "time": 95.0,
+     "lines": [
+      "MAIS PERTO DE TI"
+     ],
+     "cues": []
+    },
+    {
+     "index": 6,
+     "part": 5,
+     "time": 110.0,
+     "lines": [
+      "CORRE, RIO DE PAZ",
+      "DENTRO DE MIM"
+     ],
+     "cues": []
+    },
+    {
+     "index": 7,
+     "part": 6,
+     "time": 130.0,
+     "lines": [],
+     "cues": [
+      {
+       "target": "ALL",
+       "text": "só instrumental"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "m3",
+   "title": "Tudo o que tenho",
+   "status": "READY",
+   "musicalKey": "E",
+   "bpm": 84,
+   "timeSignature": "4/4",
+   "holyricsId": "9333",
+   "audio": {
+    "url": "https://exemplo.invalid/audio/m3.mp3",
+    "fileName": "m3.mp3",
+    "durationSeconds": 45,
+    "sizeBytes": 1
+   },
+   "parts": [
+    {
+     "index": 0,
+     "kind": "VERSE",
+     "name": "Verso 1",
+     "mood": "WORSHIP",
+     "time": 0,
+     "firstSlide": 0,
+     "slideCount": 1
+    },
+    {
+     "index": 1,
+     "kind": "CHORUS",
+     "name": "Refrão",
+     "mood": "CELEBRATION",
+     "time": 25,
+     "firstSlide": 1,
+     "slideCount": 1
+    }
+   ],
+   "slides": [
+    {
+     "index": 0,
+     "part": 0,
+     "time": 0.0,
+     "lines": [
+      "TUDO O QUE TENHO",
+      "VEM DE TI"
+     ],
+     "cues": []
+    },
+    {
+     "index": 1,
+     "part": 1,
+     "time": 25.0,
+     "lines": [
+      "RECEBE, SENHOR",
+      "A MINHA VIDA"
+     ],
+     "cues": []
+    }
+   ]
+  }
+ ],
+ "roteiro": [
+  {
+   "ordem": 1,
+   "tipo": "momento",
+   "id": "mo1",
+   "nome": "Abertura",
+   "inicio": "19:00",
+   "duracaoMin": 5
+  },
+  {
+   "ordem": 2,
+   "tipo": "musica",
+   "id": "m1",
+   "nome": "Nada nos separa",
+   "inicio": "19:05",
+   "duracaoMin": 4,
+   "musica": {
+    "id": "m1",
+    "titulo": "Nada nos separa",
+    "tom": "G",
+    "bpm": 72,
+    "clima": "WORSHIP",
+    "holyricsId": "9111",
+    "audioUrl": "https://exemplo.invalid/audio/m1.mp3",
+    "partes": [
+     {
+      "indice": 0,
+      "nome": "Verso 1",
+      "inicioSeg": 0,
+      "fimSeg": 20
+     },
+     {
+      "indice": 1,
+      "nome": "Refrão",
+      "inicioSeg": 20,
+      "fimSeg": 40
+     },
+     {
+      "indice": 2,
+      "nome": "Final",
+      "inicioSeg": 40,
+      "fimSeg": 60
+     }
+    ]
+   }
+  },
+  {
+   "ordem": 3,
+   "tipo": "momento",
+   "id": "mo2",
+   "nome": "Oração",
+   "inicio": "19:09",
+   "duracaoMin": 3
+  },
+  {
+   "ordem": 4,
+   "tipo": "musica",
+   "id": "m2",
+   "nome": "Rio de paz",
+   "inicio": "19:12",
+   "duracaoMin": 5,
+   "musica": {
+    "id": "m2",
+    "titulo": "Rio de paz",
+    "tom": "D",
+    "bpm": 68,
+    "clima": "WORSHIP",
+    "holyricsId": "9222",
+    "audioUrl": "https://exemplo.invalid/audio/m2.mp3",
+    "partes": [
+     {
+      "indice": 0,
+      "nome": "Verso 1",
+      "inicioSeg": 0,
+      "fimSeg": 20
+     },
+     {
+      "indice": 1,
+      "nome": "Refrão",
+      "inicioSeg": 20,
+      "fimSeg": 40
+     },
+     {
+      "indice": 2,
+      "nome": "Verso 2",
+      "inicioSeg": 40,
+      "fimSeg": 60
+     },
+     {
+      "indice": 3,
+      "nome": "Refrão",
+      "inicioSeg": 60,
+      "fimSeg": 80
+     },
+     {
+      "indice": 4,
+      "nome": "Ponte",
+      "inicioSeg": 80,
+      "fimSeg": 110
+     },
+     {
+      "indice": 5,
+      "nome": "Refrão",
+      "inicioSeg": 110,
+      "fimSeg": 130
+     },
+     {
+      "indice": 6,
+      "nome": "Final",
+      "inicioSeg": 130,
+      "fimSeg": 150
+     }
+    ]
+   }
+  },
+  {
+   "ordem": 5,
+   "tipo": "momento",
+   "id": "mo3",
+   "nome": "Avisos",
+   "inicio": "19:17",
+   "duracaoMin": 5
+  },
+  {
+   "ordem": 6,
+   "tipo": "momento",
+   "id": "mo4",
+   "nome": "Ofertório",
+   "inicio": "19:22",
+   "duracaoMin": 5
+  },
+  {
+   "ordem": 7,
+   "tipo": "musica",
+   "id": "m3",
+   "nome": "Tudo o que tenho",
+   "inicio": "19:27",
+   "duracaoMin": 4,
+   "musica": {
+    "id": "m3",
+    "titulo": "Tudo o que tenho",
+    "tom": "E",
+    "bpm": 84,
+    "clima": "WORSHIP",
+    "holyricsId": "9333",
+    "audioUrl": "https://exemplo.invalid/audio/m3.mp3",
+    "partes": [
+     {
+      "indice": 0,
+      "nome": "Verso 1",
+      "inicioSeg": 0,
+      "fimSeg": 25
+     },
+     {
+      "indice": 1,
+      "nome": "Refrão",
+      "inicioSeg": 25,
+      "fimSeg": 45
+     }
+    ]
+   }
+  },
+  {
+   "ordem": 8,
+   "tipo": "momento",
+   "id": "mo5",
+   "nome": "Palavra",
+   "inicio": "19:31",
+   "duracaoMin": 40,
+   "momento": "SERMON"
+  },
+  {
+   "ordem": 9,
+   "tipo": "momento",
+   "id": "mo6",
+   "nome": "Encerramento",
+   "inicio": "20:11",
+   "duracaoMin": 5
+  }
+ ]
+}

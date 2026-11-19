@@ -26,7 +26,11 @@ from ponte import obs_imagem as mod_obs_imagem
 from ponte import obs_ouvinte as mod_obs_ouvinte
 from ponte import painel_ao_vivo as mod_ao_vivo
 from ponte import palavra as mod_palavra
+from ponte import musico as mod_musico
 from ponte import passador as mod_passador
+from ponte import roteiro as mod_roteiro
+from ponte import vs as mod_vs
+from ponte import vs_reaper as mod_vs_reaper
 from ponte import telao as mod_telao
 from ponte import relogio as mod_relogio
 from ponte import repertorio as mod_repertorio
@@ -362,6 +366,8 @@ def _carregar_ordem(ordem_id, atual=None):
     # pregador valia so para o anterior.
     if _pecas.get("palavra") is not None:
         _pecas["palavra"].encerrar_link()
+    if _pecas.get("musico") is not None:
+        _pecas["musico"].link.encerrar()
     return True
 
 
@@ -1834,6 +1840,11 @@ def _pedido_da_web(comando):
         # mesma do painel local (_acao_do_painel), e a chave "aceitar comandos
         # pela web" e conferida la dentro.
         _acao_do_painel(corpo, "web")
+    elif tipo == "musico":
+        # O toque do musico pelo celular, vindo pela internet. Como o do
+        # pregador: o link e a autorizacao, e o codigo e conferido aqui.
+        if _ao_vivo["valor"] is not None:
+            _ao_vivo["valor"].musico_agir(str(corpo.get("codigo") or ""), str(corpo.get("acao") or ""), corpo)
     elif tipo == "pregador":
         # O toque do pregador pelo celular, vindo pela internet. Nao passa
         # pela chave "aceita comandos": o link dele e uma autorizacao a parte,
@@ -2040,7 +2051,7 @@ def aqui_imagem():
 # viaja se alguem escrever o nome dele abaixo.
 PACOTE = (
     "app.py", "requirements.txt", "INSTALAR.md",
-    "painel.html", "ao-vivo.html", "ao-vivo.css", "ao-vivo.js", "pregador.html", "louvor.html", "luzes.html", "cenas.html", "youtube.html",
+    "painel.html", "ao-vivo.html", "ao-vivo.css", "ao-vivo.js", "pregador.html", "musico.html", "louvor.html", "luzes.html", "cenas.html", "youtube.html",
     "chegada.html", "aqui.html", "letras.html", "guia.js", "guia.css",
     "estudio.html",
     "chegada.yaml", "looks_salvas.yaml", "patch.yaml",
@@ -2249,6 +2260,7 @@ _pecas = {
     "reler_obs": lambda: _pedir_estado_ja(),
     "anotar": lambda titulo, ok, detalhe, origem: _anotar(titulo, ok, detalhe, origem),
     "ordem_agora": lambda: _ordem_agora(),
+    "ir_para_cue": lambda cue_id: _ir_para_cue(cue_id),
 }
 _maquinas_vistas = {}
 _yt_painel = {"em": 0.0, "dados": None, "pedir": True}
@@ -2504,6 +2516,21 @@ def _o_que_falhou(passos):
         len(falhas), len(passos),
         "; ".join("{} ({})".format(p.get("rotulo") or p.get("sistema") or "passo",
                                    str(p.get("detalhe") or "")[:80]) for p in falhas[:3]))
+
+
+def _ir_para_cue(cue_id):
+    """Entra num momento pelo roteiro: se ele esta na ordem carregada, anda o
+    ponteiro dela (e o painel antigo acompanha); senao, so executa o que o
+    momento pede. Devolve {"ok", "detalhe"}."""
+    with _tranca_ordem:
+        indice = _ordem["momentos"].index(cue_id) if cue_id in _ordem["momentos"] else None
+    if indice is not None:
+        corpo, codigo = _transicionar(indice)
+        if codigo != 200:
+            return {"ok": False, "detalhe": corpo.get("erro") or "o momento não entrou"}
+        return {"ok": corpo["tudo_ok"], "detalhe": _o_que_falhou(corpo["passos"])}
+    corpo, codigo = _rodar_cue_do_painel(cue_id)
+    return {"ok": codigo == 200 and bool(corpo.get("ok")), "detalhe": corpo.get("detalhe") or corpo.get("erro") or ""}
 
 
 def _rodar_cue_do_painel(cue_id):
@@ -2853,6 +2880,65 @@ def pregador_passar(codigo):
     return jsonify(resultado), status
 
 
+# -- o celular do musico -------------------------------------------------------
+#
+# O mesmo desenho do celular do pregador: link com codigo que vale so neste
+# culto, direto pelo Wi-Fi da igreja ou pela fila da versao web (tipo "musico").
+
+@app.get("/musico/<codigo>")
+def pagina_musico(codigo):
+    if _ao_vivo["valor"] is None or _ao_vivo["valor"].musico_retrato(codigo) is None:
+        return Response("Este link não vale mais. Peça outro à equipe de multimídia.",
+                        status=404, mimetype="text/plain; charset=utf-8")
+    return send_from_directory(RAIZ, "musico.html")
+
+
+@app.get("/api/musico/<codigo>")
+def musico_retrato(codigo):
+    tela = _ao_vivo["valor"].musico_retrato(codigo) if _ao_vivo["valor"] is not None else None
+    if tela is None:
+        return jsonify({"erro": "este link não vale mais. Peça outro à equipe."}), 404
+    tela["local"] = True
+    return jsonify(tela)
+
+
+@app.post("/api/musico/<codigo>")
+def musico_agir(codigo):
+    if _ao_vivo["valor"] is None:
+        return jsonify({"erro": "este PC não conduz o louvor"}), 400
+    corpo = request.get_json(silent=True) or {}
+    resultado, status = _ao_vivo["valor"].musico_agir(codigo, str(corpo.get("acao") or ""), corpo)
+    return jsonify(resultado), status
+
+
+@app.get("/api/painel/musico")
+def painel_musico():
+    """Os enderecos do link do musico. So existe AQUI, como o do pregador."""
+    musico = _pecas.get("musico")
+    codigo = musico.link.codigo() if musico is not None else None
+    if codigo is None:
+        return jsonify({"ativo": False})
+    web = (_config.get("web") or {})
+    return jsonify({
+        "ativo": True,
+        "local": "http://{}:{}/musico/{}".format(_ip_da_rede(), _porta["valor"], codigo),
+        "web": ("{}/musico/{}".format(str(web.get("url")).rstrip("/"), codigo)
+                if _espelho["valor"] is not None and web.get("url") else None),
+    })
+
+
+@app.get("/api/vs/pedido")
+def vs_pedido():
+    """O ultimo pedido para o VS (ponte/vs.py). Quem toca o audio pergunta:
+    a tela em ensaio, ou a ponte do PC do som. Com o VS desligado no config,
+    a resposta e sempre "nada"."""
+    transporte = _pecas.get("transporte")
+    if transporte is None:
+        return jsonify({"pedido": None, "ativo": False})
+    return jsonify({"pedido": transporte.pedido(request.args.get("quem")), "ativo": transporte.ativo,
+                    "driver": transporte.driver})
+
+
 @app.get("/api/painel/pregador")
 def painel_pregador():
     """Os enderecos do link do pregador, para o operador mostrar ou copiar.
@@ -3008,11 +3094,21 @@ def _montar_ao_vivo():
     for chave, valor in (_config.get("cultos") or {}).items():
         conf_rep.setdefault(chave, valor)
     fonte_cultos = None
-    if conf_rep.get("fonte") == "cultos" and conf_rep.get("url") and conf_rep.get("slug"):
+    if conf_rep.get("fonte") == "cultos" and conf_rep.get("arquivo"):
+        # O culto lido de um ARQUIVO desta pasta, no formato do ChurchManager
+        # (ver roteiro.exemplo.json). Serve para ensaiar e testar sem internet.
+        def do_arquivo(caminho=os.path.join(RAIZ, str(conf_rep["arquivo"]))):
+            with open(caminho, "r", encoding="utf-8-sig") as arquivo:
+                return json.load(arquivo)
+        fonte_cultos = mod_repertorio.FonteCultos(
+            "arquivo", "local", None, os.path.join(RAIZ, "_culto_do_dia.json"), ao_vivo.tabela,
+            _achar_no_holyrics, buscar=do_arquivo)
+    elif conf_rep.get("fonte") == "cultos" and conf_rep.get("url") and conf_rep.get("slug"):
         # As musicas montadas no ChurchManager; ver o fim de ponte/repertorio.py.
         fonte_cultos = mod_repertorio.FonteCultos(
             conf_rep["url"], conf_rep["slug"], conf_rep.get("chave"),
             os.path.join(RAIZ, "_culto_do_dia.json"), ao_vivo.tabela, _achar_no_holyrics)
+    if fonte_cultos is not None:
         fonte_cultos.comecar()
         _pecas["repertorio"] = fonte_cultos
         print("  [louvor] musicas vindas do ChurchManager")
@@ -3024,6 +3120,19 @@ def _montar_ao_vivo():
         ao_vivo.luz_da_parte, lambda titulo, ok, detalhe: _anotar(titulo, ok, detalhe, "local"),
         lembrado=_lembrar_se_ainda_e_louvor(ao_vivo), guardar=_guardar_louvor)
     _pecas["condutor"].comecar()
+    # O roteiro (momentos e musicas intercalados), o VS e o celular do musico.
+    _pecas["roteiro"] = mod_roteiro.Roteiro()
+    _pecas["transporte"] = mod_vs.Transporte(_config.get("vs") or {}, _pecas["relogio"])
+    _pecas["musico"] = mod_musico.Musico(
+        _pecas["condutor"], _pecas["roteiro"], _pecas["transporte"], _pecas["relogio"],
+        _pecas["repertorio"].musicas, ao_vivo.entrar_no_item,
+        lambda titulo, ok, detalhe: _anotar(titulo, ok, detalhe, "músico"),
+        sincronizar=ao_vivo._roteiro_em_dia,
+        no_ar=lambda: bool((_estado.get("obs") or {}).get("transmitindo")))
+    _pecas["musico"].comecar()
+    if _pecas["transporte"].ativo:
+        print("  [vs] ligado: os pedidos do músico vão para quem toca o áudio ({})".format(
+            _pecas["transporte"].driver))
     # O que esta aberto no Holyrics, slide a slide (ponte/telao.py), e o
     # passador de slides que funciona com qualquer janela em foco
     # (ponte/passador.py). Os dois so na maquina principal.
@@ -3226,7 +3335,8 @@ def main():
         # Enquanto houver link de pregador valendo, um segundo pedido fica
         # pendurado na web para o toque dele chegar na hora, e nao em ate 2 s.
         _espelho["valor"].comecar_espera_longa(
-            lambda: _pecas.get("palavra") is not None and _pecas["palavra"].tem_link())
+            lambda: (_pecas.get("palavra") is not None and _pecas["palavra"].tem_link())
+            or (_pecas.get("musico") is not None and _pecas["musico"].link.codigo() is not None))
         print("  [espelho] ligado: entregando o estado para a versao web")
     # O vigia do retorno na TV: so no PC principal, e so se o chegada.yaml
     # diz onde esta o script que fala com a TV.
@@ -3244,6 +3354,13 @@ def main():
             _remoto["aceita"] = bool(json.load(arq).get("aceita", True))
     except (OSError, ValueError):
         pass
+    # No PC do som, com o VS ligado para o Reaper: buscar os pedidos na
+    # principal e mandar no Reaper (ponte/vs_reaper.py). Nunca rodou com um.
+    conf_vs = _config.get("vs") or {}
+    if (_maquina["principal"] is not None and _maquina["papel"] == "som"
+            and conf_vs.get("ativo") and conf_vs.get("driver") == "reaper"):
+        mod_vs_reaper.AgenteDoReaper(_maquina["principal"], conf_vs.get("reaper") or {}).comecar()
+        print("  [vs] este PC obedece aos pedidos do VS e manda no Reaper")
     try:
         _ao_vivo["valor"] = _montar_ao_vivo()
     except Exception as erro:
