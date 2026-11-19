@@ -3,7 +3,7 @@
 Data: 19/11/2026 · Branch: `claude/palavras-pregador-0fc79e` (entra pela `qa`).
 Telas aprovadas: https://claude.ai/artifact/QU7o3ybrFftbDyX6hugHLu (`PalavraLista`, `Palavra`, `PalavraVersiculo`, `PalavraSlides`, `PalavraEnviar`, `PalavraCulto`, `PalavraExportar`, e a linha "Palavra" de `Roteiro`). Os textos de sermão ali são inventados.
 
-**Situação:** especificação para revisão. Nenhum código de produto é escrito antes de (1) o módulo Cultos (`claude/cultos-musicas-roteiro-332cc9`) entrar na `qa` e (2) esta especificação ser aprovada. Os dois módulos mexem no `schema.prisma`, no menu lateral e nos módulos da API.
+**Situação:** aprovada em 19/11/2026. A etapa 1 está implementada (plano em `docs/superpowers/plans/2026-11-19-palavras-etapa-1.md`); as etapas 2 a 6 seguem como descritas aqui.
 
 ## Problema
 
@@ -82,7 +82,7 @@ Mesmo raciocínio das músicas do módulo Cultos: o documento é editado inteiro
 A **situação** não é coluna. É calculada na leitura a partir do envio:
 
 - **Rascunho:** não tem envio.
-- **Enviada · dom 22/11, 19h:** tem envio e a data e hora ainda não passaram (no fuso do tenant, `Tenant.timezone`). Quando o envio ainda não casou com nenhum culto, a lista mostra o mesmo texto e o detalhe diz "guardada até o culto ser criado".
+- **Enviada · dom 22/11, 19h:** tem envio e a data e hora ainda não passaram, no fuso de Brasília (`America/Sao_Paulo`). O tenant ainda não tem fuso próprio no banco; a conta fica atrás de `SermonsService.timeZone()`, um lugar só para trocar quando tiver. Quando o envio ainda não casou com nenhum culto, a lista mostra o mesmo texto e o detalhe diz "guardada até o culto ser criado".
 - **Pregada · dom 15/11:** tem envio e a data e hora já passaram, tenha ele casado com um culto ou não: o pregador disse que pregaria naquele dia.
 
 ### Envio: a cópia pública
@@ -166,7 +166,8 @@ type Doc = { type: 'doc'; content: Block[] };
 type Block =
   | { type: 'paragraph'; content?: Inline[] }
   | { type: 'heading'; attrs: { id: string; level: 2 | 3 }; content?: Inline[] } // "Título de seção" e "Subtítulo"
-  | { type: 'bulletList' | 'orderedList'; content: ListItem[] }
+  | { type: 'bulletList'; content: ListItem[] }
+  | { type: 'orderedList'; attrs?: { start?: number; type?: string | null }; content: ListItem[] } // o Tiptap grava `start` (inteiro ≥ 1) e `type` (até 8 caracteres)
   | { type: 'point'; attrs: { id: string }; content?: Inline[] }                 // Ponto: o número vem da ordem
   | { type: 'verse'; attrs: VerseAttrs }                                          // Versículo: bloco fechado
   | { type: 'illustration' | 'application' | 'privateNote'; attrs: { id: string }; content: Inner[] };
@@ -195,7 +196,7 @@ Pontos do formato:
 - **Estilo do texto** ("Texto" na barra): Texto normal, Título de seção (`heading` 2), Subtítulo (`heading` 3).
 - Colar traz só texto e o que o esquema aceita; o resto é descartado pelo editor.
 
-**Validação no servidor.** O DTO declara `document` como objeto e aplica um validador próprio (`validateSermonDocument`, função pura): percorre a árvore e recusa com 400 qualquer tipo de nó, atributo ou marca fora do esquema acima. Limites: 3.000 nós, 300.000 caracteres de texto, 8 níveis de profundidade, `id` até 36 caracteres, `reference` até 120, até 200 versículos por bloco. É o equivalente, para uma árvore, do whitelist do `ValidationPipe`.
+**Validação no servidor.** O DTO declara `document` como objeto e aplica um validador próprio (`validateSermonDocument`, função pura): percorre a árvore e recusa com 400 qualquer tipo de nó, atributo ou marca fora do esquema acima. Limites: 3.000 nós, 300.000 caracteres de texto, 8 níveis de profundidade, `id` até 36 caracteres, `reference` até 120, até 200 versículos por bloco. É o equivalente, para uma árvore, do whitelist do `ValidationPipe`. O editor é feito para nunca produzir o que o validador recusa: lista dentro de lista para de aceitar Tab no limite de profundidade, e item de lista só aceita parágrafo e lista.
 
 **Derivação.** Uma função pura (`deriveSermon(document)`), igual na API e no painel, como o `worship-document.ts`, produz: as seções da estrutura, os versículos citados, `baseReference`, `pointCount`, `verseRefs` e o tempo de fala. O painel usa para a coluna da esquerda sem ir ao servidor; a API usa para gravar as colunas derivadas. Um teste com o mesmo documento de exemplo dos dois lados garante que não divergem.
 
@@ -361,7 +362,7 @@ Lista dos próximos cultos (de hoje em diante, até 8), cada um com data, hora, 
 Uma função pura, `matchDeliveries(services, deliveries)`, recebe os cultos e os envios de **um tenant numa data** e devolve quem fica com quem:
 
 1. Envios `pinned` ficam onde estão; o culto deles está ocupado.
-2. Os demais, do mais antigo para o mais novo (`createdAt`): o candidato é o culto daquela data com a hora **mais próxima** da hora pedida (empate: o mais cedo). Se o candidato está livre, casa. Se está ocupado, o envio fica guardado; não pula para outro culto.
+2. Os demais, do mais antigo para o mais novo (`createdAt`, que é carimbado de novo a cada envio: quem reenvia vai para o fim da fila daquela data e nunca passa na frente de quem já esperava): o candidato é o culto daquela data com a hora **mais próxima** da hora pedida (empate: o mais cedo). Se o candidato está livre, casa. Se está ocupado, o envio fica guardado; não pula para outro culto.
 
 A função roda, para a data afetada, numa transação junto com a escrita que a provocou:
 
