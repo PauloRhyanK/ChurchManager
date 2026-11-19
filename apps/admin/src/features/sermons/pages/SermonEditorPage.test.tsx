@@ -1,10 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import type { ReactNode } from "react";
+import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_DOC, type SermonDoc } from "../lib/document";
 import SermonEditorPage from "./SermonEditorPage";
+import SermonSlidesPage from "./SermonSlidesPage";
 
 const api = vi.hoisted(() => ({
   getSermon: vi.fn(),
@@ -16,20 +18,27 @@ const api = vi.hoisted(() => ({
   sendSermon: vi.fn(),
   cancelDelivery: vi.fn(),
   generateSlides: vi.fn(),
+  saveSlides: vi.fn(),
 }));
 vi.mock("../api/sermons-api", () => api);
 const perms = vi.hoisted(() => ({ canEdit: true }));
 vi.mock("@/features/access/hooks/use-permissions", () => ({ usePermissions: () => ({ can: () => perms.canEdit }) }));
-vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+vi.mock("sonner", () => ({ toast }));
+vi.mock("@/components/layout/DashboardLayout", () => ({
+  DashboardLayout: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
 // Tiptap em jsdom não é o alvo aqui: a folha e a barra viram dublês simples.
 const fakeEditor = { on() {}, off() {}, state: { selection: { from: 0 }, doc: { forEach() {} } } };
 const TYPED: SermonDoc = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Graça" }] }] };
 vi.mock("../editor/SermonSheet", () => ({
   SermonSheet: ({
+    document,
     onTitleChange,
     onDocumentChange,
     onEditor,
   }: {
+    document: SermonDoc;
     onTitleChange(t: string): void;
     onDocumentChange(d: SermonDoc): void;
     onEditor(e: unknown): void;
@@ -37,6 +46,7 @@ vi.mock("../editor/SermonSheet", () => ({
     useEffect(() => onEditor(fakeEditor), [onEditor]);
     return (
       <>
+        <output data-testid="sheet-doc">{JSON.stringify(document)}</output>
         <input aria-label="Título da palavra" onChange={(e) => onTitleChange(e.target.value)} />
         <button type="button" onClick={() => onDocumentChange(TYPED)}>
           Digitar no texto
@@ -231,30 +241,99 @@ describe("SermonEditorPage", () => {
     expect(screen.queryByRole("toolbar")).not.toBeInTheDocument();
   });
 
-  it("sem slides a barra tem Gerar slides e não tem Enviar para um culto", async () => {
+  const SENT_DELIVERY = { date: "2026-11-22", startTime: "19:00", serviceId: "c1", serviceName: "Culto" };
+  const WITH_SLIDES = { slideCount: 5, slideMode: "VERSES_AND_POINTS", slides: FIVE_SLIDES };
+
+  it("sem slides: Gerar slides e, ao lado, Enviar para um culto, que abre o envio com o salvamento do editor", async () => {
     api.getSermon.mockResolvedValue(sermon);
+    api.listServiceOptions.mockResolvedValue([]);
+    api.updateSermon.mockResolvedValue({ ...sermon, revision: 2 });
     renderPage();
     expect(await screen.findByRole("button", { name: "Gerar slides" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Enviar para um culto/ })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Enviar para um culto" }));
+    expect(await screen.findByRole("dialog", { name: "Enviar para um culto" })).toBeInTheDocument();
   });
 
-  it("com slides a barra tem Slides · N que leva à conferência", async () => {
-    api.getSermon.mockResolvedValue({ ...sermon, slideCount: 5, slideMode: "VERSES_AND_POINTS", slides: FIVE_SLIDES });
+  it("sem slides e enviada: a etiqueta Enviada abre o mesmo envio (mudar ou cancelar)", async () => {
+    api.getSermon.mockResolvedValue({ ...sermon, status: "SENT", delivery: SENT_DELIVERY });
+    api.listServiceOptions.mockResolvedValue([]);
     renderPage();
-    const link = await screen.findByRole("link", { name: "Slides · 5" });
-    expect(link).toHaveAttribute("href", "/palavras/s1/slides");
-    expect(screen.queryByRole("button", { name: "Gerar slides" })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Enviada · dom 22/11, 19h" }));
+    const dialog = await screen.findByRole("dialog", { name: "Enviar para um culto" });
+    expect(dialog).toHaveTextContent("Cancelar o envio");
   });
 
-  it("palavra enviada mostra o culto como texto, sem botão de envio", async () => {
-    api.getSermon.mockResolvedValue({
-      ...sermon,
-      status: "SENT",
-      delivery: { date: "2026-11-22", startTime: "19:00", serviceId: "c1", serviceName: "Culto" },
+  it("com slides: Slides · N leva à conferência e não há envio no editor", async () => {
+    api.getSermon.mockResolvedValue({ ...sermon, ...WITH_SLIDES });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Slides · 5" }));
+    expect(await screen.findByText("Conferência dos slides")).toBeInTheDocument();
+  });
+
+  it("com slides e enviada: a etiqueta Enviada é um link para a conferência", async () => {
+    api.getSermon.mockResolvedValue({ ...sermon, ...WITH_SLIDES, status: "SENT", delivery: SENT_DELIVERY });
+    renderPage();
+    expect(await screen.findByRole("link", { name: "Enviada · dom 22/11, 19h" })).toHaveAttribute("href", "/palavras/s1/slides");
+    expect(screen.queryByRole("button", { name: "Enviar para um culto" })).not.toBeInTheDocument();
+  });
+
+  it("Slides · N salva o que está pendente antes de ir; se o salvamento falha, fica", async () => {
+    api.getSermon.mockResolvedValue({ ...sermon, ...WITH_SLIDES });
+    api.updateSermon.mockRejectedValueOnce(new Error("rede")).mockResolvedValue({ ...sermon, ...WITH_SLIDES, revision: 2 });
+    renderPage();
+    fireEvent.change(await screen.findByLabelText("Título da palavra"), { target: { value: "Novo" } });
+    fireEvent.click(screen.getByRole("button", { name: "Slides · 5" }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Salve a palavra antes de abrir os slides."));
+    expect(api.updateSermon).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Conferência dos slides")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+    await waitFor(() => expect(api.updateSermon).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole("button", { name: "Slides · 5" }));
+    expect(await screen.findByText("Conferência dos slides")).toBeInTheDocument();
+  });
+
+  it("vindo de um cache novo (staleTime do app), o editor ainda busca do servidor antes de abrir", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: false } } });
+    client.setQueryData(["sermons", "detail", "s1"], { ...sermon, document: EMPTY_DOC, revision: 1 });
+    api.getSermon.mockResolvedValue({ ...sermon, document: TYPED, revision: 4 });
+    renderPage(client);
+    await waitFor(() => expect(screen.getByTestId("sheet-doc")).toHaveTextContent("Graça"));
+    expect(api.getSermon).toHaveBeenCalledTimes(1);
+  });
+
+  it("esboço → slides → esboço → digitar → lista → esboço abre o texto e a revisão mais novos", async () => {
+    let server: Record<string, unknown> = { ...sermon, ...WITH_SLIDES };
+    api.getSermon.mockImplementation(async () => server);
+    api.updateSermon.mockImplementation(async (_id: string, body: { title?: string; document?: SermonDoc }) => {
+      server = { ...server, ...body, revision: (server.revision as number) + 1 };
+      return server;
     });
-    renderPage();
-    expect(await screen.findByText("Enviada · dom 22/11, 19h")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Enviada/ })).not.toBeInTheDocument();
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/palavras/s1"]}>
+          <Routes>
+            <Route path="/palavras/:id" element={<SermonEditorPage />} />
+            <Route path="/palavras/:id/slides" element={<SermonSlidesPage />} />
+            <Route path="/palavras" element={<Link to="/palavras/s1">abrir a palavra</Link>} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Slides · 5" }));
+    fireEvent.click(await screen.findByRole("link", { name: "Voltar para o esboço" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Digitar no texto" }));
+    back();
+    fireEvent.click(await screen.findByRole("link", { name: "abrir a palavra" }));
+    await waitFor(() => expect(screen.getByTestId("sheet-doc")).toHaveTextContent("Graça"));
+    expect(api.updateSermon).toHaveBeenCalledWith("s1", { document: TYPED, baseRevision: 1 });
+    expect((client.getQueryData(["sermons", "detail", "s1"]) as { revision: number } | undefined)?.revision ?? 2).toBe(2);
+    // A próxima escrita parte da revisão nova: sem 409.
+    fireEvent.change(screen.getByLabelText("Título da palavra"), { target: { value: "x" } });
+    fireEvent.click(screen.getByRole("button", { name: "Digitar no texto" }));
+    back();
+    await waitFor(() => expect(api.updateSermon).toHaveBeenCalledTimes(2));
+    expect(api.updateSermon.mock.calls[1][1]).toMatchObject({ baseRevision: 2 });
   });
 
   it("Montar salva, gera, atualiza a barra sem remontar o editor e vai para a conferência", async () => {

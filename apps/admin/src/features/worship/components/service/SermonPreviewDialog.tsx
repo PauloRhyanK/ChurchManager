@@ -19,7 +19,7 @@ export function SermonPreviewDialog({ serviceId, open, onOpenChange }: SermonPre
     queryKey: ["worship", "service-sermon", serviceId],
     queryFn: () => getServiceSermon(serviceId),
     enabled: open,
-    // Os slides mudam na conferência sem invalidar o roteiro: cada abertura busca de novo (mostrando o cache enquanto isso).
+    // Os slides mudam na conferência sem invalidar o roteiro: cada abertura busca de novo.
     staleTime: 0,
   });
   const data = query.data;
@@ -32,7 +32,8 @@ export function SermonPreviewDialog({ serviceId, open, onOpenChange }: SermonPre
           <DialogDescription>{data ? `Palavra de ${data.preacherName}` : "Slides da palavra deste culto."}</DialogDescription>
         </DialogHeader>
 
-        {query.isPending ? (
+        {/* Ao reabrir, os slides guardados podem ser antigos: espera a busca nova. */}
+        {query.isPending || query.isFetching ? (
           <div className="flex justify-center py-10" role="status" aria-label="Carregando">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden="true" />
           </div>

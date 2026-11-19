@@ -20,6 +20,7 @@ const LIST_PATH = "/palavras";
 const STYLE_NAME: Record<SlideStyle, string> = { MINIMAL: "Minimalista", BACKGROUND: "Com fundo" };
 const SAVE_ERROR = "Não foi possível salvar os slides.";
 const UNSAVED = "Não foi possível salvar os slides. Confira a lista antes de enviar.";
+const RELOAD_ERROR = "Não foi possível carregar os slides. Atualize a página.";
 const REGENERATE_NOTICE = "Trocar o que mostrar refaz a sequência do zero.";
 
 const plural = (n: number) => `${n} ${n === 1 ? "slide" : "slides"}`;
@@ -40,16 +41,20 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
   // Fila de salvamento: um pedido por vez; o que mudar no meio espera e vai inteiro no próximo.
   const pending = useRef<Draft | null>(null);
   const running = useRef<Promise<void> | null>(null);
-  // O último salvamento falhou: nada segue (enviar, gerar) até um salvamento dar certo.
+  // Falhas de salvamento: `failures` conta todas (quem esperava durante uma falha recebe `false`);
+  // `failed` = a tela não está com a lista do servidor (a volta ao servidor também falhou).
+  const failures = useRef(0);
   const failed = useRef(false);
   const busyRef = useRef(false);
+  // Depois da primeira mudança local, só respostas das próprias escritas entram (via `adopt`).
+  const touched = useRef(false);
   const lastServer = useRef(server);
 
-  // Nova cópia do servidor (a busca da montagem chegou): entra se não há mudança local esperando.
+  // Nova cópia do servidor (a busca da montagem chegou): entra só se nada local aconteceu ainda.
   useEffect(() => {
     if (server === lastServer.current) return;
     lastServer.current = server;
-    if (pending.current || running.current || busyRef.current) return;
+    if (touched.current || pending.current || running.current || busyRef.current) return;
     setSermon(server);
     setDraft({ items: server.slides, style: server.slideStyle });
   }, [server]);
@@ -74,13 +79,17 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
           adopt(saved, pending.current === null);
         } catch {
           pending.current = null;
+          failures.current += 1;
           failed.current = true;
           toast.error(SAVE_ERROR);
           setResetting(true);
           try {
             adopt(await getSermon(id), true);
+            // A tela voltou a mostrar o que o servidor tem: dá para seguir.
+            failed.current = false;
           } catch {
-            // Sem a cópia do servidor, a tela fica como está; o próximo salvamento tenta de novo.
+            // Sem a cópia do servidor a tela fica como está e nada segue até um salvamento dar certo.
+            toast.error(RELOAD_ERROR);
           } finally {
             // O que mudou nesse meio (não deveria: a lista estava travada) é descartado.
             pending.current = null;
@@ -94,21 +103,28 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
   }
 
   function change(next: Draft) {
+    touched.current = true;
+    // Uma busca ainda em voo traria a lista de antes desta mudança.
+    void queryClient.cancelQueries({ queryKey: detailKey(id) });
     setDraft(next);
     pending.current = next;
     if (!running.current) running.current = drain();
   }
 
-  /** Espera a fila esvaziar (antes de gerar de novo ou enviar); `false` se o último salvamento falhou. */
+  /** Espera a fila esvaziar (antes de gerar de novo ou enviar); `false` se houve falha no meio ou a tela não está com a lista do servidor. */
   async function whenIdle() {
+    const start = failures.current;
     while (running.current) await running.current;
-    return !failed.current;
+    return failures.current === start && !failed.current;
   }
 
   const { items, style } = draft;
   const shown = publicSlides(items);
+  const preached = sermon.status === "PREACHED";
+  // Palavra pregada: os slides ficam como foram ao culto.
+  const canChange = canEdit && !preached;
   const locked = busy || resetting;
-  const readOnly = !canEdit || locked;
+  const readOnly = !canChange || locked;
 
   async function refresh() {
     setBusy(true);
@@ -128,7 +144,6 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
   }
 
   const situation = sermon.delivery && sermon.status !== "DRAFT" ? formatSituation(sermon) : null;
-  const preached = sermon.status === "PREACHED";
   const hasSlides = items.length > 0;
 
   return (
@@ -161,14 +176,20 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
           )}
         </div>
 
-        {sermon.slidesStale && hasSlides && (
+        {preached && hasSlides && (
+          <p className="rounded-xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+            Esta palavra já foi pregada. Os slides ficam como foram ao culto.
+          </p>
+        )}
+
+        {sermon.slidesStale && hasSlides && canChange && (
           <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm">
             <span className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 flex-none text-amber-600" aria-hidden="true" />
               O esboço mudou depois destes slides.
             </span>
-            {canEdit && (
-              <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={busy} onClick={refresh}>
+            {canChange && (
+              <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={locked} onClick={refresh}>
                 <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
                 Atualizar
               </Button>
@@ -179,7 +200,7 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
         {!hasSlides ? (
           <div className="flex flex-col items-center gap-3 rounded-xl border bg-card px-6 py-12 text-center">
             <p className="text-base font-semibold">Esta palavra ainda não tem slides.</p>
-            {canEdit && (
+            {canChange && (
               <Button type="button" className="gap-1.5" onClick={() => setGenerateOpen(true)}>
                 <Sparkles aria-hidden="true" />
                 Gerar slides
@@ -194,7 +215,7 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
                 <span className="flex-1">
                   <b>Tirado do esboço</b> <span className="text-muted-foreground">· {plural(shown.length)}</span>
                 </span>
-                {canEdit && (
+                {canChange && (
                   <Button type="button" variant="ghost" size="sm" disabled={locked} onClick={() => setGenerateOpen(true)}>
                     Gerar de novo
                   </Button>
@@ -218,7 +239,7 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
             <section aria-label="No telão" className="flex min-w-0 flex-[1_1_380px] flex-col gap-3">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-xs font-bold uppercase tracking-[0.08em] text-muted-foreground">No telão</h2>
-                {canEdit ? (
+                {canChange ? (
                   <button
                     type="button"
                     disabled={locked}
@@ -258,7 +279,7 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
           onChanged={(saved) => adopt(saved, !running.current)}
         />
       )}
-      {canEdit && (
+      {canChange && (
         <GenerateSlidesDialog
           open={generateOpen}
           onOpenChange={setGenerateOpen}
@@ -286,6 +307,8 @@ export default function SermonSlidesPage() {
     queryFn: () => getSermon(id),
     staleTime: 0,
     refetchOnMount: "always",
+    // Sem cache guardado depois de sair: o esboço sempre lê do servidor e as duas telas não disputam a cópia.
+    gcTime: 0,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,

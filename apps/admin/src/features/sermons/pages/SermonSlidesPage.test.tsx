@@ -245,32 +245,47 @@ describe("SermonSlidesPage", () => {
     await waitFor(() => expect(box(/João 8:12/)).not.toBeChecked());
   });
 
-  it("depois de um salvamento que falhou, Enviar não segue e avisa", async () => {
-    api.saveSlides.mockRejectedValue(new Error("falhou"));
-    api.sendSermon.mockResolvedValue(sermon());
-    api.listServiceOptions.mockResolvedValue([
-      { id: "c1", date: "2026-11-22", startTime: "19:00", name: "Culto", hasSermon: false, isMine: false },
-    ]);
-    renderPage();
-    fireEvent.click(await screen.findByRole("checkbox", { name: /João 8:12/ }));
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Não foi possível salvar os slides."));
-    await waitFor(() => expect(box(/João 8:12/)).not.toBeDisabled());
+  const chooseAndSend = async () => {
     fireEvent.click(screen.getByRole("button", { name: "Enviar para um culto" }));
     fireEvent.click(await screen.findByRole("radio", { name: /Culto/ }));
     fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+  };
+  const OPTION = [{ id: "c1", date: "2026-11-22", startTime: "19:00", name: "Culto", hasSermon: false, isMine: false }];
+
+  it("envio pedido enquanto um salvamento falha não segue e avisa", async () => {
+    const failing = deferred<unknown>();
+    api.saveSlides.mockReturnValueOnce(failing.promise);
+    api.sendSermon.mockResolvedValue(sermon());
+    api.listServiceOptions.mockResolvedValue(OPTION);
+    renderPage();
+    fireEvent.click(await screen.findByRole("checkbox", { name: /João 8:12/ }));
+    await chooseAndSend();
+    await act(async () => failing.reject(new Error("falhou")));
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith("Não foi possível salvar os slides. Confira a lista antes de enviar."),
     );
     expect(api.sendSermon).not.toHaveBeenCalled();
   });
 
-  it("depois de um salvamento que falhou, Atualizar não gera; um salvamento bom libera", async () => {
-    api.getSermon.mockResolvedValue(sermon({ slidesStale: true }));
+  it("depois que a lista volta ao estado do servidor, o envio segue sem precisar mexer em nada", async () => {
+    api.saveSlides.mockRejectedValue(new Error("falhou"));
+    api.sendSermon.mockResolvedValue(sermon());
+    api.listServiceOptions.mockResolvedValue(OPTION);
+    renderPage();
+    fireEvent.click(await screen.findByRole("checkbox", { name: /João 8:12/ }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Não foi possível salvar os slides."));
+    await waitFor(() => expect(box(/João 8:12/)).not.toBeDisabled());
+    await chooseAndSend();
+    await waitFor(() => expect(api.sendSermon).toHaveBeenCalled());
+  });
+
+  it("se nem a volta ao servidor dá certo, avisa para atualizar e nada segue até um salvamento bom", async () => {
+    api.getSermon.mockResolvedValueOnce(sermon({ slidesStale: true })).mockRejectedValue(new Error("rede"));
     api.saveSlides.mockRejectedValueOnce(new Error("falhou")).mockResolvedValue(sermon({ slidesStale: true }));
     api.generateSlides.mockResolvedValue(sermon());
     renderPage();
     fireEvent.click(await screen.findByRole("checkbox", { name: /João 8:12/ }));
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Não foi possível salvar os slides."));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Não foi possível carregar os slides. Atualize a página."));
     await waitFor(() => expect(box(/João 8:12/)).not.toBeDisabled());
     fireEvent.click(screen.getByRole("button", { name: "Atualizar" }));
     await waitFor(() =>
@@ -282,6 +297,39 @@ describe("SermonSlidesPage", () => {
     await settle();
     fireEvent.click(screen.getByRole("button", { name: "Atualizar" }));
     await waitFor(() => expect(api.generateSlides).toHaveBeenCalled());
+  });
+
+  it("a busca da montagem que chega atrasada não desfaz uma mudança local", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } });
+    client.setQueryData(["sermons", "detail", "s1"], sermon());
+    const late = deferred<unknown>();
+    api.getSermon.mockReturnValue(late.promise);
+    api.saveSlides.mockResolvedValue(sermon({ slides: SLIDES.map((s) => (s.id === "v1:0" ? { ...s, included: false } : s)) }));
+    renderPage(client);
+    fireEvent.click(await screen.findByRole("checkbox", { name: /João 8:12/ }));
+    await settle();
+    expect(box(/João 8:12/)).not.toBeChecked();
+    await act(async () => late.resolve(sermon()));
+    await settle();
+    expect(box(/João 8:12/)).not.toBeChecked();
+  });
+
+  it("palavra pregada: só leitura, com o aviso", async () => {
+    api.getSermon.mockResolvedValue(
+      sermon({
+        status: "PREACHED",
+        slidesStale: true,
+        delivery: { date: "2026-11-22", startTime: "19:00", serviceId: "c1", serviceName: "Culto" },
+      }),
+    );
+    renderPage();
+    expect(await screen.findByText("Esta palavra já foi pregada. Os slides ficam como foram ao culto.")).toBeInTheDocument();
+    for (const b of screen.getAllByRole("checkbox")) expect(b).toBeDisabled();
+    expect(screen.queryByLabelText("Arrastar para mudar a ordem")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "A luz chama" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Gerar de novo" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Atualizar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /trocar/ })).not.toBeInTheDocument();
   });
 
   it("a lista fica travada enquanto volta ao estado do servidor depois de um erro", async () => {

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Editor } from "@tiptap/react";
 import { ArrowLeft, Check, Clock, ListTree, Loader2, MoreHorizontal, Sparkles } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -21,6 +21,7 @@ import { usePermissions } from "@/features/access/hooks/use-permissions";
 import { getApiErrorMessage } from "@/lib/api";
 import { deleteSermon, duplicateSermon, getSermon, updateSermon, type Sermon } from "../api/sermons-api";
 import { GenerateSlidesDialog } from "../components/GenerateSlidesDialog";
+import { SendToServiceDialog } from "../components/SendToServiceDialog";
 import { StructurePanel } from "../components/StructurePanel";
 import { SermonSheet } from "../editor/SermonSheet";
 import { SermonToolbar } from "../editor/SermonToolbar";
@@ -31,6 +32,7 @@ import { useAutosave } from "../lib/use-autosave";
 const LIST_PATH = "/palavras";
 const UNTITLED = "Sem título";
 const LIST_KEY = ["sermons", "list"] as const;
+const detailKey = (id: string) => ["sermons", "detail", id] as const;
 
 /** Id da seção onde está o cursor: o último Ponto ou Título de seção até a posição; nulo na Abertura. */
 function sectionAtCursor(editor: Editor): string | null {
@@ -132,9 +134,10 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [slidesOpen, setSlidesOpen] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
   const queryClient = useQueryClient();
-  // Situação do envio (só leitura aqui) e slides: vivem à parte do texto, que depois de aberto é do editor.
-  const situation = { status: sermon.status, delivery: sermon.delivery };
+  // Situação do envio e slides: vivem à parte do texto, que depois de aberto é do editor.
+  const [situation, setSituation] = useState({ status: sermon.status, delivery: sermon.delivery });
   const [slidesInfo, setSlidesInfo] = useState({
     count: sermon.slideCount,
     has: sermon.slides.length > 0,
@@ -146,6 +149,22 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
     initialRevision: sermon.revision,
     save: async (body) => {
       const saved = await updateSermon(sermon.id, body);
+      // A cópia em cache acompanha o servidor (o editor aberto não relê dela; quem abrir depois parte daqui).
+      queryClient.setQueryData<Sermon>(detailKey(sermon.id), (old) =>
+        old
+          ? {
+              ...old,
+              title: saved.title,
+              document: saved.document,
+              revision: saved.revision,
+              baseReference: saved.baseReference,
+              pointCount: saved.pointCount,
+              estimatedSeconds: saved.estimatedSeconds,
+              slidesStale: saved.slidesStale,
+              updatedAt: saved.updatedAt,
+            }
+          : saved,
+      );
       return { revision: saved.revision };
     },
     // O envio gravou mas a resposta se perdeu? Se o servidor tem exatamente o que foi mandado, segue dali.
@@ -240,6 +259,21 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
     await autosave.flush();
     return !autosave.isDirty();
   }
+  /** Só abre a conferência com tudo salvo: ela lê do servidor (e o aviso de esboço alterado depende disso). */
+  async function openSlides() {
+    await autosave.flush();
+    if (autosave.isDirty()) {
+      toast.error("Salve a palavra antes de abrir os slides.");
+      return;
+    }
+    navigate(`${LIST_PATH}/${sermon.id}/slides`);
+  }
+  function handleSent(updated: Sermon) {
+    setSituation({ status: updated.status, delivery: updated.delivery });
+    queryClient.setQueryData<Sermon>(detailKey(sermon.id), (old) =>
+      old ? { ...old, status: updated.status, delivery: updated.delivery } : old,
+    );
+  }
   function handleGenerated(updated: Sermon) {
     setSlidesInfo({ count: updated.slideCount, has: updated.slides.length > 0, style: updated.slideStyle });
     // Só os slides mudam na cópia em cache; o texto e a revisão ficam como estão.
@@ -256,36 +290,49 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
         : old,
     );
     void queryClient.invalidateQueries({ queryKey: LIST_KEY });
-    navigate(`${LIST_PATH}/${sermon.id}/slides`);
+    void openSlides();
   }
 
-  // O envio para o culto fica na conferência dos slides; aqui só a situação aparece, como texto.
+  // Com slides, o envio fica na conferência; sem slides (ou palavra antiga), o envio abre aqui mesmo.
   const situationText =
     delivery && situation.status === "PREACHED"
       ? `Pregada · ${formatDay(delivery.date)}`
       : delivery
         ? `Enviada · ${formatDay(delivery.date)}, ${formatHour(delivery.startTime)}`
         : null;
+  const preached = situation.status === "PREACHED";
+  const canSendHere = canEdit && !slidesInfo.has && !preached;
+  const plainSituation = situationText && (
+    <span className="flex h-8 items-center rounded-md border border-[#E5E7EB] px-3 text-sm text-[#6B7280]">{situationText}</span>
+  );
   const headerActions = (
     <>
-      {situationText && (
-        <span className="flex h-8 items-center rounded-md border border-[#E5E7EB] px-3 text-sm text-[#6B7280]">{situationText}</span>
-      )}
       {slidesInfo.has ? (
-        <Button asChild size="sm" className="gap-1.5">
-          <Link to={`${LIST_PATH}/${sermon.id}/slides`}>
+        <>
+          {situationText && !preached ? (
+            <Button asChild variant="outline" size="sm">
+              <Link to={`${LIST_PATH}/${sermon.id}/slides`}>{situationText}</Link>
+            </Button>
+          ) : (
+            plainSituation
+          )}
+          <Button type="button" size="sm" className="gap-1.5" onClick={() => void openSlides()}>
             <Sparkles aria-hidden="true" />
             Slides · {slidesInfo.count}
-          </Link>
-        </Button>
-      ) : (
-        canEdit &&
-        situation.status !== "PREACHED" && (
+          </Button>
+        </>
+      ) : canSendHere ? (
+        <>
+          <Button type="button" variant="outline" size="sm" onClick={() => setSendOpen(true)}>
+            {situationText ?? "Enviar para um culto"}
+          </Button>
           <Button type="button" size="sm" className="gap-1.5" onClick={() => setSlidesOpen(true)}>
             <Sparkles aria-hidden="true" />
             Gerar slides
           </Button>
-        )
+        </>
+      ) : (
+        plainSituation
       )}
     </>
   );
@@ -376,6 +423,18 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
         onGenerated={handleGenerated}
       />
 
+      {canSendHere && (
+        <SendToServiceDialog
+          open={sendOpen}
+          onOpenChange={setSendOpen}
+          sermonId={sermon.id}
+          sermonTitle={title}
+          delivery={delivery}
+          ensureSaved={ensureSaved}
+          onChanged={handleSent}
+        />
+      )}
+
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -396,31 +455,40 @@ export default function SermonEditorPage() {
   const { id = "" } = useParams<{ id: string }>();
   const { can } = usePermissions();
   const canEdit = can("SERMONS", "EDIT");
-  // A cópia do servidor só abre o editor: depois disso quem manda é o editor.
+  // O editor sempre abre de uma leitura feita agora (o cache pode ter vindo de outra tela); depois quem manda é o editor.
   const sermonQuery = useQuery({
-    queryKey: ["sermons", "detail", id],
+    queryKey: detailKey(id),
     queryFn: () => getSermon(id),
-    staleTime: Infinity,
+    staleTime: 0,
+    refetchOnMount: "always",
     gcTime: 0,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     retry: false,
   });
   const [loadKey, setLoadKey] = useState(0);
+  // A cópia que abriu o editor desta montagem (troca só ao recarregar): o cache pode mudar sem remontar o editor.
+  const opened = useRef<{ key: number; sermon: Sermon } | null>(null);
 
   const reload = useCallback(async () => {
     const result = await sermonQuery.refetch();
     if (result.data) setLoadKey((k) => k + 1);
   }, [sermonQuery]);
 
-  if (sermonQuery.isPending) {
+  if (!sermonQuery.isError && (!opened.current || opened.current.key !== loadKey)) {
+    if (sermonQuery.data && sermonQuery.isFetchedAfterMount && !sermonQuery.isFetching) {
+      opened.current = { key: loadKey, sermon: sermonQuery.data };
+    }
+  }
+
+  if (!sermonQuery.isError && !opened.current) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#F3F4F6]" role="status" aria-label="Carregando">
         <Loader2 className="h-6 w-6 animate-spin text-[#6B7280]" aria-hidden="true" />
       </div>
     );
   }
-  if (sermonQuery.isError || !sermonQuery.data) {
+  if (sermonQuery.isError || !opened.current) {
     const notFound = (sermonQuery.error as { response?: { status?: number } } | null)?.response?.status === 404;
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#F3F4F6] p-6 text-center">
@@ -433,5 +501,5 @@ export default function SermonEditorPage() {
       </div>
     );
   }
-  return <EditorView key={loadKey} sermon={sermonQuery.data} canEdit={canEdit} onReload={reload} />;
+  return <EditorView key={loadKey} sermon={opened.current.sermon} canEdit={canEdit} onReload={reload} />;
 }

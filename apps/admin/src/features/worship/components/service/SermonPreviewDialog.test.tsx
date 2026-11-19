@@ -47,6 +47,24 @@ describe("SermonPreviewDialog", () => {
     expect(await screen.findByRole("link", { name: "Abrir a palavra" })).toHaveAttribute("href", "/palavras/s9");
   });
 
+  it("ao reabrir, mostra o carregando em vez dos slides antigos enquanto busca de novo", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(["worship", "service-sermon", "c1"], PREVIEW);
+    let finish!: (v: unknown) => void;
+    api.getServiceSermon.mockReturnValue(new Promise((res) => (finish = res)));
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          <SermonPreviewDialog serviceId="c1" open onOpenChange={vi.fn()} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByRole("status", { name: "Carregando" })).toBeInTheDocument();
+    expect(screen.queryByTestId("slide-card")).not.toBeInTheDocument();
+    finish({ ...PREVIEW, slides: [PREVIEW.slides[0]] });
+    expect(await screen.findAllByTestId("slide-card")).toHaveLength(1);
+  });
+
   it("sem slides avisa", async () => {
     api.getServiceSermon.mockResolvedValue({ ...PREVIEW, slides: [] });
     renderDialog();
