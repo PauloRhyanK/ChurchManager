@@ -130,6 +130,7 @@ export function normalizeRows(input: WorshipRow[]): WorshipRow[] {
   const seen = new Set<string>();
   const out: WorshipRow[] = [];
   let carriedPart: RowPart | undefined;
+  let carriedTime: { time: number; timeSource?: TimeSource } | undefined;
 
   for (const raw of input.slice(0, MAX_ROWS)) {
     let id = typeof raw.id === 'string' && raw.id ? raw.id : newRowId();
@@ -137,8 +138,12 @@ export function normalizeRows(input: WorshipRow[]): WorshipRow[] {
     seen.add(id);
 
     if (isBlank(raw)) {
-      // Uma linha apagada que abria parte passa a parte para a seguinte.
-      if (raw.part && !carriedPart) carriedPart = raw.part;
+      // Uma linha apagada que abria parte ou slide passa a parte e o tempo para a seguinte
+      // (se houver duas, vale a última, como em `deriveSong`).
+      if (raw.part) carriedPart = raw.part;
+      if (typeof raw.time === 'number' && Number.isFinite(raw.time)) {
+        carriedTime = { time: raw.time, timeSource: raw.timeSource };
+      }
       const last = out[out.length - 1];
       if (!last || last.type === 'break') continue;
       out.push({ id, type: 'break' });
@@ -146,7 +151,9 @@ export function normalizeRows(input: WorshipRow[]): WorshipRow[] {
     }
 
     const part = raw.part ?? carriedPart;
+    const inherited = typeof raw.time === 'number' ? undefined : carriedTime;
     carriedPart = undefined;
+    carriedTime = undefined;
     const last = out[out.length - 1];
     if (part && last?.type === 'break') out.pop();
 
@@ -158,9 +165,10 @@ export function normalizeRows(input: WorshipRow[]): WorshipRow[] {
     };
     if (raw.type === 'cue') row.target = raw.target ?? 'ALL';
     if (part) row.part = { kind: part.kind, mood: part.mood ?? null };
-    if (startsSlide && typeof raw.time === 'number' && Number.isFinite(raw.time)) {
-      row.time = Math.min(MAX_TIME_SECONDS, Math.max(0, Math.round(raw.time * 100) / 100));
-      row.timeSource = raw.timeSource ?? 'MANUAL';
+    const time = typeof raw.time === 'number' ? raw.time : inherited?.time;
+    if (startsSlide && typeof time === 'number' && Number.isFinite(time)) {
+      row.time = Math.min(MAX_TIME_SECONDS, Math.max(0, Math.round(time * 100) / 100));
+      row.timeSource = (typeof raw.time === 'number' ? raw.timeSource : inherited?.timeSource) ?? 'MANUAL';
     }
     out.push(row);
   }

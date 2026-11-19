@@ -187,7 +187,9 @@ test('áudio: aceita MP3, WAV, M4A, OGG e FLAC pela assinatura', withEnv(FULL_EN
 
 test('áudio: recusa o que não é áudio (imagem, WebP em RIFF, texto) e arquivo ausente', withEnv(FULL_ENV, async () => {
   const { service, sent } = createService();
-  for (const buf of [PNG, WEBP, SVG, Buffer.from('isto não é um mp3, só tem a extensão')]) {
+  const UTF16 = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from('texto qualquer', 'utf16le')]);
+  const VIDEO = pad(Buffer.concat([Buffer.from([0, 0, 0, 0x20]), Buffer.from('ftypqt  ')]));
+  for (const buf of [PNG, WEBP, SVG, UTF16, VIDEO, Buffer.from('isto não é um mp3, só tem a extensão')]) {
     await assert.rejects(() => service.uploadAudio(buf, AUDIO_FOLDER), BadRequestException);
   }
   await assert.rejects(() => service.uploadAudio(undefined, AUDIO_FOLDER), BadRequestException);

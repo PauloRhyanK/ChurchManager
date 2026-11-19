@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, LayoutTemplate, Loader2, MoreHorizontal, Music, Plus } from "lucide-react";
+import { CalendarDays, LayoutTemplate, Loader2, MoreHorizontal, Music, Plus, Radio } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -34,6 +34,7 @@ import {
 import { AddSongDialog } from "../components/service/AddSongDialog";
 import { MomentsTab } from "../components/service/MomentsTab";
 import { NewServiceDialog } from "../components/service/NewServiceDialog";
+import { PonteKeyDialog } from "../components/service/PonteKeyDialog";
 import { WorshipTab } from "../components/service/WorshipTab";
 import { formatServiceLabel } from "../lib/format";
 
@@ -50,6 +51,9 @@ export default function ServicePlanPage() {
   const [newOpen, setNewOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [ponteOpen, setPonteOpen] = useState(false);
+  // A chave dá acesso de leitura ao roteiro: gerar e revogar é de quem cuida das configurações.
+  const canManagePonte = can("SETTINGS", "EDIT");
   const [templateName, setTemplateName] = useState<string | null>(null);
 
   const servicesQuery = useQuery({ queryKey: ["worship", "services"], queryFn: fetchServices });
@@ -133,12 +137,20 @@ export default function ServicePlanPage() {
       <div className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <h1 className="text-2xl font-bold tracking-tight">Roteiro</h1>
-          {canEdit && (
-            <Button className="gap-2" onClick={() => setNewOpen(true)}>
-              <Plus className="h-4 w-4" />
-              Novo culto
-            </Button>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {canManagePonte && (
+              <Button variant="outline" className="gap-2" onClick={() => setPonteOpen(true)}>
+                <Radio className="h-4 w-4" />
+                Ponte do Culto
+              </Button>
+            )}
+            {canEdit && (
+              <Button className="gap-2" onClick={() => setNewOpen(true)}>
+                <Plus className="h-4 w-4" />
+                Novo culto
+              </Button>
+            )}
+          </div>
         </div>
 
         {error && (
@@ -247,6 +259,8 @@ export default function ServicePlanPage() {
           </section>
         ) : null}
       </div>
+
+      {canManagePonte && <PonteKeyDialog open={ponteOpen} onOpenChange={setPonteOpen} />}
 
       <NewServiceDialog open={newOpen} onOpenChange={setNewOpen} onCreate={(input) => create.mutate(input)} creating={create.isPending} />
 
