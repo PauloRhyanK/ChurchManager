@@ -1107,3 +1107,37 @@ model SermonDelivery {
   @@index([tenantId, date])
   @@map("sermon_deliveries")
 }
+
+/// Tradução da Bíblia. Tabela global (sem tenant), carregada por script.
+model BibleTranslation {
+  id            String   @id @default(uuid()) @db.Uuid
+  code          String   @unique @db.VarChar(16)
+  name          String   @db.VarChar(120)
+  shortName     String   @map("short_name") @db.VarChar(32)
+  license       String   @db.VarChar(255)
+  attribution   String   @db.Text
+  sourceUrl     String   @map("source_url") @db.VarChar(512)
+  sourceVersion String   @map("source_version") @db.VarChar(32)
+  isDefault     Boolean  @default(false) @map("is_default")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  verses BibleVerse[]
+
+  @@map("bible_translations")
+}
+
+/// Versículo de uma tradução. `searchText` é o texto sem acento e em minúsculas, para a busca por trecho.
+model BibleVerse {
+  translationId String @map("translation_id") @db.Uuid
+  book          Int    @db.SmallInt
+  chapter       Int    @db.SmallInt
+  verse         Int    @db.SmallInt
+  text          String @db.Text
+  searchText    String @map("search_text") @db.Text
+
+  translation BibleTranslation @relation(fields: [translationId], references: [id], onDelete: Cascade)
+
+  @@id([translationId, book, chapter, verse])
+  @@map("bible_verses")
+}
