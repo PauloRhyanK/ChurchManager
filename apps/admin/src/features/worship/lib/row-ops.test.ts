@@ -4,8 +4,10 @@ import {
   applySuggestedMoods,
   insertCue,
   insertEmptyPart,
+  moveCue,
   pasteLines,
   removeRow,
+  renamePart,
   repeatRange,
   rowsFromEditorNodes,
   setPartKind,
@@ -219,5 +221,71 @@ describe("pasteLines", () => {
   it("cola em documento vazio", () => {
     const { rows } = pasteLines([], 0, 0, "um\ndois");
     expect(rows.map((r) => r.text)).toEqual(["um", "dois"]);
+  });
+});
+
+describe("moveCue", () => {
+  const withCue = (): WorshipRow[] => insertCue(verse(), 3, "VOCAL", "solo");
+  // a b c [cue] d e f g — a instrução abre o slide 2 e herdou o tempo 20.
+
+  it("mover para o meio de outro slide: o slide de onde saiu volta a ter o tempo na letra", () => {
+    const before = withCue();
+    const id = before[3].id;
+    const rows = moveCue(before, id, 7); // antes de "g"
+    expect(rows.find((r) => r.id === "d")?.time).toBe(20);
+    const at = rows.findIndex((r) => r.id === id);
+    expect(rows[at + 1].id).toBe("g");
+    // Chegou no começo do slide de "g": leva o tempo dele.
+    expect(rows[at].time).toBe(30);
+    expect(rows.find((r) => r.id === "g")?.time).toBeUndefined();
+    expect(rows.length).toBe(before.length);
+  });
+
+  it("subir uma linha atravessa a quebra e vai para o fim do slide de cima", () => {
+    const rows = withCue();
+    const id = rows[3].id;
+    const out = moveCue(rows, id, 2);
+    expect(out.map((r) => r.id)).toEqual(["a", "b", id, "c", "d", "e", "f", "g"]);
+    expect(texts(out)[0]).toBe("ANTES DO SOL NASCER / TUA VOZ ME CHAMOU");
+    expect(deriveSong(out).slides[0].cues).toEqual([{ target: "VOCAL", text: "solo" }]);
+    expect(out.find((r) => r.id === "d")?.time).toBe(20);
+  });
+
+  it("no mesmo lugar não muda nada", () => {
+    const rows = withCue();
+    expect(moveCue(rows, rows[3].id, 3)).toBe(rows);
+    expect(moveCue(rows, rows[3].id, 4)).toBe(rows);
+  });
+
+  it("instrução que é sozinha uma parte leva a parte junto", () => {
+    const rows = insertEmptyPart(verse(), -1, "INTRO");
+    const id = rows[0].id;
+    const out = moveCue(rows, id, rows.length);
+    expect(names(out)).toEqual(["Verso 1", "Intro"]);
+    expect(out[0].part?.kind).toBe("VERSE");
+  });
+});
+
+describe("renamePart", () => {
+  it("nome próprio fica com o tipo; null volta ao nome do tipo", () => {
+    const rows = setPartKind(verse(), 3, 4, "CHORUS");
+    const named = renamePart(rows, "d", "CHORUS", "  Refrão   final ");
+    expect(names(named)).toEqual(["Verso 1", "Refrão final", "Verso 2"]);
+    expect(named.find((r) => r.id === "d")?.part?.mood).toBe(rows.find((r) => r.id === "d")?.part?.mood);
+    expect(names(renamePart(named, "d", "CHORUS", null))).toEqual(["Verso 1", "Refrão", "Verso 2"]);
+  });
+
+  it("trocar o tipo troca o clima sugerido; o clima e o nome sobrevivem à troca de clima", () => {
+    const out = renamePart(verse(), "a", "BRIDGE", null);
+    expect(out[0].part).toEqual({ kind: "BRIDGE", mood: "BUILD" });
+    const named = renamePart(out, "a", "BRIDGE", "Ponte 2");
+    expect(setPartMood(named, "a", "EXPLOSION")[0].part).toEqual({ kind: "BRIDGE", mood: "EXPLOSION", name: "Ponte 2" });
+    expect(applySuggestedMoods(named)[0].part?.name).toBe("Ponte 2");
+  });
+
+  it("marcar de novo o mesmo tipo pela barrinha mantém o nome; outro tipo tira", () => {
+    const named = renamePart(verse(), "a", "VERSE", "Tag");
+    expect(setPartKind(named, 0, 1, "VERSE")[0].part?.name).toBe("Tag");
+    expect(setPartKind(named, 0, 1, "CHORUS")[0].part?.name).toBeUndefined();
   });
 });

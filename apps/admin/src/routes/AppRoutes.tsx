@@ -84,7 +84,7 @@ export function AppRoutes() {
           </Route>
         </Route>
         <Route element={<PermissionRoute module="WORSHIP" />}>
-          <Route path="/cultos" element={<Navigate to="/cultos/musicas" replace />} />
+          <Route path="/cultos" element={<Navigate to="/cultos/roteiro" replace />} />
           <Route path="/cultos/musicas" element={<SongsListPage />} />
           <Route element={<PermissionRoute module="WORSHIP" level="EDIT" />}>
             <Route path="/cultos/musicas/nova" element={<NewSongPage />} />

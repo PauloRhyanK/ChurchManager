@@ -23,8 +23,10 @@ import { PART_KIND_LABEL, deriveSong, type PartKind, type WorshipRow } from "../
 import {
   insertCue,
   insertEmptyPart,
+  moveCue,
   partAt,
   removeRow,
+  renamePart,
   repeatRange,
   setPartKind,
   splitSlideAt,
@@ -167,6 +169,8 @@ export function LyricsStep({ song, rows, draft, version, canEdit, onChange, onOr
           onChange={onChange}
           onSelection={handleSelection}
           onCueClick={(id) => canEdit && setCue({ mode: "edit", id })}
+          onMoveCue={(id, beforeIndex) => onChange(moveCue(rows, id, beforeIndex), true)}
+          onRenamePart={(rowId, choice) => onChange(renamePart(rows, rowId, choice.kind, choice.name), true)}
           renderToolbar={(sel) => (
             <SelectionToolbar
               activeKind={partAt(rows, sel.from).kind}
@@ -179,7 +183,9 @@ export function LyricsStep({ song, rows, draft, version, canEdit, onChange, onOr
         />
         {canEdit && (
           <p className="border-t px-5 py-3 text-[13px] text-muted-foreground">
-            Selecione um trecho para dizer o que ele é. Linha em branco separa um slide do outro.
+            Selecione um trecho para dizer o que ele é. Linha em branco separa um slide do outro. Clique no nome da
+            parte para renomear e arraste as instruções para mudá-las de lugar (pelo teclado: Tab até a instrução e
+            Alt+↑ ou Alt+↓).
           </p>
         )}
       </section>
