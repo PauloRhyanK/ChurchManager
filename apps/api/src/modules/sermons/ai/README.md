@@ -1,13 +1,14 @@
-# IA dos "Slides completos"
+# IA da Palavra ("Colar texto")
 
-O modo "Slides completos" usa um modelo de linguagem para montar os slides segundo o manual de identidade (`docs/identidade-slides.md`): resume as partes do sermão (Abertura, seções, Ilustração, Aplicação) em frases de até 90 caracteres (modelo 02), escolhe para cada Ponto o modelo 01 ou 02 (com subtítulo) e para cada Versículo o modelo 03 ou 04 (com subtítulo curto).
+O "Colar texto" usa um modelo de linguagem para organizar o texto que o pregador colou no formato do esboço: o modelo lê as linhas numeradas e diz só onde começa e termina cada parte (título de seção, ponto, versículo, ilustração, aplicação, lista, parágrafo). O texto em si sai das linhas coladas, no servidor (`anthropic-structurer.ts`, `sermon-outline.ts`).
+
+Os slides **não** usam IA: o gerador (`sermon-slides.ts`) monta um slide por tópico a partir do esboço, seguindo `docs/identidade-slides.md`.
 
 ## O que vai ao provedor
 
-- O título da palavra e, para cada parte, um id, o tipo (`OPENING`, `ILLUSTRATION`, `APPLICATION`, `SECTION`, `POINT`, `VERSE`), o rótulo e o texto da parte. No Ponto, o texto é o que o pregador diz nele; no Versículo, o texto bíblico, **só como contexto**.
-- A resposta é `{ slides: [{ id, model: '01' | '02' | '03' | '04', text }] }` e não tem campo de texto bíblico: o texto e a referência de um versículo vêm sempre do bloco do esboço, e o que o modelo devolve para um versículo só pode virar o subtítulo do modelo 04 (`cleanDecisions` e `buildSlides` em `sermon-slides.ts`).
-- **Nunca**: blocos "Só para mim", dados da igreja ou do usuário, a chave de outros serviços.
-- O conteúdo do sermão é tratado como dado, não como instrução; as regras do manual vão resumidas na instrução de sistema (ver `SUMMARY_SYSTEM_PROMPT`).
+- As linhas do texto colado, numeradas. A resposta não tem campo para o texto do sermão nem para texto bíblico: só tipos, números de linha, títulos e referências.
+- **Nunca**: dados da igreja ou do usuário, a chave de outros serviços.
+- O conteúdo do sermão é tratado como dado, não como instrução (ver `STRUCTURE_SYSTEM_PROMPT`).
 
 ## Variáveis (ambiente do servidor; nunca no Git nem no navegador)
 
@@ -23,13 +24,13 @@ Basta incluí-lo em `SERMON_AI_MODELS`, com o id exato do provedor e sem sufixo 
 
 ## Acrescentar outro provedor
 
-1. Implemente `SermonSummarizer` (`sermon-summarizer.ts`), convertendo as falhas em `SummarizerError`.
+1. Implemente `SermonStructurer` (`sermon-structurer.ts`), convertendo as falhas em `SummarizerError` (`sermon-summarizer.ts`).
 2. Inclua o nome do provedor em `PROVIDERS` de `sermon-ai.config.ts`.
-3. Registre-o em `SUMMARIZERS` em `sermons.module.ts`, criando o cliente só quando a configuração estiver ligada.
+3. Registre-o em `STRUCTURERS` em `sermons.module.ts`, criando o cliente só quando a configuração estiver ligada.
 
 ## Conferir a chave e os modelos
 
-Monta os slides completos de um sermão de exemplo com **cada** modelo de `SERMON_AI_MODELS` e imprime o modelo de slide e a frase/subtítulo de cada parte; para o modelo que falhar, imprime `reason`, `status`, `type` e o modelo (os mesmos campos do registro da API) e, no fim, sai com código 1. Sem chave, explica o que configurar e sai com código 1. Faz uma chamada real por modelo: não roda em teste nem no CI.
+Organiza um texto de exemplo com **cada** modelo de `SERMON_AI_MODELS` e imprime o título e as partes que o modelo encontrou; para o modelo que falhar, imprime `reason`, `status`, `type` e o modelo (os mesmos campos do registro da API) e, no fim, sai com código 1. Sem chave, explica o que configurar e sai com código 1. Faz uma chamada real por modelo: não roda em teste nem no CI.
 
 - **QA e produção** (dentro do contêiner da API, que já recebe as variáveis do ambiente):
   - produção: `docker compose -f docker-compose.prod.yml exec api npx tsx scripts/sermon-ai-smoke.ts`
@@ -45,8 +46,8 @@ O reencaminhamento no servidor em caso de recusa (`fallbacks: "default"`, header
 
 ## Tempo de resposta e proxy
 
-O cliente do SDK espera até 45 s por resposta e não repete sozinho (`ANTHROPIC_CLIENT_OPTIONS`). O proxy reverso na frente da API (Nginx Proxy Manager ou outro) precisa permitir **pelo menos 60 s** de leitura para `POST /admin/tenants/me/sermons/:id/slides/generate`; com o padrão de 60 s do Nginx funciona, mas não reduza.
+O cliente do SDK (`anthropic-client.ts`) espera até 45 s por resposta e não repete sozinho (`ANTHROPIC_CLIENT_OPTIONS`). O proxy reverso na frente da API (Nginx Proxy Manager ou outro) precisa permitir **pelo menos 60 s** de leitura para `POST /admin/tenants/me/sermons/from-text`; com o padrão de 60 s do Nginx funciona, mas não reduza.
 
 ## Custo e limites
 
-O custo depende do modelo escolhido; consulte a tabela de preços do provedor em https://www.anthropic.com/pricing. Cada usuário pode gerar 10 vezes por hora (em memória, por processo); partes curtas demais não são enviadas (no máximo 60 partes, 6.000 caracteres cada), e uma palavra sem partes, pontos com texto ou versículos não chama o modelo.
+O custo depende do modelo escolhido; consulte a tabela de preços do provedor em https://www.anthropic.com/pricing. Cada usuário pode organizar textos 10 vezes por hora (em memória, por processo), com até 1.500 linhas por vez.

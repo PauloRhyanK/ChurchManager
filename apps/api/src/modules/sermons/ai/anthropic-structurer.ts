@@ -1,7 +1,7 @@
 // "Colar texto" pelo SDK da Anthropic: o modelo lê as linhas numeradas e devolve só a divisão em partes.
 // A resposta não tem campo para o texto do sermão nem para texto bíblico: só tipos, números de linha, títulos e referências.
 import type { MessageCreateParamsNonStreaming } from '@anthropic-ai/sdk/resources/beta/messages';
-import { createMessage, readResponseJson, type AnthropicMessagesClient } from './anthropic-summarizer';
+import { createMessage, readResponseJson, type AnthropicMessagesClient } from './anthropic-client';
 import { OUTLINE_KINDS, type OutlineBlock, type SermonStructurer, type StructureInput, type StructureOutput } from './sermon-structurer';
 import { SummarizerError } from './sermon-summarizer';
 

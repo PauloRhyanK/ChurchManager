@@ -5,14 +5,13 @@ import { BibleController } from './bible/bible.controller';
 import { BIBLE_SOURCE, BibleService, PrismaBibleSource } from './bible/bible.service';
 import Anthropic from '@anthropic-ai/sdk';
 import { AnthropicStructurer } from './ai/anthropic-structurer';
-import { ANTHROPIC_CLIENT_OPTIONS, AnthropicSummarizer } from './ai/anthropic-summarizer';
+import { ANTHROPIC_CLIENT_OPTIONS } from './ai/anthropic-client';
 import { GenerationLimiter } from './ai/generation-limiter';
-import { describeSermonAiConfig, readSermonAiConfig, type SermonAiConfig } from './ai/sermon-ai.config';
+import { SERMON_AI_CONFIG, describeSermonAiConfig, readSermonAiConfig, type SermonAiConfig } from './ai/sermon-ai.config';
 import { STRUCTURERS } from './ai/sermon-structurer';
-import { SUMMARIZERS } from './ai/sermon-summarizer';
 import { STRUCTURE_LIMITER, SermonImportService } from './sermon-import.service';
 import { SermonDeliveryService } from './sermon-delivery.service';
-import { SERMON_AI_CONFIG, SermonSlidesService } from './sermon-slides.service';
+import { SermonSlidesService } from './sermon-slides.service';
 import { SermonsController } from './sermons.controller';
 import { SermonsService } from './sermons.service';
 
@@ -43,19 +42,12 @@ const ANTHROPIC_CLIENT = Symbol('ANTHROPIC_CLIENT');
     // Sem chave não se cria o cliente do SDK: a API sobe sem nenhuma variável de IA.
     { provide: ANTHROPIC_CLIENT, inject: [SERMON_AI_CONFIG], useFactory: (config: SermonAiConfig) => (config.enabled ? new Anthropic(ANTHROPIC_CLIENT_OPTIONS) : null) },
     {
-      provide: SUMMARIZERS,
-      inject: [ANTHROPIC_CLIENT],
-      useFactory: (client: Anthropic | null) => (client ? { anthropic: new AnthropicSummarizer(client) } : {}),
-    },
-    {
       provide: STRUCTURERS,
       inject: [ANTHROPIC_CLIENT],
       useFactory: (client: Anthropic | null) => (client ? { anthropic: new AnthropicStructurer(client) } : {}),
     },
-    // "Colar texto" tem a sua própria contagem: organizar textos não gasta as gerações de slides.
+    // Singleton: o limite de "Colar texto" por usuário vale para a API toda (em memória, por processo).
     { provide: STRUCTURE_LIMITER, useFactory: () => new GenerationLimiter() },
-    // Singleton: o limite por usuário vale para a API toda (em memória, por processo).
-    { provide: GenerationLimiter, useFactory: () => new GenerationLimiter() },
   ],
   exports: [SermonsService, SermonDeliveryService],
 })

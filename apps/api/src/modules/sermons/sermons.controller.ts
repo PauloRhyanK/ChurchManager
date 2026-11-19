@@ -45,7 +45,7 @@ export class SermonsController {
     return this.sermons.create(user, dto);
   }
 
-  /** "Colar texto": chama o provedor de IA, então tem o limite mais apertado dos slides completos. */
+  /** "Colar texto": chama o provedor de IA, então tem um limite mais apertado. */
   @Post('from-text')
   @Throttle({ public: { limit: 20, ttl: 60_000 } })
   @RequirePermission(PermissionModule.SERMONS, PermissionLevel.EDIT)
@@ -63,10 +63,10 @@ export class SermonsController {
     return this.deliveries.preview(user.tenantId, query.date, query.startTime);
   }
 
-  /** Se os slides completos estão ligados e quais modelos há; nunca a chave. Antes de ':id'. */
+  /** Se a IA do "Colar texto" está ligada e quais modelos há; nunca a chave. Antes de ':id'. */
   @Get('ai')
   aiOptions() {
-    return this.slides.aiOptions();
+    return this.imports.aiOptions();
   }
 
   @Get(':id')
@@ -106,7 +106,7 @@ export class SermonsController {
     return this.deliveries.cancel(user, id);
   }
 
-  /** Slides completos chamam um provedor externo: limite próprio, mais apertado, para não empilhar chamadas. */
+  /** Gerar refaz a sequência inteira: limite próprio, mais apertado que o do salvar. */
   @Post(':id/slides/generate')
   @Throttle({ public: { limit: 20, ttl: 60_000 } })
   @RequirePermission(PermissionModule.SERMONS, PermissionLevel.EDIT)

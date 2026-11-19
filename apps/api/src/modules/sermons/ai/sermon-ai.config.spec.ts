@@ -66,10 +66,10 @@ describe('readSermonAiConfig: provedor sem diferença de maiúsculas e registro 
     const env = { ANTHROPIC_API_KEY: 'sk-ant-segredo', SERMON_AI_MODELS: 'anthropic:claude-opus-5-5,openai:gpt-x' };
     const lines = describeSermonAiConfig(env);
     assert.deepEqual(lines, [
-      'IA dos slides completos: ligada, 1 modelo(s).',
+      'IA da Palavra (Colar texto): ligada, 1 modelo(s).',
       'SERMON_AI_MODELS: entradas ignoradas: openai:gpt-x',
     ]);
     assert.equal(lines.join('\n').includes('sk-ant'), false);
-    assert.deepEqual(describeSermonAiConfig({}), ['IA dos slides completos: desligada, 1 modelo(s).']);
+    assert.deepEqual(describeSermonAiConfig({}), ['IA da Palavra (Colar texto): desligada, 1 modelo(s).']);
   });
 });

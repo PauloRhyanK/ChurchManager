@@ -1,17 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BadRequestException, ConflictException, HttpException, NotFoundException, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, NotFoundException, ValidationPipe } from '@nestjs/common';
 import type { Type } from '@nestjs/common';
 import { VALIDATION_PIPE_OPTIONS } from '../../validation-options';
 import type { AuthUser } from '../auth/auth-user';
 import { GenerateSlidesDto, SaveSlidesDto } from './dto/slides.dto';
 import { EXAMPLE_DOC } from './sermon-example';
-import { GenerationLimiter } from './ai/generation-limiter';
-import type { SermonAiConfig } from './ai/sermon-ai.config';
-import { SummarizerError, type SermonSummarizer, type SummarizeInput, type SummarizeOutput } from './ai/sermon-summarizer';
 import { readDeliverySlides } from './delivery-copy';
-import { aiTargets, buildSlides, type AiDecision, type SlideItem } from './sermon-slides';
-import { SermonSlidesService } from './sermon-slides.service';
+import { buildSlides, type SlideItem } from './sermon-slides';
+import { SermonSlidesService, normalizeListReference } from './sermon-slides.service';
 import { SermonsService } from './sermons.service';
 
 const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -38,38 +35,7 @@ const deliveryRow = (date: string, over: Row = {}): Row => ({
   title: 'Luz', preacherName: 'Pr', estimatedSeconds: 601, slideStyle: 'MINIMAL', slides: [], ...over,
 });
 
-const AI_ON: SermonAiConfig = {
-  enabled: true,
-  effort: 'low',
-  models: [
-    { id: 'anthropic:claude-opus-5-5', provider: 'anthropic', model: 'claude-opus-5-5', label: 'Claude Opus 5.5' },
-    { id: 'anthropic:claude-sonnet-5-5', provider: 'anthropic', model: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
-  ],
-};
-const AI_OFF: SermonAiConfig = { ...AI_ON, enabled: false };
-
-const SUMMARY_PARTS = ['OPENING', 'ILLUSTRATION', 'APPLICATION', 'SECTION'];
-/** Resposta padrão: frase em 02 para cada resumo; ponto em 01 e versículo em 03, sem texto. */
-const defaultReply = (input: SummarizeInput): SummarizeOutput =>
-  input.targets.map((t) =>
-    SUMMARY_PARTS.includes(t.part)
-      ? { id: t.id, model: '02', text: `Resumo de ${t.id}` }
-      : { id: t.id, model: t.part === 'POINT' ? '01' : '03', text: '' },
-  );
-
-/** Resumidor falso: registra as chamadas e devolve uma decisão por alvo (ou o que `reply` mandar). */
-function fakeSummarizer(reply?: (input: SummarizeInput) => Promise<SummarizeOutput>) {
-  const calls: SummarizeInput[] = [];
-  const summarizer: SermonSummarizer = {
-    summarize: async (input) => {
-      calls.push(structuredClone(input));
-      return reply ? reply(input) : defaultReply(input);
-    },
-  };
-  return { summarizer, calls };
-}
-
-function build(init: { sermons: Row[]; deliveries?: Row[]; config?: SermonAiConfig; summarizer?: SermonSummarizer; limiter?: GenerationLimiter }) {
+function build(init: { sermons: Row[]; deliveries?: Row[] }) {
   const sermons = init.sermons.map((s) => ({ ...s }));
   const deliveries = (init.deliveries ?? []).map((x) => ({ ...x }));
   const writes: string[] = [];
@@ -117,39 +83,53 @@ function build(init: { sermons: Row[]; deliveries?: Row[]; config?: SermonAiConf
   };
   const sermonsService = new SermonsService(prisma as never);
   sermonsService.clock = () => NOW;
-  const fake = fakeSummarizer();
-  const service = new SermonSlidesService(
-    prisma as never,
-    sermonsService,
-    init.config ?? AI_OFF,
-    { anthropic: init.summarizer ?? fake.summarizer },
-    init.limiter ?? new GenerationLimiter(),
-  );
+  const service = new SermonSlidesService(prisma as never, sermonsService);
   return { service, sermonsService, sermons, deliveries, writes, updates };
 }
 
 const ids = (items: { id: string }[]) => items.map((i) => i.id);
 const asInput = (items: SlideItem[]) => items.map((s) => ({ id: s.id, included: s.included }));
+const WITH_VERSES = ['v1:0', 'overview', 'v2:0', 'pt2:title', 'n1:0'];
 
 test('generate em palavra sem slides grava a sequência, o modo, o estilo e slidesRevision', async () => {
   const { service, sermons } = build({ sermons: [sermonRow()] });
   const out = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS', style: 'BACKGROUND' });
-  assert.deepEqual(ids(out.slides), ['title', 'v1:0', 'pt1:0', 'v2:0', 'pt2:0', 'n1:0']);
+  assert.deepEqual(ids(out.slides), WITH_VERSES);
   assert.equal(out.slideMode, 'VERSES_AND_POINTS');
   assert.equal(out.slideStyle, 'BACKGROUND');
   assert.equal(out.slidesStale, false);
   assert.equal(sermons[0].slidesRevision, 3);
   assert.equal(sermons[0].revision, 3, 'gerar não mexe na revisão do documento');
-  assert.equal(out.slideCount, 5);
+  assert.equal(out.slideCount, 4);
 });
 
-test('FULL dá 400 com a mensagem combinada e nada é escrito', async () => {
-  const { service, writes } = build({ sermons: [sermonRow()] });
-  await assert.rejects(
-    service.generate(user(), S1, { mode: 'FULL' }),
-    (e: any) => e instanceof BadRequestException && e.message === 'Slides completos ainda não estão disponíveis.',
-  );
-  assert.deepEqual(writes, []);
+test('"Só títulos": capa, visão geral e um slide por ponto; modo TITLES gravado', async () => {
+  const { service, sermons } = build({ sermons: [sermonRow()] });
+  const out = await service.generate(user(), S1, { mode: 'TITLES' });
+  assert.deepEqual(ids(out.slides), ['title', 'overview', 'pt1:title', 'pt2:title', 'n1:0']);
+  assert.equal(sermons[0].slideMode, 'TITLES');
+  assert.equal(out.slideMode, 'TITLES');
+});
+
+test('generate completa as referências entre parênteses nas listas', async () => {
+  const document = {
+    type: 'doc',
+    content: [
+      { type: 'point', attrs: { id: 'p' }, content: [{ type: 'text', text: 'Troca de guarda' }] },
+      { type: 'bulletList', content: [{ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'José (Gn 37:5) e (nada)' }] }] }] },
+    ],
+  };
+  const { service } = build({ sermons: [sermonRow({ document })] });
+  const out = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
+  assert.deepEqual(out.slides.find((s) => s.layout === 'BULLETS')!.items, ['José (Gênesis 37:5) e (nada)']);
+});
+
+test('normalizeListReference: livro por extenso; "l" no lugar de "1"; nulo sem capítulo', () => {
+  assert.equal(normalizeListReference('Gn 37:5'), 'Gênesis 37:5');
+  assert.equal(normalizeListReference('Ex 3:2'), 'Êxodo 3:2');
+  assert.equal(normalizeListReference('l Reis 3.5'), '1 Reis 3:5');
+  assert.equal(normalizeListReference('1 Co 2:13'), '1 Coríntios 2:13');
+  for (const not of ['Ex', 'nada', 'pede-me...', '2026']) assert.equal(normalizeListReference(not), null, not);
 });
 
 test('gerar de novo no mesmo modo preserva item desmarcado e texto editado; trocar de modo recomeça', async () => {
@@ -158,17 +138,27 @@ test('gerar de novo no mesmo modo preserva item desmarcado e texto editado; troc
   const items = first.slides.map((s) => ({
     id: s.id,
     included: s.id === 'v2:0' ? false : s.included,
-    ...(s.id === 'pt1:0' ? { text: 'A luz nos chama' } : {}),
+    ...(s.id === 'pt2:title' ? { text: 'A luz nos mostra' } : {}),
   }));
   await service.save(user(), S1, { items });
   const again = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
   assert.equal(again.slides.find((s) => s.id === 'v2:0')!.included, false);
-  const pt = again.slides.find((s) => s.id === 'pt1:0')!;
-  assert.deepEqual([pt.text, pt.edited], ['A luz nos chama', true]);
+  const pt = again.slides.find((s) => s.id === 'pt2:title')!;
+  assert.deepEqual([pt.text, pt.edited], ['A luz nos mostra', true]);
 
-  const other = await service.generate(user(), S1, { mode: 'VERSES' });
-  assert.deepEqual(other.slides, buildSlides('Luz', EXAMPLE_DOC, 'VERSES'));
-  assert.equal(other.slideMode, 'VERSES');
+  const other = await service.generate(user(), S1, { mode: 'TITLES' });
+  assert.deepEqual(other.slides, buildSlides('Luz', EXAMPLE_DOC, 'TITLES'));
+  assert.equal(other.slideMode, 'TITLES');
+});
+
+test('slides gravados num modo antigo (VERSES, FULL) valem como "Com versículos" e passam pelo merge', async () => {
+  const stored = buildSlides('Luz', EXAMPLE_DOC, 'VERSES_AND_POINTS').map((s) => (s.id === 'v2:0' ? { ...s, included: false } : s));
+  for (const slideMode of ['VERSES', 'FULL']) {
+    const { service, sermonsService } = build({ sermons: [sermonRow({ slides: stored, slideMode })] });
+    assert.equal((await sermonsService.get(user(), S1)).slideMode, 'VERSES_AND_POINTS');
+    const again = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
+    assert.equal(again.slides.find((s) => s.id === 'v2:0')!.included, false, slideMode);
+  }
 });
 
 test('save grava a nova ordem; PRIVATE marcado fica false e no fim; não mexe nas revisões', async () => {
@@ -176,18 +166,18 @@ test('save grava a nova ordem; PRIVATE marcado fica false e no fim; não mexe na
   const gen = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
   const reordered = [...gen.slides].reverse().map((s) => ({ id: s.id, included: true }));
   const out = await service.save(user(), S1, { style: 'BACKGROUND', items: reordered });
-  assert.deepEqual(ids(out.slides), ['pt2:0', 'v2:0', 'pt1:0', 'v1:0', 'title', 'n1:0']);
+  assert.deepEqual(ids(out.slides), ['pt2:title', 'v2:0', 'overview', 'v1:0', 'n1:0']);
   const priv = out.slides.find((s) => s.kind === 'PRIVATE')!;
   assert.equal(priv.included, false);
   assert.equal(out.slideStyle, 'BACKGROUND');
   assert.equal(sermons[0].revision, 3);
   assert.equal(sermons[0].slidesRevision, 3);
-  assert.equal(out.slideCount, 5);
+  assert.equal(out.slideCount, 4);
 });
 
 test('save com id desconhecido, repetido ou faltando dá 400 sem escrita', async () => {
   const { service, writes } = build({ sermons: [sermonRow()] });
-  const gen = await service.generate(user(), S1, { mode: 'VERSES' });
+  const gen = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
   writes.length = 0;
   const base = asInput(gen.slides);
   const bad = [
@@ -204,40 +194,49 @@ test('save com id desconhecido, repetido ou faltando dá 400 sem escrita', async
   assert.deepEqual(writes, []);
 });
 
-test('text em VERSE e PRIVATE é ignorado; em POINT aparado marca edited; 301 caracteres dá 400', async () => {
+test('text só vale em TITLE e POINT: aparado marca edited; VERSE, SUMMARY e PRIVATE ignoram; 121 caracteres dá 400', async () => {
   const { service, writes } = build({ sermons: [sermonRow()] });
-  const gen = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
+  const gen = await service.generate(user(), S1, { mode: 'TITLES' });
   const items = gen.slides.map((s) => ({
     id: s.id,
     included: s.included,
-    ...(s.kind === 'VERSE' || s.kind === 'PRIVATE' ? { text: 'trocado' } : {}),
-    ...(s.id === 'pt1:0' ? { text: '  Novo ponto  ' } : {}),
+    ...(s.kind === 'SUMMARY' || s.kind === 'PRIVATE' ? { text: 'trocado' } : {}),
+    ...(s.id === 'pt1:title' ? { text: '  1. Novo ponto  ' } : {}),
     ...(s.id === 'title' ? { text: s.text } : {}),
   }));
   const out = await service.save(user(), S1, { items });
-  for (const s of out.slides.filter((x) => x.kind === 'VERSE' || x.kind === 'PRIVATE')) assert.notEqual(s.text, 'trocado');
-  const pt = out.slides.find((s) => s.id === 'pt1:0')!;
-  assert.deepEqual([pt.text, pt.edited], ['Novo ponto', true]);
+  for (const s of out.slides.filter((x) => x.kind === 'SUMMARY' || x.kind === 'PRIVATE')) assert.notEqual(s.text, 'trocado');
+  const pt = out.slides.find((s) => s.id === 'pt1:title')!;
+  assert.deepEqual([pt.text, pt.edited], ['1. Novo ponto', true]);
   assert.equal(out.slides.find((s) => s.id === 'title')!.edited, false, 'texto igual ao gravado não marca edited');
 
+  const verses = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
+  const v = await service.save(user(), S1, { items: verses.slides.map((s) => ({ id: s.id, included: true, ...(s.kind === 'VERSE' ? { text: 'trocado' } : {}) })) });
+  for (const s of v.slides.filter((x) => x.kind === 'VERSE')) assert.notEqual(s.text, 'trocado');
+
   writes.length = 0;
-  for (const size of [301, 76]) {
-    const long = gen.slides.map((s) => ({ id: s.id, included: true, ...(s.id === 'pt1:0' ? { text: 'x'.repeat(size) } : {}) }));
-    await assert.rejects(service.save(user(), S1, { items: long }), BadRequestException);
+  for (const size of [121, 300]) {
+    const long = verses.slides.map((s) => ({ id: s.id, included: true, ...(s.id === 'pt2:title' ? { text: 'x'.repeat(size) } : {}) }));
+    await assert.rejects(
+      service.save(user(), S1, { items: long }),
+      (e: any) => e instanceof BadRequestException && e.message === 'O título do slide passa de 120 caracteres.',
+    );
   }
-  assert.deepEqual(writes, []);
+  const ok = verses.slides.map((s) => ({ id: s.id, included: true, ...(s.id === 'pt2:title' ? { text: 'x'.repeat(120) } : {}) }));
+  assert.equal((await service.save(user(), S1, { items: ok })).slides.find((s) => s.id === 'pt2:title')!.text.length, 120);
 });
 
 test('palavra de outro autor (inclusive administrador) e de outro tenant: 404 sem escrita', async () => {
-  const { service, writes } = build({ sermons: [sermonRow({ slides: buildSlides('Luz', EXAMPLE_DOC, 'VERSES'), slideMode: 'VERSES' })] });
+  const stored = buildSlides('Luz', EXAMPLE_DOC, 'TITLES');
+  const { service, writes } = build({ sermons: [sermonRow({ slides: stored, slideMode: 'TITLES' })] });
   const intruders = [
     user({ userId: OTHER, role: 'TENANT_ADMIN' as never }),
     user({ userId: OTHER, role: 'PLATFORM_ADMIN' as never }),
     user({ tenantId: OTHER_TENANT }),
   ];
-  const items = asInput(buildSlides('Luz', EXAMPLE_DOC, 'VERSES'));
+  const items = asInput(stored);
   for (const intruder of intruders) {
-    await assert.rejects(service.generate(intruder, S1, { mode: 'VERSES' }), NotFoundException);
+    await assert.rejects(service.generate(intruder, S1, { mode: 'TITLES' }), NotFoundException);
     await assert.rejects(service.save(intruder, S1, { items }), NotFoundException);
   }
   assert.deepEqual(writes, []);
@@ -245,7 +244,7 @@ test('palavra de outro autor (inclusive administrador) e de outro tenant: 404 se
 
 test('as escritas filtram por id, tenant e autor', async () => {
   const { service, updates } = build({ sermons: [sermonRow()] });
-  const gen = await service.generate(user(), S1, { mode: 'VERSES' });
+  const gen = await service.generate(user(), S1, { mode: 'TITLES' });
   await service.save(user(), S1, { items: asInput(gen.slides) });
   assert.equal(updates.length, 2);
   for (const u of updates) {
@@ -255,15 +254,13 @@ test('as escritas filtram por id, tenant e autor', async () => {
 
 test('slidesStale vira true depois de salvar o documento e false depois de generate; autosave não mexe nos slides', async () => {
   const { service, sermonsService, sermons } = build({ sermons: [sermonRow()] });
-  await service.generate(user(), S1, { mode: 'VERSES' });
+  await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
   const before = structuredClone(sermons[0].slides);
   const saved = await sermonsService.update(user(), S1, { document: EXAMPLE_DOC as never, baseRevision: 3 });
   assert.equal(saved.slidesStale, true);
   assert.deepEqual(sermons[0].slides, before);
   assert.equal((await sermonsService.get(user(), S1)).slidesStale, true);
-  assert.equal((await service.generate(user(), S1, { mode: 'VERSES' })).slidesStale, false);
-  const fresh = await sermonsService.get(user(), sermons[0].id);
-  assert.equal(fresh.slidesStale, false);
+  assert.equal((await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' })).slidesStale, false);
   sermons[0].revision = 9;
   sermons[0].slides = [];
   assert.equal((await sermonsService.get(user(), S1)).slidesStale, false, 'sem slides não é desatualizado');
@@ -278,14 +275,14 @@ test('palavra Enviada: save atualiza slides e estilo do envio, sem nenhum PRIVAT
   });
   const copy = sent.deliveries[0];
   assert.equal(copy.slideStyle, 'BACKGROUND');
-  assert.equal(copy.slides.length, 5);
+  assert.equal(copy.slides.length, 4);
   assert.equal(copy.slides.some((s: Row) => s.kind === 'PRIVATE'), false);
   assert.equal(JSON.stringify(copy.slides).includes('Dois minutos'), false, 'o texto da nota privada não sai');
-  for (const s of copy.slides) assert.deepEqual(Object.keys(s).sort(), ['kind', 'layout', 'reference', 'subtitle', 'text', 'title', 'verse']);
+  for (const s of copy.slides) assert.deepEqual(Object.keys(s).sort(), ['items', 'kind', 'layout', 'reference', 'start', 'text', 'title', 'verse']);
 
   const original = deliveryRow('2026-11-15');
   const preached = build({ sermons: [sermonRow()], deliveries: [original] });
-  await preached.service.generate(user(), S1, { mode: 'VERSES' });
+  await preached.service.generate(user(), S1, { mode: 'TITLES' });
   const g2 = await preached.sermonsService.get(user(), S1);
   await preached.service.save(user(), S1, { style: 'BACKGROUND', items: asInput(g2.slides) });
   await preached.sermonsService.update(user(), S1, { title: 'Outro título' });
@@ -293,47 +290,63 @@ test('palavra Enviada: save atualiza slides e estilo do envio, sem nenhum PRIVAT
   assert.equal(preached.writes.includes('delivery.update'), false);
 });
 
+test('cópia do envio: kind, text e reference do contrato; SUMMARY com os itens em text; lida de volta igual', async () => {
+  const { service, deliveries } = build({ sermons: [sermonRow()], deliveries: [deliveryRow('2026-11-22')] });
+  await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
+  const copy = deliveries[0].slides as Row[];
+  assert.deepEqual(copy[0], {
+    kind: 'VERSE',
+    text: 'Eu sou a luz do mundo; quem me segue não andará em trevas.',
+    layout: 'VERSE',
+    title: 'Luz',
+    verse: 'Eu sou a luz do mundo; quem me segue não andará em trevas.',
+    reference: 'João 8:12',
+    items: null,
+    start: null,
+  });
+  assert.deepEqual(copy[1], {
+    kind: 'SUMMARY', text: 'A luz chama\nA luz mostra', layout: 'NUMBERED', title: 'Luz', verse: null, reference: null, items: ['A luz chama', 'A luz mostra'], start: 1,
+  });
+  assert.deepEqual(copy[3], { kind: 'POINT', text: '2. A luz mostra', layout: 'TITLE', title: '2. A luz mostra', verse: null, reference: null, items: null, start: null });
+  assert.deepEqual(readDeliverySlides(copy), copy);
+});
+
 test('salvar título de palavra Enviada copia título, tempo e slides públicos para o envio', async () => {
   const { service, sermonsService, deliveries } = build({ sermons: [sermonRow()], deliveries: [deliveryRow('2026-11-22')] });
-  await service.generate(user(), S1, { mode: 'VERSES' });
+  await service.generate(user(), S1, { mode: 'TITLES' });
   deliveries[0].slides = [];
   await sermonsService.update(user(), S1, { title: 'Nova luz' });
   assert.equal(deliveries[0].title, 'Nova luz');
-  assert.deepEqual(deliveries[0].slides.map((s: Row) => s.kind), ['VERSE', 'VERSE']);
+  assert.deepEqual(deliveries[0].slides.map((s: Row) => s.kind), ['TITLE', 'SUMMARY', 'POINT', 'POINT']);
 });
 
 test('resumo da lista traz slideCount (marcados, sem PRIVATE)', async () => {
   const slides = buildSlides('Luz', EXAMPLE_DOC, 'VERSES_AND_POINTS').map((s) => (s.id === 'v1:0' ? { ...s, included: false } : s));
   const { sermonsService } = build({ sermons: [sermonRow({ slides })] });
-  assert.equal((await sermonsService.get(user(), S1)).slideCount, 4);
+  assert.equal((await sermonsService.get(user(), S1)).slideCount, 3);
   const listed = await sermonsService.list(user(), {});
   assert.equal(listed.items.length, 1);
-  assert.equal(listed.items[0].slideCount, 4);
+  assert.equal(listed.items[0].slideCount, 3);
 });
 
-test('mudar só o título deixa os slides desatualizados; Atualizar (mesmo modo) põe o título novo e limpa', async () => {
-  const { service, sermonsService } = build({ sermons: [sermonRow()] });
-  await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
-  const renamed = await sermonsService.update(user(), S1, { title: 'Nova luz' });
-  assert.equal(renamed.slidesStale, true);
-  assert.equal((await sermonsService.get(user(), S1)).slidesStale, true);
-  const again = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
-  assert.equal(again.slidesStale, false);
-  assert.equal(again.slides.find((s) => s.kind === 'TITLE')!.text, 'Nova luz');
+test('mudar só o título deixa os slides desatualizados (capa ou visão geral); Atualizar põe o título novo e limpa', async () => {
+  for (const mode of ['TITLES', 'VERSES_AND_POINTS'] as const) {
+    const { service, sermonsService } = build({ sermons: [sermonRow()] });
+    await service.generate(user(), S1, { mode });
+    const renamed = await sermonsService.update(user(), S1, { title: 'Nova luz' });
+    assert.equal(renamed.slidesStale, true, mode);
+    const again = await service.generate(user(), S1, { mode });
+    assert.equal(again.slidesStale, false, mode);
+    assert.equal(again.slides.find((s) => s.id === 'overview')!.heading, 'Nova luz', mode);
+  }
 });
 
-test('título do slide editado à mão não fica desatualizado quando o título da palavra muda', async () => {
+test('título da capa editado à mão não fica desatualizado quando o título da palavra muda', async () => {
   const { service, sermonsService } = build({ sermons: [sermonRow()] });
-  const gen = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
+  const gen = await service.generate(user(), S1, { mode: 'TITLES' });
   await service.save(user(), S1, {
     items: gen.slides.map((s) => (s.kind === 'TITLE' ? { id: s.id, included: true, text: 'Meu título' } : { id: s.id, included: s.included })),
   });
-  assert.equal((await sermonsService.update(user(), S1, { title: 'Nova luz' })).slidesStale, false);
-});
-
-test('modo só versículos (sem TITLE) não fica desatualizado pela troca de título', async () => {
-  const { service, sermonsService } = build({ sermons: [sermonRow()] });
-  await service.generate(user(), S1, { mode: 'VERSES' });
   assert.equal((await sermonsService.update(user(), S1, { title: 'Nova luz' })).slidesStale, false);
 });
 
@@ -347,8 +360,8 @@ async function rejects(metatype: Type<unknown>, body: unknown) {
   await assert.rejects(parse(metatype, body), BadRequestException);
 }
 
-test('DTO de salvar recusa kind, reference, sourceBlockId, edited e mais de 400 itens', async () => {
-  for (const extra of [{ kind: 'VERSE' }, { reference: 'João 1:1' }, { sourceBlockId: 'v1' }, { edited: true }]) {
+test('DTO de salvar recusa kind, reference, sourceBlockId, edited, layout, heading, items, subtitle e mais de 400 itens', async () => {
+  for (const extra of [{ kind: 'VERSE' }, { reference: 'João 1:1' }, { sourceBlockId: 'v1' }, { edited: true }, { layout: 'VERSE' }, { heading: 'H' }, { items: ['a'] }, { subtitle: 'S' }]) {
     await rejects(SaveSlidesDto, { items: [{ id: 'v1:0', included: true, ...extra }] });
   }
   const many = Array.from({ length: 401 }, (_, i) => ({ id: `b${i}:0`, included: true }));
@@ -359,477 +372,36 @@ test('DTO de salvar recusa kind, reference, sourceBlockId, edited e mais de 400 
   await rejects(SaveSlidesDto, { items: [{ id: 'v1:0', included: true, text: '   ' }] });
   await rejects(SaveSlidesDto, { style: 'NEON', items: [] });
   await rejects(SaveSlidesDto, { slides: [], items: [] });
-  const ok = await parse(SaveSlidesDto, { style: 'MINIMAL', items: [{ id: 'pt1:0', included: false, text: ' Oi ' }] });
+  const ok = await parse(SaveSlidesDto, { style: 'MINIMAL', items: [{ id: 'pt1:title', included: false, text: ' Oi ' }] });
   assert.equal(ok.items[0].text, 'Oi');
 });
 
-test('DTO de gerar aceita os três modos e recusa o resto', async () => {
-  for (const mode of ['VERSES', 'VERSES_AND_POINTS', 'FULL']) assert.equal((await parse(GenerateSlidesDto, { mode })).mode, mode);
+test('DTO de gerar aceita só "Com versículos" e "Só títulos"; recusa os modos antigos e model', async () => {
+  for (const mode of ['VERSES_AND_POINTS', 'TITLES']) assert.equal((await parse(GenerateSlidesDto, { mode })).mode, mode);
   await rejects(GenerateSlidesDto, {});
-  await rejects(GenerateSlidesDto, { mode: 'ALL' });
-  await rejects(GenerateSlidesDto, { mode: 'VERSES', style: 'NEON' });
-  await rejects(GenerateSlidesDto, { mode: 'VERSES', slides: [] });
+  for (const mode of ['VERSES', 'FULL', 'ALL']) await rejects(GenerateSlidesDto, { mode });
+  await rejects(GenerateSlidesDto, { mode: 'TITLES', style: 'NEON' });
+  await rejects(GenerateSlidesDto, { mode: 'TITLES', slides: [] });
+  await rejects(GenerateSlidesDto, { mode: 'TITLES', model: 'anthropic:claude-opus-5-5' });
 });
 
-// --- Slides completos (IA) -------------------------------------------------
+// --- Linhas antigas do envio ----------------------------------------------
 
-const TARGET_IDS = ['opening:0', 'i1:0', 'a1:0'];
-const AI_IDS = ['opening:0', 'v1', 'pt1:0', 'v2', 'i1:0', 'pt2:0', 'a1:0'];
-const summaryDecisions = (): Record<string, AiDecision> => Object.fromEntries(TARGET_IDS.map((id) => [id, { layout: 'M02' as const, text: `Resumo de ${id}` }]));
-const rejectsWith = (p: Promise<unknown>, status: number, message: string) =>
-  assert.rejects(p, (e: any) => e instanceof HttpException && e.getStatus() === status && e.message === message);
-
-test('FULL com a IA desligada: 400 e nenhuma chamada', async () => {
-  const f = fakeSummarizer();
-  const { service, writes } = build({ sermons: [sermonRow()], config: AI_OFF, summarizer: f.summarizer });
-  await rejectsWith(service.generate(user(), S1, { mode: 'FULL' }), 400, 'Slides completos ainda não estão disponíveis.');
-  assert.equal(f.calls.length, 0);
-  assert.deepEqual(writes, []);
-});
-
-test('FULL com model fora da lista: 400 e nenhuma chamada; sem model usa o primeiro', async () => {
-  const f = fakeSummarizer();
-  const { service } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
-  await rejectsWith(service.generate(user(), S1, { mode: 'FULL', model: 'anthropic:outro' }), 400, 'Modelo indisponível.');
-  assert.equal(f.calls.length, 0);
-  await service.generate(user(), S1, { mode: 'FULL' });
-  assert.equal(f.calls[0].model, 'claude-opus-5-5');
-  assert.equal(f.calls[0].effort, 'low');
-  await service.generate(user(), S1, { mode: 'FULL', model: 'anthropic:claude-sonnet-5-5' });
-  assert.equal(f.calls[1].model, 'claude-sonnet-5-5');
-});
-
-test('FULL em palavra sem alvos: nenhuma chamada nem uso do limite, e o resultado é o de Versículos e pontos', async () => {
-  const f = fakeSummarizer();
-  const doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Curto.' }] }] };
-  const limiter = new GenerationLimiter(1);
-  const { service } = build({ sermons: [sermonRow({ document: doc })], config: AI_ON, summarizer: f.summarizer, limiter });
-  const out = await service.generate(user(), S1, { mode: 'FULL' });
-  assert.equal(f.calls.length, 0);
-  assert.equal(limiter.take(AUTHOR), true, 'o limite não foi gasto');
-  assert.equal(out.slideMode, 'FULL');
-  assert.deepEqual(out.slides, buildSlides('Luz', doc as never, 'VERSES_AND_POINTS'));
-});
-
-test('FULL feliz: SUMMARY nas posições certas, modo FULL, envio atualizado sem PRIVATE e sem a nota privada no pedido', async () => {
-  const f = fakeSummarizer();
-  const { service, sermons, deliveries } = build({
-    sermons: [sermonRow()],
-    deliveries: [deliveryRow('2026-11-22')],
-    config: AI_ON,
-    summarizer: f.summarizer,
-  });
-  const out = await service.generate(user(), S1, { mode: 'FULL' });
-  assert.deepEqual(f.calls[0].targets.map((t) => t.id), AI_IDS);
-  assert.equal(JSON.stringify(f.calls[0]).includes('Dois minutos'), false, 'a nota privada não vai ao provedor');
-  const summaries = out.slides.filter((s) => s.kind === 'SUMMARY');
-  assert.deepEqual(ids(summaries), TARGET_IDS);
-  assert.deepEqual(
-    out.slides.map((s) => s.id),
-    ids(buildSlides('Luz', EXAMPLE_DOC, 'FULL', summaryDecisions())),
-  );
-  assert.equal(out.slideMode, 'FULL');
-  assert.equal(sermons[0].slidesRevision, 3);
-  const copy = deliveries[0].slides as Row[];
-  assert.equal(copy.some((s) => s.kind === 'PRIVATE'), false);
-  assert.deepEqual(copy.filter((s) => s.kind === 'SUMMARY').length, 3);
-  assert.equal(JSON.stringify(copy).includes('Dois minutos'), false);
-});
-
-test('a 11ª geração na hora dá 429 sem chamada ao provedor', async () => {
-  const f = fakeSummarizer();
-  const { service } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
-  for (let i = 0; i < 10; i++) await service.generate(user(), S1, { mode: 'FULL' });
-  assert.equal(f.calls.length, 10);
-  await rejectsWith(
-    service.generate(user(), S1, { mode: 'FULL' }),
-    429,
-    'Você gerou slides completos muitas vezes na última hora. Tente de novo mais tarde.',
-  );
-  assert.equal(f.calls.length, 10);
-});
-
-test('cada SummarizerError vira a resposta combinada e nada é gravado', async () => {
-  const table: [SummarizerError['reason'], number, string][] = [
-    ['AUTH', 503, 'A chave do provedor de IA não foi aceita. Avise o administrador.'],
-    ['RATE_LIMIT', 503, 'O provedor de IA não respondeu. Tente de novo em instantes.'],
-    ['UNAVAILABLE', 503, 'O provedor de IA não respondeu. Tente de novo em instantes.'],
-    ['REFUSED', 422, 'O modelo não pôde resumir esta palavra. Use “Versículos e pontos”.'],
-    ['TRUNCATED', 502, 'A resposta do modelo veio incompleta. Tente de novo.'],
-    ['INVALID', 502, 'A resposta do modelo veio incompleta. Tente de novo.'],
-    ['CONFIG', 503, 'O modelo configurado não aceitou o pedido. Avise o administrador.'],
-  ];
-  for (const [reason, status, message] of table) {
-    const f = fakeSummarizer(async () => {
-      throw new SummarizerError(reason, 'sk-ant-segredo corpo do pedido');
-    });
-    const before = buildSlides('Luz', EXAMPLE_DOC, 'VERSES');
-    const { service, writes, sermons } = build({
-      sermons: [sermonRow({ slides: before, slideMode: 'VERSES', slidesRevision: 3 })],
-      config: AI_ON,
-      summarizer: f.summarizer,
-    });
-    await assert.rejects(service.generate(user(), S1, { mode: 'FULL' }), (e: any) => {
-      assert.ok(e instanceof HttpException);
-      assert.equal(e.getStatus(), status, reason);
-      assert.equal(e.message, message, reason);
-      assert.equal(JSON.stringify(e.getResponse()).includes('segredo'), false);
-      return true;
-    });
-    assert.deepEqual(writes, [], reason);
-    assert.deepEqual(sermons[0].slides, before);
-    assert.equal(sermons[0].slideMode, 'VERSES');
-  }
-});
-
-test('documento salvo durante a geração: 409 e nada gravado', async () => {
-  let bump: () => void = () => {};
-  const f = fakeSummarizer(async (input) => {
-    bump();
-    return input.targets.map((t) => ({ id: t.id, model: '02', text: 'x' }));
-  });
-  const { service, writes, sermons } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
-  bump = () => {
-    sermons[0].revision = 4;
-  };
-  await assert.rejects(
-    service.generate(user(), S1, { mode: 'FULL' }),
-    (e: any) => e instanceof ConflictException && e.message === 'A palavra mudou enquanto os slides eram gerados. Gere de novo.',
-  );
-  assert.deepEqual(writes, []);
-  assert.deepEqual(sermons[0].slides, []);
-});
-
-test('o provedor é chamado fora da transação', async () => {
-  let inTx = false;
-  const f = fakeSummarizer(async (input) => {
-    assert.equal(inTx, false);
-    return input.targets.map((t) => ({ id: t.id, model: '02', text: 'ok' }));
-  });
-  const { service } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
-  const prisma = (service as any).prisma;
-  const original = prisma.$transaction;
-  prisma.$transaction = async (fn: any) => {
-    inTx = true;
-    try {
-      return await original(fn);
-    } finally {
-      inTx = false;
-    }
-  };
-  await service.generate(user(), S1, { mode: 'FULL' });
-});
-
-test('gerar FULL de novo preserva frase editada e item desmarcado', async () => {
-  const f = fakeSummarizer();
-  const { service } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
-  const first = await service.generate(user(), S1, { mode: 'FULL' });
-  await service.save(user(), S1, {
-    items: first.slides.map((s) => ({
-      id: s.id,
-      included: s.id === 'i1:0' ? false : s.included,
-      ...(s.id === 'opening:0' ? { text: 'Minha abertura' } : {}),
-    })),
-  });
-  const again = await service.generate(user(), S1, { mode: 'FULL' });
-  const opening = again.slides.find((s) => s.id === 'opening:0')!;
-  assert.deepEqual([opening.text, opening.edited], ['Minha abertura', true]);
-  assert.equal(again.slides.find((s) => s.id === 'i1:0')!.included, false);
-});
-
-test('FULL em palavra de outro autor: 404 sem chamada ao provedor', async () => {
-  const f = fakeSummarizer();
-  const { service, writes } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
-  await assert.rejects(service.generate(user({ userId: OTHER }), S1, { mode: 'FULL' }), NotFoundException);
-  assert.equal(f.calls.length, 0);
-  assert.deepEqual(writes, []);
-});
-
-test('aiOptions devolve só enabled e models com id e label', () => {
-  const { service } = build({ sermons: [], config: AI_ON });
-  assert.deepEqual(service.aiOptions(), {
-    enabled: true,
-    models: [
-      { id: 'anthropic:claude-opus-5-5', label: 'Claude Opus 5.5' },
-      { id: 'anthropic:claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
-    ],
-  });
-  assert.deepEqual(build({ sermons: [], config: AI_OFF }).service.aiOptions(), { enabled: false, models: [] });
-});
-
-test('DTO de gerar aceita model de até 80 caracteres e recusa 81', async () => {
-  assert.equal((await parse(GenerateSlidesDto, { mode: 'FULL', model: 'm'.repeat(80) })).model?.length, 80);
-  await rejects(GenerateSlidesDto, { mode: 'FULL', model: 'm'.repeat(81) });
-});
-
-test('falha do provedor registra só reason, status, type e o modelo; outra falha só o nome do erro', async () => {
-  const logs: string[] = [];
-  const err = new SummarizerError('CONFIG', 'sk-ant-segredo corpo do pedido', { status: 400, type: 'invalid_request_error' });
-  const f = fakeSummarizer(async () => {
-    throw err;
-  });
-  const { service } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
-  (service as any).logger = { warn: (m: string) => logs.push(m), log: (m: string) => logs.push(m), error: (m: string) => logs.push(m) };
-  await rejectsWith(service.generate(user(), S1, { mode: 'FULL' }), 503, 'O modelo configurado não aceitou o pedido. Avise o administrador.');
-  assert.deepEqual(logs, ['Resumo por IA falhou: reason=CONFIG status=400 type=invalid_request_error model=claude-opus-5-5']);
-
-  logs.length = 0;
-  const bug = new TypeError('Dois minutos sk-ant-segredo');
-  const g = fakeSummarizer(async () => {
-    throw bug;
-  });
-  const other = build({ sermons: [sermonRow()], config: AI_ON, summarizer: g.summarizer });
-  (other.service as any).logger = { warn: (m: string) => logs.push(m), log: (m: string) => logs.push(m), error: (m: string) => logs.push(m) };
-  await rejectsWith(other.service.generate(user(), S1, { mode: 'FULL' }), 503, 'O provedor de IA não respondeu. Tente de novo em instantes.');
-  assert.deepEqual(logs, ['Resumo por IA falhou: TypeError model=claude-opus-5-5']);
-});
-
-test('gerar FULL de novo: frase editada continua mesmo se o modelo omitir o alvo', async () => {
-  let omit = false;
-  const f = fakeSummarizer(async (input) =>
-    defaultReply(input).filter((t) => !(omit && (t.id === 'opening:0' || t.id === 'a1:0'))),
-  );
-  const { service } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
-  const first = await service.generate(user(), S1, { mode: 'FULL' });
-  await service.save(user(), S1, {
-    items: first.slides.map((s) => ({ id: s.id, included: s.included, ...(s.id === 'opening:0' ? { text: 'Minha abertura' } : {}) })),
-  });
-  omit = true;
-  const again = await service.generate(user(), S1, { mode: 'FULL' });
-  const opening = again.slides.find((s) => s.id === 'opening:0');
-  assert.deepEqual([opening?.text, opening?.edited, opening?.kind], ['Minha abertura', true, 'SUMMARY']);
-  assert.equal(again.slides.some((s) => s.id === 'a1:0'), false, 'omitido e não editado: some');
-  assert.deepEqual(again.slides.filter((s) => s.kind === 'SUMMARY').map((s) => s.id), ['opening:0', 'i1:0']);
-});
-
-test('FULL: id não pedido (o da nota privada), id repetido e frase de 300 caracteres', async () => {
-  const long = 'palavra '.repeat(40).trim() + ' ' + 'x'.repeat(20);
-  const f = fakeSummarizer(async () => [
-    { id: 'n1:0', model: '02', text: 'Dois minutos nessa história' },
-    { id: 'i1:0', model: '02', text: 'Primeira' },
-    { id: 'i1:0', model: '02', text: 'Segunda' },
-    { id: 'a1:0', model: '02', text: long },
-  ]);
-  const { service, deliveries } = build({
-    sermons: [sermonRow()],
-    deliveries: [deliveryRow('2026-11-22')],
-    config: AI_ON,
-    summarizer: f.summarizer,
-  });
-  const out = await service.generate(user(), S1, { mode: 'FULL' });
-  const summaries = out.slides.filter((s) => s.kind === 'SUMMARY');
-  assert.deepEqual(summaries.map((s) => [s.id, s.text]), [
-    ['i1:0', 'Primeira'],
-    ['a1:0', Array(11).fill('palavra').join(' ')],
-  ]);
-  assert.ok(summaries.every((s) => s.text.length <= 90));
-  assert.equal(out.slides.filter((s) => s.id === 'n1:0').length, 1);
-  assert.equal(out.slides.find((s) => s.id === 'n1:0')!.kind, 'PRIVATE');
-  assert.equal(out.slides.some((s) => s.kind === 'PRIVATE' && s.included), false);
-  assert.equal(JSON.stringify(out.slides.filter((s) => s.kind !== 'PRIVATE')).includes('Dois minutos'), false);
-  const copy = deliveries[0].slides as Row[];
-  assert.equal(copy.some((s) => s.kind === 'PRIVATE'), false);
-  assert.equal(JSON.stringify(copy).includes('Dois minutos'), false);
-});
-
-// --- Modelos de slide do manual ---------------------------------------------
-
-test('FULL grava layout, heading, subtitle e version decididos pela IA', async () => {
-  const f = fakeSummarizer(async (input) =>
-    defaultReply(input).map((d) =>
-      d.id === 'pt1:0' ? { ...d, model: '02', text: 'Ninguém acha o caminho sozinho' } : d.id === 'v1' ? { ...d, model: '04', text: 'A luz que guia' } : d,
-    ),
-  );
-  const { service, sermons } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
-  await service.generate(user(), S1, { mode: 'FULL' });
-  const stored = sermons[0].slides as SlideItem[];
-  const pick = (id: string) => {
-    const s = stored.find((x) => x.id === id)!;
-    return [s.layout, s.heading, s.subtitle, s.version];
-  };
-  assert.deepEqual(pick('title'), ['M01', null, null, null]);
-  assert.deepEqual(pick('pt1:0'), ['M02', null, 'Ninguém acha o caminho sozinho', null]);
-  assert.deepEqual(pick('v1:0'), ['M04', 'Luz', 'A luz que guia', 'BLIVRE']);
-  assert.deepEqual(pick('v2:0'), ['M03', 'A luz chama', null, 'BLIVRE']);
-  assert.deepEqual(pick('i1:0'), ['M02', 'A luz chama', null, null]);
-  assert.deepEqual(pick('pt2:0'), ['M01', null, null, null]);
-});
-
-test('resposta da IA tentando mudar um versículo não muda o texto gravado', async () => {
-  const fake = 'Texto bíblico inventado pela IA que tenta substituir o versículo original da Bíblia importada, bem longo para passar de noventa caracteres e mais';
-  const f = fakeSummarizer(async () => [
-    { id: 'v1', model: '03', text: fake },
-    { id: 'v2', model: '04', text: fake },
-    { id: 'v1:0', model: '04', text: fake },
-  ]);
-  const { service, sermons } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
-  await service.generate(user(), S1, { mode: 'FULL' });
-  const verses = (sermons[0].slides as SlideItem[]).filter((x) => x.kind === 'VERSE');
-  assert.deepEqual(
-    verses.map((x) => [x.id, x.text, x.reference]),
-    buildSlides('Luz', EXAMPLE_DOC, 'VERSES').filter((x) => x.kind === 'VERSE').map((x) => [x.id, x.text, x.reference]),
-  );
-  assert.deepEqual(verses.map((x) => x.layout), ['M03', 'M04']);
-  assert.ok(Array.from(verses[1].subtitle!).length <= 90);
-  assert.equal(verses.some((x) => x.text.includes('inventado')), false);
-});
-
-test('save com subtitle em ponto e em versículo; vazio remove e volta a M01/M03', async () => {
-  const { service } = build({ sermons: [sermonRow()] });
-  const gen = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
-  const withSubs = (pt: string, v: string) =>
-    gen.slides.map((s) => ({
-      id: s.id,
-      included: s.included,
-      ...(s.id === 'pt1:0' ? { subtitle: pt } : {}),
-      ...(s.id === 'v2:0' ? { subtitle: v } : {}),
-      ...(s.id === 'title' ? { subtitle: 'ignorado no título' } : {}),
-    }));
-  const out = await service.save(user(), S1, { items: withSubs('  Antes de procurar  ', 'Lâmpada para o caminho') });
-  const pt = out.slides.find((s) => s.id === 'pt1:0')!;
-  assert.deepEqual([pt.layout, pt.subtitle, pt.edited, pt.subtitleEdited, pt.text], ['M02', 'Antes de procurar', false, true, 'A luz chama']);
-  const v = out.slides.find((s) => s.id === 'v2:0')!;
-  assert.deepEqual([v.layout, v.subtitle, v.edited, v.subtitleEdited, v.heading], ['M04', 'Lâmpada para o caminho', false, true, 'A luz chama']);
-  assert.equal(v.text, 'Lâmpada para os meus pés é a tua palavra, e luz para o meu caminho.');
-  const title = out.slides.find((s) => s.id === 'title')!;
-  assert.deepEqual([title.layout, title.subtitle, title.edited], ['M01', null, false]);
-
-  const cleared = await service.save(user(), S1, { items: withSubs('', '') });
-  const pt2 = cleared.slides.find((s) => s.id === 'pt1:0')!;
-  const v2 = cleared.slides.find((s) => s.id === 'v2:0')!;
-  assert.deepEqual([pt2.layout, pt2.subtitle, v2.layout, v2.subtitle], ['M01', null, 'M03', null]);
-});
-
-test('limites do modelo no save: 400 com a mensagem e nada escrito', async () => {
-  const longVerse = Array(12).fill('Bem-aventurados os mansos.').join(' ');
-  const doc = {
-    type: 'doc',
-    content: [
-      ...EXAMPLE_DOC.content,
-      { type: 'verse', attrs: { id: 'vl', reference: 'Mateus 5:5', book: 40, chapter: 5, verseStart: 5, verseEnd: 5, translation: null, verses: [{ number: 5, text: longVerse }] } },
-    ],
-  };
-  const f = fakeSummarizer();
-  const { service, writes } = build({ sermons: [sermonRow({ document: doc })], config: AI_ON, summarizer: f.summarizer });
-  const gen = await service.generate(user(), S1, { mode: 'FULL' });
-  writes.length = 0;
-  const LIMIT = 'O texto passa do limite deste modelo de slide. Divida em dois.';
-  const attempt = (id: string, change: { text?: string; subtitle?: string }) =>
-    service.save(user(), S1, { items: gen.slides.map((s) => ({ id: s.id, included: s.included, ...(s.id === id ? change : {}) })) });
-  const cases: [string, { text?: string; subtitle?: string }, string][] = [
-    ['title', { text: 'x'.repeat(76) }, LIMIT],
-    ['pt1:0', { text: 'x'.repeat(76) }, LIMIT],
-    ['pt1:0', { text: 'x'.repeat(61), subtitle: 'Sub' }, LIMIT],
-    ['pt1:0', { subtitle: 's'.repeat(151) }, LIMIT],
-    ['i1:0', { text: 'x'.repeat(151) }, LIMIT],
-    ['v1:0', { subtitle: 's'.repeat(91) }, LIMIT],
-    ['vl:1', { subtitle: 'Liga' }, LIMIT],
-    ['vl:0', { subtitle: 'Liga' }, 'Este versículo passa de 160 caracteres e não cabe no modelo com subtítulo.'],
-  ];
-  for (const [id, change, message] of cases) {
-    await assert.rejects(attempt(id, change), (e: any) => e instanceof BadRequestException && e.message === message, `${id} ${JSON.stringify(change).slice(0, 40)}`);
-  }
-  assert.deepEqual(writes, []);
-  const ok = await attempt('i1:0', { text: 'x'.repeat(150) });
-  assert.equal(ok.slides.find((s) => s.id === 'i1:0')!.text.length, 150);
-});
-
-test('DTO de salvar recusa layout, heading, version e subtitle acima de 150; aceita subtitle vazio', async () => {
-  for (const extra of [{ layout: 'M02' }, { heading: 'X' }, { version: 'BLIVRE' }, { subtitle: 's'.repeat(151) }, { subtitle: 3 }]) {
-    await rejects(SaveSlidesDto, { items: [{ id: 'pt1:0', included: true, ...extra }] });
-  }
-  const ok = await parse(SaveSlidesDto, { items: [{ id: 'pt1:0', included: true, subtitle: '' }, { id: 'v1:0', included: true, subtitle: ' Liga ' }] });
-  assert.deepEqual(ok.items.map((i) => i.subtitle), ['', 'Liga']);
-});
-
-test('cópia do envio traz os campos de slideFace, com a versão na referência, e nenhum PRIVATE', async () => {
-  const f = fakeSummarizer(async (input) => defaultReply(input).map((d) => (d.id === 'v1' ? { ...d, model: '04', text: 'A luz que guia' } : d)));
-  const { service, deliveries } = build({ sermons: [sermonRow()], deliveries: [deliveryRow('2026-11-22')], config: AI_ON, summarizer: f.summarizer });
-  await service.generate(user(), S1, { mode: 'FULL' });
-  const copy = deliveries[0].slides as Row[];
-  assert.equal(copy.some((s) => s.kind === 'PRIVATE'), false);
-  assert.equal(JSON.stringify(copy).includes('Dois minutos'), false);
-  assert.deepEqual(copy[0], { kind: 'TITLE', text: 'Luz', layout: 'M01', title: 'Luz', subtitle: null, verse: null, reference: null });
-  assert.deepEqual(copy.find((s) => s.kind === 'VERSE'), {
-    kind: 'VERSE',
-    text: 'Eu sou a luz do mundo; quem me segue não andará em trevas.',
-    layout: 'M04',
-    title: 'Luz',
-    subtitle: 'A luz que guia',
-    verse: 'Eu sou a luz do mundo; quem me segue não andará em trevas.',
-    reference: 'João 8:12 · BLIVRE',
-  });
-  assert.deepEqual(copy.find((s) => s.kind === 'SUMMARY' && s.title === 'A luz chama')?.subtitle, 'Resumo de i1:0');
-  assert.deepEqual(readDeliverySlides(copy), copy);
-});
-
-test('readDeliverySlides aceita a linha gravada antes dos modelos e completa com slideFace', () => {
+test('readDeliverySlides aceita linhas antigas (só kind/text/reference, ou M01–M04 com subtitle)', () => {
   const old = [
     { kind: 'TITLE', text: 'Luz', reference: null },
     { kind: 'VERSE', text: 'Eu sou a luz do mundo.', reference: 'João 8:12' },
-    { kind: 'POINT', text: 'A luz chama', reference: null, sourceBlockId: 'pt1', edited: true },
-    { kind: 'SUMMARY', text: 'Lanterna', reference: null },
+    { kind: 'VERSE', text: 'Eu sou.', layout: 'M04', title: 'A luz chama', subtitle: 'Liga', verse: 'Eu sou.', reference: 'João 8:12 · BLIVRE' },
+    { kind: 'POINT', text: 'A luz chama', reference: null, layout: 'M02', title: 'A luz chama', subtitle: 'Sub', verse: null },
+    { kind: 'SUMMARY', text: 'Lanterna', reference: null, layout: 'M02', title: 'Conclusão', subtitle: 'Lanterna', verse: null },
     { kind: 'PRIVATE', text: 'segredo', reference: null },
     { kind: 'VERSE', text: 3, reference: 'x' },
   ];
   assert.deepEqual(readDeliverySlides(old), [
-    { kind: 'TITLE', text: 'Luz', layout: 'M01', title: 'Luz', subtitle: null, verse: null, reference: null },
-    { kind: 'VERSE', text: 'Eu sou a luz do mundo.', layout: 'M03', title: 'João 8:12', subtitle: null, verse: 'Eu sou a luz do mundo.', reference: 'João 8:12' },
-    { kind: 'POINT', text: 'A luz chama', layout: 'M01', title: 'A luz chama', subtitle: null, verse: null, reference: null },
-    { kind: 'SUMMARY', text: 'Lanterna', layout: 'M02', title: '', subtitle: 'Lanterna', verse: null, reference: null },
+    { kind: 'TITLE', text: 'Luz', layout: 'TITLE', title: 'Luz', verse: null, reference: null, items: null, start: null },
+    { kind: 'VERSE', text: 'Eu sou a luz do mundo.', layout: 'VERSE', title: 'João 8:12', verse: 'Eu sou a luz do mundo.', reference: 'João 8:12', items: null, start: null },
+    { kind: 'VERSE', text: 'Eu sou.', layout: 'VERSE', title: 'A luz chama', verse: 'Eu sou.', reference: 'João 8:12 · BLIVRE', items: null, start: null },
+    { kind: 'POINT', text: 'A luz chama', layout: 'TITLE', title: 'A luz chama', verse: null, reference: null, items: null, start: null },
+    { kind: 'SUMMARY', text: 'Lanterna', layout: 'BULLETS', title: 'Conclusão', verse: null, reference: null, items: ['Lanterna'], start: null },
   ]);
-});
-
-test('aiTargets do exemplo: nenhum alvo leva a nota privada', () => {
-  assert.equal(JSON.stringify(aiTargets(EXAMPLE_DOC)).includes('Dois minutos'), false);
-});
-
-// --- Correções da revisão ---------------------------------------------------
-
-const renamePoint = (doc: any, id: string, text: string) => ({
-  ...doc,
-  content: doc.content.map((b: any) => (b.type === 'point' && b.attrs.id === id ? { ...b, content: [{ type: 'text', text }] } : b)),
-});
-
-test('subtítulo editado não congela o título: renomear o ponto e Atualizar traz o título novo e mantém o subtítulo', async () => {
-  const { service, sermons } = build({ sermons: [sermonRow()] });
-  const gen = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
-  await service.save(user(), S1, { items: gen.slides.map((s) => ({ id: s.id, included: s.included, ...(s.id === 'pt1:0' ? { subtitle: 'Meu subtítulo' } : {}) })) });
-  sermons[0].document = renamePoint(EXAMPLE_DOC, 'pt1', 'A luz convida');
-  const again = await service.generate(user(), S1, { mode: 'VERSES_AND_POINTS' });
-  const pt = again.slides.find((s) => s.id === 'pt1:0')!;
-  assert.deepEqual([pt.text, pt.layout, pt.subtitle, pt.edited, pt.subtitleEdited], ['A luz convida', 'M02', 'Meu subtítulo', false, true]);
-});
-
-test('Atualizar em Só versículos também passa pelo merge: subtítulo do versículo continua', async () => {
-  const { service } = build({ sermons: [sermonRow()] });
-  const gen = await service.generate(user(), S1, { mode: 'VERSES' });
-  await service.save(user(), S1, { items: gen.slides.map((s) => ({ id: s.id, included: s.included, ...(s.id === 'v2:0' ? { subtitle: 'Liga' } : {}) })) });
-  const again = await service.generate(user(), S1, { mode: 'VERSES' });
-  const v = again.slides.find((s) => s.id === 'v2:0')!;
-  assert.deepEqual([v.layout, v.subtitle, v.subtitleEdited], ['M04', 'Liga', true]);
-});
-
-test('tirar o subtítulo do versículo (M04 → M03) recalcula o título de contexto com o limite 50', async () => {
-  const context = 'Quarenta e oito letras cabem no título do três';
-  assert.ok(context.length > 45 && context.length <= 50);
-  const { service } = build({ sermons: [sermonRow({ document: renamePoint(EXAMPLE_DOC, 'pt1', context) })] });
-  const gen = await service.generate(user(), S1, { mode: 'VERSES' });
-  assert.equal(gen.slides.find((s) => s.id === 'v2:0')!.heading, context);
-  const withSub = (sub: string) => gen.slides.map((s) => ({ id: s.id, included: s.included, ...(s.id === 'v2:0' ? { subtitle: sub } : {}) }));
-  const m04 = await service.save(user(), S1, { items: withSub('Liga') });
-  const cutHeading = m04.slides.find((s) => s.id === 'v2:0')!.heading!;
-  assert.ok(Array.from(cutHeading).length <= 45 && cutHeading.endsWith('…'));
-  const m03 = await service.save(user(), S1, { items: withSub('') });
-  const v = m03.slides.find((s) => s.id === 'v2:0')!;
-  assert.deepEqual([v.layout, v.heading], ['M03', context]);
-});
-
-test('linha antiga do envio com ponto de 300 caracteres sai em vários M01 de até 75', () => {
-  const long = Array(37).fill('palavra').join(' ') + ' fim';
-  assert.ok(long.length >= 295 && long.length <= 300);
-  const out = readDeliverySlides([{ kind: 'POINT', text: long, reference: null }]);
-  assert.ok(out.length >= 4);
-  assert.ok(out.every((x) => x.kind === 'POINT' && x.layout === 'M01' && Array.from(x.title).length <= 75 && x.text === x.title));
-  assert.equal(out.map((x) => x.title).join(' '), long);
 });
