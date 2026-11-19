@@ -127,7 +127,7 @@ export async function deleteSong(id: string): Promise<void> {
 
 // --- roteiro -------------------------------------------------------------------
 
-export type MomentKind = "PRE_SERVICE" | "GENERIC" | "WORSHIP";
+export type MomentKind = "PRE_SERVICE" | "GENERIC" | "WORSHIP" | "SERMON";
 
 export interface TemplateMoment {
   name: string;
