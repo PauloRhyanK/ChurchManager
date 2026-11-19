@@ -1,0 +1,18 @@
+/* Ponto do sermão: o número ("1.", "2.") é um contador de CSS, não texto do documento. */
+.sermon-editor .ProseMirror {
+  counter-reset: sermon-point;
+}
+
+.sermon-editor .ProseMirror > h2[data-type="point"] {
+  counter-increment: sermon-point;
+  margin-top: 2rem;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #030712;
+}
+
+.sermon-editor .ProseMirror > h2[data-type="point"]::before {
+  content: counter(sermon-point) ". ";
+  font-variant-numeric: tabular-nums;
+}

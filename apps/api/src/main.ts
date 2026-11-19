@@ -1,7 +1,9 @@
 import dns from 'node:dns';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
+import { applyBodyLimits } from './body-limits';
 import { readBootstrapEnv } from './bootstrap-env';
 import { VALIDATION_PIPE_OPTIONS } from './validation-options';
 
@@ -9,7 +11,8 @@ import { VALIDATION_PIPE_OPTIONS } from './validation-options';
 dns.setDefaultResultOrder('ipv4first');
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  applyBodyLimits(app);
   const { trustProxyHops, warnings } = readBootstrapEnv(process.env);
   const logger = new Logger('Bootstrap');
   for (const warning of warnings) {

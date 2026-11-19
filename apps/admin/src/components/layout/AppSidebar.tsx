@@ -14,6 +14,7 @@ import {
   Link2,
   QrCode,
   Music,
+  BookOpen,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -62,6 +63,7 @@ const mainNav: {
       { title: "Roteiro", url: "/cultos/roteiro" },
     ],
   },
+  { title: "Palavras", url: "/palavras", icon: BookOpen, modules: ["SERMONS"] },
   // Igreja inclui a aba Site.
   { title: "Igreja", url: "/igreja", icon: Church, modules: ["CHURCH", "SITE"] },
 ];

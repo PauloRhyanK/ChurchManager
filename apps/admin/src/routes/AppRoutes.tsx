@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { LoginPage } from "@/features/auth/pages/LoginPage";
 import { ForgotPasswordPage } from "@/features/auth/pages/ForgotPasswordPage";
@@ -14,6 +15,7 @@ import SongsListPage from "@/features/worship/pages/SongsListPage";
 import NewSongPage from "@/features/worship/pages/NewSongPage";
 import SongEditorPage from "@/features/worship/pages/SongEditorPage";
 import ServicePlanPage from "@/features/worship/pages/ServicePlanPage";
+import SermonsListPage from "@/features/sermons/pages/SermonsListPage";
 import UsersListPage from "@/features/access/pages/UsersListPage";
 import InviteUserPage from "@/features/access/pages/InviteUserPage";
 import PermissionGroupsPage from "@/features/access/pages/PermissionGroupsPage";
@@ -29,6 +31,18 @@ import PlatformChurches from "@/pages/PlatformChurches";
 import { PlatformAdminRoute } from "./PlatformAdminRoute";
 import { PermissionRoute } from "./PermissionRoute";
 import { ProtectedRoute } from "./ProtectedRoute";
+
+const SermonEditorPage = lazy(() => import("@/features/sermons/pages/SermonEditorPage"));
+
+/** Remonta o editor quando a palavra muda (o documento é estado local). */
+function SermonEditorRoutePage() {
+  const { id } = useParams<{ id: string }>();
+  return (
+    <Suspense fallback={null}>
+      <SermonEditorPage key={id} />
+    </Suspense>
+  );
+}
 
 /** Remonta o editor quando a música muda (o documento da letra é estado local). */
 function SongEditorRoutePage() {
@@ -75,6 +89,10 @@ export function AppRoutes() {
           </Route>
           <Route path="/cultos/musicas/:id" element={<SongEditorRoutePage />} />
           <Route path="/cultos/roteiro" element={<ServicePlanPage />} />
+        </Route>
+        <Route element={<PermissionRoute module="SERMONS" />}>
+          <Route path="/palavras" element={<SermonsListPage />} />
+          <Route path="/palavras/:id" element={<SermonEditorRoutePage />} />
         </Route>
         {/* O site é gerido na aba Site de Igreja; /site fica como atalho. */}
         <Route path="/site" element={<Navigate to="/igreja?aba=site" replace />} />

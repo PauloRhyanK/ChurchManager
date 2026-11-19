@@ -1,4 +1,4 @@
-import { ChevronRight, Music, Plus, Trash2 } from "lucide-react";
+import { BookOpen, ChevronRight, Music, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { MomentKind, ServiceMoment, ServicePlan } from "../../api/worship-api";
@@ -27,7 +27,17 @@ const toDraft = (m: ServiceMoment): MomentDraft => ({
 });
 
 /** Nome e duração de um momento: salva ao sair do campo, se mudou e é válido. */
-function MomentFields({ moment, canEdit, onCommit }: { moment: ServiceMoment; canEdit: boolean; onCommit: (patch: Partial<MomentDraft>) => void }) {
+function MomentFields({
+  moment,
+  canEdit,
+  sermon,
+  onCommit,
+}: {
+  moment: ServiceMoment;
+  canEdit: boolean;
+  sermon: ServicePlan["sermon"] | null;
+  onCommit: (patch: Partial<MomentDraft>) => void;
+}) {
   const [name, setName] = useState(moment.name);
   const [minutes, setMinutes] = useState(String(moment.durationMinutes));
   useEffect(() => setName(moment.name), [moment.name]);
@@ -71,6 +81,7 @@ function MomentFields({ moment, canEdit, onCommit }: { moment: ServiceMoment; ca
             className="w-12 rounded-md border border-transparent bg-transparent px-1.5 py-1.5 text-right tabular-nums text-foreground hover:border-input focus:border-input focus:outline-none focus:ring-2 focus:ring-ring"
           />
           min
+          {sermon && sermon.estimatedMinutes >= 1 && <span className="whitespace-nowrap">· palavra estimada em {sermon.estimatedMinutes}</span>}
         </label>
       )}
     </>
@@ -81,9 +92,26 @@ export function MomentsTab({ service, canEdit, saving, onSave, onOpenWorship }: 
   const drafts = service.moments.map(toDraft);
   const items = service.moments.map((m) => ({ ...m, key: m.id }));
   const firstWorship = service.moments.find((m) => m.kind === "WORSHIP")?.id;
+  const firstSermon = service.moments.find((m) => m.kind === "SERMON")?.id;
+  const sermon = service.sermon;
 
   return (
     <div className="flex flex-col gap-4">
+      {sermon && !firstSermon && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-purple-200 bg-purple-50 px-4 py-3 text-sm">
+          <span>Este culto tem uma palavra, mas o roteiro não tem o momento Palavra.</span>
+          {canEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={saving || drafts.length >= 40}
+              onClick={() => onSave([...drafts, { name: "Palavra", kind: "SERMON", durationMinutes: 40 }])}
+            >
+              Adicionar o momento Palavra
+            </Button>
+          )}
+        </div>
+      )}
       {items.length === 0 ? (
         <p className="rounded-xl border px-5 py-8 text-center text-sm text-muted-foreground">Este culto não tem momentos.</p>
       ) : (
@@ -98,6 +126,7 @@ export function MomentsTab({ service, canEdit, saving, onSave, onOpenWorship }: 
               <MomentFields
                 moment={moment}
                 canEdit={canEdit && !saving}
+                sermon={moment.id === firstSermon ? sermon : null}
                 onCommit={(patch) => onSave(drafts.map((d, i) => (i === index ? { ...d, ...patch } : d)))}
               />
               {moment.id === firstWorship && (
@@ -110,6 +139,15 @@ export function MomentsTab({ service, canEdit, saving, onSave, onOpenWorship }: 
                   {service.songs.length} {service.songs.length === 1 ? "música" : "músicas"}
                   <ChevronRight className="h-4 w-4" aria-hidden="true" />
                 </button>
+              )}
+              {moment.id === firstSermon && sermon && (
+                <span
+                  title={`Palavra de ${sermon.preacherName}`}
+                  className="inline-flex min-w-0 max-w-[40%] flex-none items-center gap-1.5 rounded-lg bg-purple-100 px-3 py-1.5 text-sm font-semibold text-purple-700"
+                >
+                  <BookOpen className="h-4 w-4 flex-none" aria-hidden="true" />
+                  <span className="truncate">{sermon.title}</span>
+                </span>
               )}
               {canEdit && (
                 <Button

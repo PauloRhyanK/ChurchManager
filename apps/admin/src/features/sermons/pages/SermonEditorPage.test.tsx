@@ -1,0 +1,246 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useEffect } from "react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { EMPTY_DOC, type SermonDoc } from "../lib/document";
+import SermonEditorPage from "./SermonEditorPage";
+
+const api = vi.hoisted(() => ({
+  getSermon: vi.fn(),
+  updateSermon: vi.fn(),
+  duplicateSermon: vi.fn(),
+  deleteSermon: vi.fn(),
+  listServiceOptions: vi.fn(),
+  previewDelivery: vi.fn(),
+  sendSermon: vi.fn(),
+  cancelDelivery: vi.fn(),
+}));
+vi.mock("../api/sermons-api", () => api);
+const perms = vi.hoisted(() => ({ canEdit: true }));
+vi.mock("@/features/access/hooks/use-permissions", () => ({ usePermissions: () => ({ can: () => perms.canEdit }) }));
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+// Tiptap em jsdom não é o alvo aqui: a folha e a barra viram dublês simples.
+const fakeEditor = { on() {}, off() {}, state: { selection: { from: 0 }, doc: { forEach() {} } } };
+const TYPED: SermonDoc = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Graça" }] }] };
+vi.mock("../editor/SermonSheet", () => ({
+  SermonSheet: ({
+    onTitleChange,
+    onDocumentChange,
+    onEditor,
+  }: {
+    onTitleChange(t: string): void;
+    onDocumentChange(d: SermonDoc): void;
+    onEditor(e: unknown): void;
+  }) => {
+    useEffect(() => onEditor(fakeEditor), [onEditor]);
+    return (
+      <>
+        <input aria-label="Título da palavra" onChange={(e) => onTitleChange(e.target.value)} />
+        <button type="button" onClick={() => onDocumentChange(TYPED)}>
+          Digitar no texto
+        </button>
+      </>
+    );
+  },
+}));
+vi.mock("../editor/SermonToolbar", () => ({ SermonToolbar: () => <div role="toolbar" /> }));
+
+const sermon = {
+  id: "s1",
+  title: "T",
+  baseReference: null,
+  pointCount: 0,
+  estimatedSeconds: 0,
+  status: "DRAFT",
+  delivery: null,
+  updatedAt: "",
+  document: EMPTY_DOC,
+  revision: 1,
+};
+
+function renderPage(client = new QueryClient()) {
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={["/palavras/s1"]}>
+        <Routes>
+          <Route path="/palavras/:id" element={<SermonEditorPage />} />
+          <Route path="/palavras" element={<p>Lista de palavras</p>} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+describe("SermonEditorPage", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    perms.canEdit = true;
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  const back = () => fireEvent.click(screen.getByRole("button", { name: "Voltar para Palavras" }));
+  const listInvalidated = (spy: ReturnType<typeof vi.spyOn>) =>
+    spy.mock.calls.some(([filters]) => JSON.stringify((filters as { queryKey?: unknown })?.queryKey) === '["sermons","list"]');
+
+  it("título apagado (ou só espaços) salva como Sem título", async () => {
+    api.getSermon.mockResolvedValue(sermon);
+    api.updateSermon.mockResolvedValue({ ...sermon, revision: 2 });
+    for (const value of ["", "   "]) {
+      api.updateSermon.mockClear();
+      const view = renderPage();
+      const input = await screen.findByLabelText("Título da palavra");
+      fireEvent.change(input, { target: { value: "x" } });
+      fireEvent.change(input, { target: { value } });
+      back();
+      await waitFor(() => expect(api.updateSermon).toHaveBeenCalledWith("s1", { title: "Sem título" }));
+      view.unmount();
+    }
+  });
+
+  it("voltar para a lista depois de salvar invalida a lista", async () => {
+    api.getSermon.mockResolvedValue(sermon);
+    api.updateSermon.mockResolvedValue({ ...sermon, revision: 2 });
+    const client = new QueryClient();
+    const spy = vi.spyOn(client, "invalidateQueries");
+    renderPage(client);
+    fireEvent.change(await screen.findByLabelText("Título da palavra"), { target: { value: "Novo" } });
+    back();
+    expect(await screen.findByText("Lista de palavras")).toBeInTheDocument();
+    expect(api.updateSermon).toHaveBeenCalled();
+    expect(listInvalidated(spy)).toBe(true);
+  });
+
+  it("apagar e duplicar invalidam a lista", async () => {
+    api.getSermon.mockResolvedValue(sermon);
+    api.deleteSermon.mockResolvedValue(undefined);
+    api.duplicateSermon.mockResolvedValue({ ...sermon, id: "s2" });
+    for (const action of ["Duplicar", "Apagar"]) {
+      const client = new QueryClient();
+      const spy = vi.spyOn(client, "invalidateQueries");
+      const view = renderPage(client);
+      fireEvent.keyDown(await screen.findByRole("button", { name: "Mais ações" }), { key: "Enter" });
+      fireEvent.click(await screen.findByRole("menuitem", { name: action }));
+      if (action === "Apagar") fireEvent.click(await screen.findByRole("button", { name: "Apagar palavra" }));
+      await waitFor(() => expect(listInvalidated(spy)).toBe(true));
+      view.unmount();
+    }
+  });
+
+  it("409 de um envio que o servidor já gravou não vira conflito: segue com a revisão do servidor", async () => {
+    // O servidor guarda o JSON com as chaves em outra ordem (jsonb).
+    const stored = JSON.parse(JSON.stringify(TYPED), (_k, v) =>
+      v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).reverse()) : v,
+    );
+    api.getSermon.mockResolvedValueOnce(sermon).mockResolvedValueOnce({ ...sermon, document: stored, revision: 6 });
+    api.updateSermon.mockRejectedValueOnce({ response: { status: 409 } }).mockResolvedValue({ ...sermon, revision: 7 });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Digitar no texto" }));
+    back();
+    expect(await screen.findByText("Lista de palavras")).toBeInTheDocument();
+    expect(api.getSermon).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/alterada em outra aba/)).not.toBeInTheDocument();
+  });
+
+  it("409 com outro texto no servidor: conflito avisa que Recarregar descarta o que foi escrito", async () => {
+    api.getSermon.mockResolvedValueOnce(sermon).mockResolvedValueOnce({ ...sermon, revision: 6 });
+    api.updateSermon.mockRejectedValue({ response: { status: 409 } });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Digitar no texto" }));
+    back();
+    expect(
+      await screen.findByText(
+        "Esta palavra foi alterada em outra aba. Recarregar descarta o que você escreveu aqui desde o último salvamento.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Recarregar" })).toBeInTheDocument();
+  });
+
+  it("erro ao salvar mostra a mensagem do status", async () => {
+    const cases = [
+      [{ response: { status: 413 } }, "A palavra ficou grande demais para salvar."],
+      [{ response: { status: 400 } }, "O servidor recusou este conteúdo. Desfaça a última alteração."],
+      [new Error("rede"), "Não foi possível salvar."],
+    ] as const;
+    for (const [error, text] of cases) {
+      api.getSermon.mockResolvedValue(sermon);
+      api.updateSermon.mockReset().mockRejectedValue(error);
+      const view = renderPage();
+      fireEvent.click(await screen.findByRole("button", { name: "Digitar no texto" }));
+      back();
+      expect(await screen.findByText(text)).toBeInTheDocument();
+      view.unmount();
+    }
+  });
+
+  it("palavra pregada mostra Pregada no cabeçalho e não abre o envio", async () => {
+    api.getSermon.mockResolvedValue({
+      ...sermon,
+      status: "PREACHED",
+      delivery: { date: "2026-11-15", startTime: "19:00", serviceId: "c1", serviceName: "Culto" },
+    });
+    renderPage();
+    const label = await screen.findByText("Pregada · dom 15/11");
+    fireEvent.click(label);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Enviar para um culto|Enviada/ })).not.toBeInTheDocument();
+    expect(api.listServiceOptions).not.toHaveBeenCalled();
+  });
+
+  it("404 mostra Palavra não encontrada", async () => {
+    api.getSermon.mockRejectedValue({ response: { status: 404 } });
+    renderPage();
+    expect(await screen.findByText("Palavra não encontrada.")).toBeInTheDocument();
+  });
+
+  it("Duplicar depois de um salvamento que falhou não duplica", async () => {
+    api.getSermon.mockResolvedValue(sermon);
+    api.updateSermon.mockRejectedValue(new Error("rede"));
+    renderPage();
+    fireEvent.change(await screen.findByLabelText("Título da palavra"), { target: { value: "Novo" } });
+    const trigger = screen.getByRole("button", { name: "Mais ações" });
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Duplicar" }));
+    await waitFor(() => expect(api.updateSermon).toHaveBeenCalled());
+    expect(await screen.findByText("Não foi possível salvar.")).toBeInTheDocument();
+    expect(api.duplicateSermon).not.toHaveBeenCalled();
+  });
+
+  it("sem permissão de edição não há barra de ferramentas", async () => {
+    perms.canEdit = false;
+    api.getSermon.mockResolvedValue(sermon);
+    renderPage();
+    await screen.findByLabelText("Título da palavra");
+    expect(screen.queryByRole("toolbar")).not.toBeInTheDocument();
+  });
+
+  it("rascunho mostra Enviar para um culto; palavra enviada mostra o culto", async () => {
+    api.getSermon.mockResolvedValue(sermon);
+    const first = renderPage();
+    expect(await screen.findByRole("button", { name: "Enviar para um culto" })).toBeInTheDocument();
+    first.unmount();
+    api.getSermon.mockResolvedValue({
+      ...sermon,
+      status: "SENT",
+      delivery: { date: "2026-11-22", startTime: "19:00", serviceId: "c1", serviceName: "Culto" },
+    });
+    renderPage();
+    expect(await screen.findByRole("button", { name: "Enviada · dom 22/11, 19h" })).toBeInTheDocument();
+  });
+
+  it("com texto que não salvou, o envio não sai", async () => {
+    api.getSermon.mockResolvedValue(sermon);
+    api.updateSermon.mockRejectedValue(new Error("rede"));
+    api.listServiceOptions.mockResolvedValue([
+      { id: "c1", date: "2026-11-22", startTime: "19:00", name: "Culto", hasSermon: false, isMine: false },
+    ]);
+    renderPage();
+    fireEvent.change(await screen.findByLabelText("Título da palavra"), { target: { value: "Novo" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar para um culto" }));
+    fireEvent.click(await screen.findByRole("radio", { name: /Domingo, 22\/11/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    await waitFor(() => expect(api.updateSermon).toHaveBeenCalled());
+    await screen.findByText("Não foi possível salvar.");
+    expect(api.sendSermon).not.toHaveBeenCalled();
+  });
+});

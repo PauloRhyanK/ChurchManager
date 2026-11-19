@@ -16,7 +16,7 @@ export const DEFAULT_TEMPLATE: { name: string; startTime: string; moments: Templ
     { name: 'Louvor', kind: 'WORSHIP', durationMinutes: 17 },
     { name: 'Avisos', kind: 'GENERIC', durationMinutes: 5 },
     { name: 'Ofertório', kind: 'GENERIC', durationMinutes: 5 },
-    { name: 'Palavra', kind: 'GENERIC', durationMinutes: 40 },
+    { name: 'Palavra', kind: 'SERMON', durationMinutes: 40 },
     { name: 'Encerramento', kind: 'GENERIC', durationMinutes: 5 },
   ],
 };

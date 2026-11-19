@@ -54,6 +54,11 @@ export const PERMISSION_MODULES: PermissionModuleMeta[] = [
     description: "Músicas, tempos, climas e roteiro do culto.",
   },
   {
+    module: "SERMONS",
+    label: "Palavras",
+    description: "Sermões do pregador: esboço, slides e envio para o culto.",
+  },
+  {
     module: "SETTINGS",
     label: "Configurações",
     description: "Credenciais Asaas e origens públicas.",
@@ -116,6 +121,11 @@ export const GROUP_TEMPLATES: GroupTemplate[] = [
     name: "Equipe de louvor",
     description: "Monta as músicas e o roteiro do culto.",
     entries: [{ module: "WORSHIP", level: "EDIT" }],
+  },
+  {
+    name: "Pregadores",
+    description: "Escreve as palavras e as envia para o culto.",
+    entries: [{ module: "SERMONS", level: "EDIT" }],
   },
   {
     name: "Financeiro",

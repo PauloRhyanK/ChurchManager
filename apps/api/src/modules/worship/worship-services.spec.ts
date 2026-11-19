@@ -44,8 +44,10 @@ const SONG_B = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const SONG_A = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const MOMENT = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 
-function build() {
+function build(sermon: { title: string; preacherName: string; estimatedMinutes: number } | null = null) {
   const writes: string[] = [];
+  const calls: string[] = [];
+  let inTx = false;
   const created: Record<string, unknown>[] = [];
   const service = {
     id: SERVICE,
@@ -65,10 +67,14 @@ function build() {
   };
   const prisma = {
     worshipService: {
+      findMany: async () => [{ ...service, _count: { songs: 0 } }],
       findFirst: async ({ where }: { where: { id: string; tenantId: string } }) =>
         where.id === SERVICE && where.tenantId === TENANT_B ? service : null,
       update: op('service.update'),
-      delete: op('service.delete'),
+      delete: (args: unknown) => {
+        calls.push('service.delete');
+        return op('service.delete')(args as never);
+      },
       create: async ({ data }: { data: { moments: { create: unknown[] } } & Record<string, unknown> }) => {
         writes.push('service.create');
         return { ...service, ...data, moments: data.moments.create.map((m, i) => ({ id: `m${i}`, ...(m as object) })), songs: [] };
@@ -81,9 +87,26 @@ function build() {
         where.id.in.filter((id) => id === SONG_B && where.tenantId === TENANT_B).length,
     },
     worshipServiceTemplate: { findFirst: async () => null, create: op('template.create'), delete: op('template.delete') },
-    $transaction: async (ops: Promise<unknown>[]) => Promise.all(ops),
+    $transaction: async (arg: Promise<unknown>[] | ((tx: unknown) => Promise<unknown>)) => {
+      if (typeof arg !== 'function') return Promise.all(arg);
+      inTx = true;
+      try {
+        return await arg(prisma);
+      } finally {
+        inTx = false;
+      }
+    },
   };
-  return { svc: new WorshipServicesService(prisma as never), writes, created };
+  const rec = (name: string) => async (...args: unknown[]) => {
+    calls.push(`${name}${inTx ? '@tx' : ''}:${JSON.stringify(args.slice(1))}`);
+  };
+  const deliveries = {
+    rematch: rec('rematch'),
+    followService: rec('follow'),
+    releaseService: rec('release'),
+    summaries: async (_t: string, ids: string[]) => new Map(sermon ? ids.map((i) => [i, sermon] as const) : []),
+  };
+  return { svc: new WorshipServicesService(prisma as never, deliveries as never), writes, created, calls };
 }
 
 test('culto de outro tenant → 404 e nada é escrito', async () => {
@@ -136,4 +159,40 @@ test('criar culto sem modelo usa o Culto padrão; data impossível → 400', asy
   assert.equal(out.endsAt, '20:17');
   assert.equal(out.date, '2026-11-22');
   await assert.rejects(svc.create(TENANT_B, { date: '2026-02-31' }), BadRequestException);
+});
+
+test('criar culto roda rematch com a data dele, dentro da transação', async () => {
+  const { svc, calls } = build();
+  await svc.create(TENANT_B, { date: '2026-11-29' });
+  assert.deepEqual(calls.filter((c) => c.startsWith('rematch')), [`rematch@tx:["${TENANT_B}",["2026-11-29"]]`]);
+});
+
+test('mudar data chama followService e rematch com as duas datas; mudar só o nome não chama nenhum', async () => {
+  const a = build();
+  await a.svc.update(TENANT_B, SERVICE, { date: '2026-11-29' });
+  assert.ok(a.calls.some((c) => c.startsWith('follow@tx')));
+  assert.ok(a.calls.includes(`rematch@tx:["${TENANT_B}",["2026-11-22","2026-11-29"]]`));
+  const b = build();
+  await b.svc.update(TENANT_B, SERVICE, { startTime: '10:00' });
+  assert.ok(b.calls.some((c) => c.startsWith('follow@tx')));
+  const c = build();
+  await c.svc.update(TENANT_B, SERVICE, { name: 'Outro nome' });
+  await c.svc.update(TENANT_B, SERVICE, { date: '2026-11-22', startTime: '19:00' });
+  assert.deepEqual(c.calls, []);
+});
+
+test('apagar libera o envio antes do delete e roda rematch depois', async () => {
+  const { svc, calls } = build();
+  await svc.remove(TENANT_B, SERVICE);
+  assert.deepEqual(calls.map((c) => c.split(':')[0]), ['release@tx', 'service.delete', 'rematch@tx']);
+});
+
+test('get traz sermon com exatamente três chaves, ou null sem envio; list traz hasSermon', async () => {
+  const sermon = { title: 'Graça', preacherName: 'Paulo', estimatedMinutes: 30 };
+  const withSermon = build(sermon);
+  const got = await withSermon.svc.get(TENANT_B, SERVICE);
+  assert.deepEqual(Object.keys(got.sermon!).sort(), ['estimatedMinutes', 'preacherName', 'title']);
+  assert.equal((await build().svc.get(TENANT_B, SERVICE)).sermon, null);
+  assert.equal((await withSermon.svc.list(TENANT_B)).items[0].hasSermon, true);
+  assert.equal((await build().svc.list(TENANT_B)).items[0].hasSermon, false);
 });

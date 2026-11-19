@@ -32,6 +32,7 @@ enum PermissionModule {
   USERS
   CHURCH
   WORSHIP
+  SERMONS
 }
 
 enum PermissionLevel {
@@ -112,6 +113,8 @@ model Tenant {
   worshipSongs       WorshipSong[]
   worshipTemplates   WorshipServiceTemplate[]
   worshipServices    WorshipService[]
+  sermons            Sermon[]
+  sermonDeliveries   SermonDelivery[]
 
   @@map("tenants")
 }
@@ -564,6 +567,8 @@ model AdminUser {
   permissionGroups AdminUserPermissionGroup[]
   invitations      AdminUserInvitation[]
   passwordResets   AdminPasswordReset[]
+  sermons          Sermon[]
+  sermonDeliveries SermonDelivery[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -954,6 +959,7 @@ enum WorshipMomentKind {
   PRE_SERVICE
   GENERIC
   WORSHIP
+  SERMON
 }
 
 model WorshipSong {
@@ -1015,10 +1021,11 @@ model WorshipService {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  tenant   Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  template WorshipServiceTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  moments  WorshipServiceMoment[]
-  songs    WorshipServiceSong[]
+  tenant         Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  template       WorshipServiceTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  moments        WorshipServiceMoment[]
+  songs          WorshipServiceSong[]
+  sermonDelivery SermonDelivery?
 
   @@index([tenantId, date])
   @@map("worship_services")
@@ -1050,4 +1057,53 @@ model WorshipServiceSong {
   @@index([serviceId])
   @@index([songId])
   @@map("worship_service_songs")
+}
+
+/// Palavra do pregador. Só o autor lê e escreve (tenant e autor vêm do JWT).
+model Sermon {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  authorId         String   @map("author_id") @db.Uuid
+  title            String   @default("Sem título") @db.VarChar(255)
+  document         Json     @default("{\"type\":\"doc\",\"content\":[]}")
+  revision         Int      @default(0)
+  baseReference    String?  @map("base_reference") @db.VarChar(120)
+  pointCount       Int      @default(0) @map("point_count")
+  verseRefs        String   @default("") @map("verse_refs") @db.Text
+  estimatedSeconds Int      @default(0) @map("estimated_seconds")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  author   AdminUser       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  delivery SermonDelivery?
+
+  @@index([tenantId, authorId, updatedAt])
+  @@map("sermons")
+}
+
+/// Envio de uma palavra para um culto. Guarda só o necessário para o roteiro do culto.
+model SermonDelivery {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  sermonId         String?  @unique @map("sermon_id") @db.Uuid
+  authorId         String?  @map("author_id") @db.Uuid
+  date             DateTime @db.Date
+  /// HH:MM
+  startTime        String   @map("start_time") @db.VarChar(5)
+  serviceId        String?  @unique @map("service_id") @db.Uuid
+  pinned           Boolean  @default(false)
+  title            String   @db.VarChar(255)
+  preacherName     String   @map("preacher_name") @db.VarChar(255)
+  estimatedSeconds Int      @default(0) @map("estimated_seconds")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  sermon  Sermon?         @relation(fields: [sermonId], references: [id], onDelete: SetNull)
+  author  AdminUser?      @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  service WorshipService? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, date])
+  @@map("sermon_deliveries")
 }

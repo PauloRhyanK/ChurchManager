@@ -85,6 +85,8 @@ export default function ServicePlanPage() {
     mutationFn: createService,
     onSuccess: (plan) => {
       adopt(plan);
+      // Um culto novo pode casar com uma palavra guardada: a situação e os destinos das palavras mudam.
+      void queryClient.invalidateQueries({ queryKey: ["sermons"] });
       setNewOpen(false);
       go({ culto: plan.id, aba: "culto" });
       toast.success("Culto criado.");
@@ -107,6 +109,7 @@ export default function ServicePlanPage() {
       setDeleteOpen(false);
       queryClient.removeQueries({ queryKey: ["worship", "service", serviceId] });
       void queryClient.invalidateQueries({ queryKey: ["worship", "services"] });
+      void queryClient.invalidateQueries({ queryKey: ["sermons"] });
       setParams({});
       toast.success("Culto apagado.");
     },
