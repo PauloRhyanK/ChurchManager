@@ -16,7 +16,8 @@ export type VerseAttrs = {
 export type SermonBlock =
   | { type: 'paragraph'; content?: Inline[] }
   | { type: 'heading'; attrs: { id: string; level: 2 | 3 }; content?: Inline[] }
-  | { type: 'bulletList' | 'orderedList'; content: ListItem[] }
+  | { type: 'bulletList'; content: ListItem[] }
+  | { type: 'orderedList'; attrs?: { start?: number; type?: string | null }; content: ListItem[] }
   | { type: 'point'; attrs: { id: string }; content?: Inline[] }
   | { type: 'verse'; attrs: VerseAttrs }
   | { type: 'illustration' | 'application' | 'privateNote'; attrs: { id: string }; content: Inner[] };
@@ -164,8 +165,21 @@ export function validateSermonDocument(input: unknown): SermonDoc {
         inlineContent(n, depth, path);
         return;
       }
-      case 'bulletList':
       case 'orderedList':
+        keys(n, ['type', 'attrs', 'content'], path);
+        if (n.attrs !== undefined) {
+          const a = attrs(n, ['start', 'type'], path);
+          const ap = `${path}.attrs`;
+          if (a.start !== undefined && (typeof a.start !== 'number' || !Number.isInteger(a.start) || a.start < 1)) {
+            fail(ap, 'o início da lista deve ser um inteiro a partir de 1');
+          }
+          if (a.type !== undefined && a.type !== null && (typeof a.type !== 'string' || a.type.length > 8)) {
+            fail(ap, 'o tipo da lista deve ser nulo ou um texto de até 8 caracteres');
+          }
+        }
+        list(n.content, `${path}.content`).forEach((c, i) => listItem(c, depth + 1, `${path}.content[${i}]`));
+        return;
+      case 'bulletList':
         keys(n, ['type', 'content'], path);
         list(n.content, `${path}.content`).forEach((c, i) => listItem(c, depth + 1, `${path}.content[${i}]`));
         return;

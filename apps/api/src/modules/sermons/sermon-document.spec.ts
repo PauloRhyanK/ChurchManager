@@ -149,3 +149,23 @@ test('limites: id, reference e versículos', () => {
   validateSermonDocument(many(DOC_LIMITS.verses));
   recusa(many(DOC_LIMITS.verses + 1));
 });
+
+test('aceita documento com content vazio (padrão da coluna)', () => {
+  assert.deepEqual(validateSermonDocument({ type: 'doc', content: [] }), { type: 'doc', content: [] });
+});
+
+test('orderedList aceita attrs start/type; recusa o resto; demais nós seguem sem attrs', () => {
+  const ol = (attrs?: unknown) => doc({ type: 'orderedList', ...(attrs === undefined ? {} : { attrs }), content: [{ type: 'listItem', content: [p('x')] }] });
+  validateSermonDocument(ol({ start: 3 }));
+  validateSermonDocument(ol({ start: 1, type: null }));
+  validateSermonDocument(ol({ type: '1' }));
+  validateSermonDocument(ol());
+  recusa(ol({ start: 0 }));
+  recusa(ol({ start: 1.5 }));
+  recusa(ol({ type: 'x'.repeat(9) }));
+  recusa(ol({ type: 5 }));
+  recusa(ol({ foo: 1 }));
+  recusa(doc({ type: 'bulletList', attrs: {}, content: [] }));
+  recusa(doc({ type: 'paragraph', attrs: {} }));
+  recusa(doc({ type: 'bulletList', content: [{ type: 'listItem', attrs: {}, content: [p('x')] }] }));
+});
