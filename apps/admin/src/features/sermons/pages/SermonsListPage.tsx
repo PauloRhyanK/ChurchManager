@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, ChevronRight, Loader2, Plus, Search } from "lucide-react";
+import { BookOpen, ChevronRight, ClipboardPaste, Loader2, Plus, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { usePermissions } from "@/features/access/hooks/use-permissions";
 import { getApiErrorMessage } from "@/lib/api";
 import { createSermon, listSermons, type SermonStatus } from "../api/sermons-api";
+import { PasteTextDialog } from "../components/PasteTextDialog";
 import { SituationLabel } from "../components/SituationLabel";
 import { formatBase } from "../lib/format";
 
@@ -22,6 +23,7 @@ export default function SermonsListPage() {
   const [search, setSearch] = useState("");
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("ALL");
+  const [pasteOpen, setPasteOpen] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setQ(search.trim()), SEARCH_DELAY_MS);
@@ -53,10 +55,16 @@ export default function SermonsListPage() {
   ];
 
   const newButton = canEdit && (
-    <Button className="gap-2" disabled={createMutation.isPending} onClick={() => createMutation.mutate()}>
-      <Plus className="h-4 w-4" />
-      Nova palavra
-    </Button>
+    <div className="flex flex-wrap gap-2">
+      <Button variant="outline" className="gap-2" onClick={() => setPasteOpen(true)}>
+        <ClipboardPaste className="h-4 w-4" />
+        Colar texto
+      </Button>
+      <Button className="gap-2" disabled={createMutation.isPending} onClick={() => createMutation.mutate()}>
+        <Plus className="h-4 w-4" />
+        Nova palavra
+      </Button>
+    </div>
   );
   const noFilter = q === "" && filter === "ALL";
 
@@ -140,6 +148,16 @@ export default function SermonsListPage() {
           </ul>
         )}
       </div>
+      {canEdit && (
+        <PasteTextDialog
+          open={pasteOpen}
+          onOpenChange={setPasteOpen}
+          onCreated={(created) => {
+            void queryClient.invalidateQueries({ queryKey: ["sermons", "list"] });
+            navigate(`/palavras/${created.id}`);
+          }}
+        />
+      )}
     </DashboardLayout>
   );
 }

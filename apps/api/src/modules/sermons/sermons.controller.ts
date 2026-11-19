@@ -8,9 +8,11 @@ import type { AuthUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { SermonStatus } from './delivery-match';
 import { DeliveryPreviewQuery, SendSermonDto } from './dto/delivery.dto';
+import { CreateFromTextDto } from './dto/from-text.dto';
 import { CreateSermonDto, UpdateSermonDto } from './dto/sermon.dto';
 import { GenerateSlidesDto, SaveSlidesDto } from './dto/slides.dto';
 import { SermonDeliveryService } from './sermon-delivery.service';
+import { SermonImportService } from './sermon-import.service';
 import { SermonSlidesService } from './sermon-slides.service';
 import { SermonsService } from './sermons.service';
 
@@ -26,6 +28,7 @@ export class SermonsController {
     private readonly sermons: SermonsService,
     private readonly deliveries: SermonDeliveryService,
     private readonly slides: SermonSlidesService,
+    private readonly imports: SermonImportService,
   ) {}
 
   @Get()
@@ -40,6 +43,14 @@ export class SermonsController {
   @RequirePermission(PermissionModule.SERMONS, PermissionLevel.EDIT)
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateSermonDto) {
     return this.sermons.create(user, dto);
+  }
+
+  /** "Colar texto": chama o provedor de IA, então tem o limite mais apertado dos slides completos. */
+  @Post('from-text')
+  @Throttle({ public: { limit: 20, ttl: 60_000 } })
+  @RequirePermission(PermissionModule.SERMONS, PermissionLevel.EDIT)
+  createFromText(@CurrentUser() user: AuthUser, @Body() dto: CreateFromTextDto) {
+    return this.imports.createFromText(user, dto);
   }
 
   @Get('service-options')

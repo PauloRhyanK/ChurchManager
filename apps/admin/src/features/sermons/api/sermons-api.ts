@@ -75,6 +75,13 @@ export async function createSermon(input: { title?: string } = {}): Promise<Serm
   return (await api.post<Sermon>(SERMONS, body)).data;
 }
 
+/** "Colar texto": a IA organiza o texto colado no formato do esboço e o servidor cria a palavra. */
+export async function createSermonFromText(input: { text: string; model?: string }): Promise<Sermon> {
+  const body: { text: string; model?: string } = { text: input.text };
+  if (input.model !== undefined) body.model = input.model;
+  return (await api.post<Sermon>(`${SERMONS}/from-text`, body)).data;
+}
+
 export async function getSermon(id: string): Promise<Sermon> {
   return (await api.get<Sermon>(`${SERMONS}/${id}`)).data;
 }
