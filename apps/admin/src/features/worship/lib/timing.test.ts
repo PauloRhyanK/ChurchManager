@@ -2,7 +2,18 @@ import { describe, expect, it } from "vitest";
 import { type WorshipRow, deriveSong, holyricsText, songStatus } from "./document";
 import { formatClock, formatClockTenths, formatServiceLabel, plain, songFicha } from "./format";
 import { situationOf } from "./labels";
-import { currentSlideIndex, markSlide, nudgeSlide, slideStates } from "./timing";
+import {
+  applyTimes,
+  changedCount,
+  currentSlideIndex,
+  markSlide,
+  moveSlideStart,
+  nudgeSlide,
+  projectedSlideIndex,
+  shiftBySeconds,
+  shiftBySlides,
+  slideStates,
+} from "./timing";
 
 const rows = (): WorshipRow[] => [
   { id: "a", type: "lyric", text: "um", part: { kind: "VERSE", mood: "WORSHIP" } },
@@ -69,5 +80,42 @@ describe("textos", () => {
     const r = markSlide(markSlide(markSlide(rows(), "a", 1), "c", 2), "e", 3);
     expect(songStatus(r, { url: "x", durationSeconds: 10 }, null)).toEqual({ status: "NEEDS_TIMING", pending: ["CONFIRM"], slideCount: 3 });
     expect(holyricsText(r)).toBe("UM\n\nDOIS\n\nTRÊS");
+  });
+});
+
+describe("ajustes em massa e bordas", () => {
+  it("voltar um slide conserta quem marcou no fim da frase", () => {
+    // Marcado no fim: o toque do slide 0 caiu quando o slide 1 começou, e assim por diante.
+    const late = [10, 20, 30, 40];
+    expect(shiftBySlides(late, -1, 60)).toEqual([0, 10, 20, 30]);
+    expect(shiftBySlides([12, 20, 30], -1, 60)).toEqual([4, 12, 20]);
+    expect(shiftBySlides([10, 20, 30], 1, 60)).toEqual([20, 30, 40]);
+    expect(shiftBySlides([10, 20, 55], 1, 60)).toEqual([20, 55, 60]);
+    // Ida e volta preserva o miolo.
+    expect(shiftBySlides(shiftBySlides([5, 10, 20, 30], -1, 60), 1, 60).slice(0, 3)).toEqual([5, 10, 20]);
+  });
+
+  it("mover tudo em segundos fica dentro do áudio e mantém os sem tempo", () => {
+    expect(shiftBySeconds([0.2, null, 10], -0.5, 60)).toEqual([0, null, 9.5]);
+    expect(shiftBySeconds([59.8], 0.5, 60)).toEqual([60]);
+  });
+
+  it("borda arrastada não passa dos vizinhos", () => {
+    expect(moveSlideStart([10, 20, 30], 1, 25, 60)).toEqual([10, 25, 30]);
+    expect(moveSlideStart([10, 20, 30], 1, 5, 60)).toEqual([10, 10.1, 30]);
+    expect(moveSlideStart([10, 20, 30], 1, 99, 60)).toEqual([10, 29.9, 30]);
+    expect(moveSlideStart([10, null, 30], 0, 50, 60)).toEqual([29.9, null, 30]);
+    expect(moveSlideStart([10, null, 30], 1, 15, 60)).toEqual([10, null, 30]);
+  });
+
+  it("aplica os tempos nas linhas e a projeção já adianta", () => {
+    const doc = rows();
+    const { slides } = deriveSong(doc);
+    const next = applyTimes(doc, slides, [1, 2, null]);
+    const again = deriveSong(next).slides;
+    expect(again.map((s) => s.time)).toEqual([1, 2, null]);
+    expect(projectedSlideIndex(again, 1.75, 0.3)).toBe(1);
+    expect(projectedSlideIndex(again, 1.6, 0.3)).toBe(0);
+    expect(changedCount([1, 2, 3], [1, 2.5, 3])).toBe(1);
   });
 });

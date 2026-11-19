@@ -313,3 +313,54 @@ export async function setServiceMoments(
 export async function setServiceSongs(id: string, songIds: string[]): Promise<ServicePlan> {
   return (await api.put<ServicePlan>(`${SERVICES}/${id}/songs`, { songIds: [...songIds] })).data;
 }
+
+// --- tempos dos slides: antecipação, ajuste por IA e aprendizado ---------------
+
+const TIMING = "/admin/tenants/me/worship/timing";
+
+export interface TimingSettings {
+  slideLeadSeconds: number;
+  aiEnabled: boolean;
+}
+
+export async function fetchTimingSettings(): Promise<TimingSettings> {
+  return (await api.get<TimingSettings>(`${TIMING}/settings`)).data;
+}
+
+export async function saveTimingSettings(slideLeadSeconds: number): Promise<TimingSettings> {
+  const body: { slideLeadSeconds: number } = { slideLeadSeconds };
+  return (await api.put<TimingSettings>(`${TIMING}/settings`, body)).data;
+}
+
+export interface LearnedTiming {
+  corrections: number;
+  meanFineDeltaSeconds: number | null;
+  slideShifts: { earlier: number; later: number };
+}
+
+export async function fetchLearnedTiming(): Promise<LearnedTiming> {
+  return (await api.get<LearnedTiming>(`${TIMING}/learned`)).data;
+}
+
+export interface TimingSuggestion {
+  before: (number | null)[];
+  times: (number | null)[];
+  summary: string;
+  slideIds: string[];
+}
+
+export async function suggestTiming(songId: string, instruction: string): Promise<TimingSuggestion> {
+  const body: { instruction: string } = { instruction };
+  return (await api.post<TimingSuggestion>(`${TIMING}/songs/${songId}/suggest`, body)).data;
+}
+
+export type TimingCorrectionSource = "DRAG" | "NUDGE" | "SHIFT_SECONDS" | "SHIFT_SLIDES" | "INSTRUCTION";
+
+export async function recordTimingCorrection(
+  songId: string,
+  input: { source: TimingCorrectionSource; before: (number | null)[]; after: (number | null)[]; instruction?: string },
+): Promise<void> {
+  const body: typeof input = { source: input.source, before: input.before, after: input.after };
+  if (input.instruction) body.instruction = input.instruction;
+  await api.post(`${TIMING}/songs/${songId}/corrections`, body);
+}

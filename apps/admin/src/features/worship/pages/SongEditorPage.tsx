@@ -341,6 +341,7 @@ export default function SongEditorPage() {
             canEdit={canEdit}
             onChange={(next) => change(next)}
             onAudioUploaded={(saved) => adopt(saved, false)}
+            saveNow={flush}
           />
         )}
         {step === 3 && (
