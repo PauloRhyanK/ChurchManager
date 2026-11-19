@@ -44,7 +44,12 @@ const SONG_B = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const SONG_A = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const MOMENT = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 
-function build(sermon: { title: string; preacherName: string; estimatedMinutes: number } | null = null) {
+type Slides = { title: string; preacherName: string; slideStyle: string; slides: unknown[]; mySermonId: string | null };
+
+function build(
+  sermon: { title: string; preacherName: string; estimatedMinutes: number; slideCount: number } | null = null,
+  slides: Slides | null = null,
+) {
   const writes: string[] = [];
   const calls: string[] = [];
   let inTx = false;
@@ -105,6 +110,10 @@ function build(sermon: { title: string; preacherName: string; estimatedMinutes: 
     followService: rec('follow'),
     releaseService: rec('release'),
     summaries: async (_t: string, ids: string[]) => new Map(sermon ? ids.map((i) => [i, sermon] as const) : []),
+    slidesForService: async (tenantId: string, serviceId: string, viewer: string) => {
+      calls.push(`slides:${JSON.stringify([tenantId, serviceId, viewer])}`);
+      return slides ? { ...slides, extra: 'não sai' } : null;
+    },
   };
   return { svc: new WorshipServicesService(prisma as never, deliveries as never), writes, created, calls };
 }
@@ -187,12 +196,28 @@ test('apagar libera o envio antes do delete e roda rematch depois', async () => 
   assert.deepEqual(calls.map((c) => c.split(':')[0]), ['release@tx', 'service.delete', 'rematch@tx']);
 });
 
-test('get traz sermon com exatamente três chaves, ou null sem envio; list traz hasSermon', async () => {
-  const sermon = { title: 'Graça', preacherName: 'Paulo', estimatedMinutes: 30 };
+test('get traz sermon com exatamente quatro chaves, ou null sem envio; list traz hasSermon', async () => {
+  const sermon = { title: 'Graça', preacherName: 'Paulo', estimatedMinutes: 30, slideCount: 7 };
   const withSermon = build(sermon);
   const got = await withSermon.svc.get(TENANT_B, SERVICE);
-  assert.deepEqual(Object.keys(got.sermon!).sort(), ['estimatedMinutes', 'preacherName', 'title']);
+  assert.deepEqual(Object.keys(got.sermon!).sort(), ['estimatedMinutes', 'preacherName', 'slideCount', 'title']);
+  assert.equal(got.sermon!.slideCount, 7);
   assert.equal((await build().svc.get(TENANT_B, SERVICE)).sermon, null);
   assert.equal((await withSermon.svc.list(TENANT_B)).items[0].hasSermon, true);
   assert.equal((await build().svc.list(TENANT_B)).items[0].hasSermon, false);
+});
+
+test('prévia da palavra: 404 sem envio; com envio, só as cinco chaves, pelo tenant e usuário de quem chama', async () => {
+  const none = build();
+  await assert.rejects(
+    none.svc.sermonSlides(TENANT_B, SERVICE, 'u1'),
+    (e: any) => e instanceof NotFoundException && e.message === 'Este culto não tem palavra.',
+  );
+  const slides = { title: 'Graça', preacherName: 'Paulo', slideStyle: 'MINIMAL', slides: [{ kind: 'VERSE', text: 'a', reference: 'b' }], mySermonId: null };
+  const withSlides = build(null, slides);
+  const out = await withSlides.svc.sermonSlides(TENANT_B, SERVICE, 'u1');
+  assert.deepEqual(Object.keys(out).sort(), ['mySermonId', 'preacherName', 'slideStyle', 'slides', 'title']);
+  assert.deepEqual(out, slides);
+  assert.deepEqual(withSlides.calls, [`slides:${JSON.stringify([TENANT_B, SERVICE, 'u1'])}`]);
+  assert.deepEqual(withSlides.writes, []);
 });

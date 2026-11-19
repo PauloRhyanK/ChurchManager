@@ -9,7 +9,9 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import type { SermonStatus } from './delivery-match';
 import { DeliveryPreviewQuery, SendSermonDto } from './dto/delivery.dto';
 import { CreateSermonDto, UpdateSermonDto } from './dto/sermon.dto';
+import { GenerateSlidesDto, SaveSlidesDto } from './dto/slides.dto';
 import { SermonDeliveryService } from './sermon-delivery.service';
+import { SermonSlidesService } from './sermon-slides.service';
 import { SermonsService } from './sermons.service';
 
 const STATUSES: SermonStatus[] = ['DRAFT', 'SENT', 'PREACHED'];
@@ -23,6 +25,7 @@ export class SermonsController {
   constructor(
     private readonly sermons: SermonsService,
     private readonly deliveries: SermonDeliveryService,
+    private readonly slides: SermonSlidesService,
   ) {}
 
   @Get()
@@ -84,5 +87,19 @@ export class SermonsController {
   @RequirePermission(PermissionModule.SERMONS, PermissionLevel.EDIT)
   cancel(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.deliveries.cancel(user, id);
+  }
+
+  @Post(':id/slides/generate')
+  @RequirePermission(PermissionModule.SERMONS, PermissionLevel.EDIT)
+  generateSlides(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: GenerateSlidesDto) {
+    return this.slides.generate(user, id, dto);
+  }
+
+  /** Marcar, reordenar e editar salva a cada mudança: o mesmo limite do autosave. */
+  @Put(':id/slides')
+  @Throttle({ public: { limit: 120, ttl: 60_000 } })
+  @RequirePermission(PermissionModule.SERMONS, PermissionLevel.EDIT)
+  saveSlides(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SaveSlidesDto) {
+    return this.slides.save(user, id, dto);
   }
 }

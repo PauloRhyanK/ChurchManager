@@ -2,11 +2,13 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { AuthUser } from '../auth/auth-user';
+import { syncDeliveryCopy } from './delivery-copy';
 import { deliveryHasPassed, sermonStatus, type SermonStatus } from './delivery-match';
 import { rematchDeliveries } from './delivery-rematch';
 import { CreateSermonDto, UpdateSermonDto } from './dto/sermon.dto';
 import { deriveSermon, normalizeSearch } from './sermon-derive';
 import { EMPTY_DOC, validateSermonDocument, type SermonDoc } from './sermon-document';
+import { parseStoredSlides, publicSlides, type SlideItem, type SlideMode, type SlideStyle } from './sermon-slides';
 
 export interface SermonSummary {
   id: string;
@@ -16,11 +18,18 @@ export interface SermonSummary {
   estimatedSeconds: number;
   status: SermonStatus;
   delivery: { date: string; startTime: string; serviceId: string | null; serviceName: string | null } | null;
+  /** Slides marcados e não privados: o que vai para o envio. */
+  slideCount: number;
   updatedAt: Date;
 }
 export interface SermonFull extends SermonSummary {
   document: SermonDoc;
   revision: number;
+  slideMode: SlideMode | null;
+  slideStyle: SlideStyle;
+  slides: SlideItem[];
+  /** O documento mudou depois da última geração dos slides. */
+  slidesStale: boolean;
 }
 
 const SERMON_INCLUDE = {
@@ -50,15 +59,21 @@ export function toSermonSummary(sermon: SermonRow, now: Date, timeZone: string):
     estimatedSeconds: sermon.estimatedSeconds,
     status: sermonStatus(delivery, now, timeZone),
     delivery,
+    slideCount: publicSlides(parseStoredSlides(sermon.slides)).length,
     updatedAt: sermon.updatedAt,
   };
 }
 
 export function toSermonFull(sermon: SermonWithDelivery, now: Date, timeZone: string): SermonFull {
+  const slides = parseStoredSlides(sermon.slides);
   return {
     ...toSermonSummary(sermon, now, timeZone),
     document: sermon.document as unknown as SermonDoc,
     revision: sermon.revision,
+    slideMode: sermon.slideMode,
+    slideStyle: sermon.slideStyle,
+    slides,
+    slidesStale: slides.length > 0 && sermon.slidesRevision !== sermon.revision,
   };
 }
 
@@ -138,7 +153,6 @@ export class SermonsService {
       const current = await this.findOwned(user, id, tx);
       if (doc && dto.baseRevision !== undefined && dto.baseRevision !== current.revision) throw conflict();
       const title = dto.title ?? current.title;
-      const estimatedSeconds = derived ? derived.estimatedSeconds : current.estimatedSeconds;
       const data: Prisma.SermonUpdateManyMutationInput = { title };
       if (doc && derived) {
         Object.assign(data, {
@@ -156,11 +170,10 @@ export class SermonsService {
         data,
       });
       if (done.count === 0) throw conflict();
-      const delivery = current.delivery;
-      if (delivery && !deliveryHasPassed(ymd(delivery.date), delivery.startTime, now, timeZone)) {
-        await tx.sermonDelivery.update({ where: { id: delivery.id }, data: { title, estimatedSeconds } });
-      }
-      return this.findOwned(user, id, tx);
+      // O autosave não mexe nos slides; o envio recebe o título e o tempo novos (e os slides de sempre).
+      const after = await this.findOwned(user, id, tx);
+      await syncDeliveryCopy(tx, after, now, timeZone);
+      return after;
     });
     return toSermonFull(saved, now, timeZone);
   }

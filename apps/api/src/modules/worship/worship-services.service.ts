@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { randomUUID } from 'crypto';
 import { Prisma, WorshipServiceMoment, WorshipServiceTemplate } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { SermonDeliveryService } from '../sermons/sermon-delivery.service';
+import { SermonDeliveryService, type DeliverySummary } from '../sermons/sermon-delivery.service';
 import {
   CreateServiceDto,
   CreateTemplateDto,
@@ -41,9 +41,7 @@ function templateMoments(template: Pick<WorshipServiceTemplate, 'moments'>): Tem
   });
 }
 
-type SermonSummary = { title: string; preacherName: string; estimatedMinutes: number };
-
-function toServiceResponse(service: ServiceWithAll, sermon: SermonSummary | null = null) {
+function toServiceResponse(service: ServiceWithAll, sermon: DeliverySummary | null = null) {
   const schedule = computeSchedule(
     service.startTime,
     service.moments.map((m: WorshipServiceMoment) => ({
@@ -64,7 +62,14 @@ function toServiceResponse(service: ServiceWithAll, sermon: SermonSummary | null
     endsAt: schedule.endsAt,
     worshipStartsAt: schedule.worshipStartsAt,
     songs: service.songs.map((s) => ({ entryId: s.id, ...toSongSummary(s.song) })),
-    sermon: sermon ? { title: sermon.title, preacherName: sermon.preacherName, estimatedMinutes: sermon.estimatedMinutes } : null,
+    sermon: sermon
+      ? {
+          title: sermon.title,
+          preacherName: sermon.preacherName,
+          estimatedMinutes: sermon.estimatedMinutes,
+          slideCount: sermon.slideCount,
+        }
+      : null,
     updatedAt: service.updatedAt,
   };
 }
@@ -80,6 +85,19 @@ export class WorshipServicesService {
   private async respond(tenantId: string, service: ServiceWithAll) {
     const sermon = (await this.deliveries.summaries(tenantId, [service.id])).get(service.id) ?? null;
     return toServiceResponse(service, sermon);
+  }
+
+  /** Prévia dos slides da palavra do culto, lida só do envio. */
+  async sermonSlides(tenantId: string, serviceId: string, viewerUserId: string) {
+    const found = await this.deliveries.slidesForService(tenantId, serviceId, viewerUserId);
+    if (!found) throw new NotFoundException('Este culto não tem palavra.');
+    return {
+      title: found.title,
+      preacherName: found.preacherName,
+      slideStyle: found.slideStyle,
+      slides: found.slides,
+      mySermonId: found.mySermonId,
+    };
   }
 
   // --- modelos ---------------------------------------------------------------
