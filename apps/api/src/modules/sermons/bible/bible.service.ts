@@ -33,10 +33,16 @@ function escapeLike(word: string): string {
   return word.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
-/** "jo 3 999" ou "mt 99": livro conhecido seguido de números que não formam referência válida. */
+/** "jo 3 999" ou "mt 99": livro conhecido seguido de números que não formam referência válida. Varredura linear, sem regex com repetição aninhada. */
 function looksLikeReference(text: string): boolean {
-  const prefix = /^(.*?\S)(?:[\s.:,\-–]*\d+)+$/.exec(text)?.[1];
-  return prefix !== undefined && parseReference(`${prefix} 1`) !== null;
+  let end = text.length;
+  let digits = false;
+  while (end > 0 && /[\s.:,\-–\d]/.test(text[end - 1])) {
+    if (/\d/.test(text[end - 1])) digits = true;
+    end--;
+  }
+  const prefix = text.slice(0, end);
+  return digits && prefix !== '' && parseReference(`${prefix} 1`) !== null;
 }
 
 type Row = { book: number; chapter: number; verse: number; text: string };
@@ -150,10 +156,7 @@ export class BibleService {
   private async byText(code: string, text: string): Promise<BibleSearchResult> {
     const normalized = normalizeBibleText(text);
     if (normalized.length < MIN_TEXT_LENGTH) return NONE;
-    const words = normalized
-      .split(' ')
-      .map((w) => w.replace(/[^\p{L}\p{N}]/gu, ''))
-      .filter((w) => w.length >= 2);
+    const words = normalized.split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 2);
     if (!words.length) return NONE;
     const rows = await this.source.searchText(code, words, TEXT_LIMIT);
     return {

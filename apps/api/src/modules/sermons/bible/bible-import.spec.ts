@@ -69,7 +69,7 @@ test('importBible: grava a tradução e os versículos com searchText sem acento
   assert.equal(f.created[0].text, 'No princípio criou Deus os céus');
   assert.equal(f.created[0].translationId, 'tr-1');
   assert.ok(f.batches.every((n) => n <= 2000));
-  assert.deepEqual(f.opts, [{ timeout: 120_000 }]);
+  assert.deepEqual(f.opts, [{ timeout: 120_000, maxWait: 20_000 }]);
 });
 
 test('importBible: apaga os versículos anteriores antes de gravar e desmarca as outras padrão', async () => {

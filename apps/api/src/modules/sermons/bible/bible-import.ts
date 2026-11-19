@@ -61,7 +61,7 @@ export async function importBible(
         });
       }
     },
-    { timeout: 120_000 },
+    { timeout: 120_000, maxWait: 20_000 },
   );
   return { verses: verses.length };
 }

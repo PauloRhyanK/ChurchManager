@@ -125,6 +125,28 @@ test('frase exata vem antes das palavras espalhadas, cada grupo na ordem dos liv
   assert.deepEqual(r.hits.map((h) => h.reference), ['Mateus 5:14', 'João 8:12', 'Apocalipse 1:1', 'Gênesis 1:1']);
 });
 
+test('consulta patológica não trava e referência inválida continua NONE', async () => {
+  for (const q of ['a ' + '1'.repeat(110) + 'x', 'mt ' + '1'.repeat(110), 'a ' + '1 '.repeat(55) + 'x']) {
+    const t0 = performance.now();
+    await svc().search(q);
+    assert.ok(performance.now() - t0 < 200, `demorou demais: ${q.slice(0, 12)}`);
+  }
+  assert.deepEqual(await svc().search('mt 99'), { mode: 'NONE', hits: [] });
+  assert.deepEqual(await svc().search('jo 3 999'), { mode: 'NONE', hits: [] });
+  assert.equal((await svc().search('luz 1')).mode, 'TEXT');
+});
+
+test('hífen dentro da palavra separa em duas palavras', async () => {
+  const seen: string[][] = [];
+  const src = memory();
+  const orig = src.searchText;
+  src.searchText = async (t, w, l) => (seen.push(w), orig(t, w, l));
+  await svc(src).search('disse-lhe Jesus');
+  await svc(src).search('luz, do mundo');
+  assert.deepEqual(seen[0], ['disse', 'lhe', 'jesus']);
+  assert.deepEqual(seen[1], ['luz', 'do', 'mundo']);
+});
+
 test('trecho curto demais é NONE e sem resultado é TEXT vazio', async () => {
   assert.deepEqual(await svc().search('ab'), { mode: 'NONE', hits: [] });
   assert.deepEqual(await svc().search('   '), { mode: 'NONE', hits: [] });

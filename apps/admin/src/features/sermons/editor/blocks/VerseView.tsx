@@ -45,6 +45,7 @@ export function VerseView({ node, editor, selected, deleteNode }: NodeViewProps)
         </blockquote>
         <figcaption className="text-sm font-bold" style={{ color: colors.accent }}>
           {attrs.reference}
+          {attrs.translation && <span className="font-normal opacity-75"> · {attrs.translation}</span>}
         </figcaption>
       </figure>
       {open && (

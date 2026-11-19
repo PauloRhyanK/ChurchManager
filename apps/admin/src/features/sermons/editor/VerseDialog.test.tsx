@@ -112,9 +112,10 @@ describe("VerseDialog — busca", () => {
     expect(options[1]).toHaveAttribute("aria-selected", "false");
   });
 
-  it("um caractere não procura", async () => {
+  it("menos de três caracteres não procura", async () => {
     renderDialog();
     await typeSearch("m");
+    await typeSearch("mt");
     await new Promise((r) => setTimeout(r, 400));
     expect(api.searchBible).not.toHaveBeenCalled();
   });

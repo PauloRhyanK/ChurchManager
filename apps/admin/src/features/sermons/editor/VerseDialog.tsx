@@ -48,7 +48,7 @@ interface VerseDialogProps {
 
 const REFERENCE_MAX = 120;
 const SEARCH_DELAY_MS = 250;
-const SEARCH_MIN = 2;
+const SEARCH_MIN = 3;
 const HOUR_MS = 60 * 60 * 1000;
 
 const joinedText = (block?: VerseBlock) => (block ? block.verses.map((v) => v.text).join(" ") : "");
