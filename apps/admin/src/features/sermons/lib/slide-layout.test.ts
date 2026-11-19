@@ -148,4 +148,54 @@ describe("drawSlide", () => {
     expect(roles(d.blocks)).toEqual(["subtitle"]);
     expect(d.blocks[0].gapBefore).toBe(0);
   });
+
+  it("bloco dentro do limite não é cortado (clamped false); só o texto acima do limite é", () => {
+    for (const l of LAYOUTS) for (const f of [SHORT[l], FULL[l]]) expect(drawSlide(f, "MINIMAL").blocks.every((b) => !b.clamped)).toBe(true);
+    const long = drawSlide(face({ layout: "M01", title: "palavra ".repeat(37).trim() }), "MINIMAL");
+    expect(long.blocks[0].clamped).toBe(true);
+  });
+
+  it("título em maiúsculas: as letras maiúsculas contam mais largura", () => {
+    const [caps] = drawSlide(face({ layout: "M01", title: "QUANDO O MUNDO INTEIRO" }), "MINIMAL").blocks;
+    expect(caps.fontSize).toBe(150);
+    expect(caps.maxLines).toBeGreaterThanOrEqual(2);
+    const [mixed] = drawSlide(face({ layout: "M01", title: "Quando o mundo inteiro" }), "MINIMAL").blocks;
+    expect(mixed.maxLines).toBeLessThanOrEqual(caps.maxLines);
+  });
+
+  it("nos quatro modelos no limite, com título misto e em maiúsculas: caixas na área segura e sem sobreposição; o título reserva uma linha a mais quando cabe", () => {
+    const caps = (f: SlideFace): SlideFace => ({ ...f, title: f.title.toUpperCase() });
+    const reserved: string[] = [];
+    for (const l of LAYOUTS) {
+      for (const [name, f] of [["misto", FULL[l]], ["maiúsculas", caps(FULL[l])]] as const) {
+        const { blocks } = drawSlide(f, "MINIMAL");
+        let bottom = 190;
+        for (const b of blocks) {
+          expect(b.y).toBeGreaterThanOrEqual(bottom);
+          expect(b.y + b.height).toBeLessThanOrEqual(890);
+          bottom = b.y + b.height;
+        }
+        const t = blocks[0];
+        if (t.height > t.maxLines * t.fontSize * t.lineHeight + 0.001) reserved.push(`${l} ${name}`);
+      }
+    }
+    // M01 não tem bloco abaixo do título: nunca reserva. M03 no limite com título em maiúsculas não cabe com a reserva.
+    expect(reserved).toEqual(["M02 misto", "M02 maiúsculas", "M03 misto", "M04 misto", "M04 maiúsculas"]);
+  });
+
+  it("títulos em maiúsculas no limite de M02 e M04 empurram o bloco seguinte para baixo da linha extra", () => {
+    for (const f of [FULL.M02, FULL.M04]) {
+      const { blocks } = drawSlide({ ...f, title: f.title.toUpperCase() }, "BACKGROUND");
+      const [t, next] = blocks;
+      expect(next.y - (t.y + (t.maxLines + 1) * t.fontSize * t.lineHeight)).toBeGreaterThanOrEqual(0);
+      expect(next.y + next.height).toBeLessThanOrEqual(890);
+    }
+  });
+
+  it("M03: o espaço entre título e versículo fica entre 70 e 90; o que sobra vai para baixo da referência", () => {
+    const m03 = drawSlide(SHORT.M03, "MINIMAL").blocks;
+    const gap = byRole(m03, "verse").gapBefore;
+    expect(gap).toBeGreaterThanOrEqual(70);
+    expect(gap).toBeLessThanOrEqual(90);
+  });
 });

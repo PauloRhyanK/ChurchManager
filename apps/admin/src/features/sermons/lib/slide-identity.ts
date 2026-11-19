@@ -96,5 +96,11 @@ export const SLIDE_OPTICAL_SHIFT = 0.03;
 /** Altura de linha (múltiplo do tamanho da fonte). */
 export const SLIDE_LINE_HEIGHT = { title: 1.1, subtitle: 1.3, verse: 1.35, reference: 1.3 } as const;
 
-/** Largura média de um caractere (em), para estimar onde as linhas quebram. */
-export const SLIDE_GLYPH_WIDTH = { title: 0.5, body: 0.58 } as const;
+/**
+ * Largura média de um caractere (em), para estimar onde as linhas quebram. Letra maiúscula conta `upper` em qualquer
+ * fonte (medido na Playfair Display itálica: 0,56 a 0,68 em); os outros caracteres, a largura da fonte.
+ */
+export const SLIDE_GLYPH_WIDTH = { title: 0.5, body: 0.58, upper: 0.68 } as const;
+
+/** Espaço entre título e versículo no modelo 03: de 70 (SLIDE_SPACING.titleVerse) até no máximo 90; o que sobra fica embaixo. */
+export const SLIDE_TITLE_VERSE_MAX_GAP = 90;
