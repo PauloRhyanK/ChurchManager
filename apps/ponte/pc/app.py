@@ -1739,6 +1739,9 @@ def _carregar_maquina():
         papel = "holyrics"
     principal = os.environ.get("PONTE_PRINCIPAL") or dados.get("principal")
     _maquina.update({
+        # `atualizar: nunca` no maquina.yaml: este PC nao se atualiza sozinho
+        # nem mostra o aviso (e o PC de quem desenvolve o projeto).
+        "atualizar": str(dados.get("atualizar") or "").strip().lower(),
         "papel": papel,
         "nome": str(dados.get("nome") or PAPEIS[papel]),
         # A principal nao tem principal: ela e a ponta da linha.
@@ -2356,8 +2359,13 @@ def _retrato_da_atualizacao():
         disponivel = bool(a["faltam"])
     else:
         disponivel = bool(a["aqui"] and a["la"] and a["aqui"] != a["la"])
+    # Num PC com `atualizar: nunca` o aviso nao aparece. "Diferente da web"
+    # nao quer dizer "atras da web": o PC de quem desenvolve esta A FRENTE, e
+    # o botao Atualizar ali traria o codigo antigo por cima do novo.
+    desligada = _maquina.get("atualizar") in ("nunca", "false", "nao", "manual")
     return {"aqui": a["aqui"], "la": a["la"], "erro": a["erro"], "aplicando": a["aplicando"],
-            "disponivel": disponivel, "faltam": (a["faltam"] or [])[:8]}
+            "disponivel": disponivel and not desligada, "desligada": desligada,
+            "faltam": (a["faltam"] or [])[:8]}
 
 
 def _maquinas_do_painel():
