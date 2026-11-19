@@ -15,7 +15,7 @@ const PENDING_LABEL: Record<Pending, string> = {
 
 /** Minúsculas e sem acento: a busca por título não diferencia "luz" de "Lúz". */
 const plain = (text: string) =>
-  text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
 const rowsOf = (song: Pick<WorshipSong, 'rows'>): WorshipRow[] =>
   Array.isArray(song.rows) ? (song.rows as unknown as WorshipRow[]) : [];
