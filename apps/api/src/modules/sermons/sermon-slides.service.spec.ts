@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BadRequestException, NotFoundException, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, NotFoundException, ValidationPipe } from '@nestjs/common';
 import type { Type } from '@nestjs/common';
 import { VALIDATION_PIPE_OPTIONS } from '../../validation-options';
 import type { AuthUser } from '../auth/auth-user';
 import { GenerateSlidesDto, SaveSlidesDto } from './dto/slides.dto';
 import { EXAMPLE_DOC } from './sermon-example';
+import { GenerationLimiter } from './ai/generation-limiter';
+import type { SermonAiConfig } from './ai/sermon-ai.config';
+import { SummarizerError, type SermonSummarizer, type SummarizeInput } from './ai/sermon-summarizer';
 import { buildSlides, type SlideItem } from './sermon-slides';
 import { SermonSlidesService } from './sermon-slides.service';
 import { SermonsService } from './sermons.service';
@@ -34,7 +37,29 @@ const deliveryRow = (date: string, over: Row = {}): Row => ({
   title: 'Luz', preacherName: 'Pr', estimatedSeconds: 601, slideStyle: 'MINIMAL', slides: [], ...over,
 });
 
-function build(init: { sermons: Row[]; deliveries?: Row[] }) {
+const AI_ON: SermonAiConfig = {
+  enabled: true,
+  effort: 'low',
+  models: [
+    { id: 'anthropic:claude-opus-5-5', provider: 'anthropic', model: 'claude-opus-5-5', label: 'Claude Opus 5.5' },
+    { id: 'anthropic:claude-sonnet-5-5', provider: 'anthropic', model: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
+  ],
+};
+const AI_OFF: SermonAiConfig = { ...AI_ON, enabled: false };
+
+/** Resumidor falso: registra as chamadas e devolve uma frase por alvo (ou o que `reply` mandar). */
+function fakeSummarizer(reply?: (input: SummarizeInput) => Promise<{ id: string; text: string }[]>) {
+  const calls: SummarizeInput[] = [];
+  const summarizer: SermonSummarizer = {
+    summarize: async (input) => {
+      calls.push(structuredClone(input));
+      return reply ? reply(input) : input.targets.map((t) => ({ id: t.id, text: `Resumo de ${t.id}` }));
+    },
+  };
+  return { summarizer, calls };
+}
+
+function build(init: { sermons: Row[]; deliveries?: Row[]; config?: SermonAiConfig; summarizer?: SermonSummarizer; limiter?: GenerationLimiter }) {
   const sermons = init.sermons.map((s) => ({ ...s }));
   const deliveries = (init.deliveries ?? []).map((x) => ({ ...x }));
   const writes: string[] = [];
@@ -82,7 +107,14 @@ function build(init: { sermons: Row[]; deliveries?: Row[] }) {
   };
   const sermonsService = new SermonsService(prisma as never);
   sermonsService.clock = () => NOW;
-  const service = new SermonSlidesService(prisma as never, sermonsService);
+  const fake = fakeSummarizer();
+  const service = new SermonSlidesService(
+    prisma as never,
+    sermonsService,
+    init.config ?? AI_OFF,
+    { anthropic: init.summarizer ?? fake.summarizer },
+    init.limiter ?? new GenerationLimiter(),
+  );
   return { service, sermonsService, sermons, deliveries, writes, updates };
 }
 
@@ -325,4 +357,192 @@ test('DTO de gerar aceita os três modos e recusa o resto', async () => {
   await rejects(GenerateSlidesDto, { mode: 'ALL' });
   await rejects(GenerateSlidesDto, { mode: 'VERSES', style: 'NEON' });
   await rejects(GenerateSlidesDto, { mode: 'VERSES', slides: [] });
+});
+
+// --- Slides completos (IA) -------------------------------------------------
+
+const TARGET_IDS = ['opening:0', 'i1:0', 'a1:0'];
+const rejectsWith = (p: Promise<unknown>, status: number, message: string) =>
+  assert.rejects(p, (e: any) => e instanceof HttpException && e.getStatus() === status && e.message === message);
+
+test('FULL com a IA desligada: 400 e nenhuma chamada', async () => {
+  const f = fakeSummarizer();
+  const { service, writes } = build({ sermons: [sermonRow()], config: AI_OFF, summarizer: f.summarizer });
+  await rejectsWith(service.generate(user(), S1, { mode: 'FULL' }), 400, 'Slides completos ainda não estão disponíveis.');
+  assert.equal(f.calls.length, 0);
+  assert.deepEqual(writes, []);
+});
+
+test('FULL com model fora da lista: 400 e nenhuma chamada; sem model usa o primeiro', async () => {
+  const f = fakeSummarizer();
+  const { service } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
+  await rejectsWith(service.generate(user(), S1, { mode: 'FULL', model: 'anthropic:outro' }), 400, 'Modelo indisponível.');
+  assert.equal(f.calls.length, 0);
+  await service.generate(user(), S1, { mode: 'FULL' });
+  assert.equal(f.calls[0].model, 'claude-opus-5-5');
+  assert.equal(f.calls[0].effort, 'low');
+  await service.generate(user(), S1, { mode: 'FULL', model: 'anthropic:claude-sonnet-5-5' });
+  assert.equal(f.calls[1].model, 'claude-sonnet-5-5');
+});
+
+test('FULL em palavra sem alvos: nenhuma chamada nem uso do limite, e o resultado é o de Versículos e pontos', async () => {
+  const f = fakeSummarizer();
+  const doc = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Curto.' }] }] };
+  const limiter = new GenerationLimiter(1);
+  const { service } = build({ sermons: [sermonRow({ document: doc })], config: AI_ON, summarizer: f.summarizer, limiter });
+  const out = await service.generate(user(), S1, { mode: 'FULL' });
+  assert.equal(f.calls.length, 0);
+  assert.equal(limiter.take(AUTHOR), true, 'o limite não foi gasto');
+  assert.equal(out.slideMode, 'FULL');
+  assert.deepEqual(out.slides, buildSlides('Luz', doc as never, 'VERSES_AND_POINTS'));
+});
+
+test('FULL feliz: SUMMARY nas posições certas, modo FULL, envio atualizado sem PRIVATE e sem a nota privada no pedido', async () => {
+  const f = fakeSummarizer();
+  const { service, sermons, deliveries } = build({
+    sermons: [sermonRow()],
+    deliveries: [deliveryRow('2026-11-22')],
+    config: AI_ON,
+    summarizer: f.summarizer,
+  });
+  const out = await service.generate(user(), S1, { mode: 'FULL' });
+  assert.deepEqual(f.calls[0].targets.map((t) => t.id), TARGET_IDS);
+  assert.equal(JSON.stringify(f.calls[0]).includes('Dois minutos'), false, 'a nota privada não vai ao provedor');
+  const summaries = out.slides.filter((s) => s.kind === 'SUMMARY');
+  assert.deepEqual(ids(summaries), TARGET_IDS);
+  assert.deepEqual(
+    out.slides.map((s) => s.id),
+    ids(buildSlides('Luz', EXAMPLE_DOC, 'FULL', Object.fromEntries(TARGET_IDS.map((id) => [id, `Resumo de ${id}`])))),
+  );
+  assert.equal(out.slideMode, 'FULL');
+  assert.equal(sermons[0].slidesRevision, 3);
+  const copy = deliveries[0].slides as Row[];
+  assert.equal(copy.some((s) => s.kind === 'PRIVATE'), false);
+  assert.deepEqual(copy.filter((s) => s.kind === 'SUMMARY').length, 3);
+  assert.equal(JSON.stringify(copy).includes('Dois minutos'), false);
+});
+
+test('a 11ª geração na hora dá 429 sem chamada ao provedor', async () => {
+  const f = fakeSummarizer();
+  const { service } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
+  for (let i = 0; i < 10; i++) await service.generate(user(), S1, { mode: 'FULL' });
+  assert.equal(f.calls.length, 10);
+  await rejectsWith(
+    service.generate(user(), S1, { mode: 'FULL' }),
+    429,
+    'Você gerou slides completos muitas vezes na última hora. Tente de novo mais tarde.',
+  );
+  assert.equal(f.calls.length, 10);
+});
+
+test('cada SummarizerError vira a resposta combinada e nada é gravado', async () => {
+  const table: [SummarizerError['reason'], number, string][] = [
+    ['AUTH', 503, 'A chave do provedor de IA não foi aceita. Avise o administrador.'],
+    ['RATE_LIMIT', 503, 'O provedor de IA não respondeu. Tente de novo em instantes.'],
+    ['UNAVAILABLE', 503, 'O provedor de IA não respondeu. Tente de novo em instantes.'],
+    ['REFUSED', 422, 'O modelo não pôde resumir esta palavra. Use “Versículos e pontos”.'],
+    ['TRUNCATED', 502, 'A resposta do modelo veio incompleta. Tente de novo.'],
+    ['INVALID', 502, 'A resposta do modelo veio incompleta. Tente de novo.'],
+  ];
+  for (const [reason, status, message] of table) {
+    const f = fakeSummarizer(async () => {
+      throw new SummarizerError(reason, 'sk-ant-segredo corpo do pedido');
+    });
+    const before = buildSlides('Luz', EXAMPLE_DOC, 'VERSES');
+    const { service, writes, sermons } = build({
+      sermons: [sermonRow({ slides: before, slideMode: 'VERSES', slidesRevision: 3 })],
+      config: AI_ON,
+      summarizer: f.summarizer,
+    });
+    await assert.rejects(service.generate(user(), S1, { mode: 'FULL' }), (e: any) => {
+      assert.ok(e instanceof HttpException);
+      assert.equal(e.getStatus(), status, reason);
+      assert.equal(e.message, message, reason);
+      assert.equal(JSON.stringify(e.getResponse()).includes('segredo'), false);
+      return true;
+    });
+    assert.deepEqual(writes, [], reason);
+    assert.deepEqual(sermons[0].slides, before);
+    assert.equal(sermons[0].slideMode, 'VERSES');
+  }
+});
+
+test('documento salvo durante a geração: 409 e nada gravado', async () => {
+  let bump: () => void = () => {};
+  const f = fakeSummarizer(async (input) => {
+    bump();
+    return input.targets.map((t) => ({ id: t.id, text: 'x' }));
+  });
+  const { service, writes, sermons } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
+  bump = () => {
+    sermons[0].revision = 4;
+  };
+  await assert.rejects(
+    service.generate(user(), S1, { mode: 'FULL' }),
+    (e: any) => e instanceof ConflictException && e.message === 'A palavra mudou enquanto os slides eram gerados. Gere de novo.',
+  );
+  assert.deepEqual(writes, []);
+  assert.deepEqual(sermons[0].slides, []);
+});
+
+test('o provedor é chamado fora da transação', async () => {
+  let inTx = false;
+  const f = fakeSummarizer(async (input) => {
+    assert.equal(inTx, false);
+    return input.targets.map((t) => ({ id: t.id, text: 'ok' }));
+  });
+  const { service } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
+  const prisma = (service as any).prisma;
+  const original = prisma.$transaction;
+  prisma.$transaction = async (fn: any) => {
+    inTx = true;
+    try {
+      return await original(fn);
+    } finally {
+      inTx = false;
+    }
+  };
+  await service.generate(user(), S1, { mode: 'FULL' });
+});
+
+test('gerar FULL de novo preserva frase editada e item desmarcado', async () => {
+  const f = fakeSummarizer();
+  const { service } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
+  const first = await service.generate(user(), S1, { mode: 'FULL' });
+  await service.save(user(), S1, {
+    items: first.slides.map((s) => ({
+      id: s.id,
+      included: s.id === 'i1:0' ? false : s.included,
+      ...(s.id === 'opening:0' ? { text: 'Minha abertura' } : {}),
+    })),
+  });
+  const again = await service.generate(user(), S1, { mode: 'FULL' });
+  const opening = again.slides.find((s) => s.id === 'opening:0')!;
+  assert.deepEqual([opening.text, opening.edited], ['Minha abertura', true]);
+  assert.equal(again.slides.find((s) => s.id === 'i1:0')!.included, false);
+});
+
+test('FULL em palavra de outro autor: 404 sem chamada ao provedor', async () => {
+  const f = fakeSummarizer();
+  const { service, writes } = build({ sermons: [sermonRow()], config: AI_ON, summarizer: f.summarizer });
+  await assert.rejects(service.generate(user({ userId: OTHER }), S1, { mode: 'FULL' }), NotFoundException);
+  assert.equal(f.calls.length, 0);
+  assert.deepEqual(writes, []);
+});
+
+test('aiOptions devolve só enabled e models com id e label', () => {
+  const { service } = build({ sermons: [], config: AI_ON });
+  assert.deepEqual(service.aiOptions(), {
+    enabled: true,
+    models: [
+      { id: 'anthropic:claude-opus-5-5', label: 'Claude Opus 5.5' },
+      { id: 'anthropic:claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
+    ],
+  });
+  assert.deepEqual(build({ sermons: [], config: AI_OFF }).service.aiOptions().enabled, false);
+});
+
+test('DTO de gerar aceita model de até 80 caracteres e recusa 81', async () => {
+  assert.equal((await parse(GenerateSlidesDto, { mode: 'FULL', model: 'm'.repeat(80) })).model?.length, 80);
+  await rejects(GenerateSlidesDto, { mode: 'FULL', model: 'm'.repeat(81) });
 });

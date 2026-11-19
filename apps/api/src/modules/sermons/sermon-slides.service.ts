@@ -1,26 +1,77 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  ConflictException,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ServiceUnavailableException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { AuthUser } from '../auth/auth-user';
 import { syncDeliveryCopy } from './delivery-copy';
 import type { GenerateSlidesDto, SaveSlidesDto } from './dto/slides.dto';
+import { GenerationLimiter } from './ai/generation-limiter';
+import type { SermonAiConfig } from './ai/sermon-ai.config';
+import { SUMMARIZERS, SummarizerError, type SermonSummarizer } from './ai/sermon-summarizer';
 import { validateSermonDocument } from './sermon-document';
-import { SLIDE_LIMITS, buildSlides, mergeSlides, parseStoredSlides, type SlideItem, type SlideKind } from './sermon-slides';
+import {
+  SLIDE_LIMITS,
+  buildSlides,
+  cleanSummaries,
+  mergeSlides,
+  parseStoredSlides,
+  summaryTargets,
+  type SlideItem,
+  type SlideKind,
+} from './sermon-slides';
 import { SermonsService, toSermonFull, type SermonFull } from './sermons.service';
 
 const EDITABLE: SlideKind[] = ['POINT', 'TITLE', 'SUMMARY'];
+/** Token de injeção da configuração da IA dos slides completos (lida do ambiente na subida). */
+export const SERMON_AI_CONFIG = Symbol('SERMON_AI_CONFIG');
+
+const providerError = (error: unknown): HttpException => {
+  const reason = error instanceof SummarizerError ? error.reason : 'UNAVAILABLE';
+  switch (reason) {
+    case 'AUTH':
+      return new ServiceUnavailableException('A chave do provedor de IA não foi aceita. Avise o administrador.');
+    case 'REFUSED':
+      return new UnprocessableEntityException('O modelo não pôde resumir esta palavra. Use “Versículos e pontos”.');
+    case 'TRUNCATED':
+    case 'INVALID':
+      return new BadGatewayException('A resposta do modelo veio incompleta. Tente de novo.');
+    default:
+      return new ServiceUnavailableException('O provedor de IA não respondeu. Tente de novo em instantes.');
+  }
+};
 const staleList = () => new BadRequestException('A lista de slides está desatualizada. Atualize a página.');
 
 /** Slides da palavra. Só o autor lê e grava; o envio recebe só a parte pública. */
 @Injectable()
 export class SermonSlidesService {
+  private readonly logger = new Logger(SermonSlidesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly sermons: SermonsService,
+    @Inject(SERMON_AI_CONFIG) private readonly ai: SermonAiConfig,
+    @Inject(SUMMARIZERS) private readonly summarizers: Record<string, SermonSummarizer>,
+    private readonly limiter: GenerationLimiter,
   ) {}
 
+  /** O que o painel precisa saber da IA: se há e quais modelos. Nunca a chave nem a configuração interna. */
+  aiOptions(): { enabled: boolean; models: { id: string; label: string }[] } {
+    return { enabled: this.ai.enabled, models: this.ai.models.map(({ id, label }) => ({ id, label })) };
+  }
+
   async generate(user: AuthUser, sermonId: string, dto: GenerateSlidesDto): Promise<SermonFull> {
-    if (dto.mode === 'FULL') throw new BadRequestException('Slides completos ainda não estão disponíveis.');
+    if (dto.mode === 'FULL') return this.generateFull(user, sermonId, dto);
     const mode = dto.mode;
     return this.write(user, sermonId, (current) => {
       const fresh = buildSlides(current.title, validateSermonDocument(current.document), mode);
@@ -28,6 +79,46 @@ export class SermonSlidesService {
       const slides = current.slideMode === mode && previous.length > 0 ? mergeSlides(previous, fresh) : fresh;
       // A revisão lida: se o documento mudar no meio, os slides ficam marcados como desatualizados.
       return { slides, slideMode: mode, slidesRevision: current.revision, ...(dto.style ? { slideStyle: dto.style } : {}) };
+    });
+  }
+
+  /** "Slides completos": o provedor é chamado fora da transação; a gravação confere a revisão lida antes dele. */
+  private async generateFull(user: AuthUser, sermonId: string, dto: GenerateSlidesDto): Promise<SermonFull> {
+    if (!this.ai.enabled) throw new BadRequestException('Slides completos ainda não estão disponíveis.');
+    const option = dto.model === undefined ? this.ai.models[0] : this.ai.models.find((m) => m.id === dto.model);
+    const summarizer = option && this.summarizers[option.provider];
+    if (!option || !summarizer) throw new BadRequestException('Modelo indisponível.');
+
+    const read = await this.sermons.findOwned(user, sermonId);
+    const doc = validateSermonDocument(read.document);
+    const targets = summaryTargets(doc);
+    let summaries: Record<string, string> = {};
+    if (targets.length > 0) {
+      if (!this.limiter.take(user.userId)) {
+        throw new HttpException(
+          'Você gerou slides completos muitas vezes na última hora. Tente de novo mais tarde.',
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+      try {
+        const raw = await summarizer.summarize({ title: read.title, targets, model: option.model, effort: this.ai.effort });
+        summaries = cleanSummaries(targets, raw);
+      } catch (error) {
+        const status = (error as { status?: unknown } | null)?.status;
+        this.logger.warn(
+          `Resumo por IA falhou: ${error instanceof SummarizerError ? error.reason : 'UNAVAILABLE'}${typeof status === 'number' ? ` (HTTP ${status})` : ''}`,
+        );
+        throw providerError(error);
+      }
+    }
+    return this.write(user, sermonId, (current) => {
+      if (current.revision !== read.revision) {
+        throw new ConflictException('A palavra mudou enquanto os slides eram gerados. Gere de novo.');
+      }
+      const fresh = buildSlides(current.title, doc, 'FULL', summaries);
+      const previous = parseStoredSlides(current.slides);
+      const slides = current.slideMode === 'FULL' && previous.length > 0 ? mergeSlides(previous, fresh) : fresh;
+      return { slides, slideMode: 'FULL', slidesRevision: current.revision, ...(dto.style ? { slideStyle: dto.style } : {}) };
     });
   }
 
@@ -63,7 +154,7 @@ export class SermonSlidesService {
     sermonId: string,
     change: (current: Awaited<ReturnType<SermonsService['findOwned']>>) => {
       slides: SlideItem[];
-      slideMode?: 'VERSES' | 'VERSES_AND_POINTS';
+      slideMode?: 'VERSES' | 'VERSES_AND_POINTS' | 'FULL';
       slidesRevision?: number;
       slideStyle?: 'MINIMAL' | 'BACKGROUND';
     },

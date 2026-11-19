@@ -16,7 +16,8 @@
     "script:cleanup-1month-recurrent-links": "dotenv -e ../../.env -- tsx scripts/cleanup-1month-recurrent-links.ts",
     "script:migrate-supabase-editorial": "dotenv -e ../../.env -- tsx scripts/migrate-supabase-editorial.ts",
     "script:migrate-supabase-admin-users": "dotenv -e ../../.env -- tsx scripts/migrate-supabase-admin-users.ts",
-    "script:import-bible": "dotenv -e ../../.env -- tsx scripts/import-bible.ts"
+    "script:import-bible": "dotenv -e ../../.env -- tsx scripts/import-bible.ts",
+    "script:sermon-ai-smoke": "dotenv -e ../../.env -- tsx scripts/sermon-ai-smoke.ts"
   },
   "prisma": {
     "seed": "dotenv -e ../../.env -- tsx prisma/seed.ts"

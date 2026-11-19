@@ -52,6 +52,12 @@ export class SermonsController {
     return this.deliveries.preview(user.tenantId, query.date, query.startTime);
   }
 
+  /** Se os slides completos estão ligados e quais modelos há; nunca a chave. Antes de ':id'. */
+  @Get('ai')
+  aiOptions() {
+    return this.slides.aiOptions();
+  }
+
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.sermons.get(user, id);
@@ -89,7 +95,9 @@ export class SermonsController {
     return this.deliveries.cancel(user, id);
   }
 
+  /** Slides completos chamam um provedor externo: limite próprio, mais apertado, para não empilhar chamadas. */
   @Post(':id/slides/generate')
+  @Throttle({ public: { limit: 20, ttl: 60_000 } })
   @RequirePermission(PermissionModule.SERMONS, PermissionLevel.EDIT)
   generateSlides(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body() dto: GenerateSlidesDto) {
     return this.slides.generate(user, id, dto);
