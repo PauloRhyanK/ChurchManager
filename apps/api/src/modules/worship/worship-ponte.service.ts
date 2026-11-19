@@ -4,6 +4,7 @@ import { Prisma, WorshipSong } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SermonDeliveryService } from '../sermons/sermon-delivery.service';
 import { computeSchedule } from './service-schedule';
+import { LEAD_LIMITS } from './timing-learning';
 import { WorshipRow, deriveSong, holyricsText, songStatus } from './worship-document';
 
 export const PONTE_KEY_HEADER = 'x-ponte-key';
@@ -23,8 +24,12 @@ type ServiceWithAll = Prisma.WorshipServiceGetPayload<{ include: typeof SERVICE_
 const rowsOf = (song: Pick<WorshipSong, 'rows'>): WorshipRow[] =>
   Array.isArray(song.rows) ? (song.rows as unknown as WorshipRow[]) : [];
 
-/** Uma música no formato que a Ponte lê (seção "Contrato para a Ponte" da especificação). */
-export function toPonteSong(song: Omit<WorshipSong, 'rawLyrics'>) {
+/**
+ * Uma música no formato que a Ponte lê (seção "Contrato para a Ponte" da especificação).
+ * O tempo de cada slide já vem com a antecipação descontada (`slideLeadSeconds`): é
+ * quando ele deve aparecer. `markedTime` é o que foi marcado (início da frase).
+ */
+export function toPonteSong(song: Omit<WorshipSong, 'rawLyrics'>, slideLeadSeconds = 0) {
   const rows = rowsOf(song);
   const { parts, slides } = deriveSong(rows);
   const { status } = songStatus(rows, { url: song.audioUrl, durationSeconds: song.audioDurationSeconds }, song.readyAt);
@@ -54,7 +59,15 @@ export function toPonteSong(song: Omit<WorshipSong, 'rawLyrics'>) {
       firstSlide: p.firstSlide,
       slideCount: p.slideCount,
     })),
-    slides: slides.map((s) => ({ index: s.index, part: s.part, time: s.time, lines: s.lines, cues: s.cues })),
+    slideLeadSeconds,
+    slides: slides.map((s) => ({
+      index: s.index,
+      part: s.part,
+      time: s.time === null ? null : Math.max(0, Math.round((s.time - slideLeadSeconds) * 100) / 100),
+      markedTime: s.time,
+      lines: s.lines,
+      cues: s.cues,
+    })),
     holyricsText: holyricsText(rows),
   };
 }
@@ -137,6 +150,8 @@ export class WorshipPonteService {
 
   private async payload(tenantId: string, service: ServiceWithAll) {
     const sermon = (await this.deliveries.summaries(tenantId, [service.id])).get(service.id) ?? null;
+    const settings = await this.prisma.worshipSettings.findUnique({ where: { tenantId } });
+    const lead = settings?.slideLeadSeconds ?? LEAD_LIMITS.default;
     const schedule = computeSchedule(
       service.startTime,
       service.moments.map((m) => ({ name: m.name, kind: m.kind, durationMinutes: m.durationMinutes })),
@@ -158,7 +173,7 @@ export class WorshipPonteService {
         })),
       },
       sermon,
-      songs: service.songs.map((s) => toPonteSong(s.song)),
+      songs: service.songs.map((s) => toPonteSong(s.song, lead)),
     };
     // Impressão digital do conteúdo: a Ponte só refaz o trabalho quando ela muda.
     const version = createHash('sha1').update(JSON.stringify(body)).digest('hex').slice(0, 12);

@@ -173,10 +173,11 @@ describe("AppRoutes — Cultos", () => {
 
   it("com VIEW abre Músicas, o editor e o Roteiro, mas não a criação", async () => {
     perms.modules = { WORSHIP: "VIEW" };
+    // Cultos abre no calendário (a página do roteiro sem culto escolhido).
     renderAt("/cultos");
-    expect(await screen.findByText("Página de músicas")).toBeInTheDocument();
-    act(() => void navigate("/cultos/roteiro"));
     expect(await screen.findByText("Página do roteiro")).toBeInTheDocument();
+    act(() => void navigate("/cultos/musicas"));
+    expect(await screen.findByText("Página de músicas")).toBeInTheDocument();
     act(() => void navigate("/cultos/roteiro/modelos"));
     expect(await screen.findByText("Página dos modelos")).toBeInTheDocument();
     act(() => void navigate("/cultos/musicas/abc"));

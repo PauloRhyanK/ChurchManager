@@ -4,6 +4,7 @@ import {
   type PartKind,
   type RowPart,
   type WorshipRow,
+  MAX_PART_NAME,
   PART_KIND_LABEL,
   deriveSong,
   newRowId,
@@ -49,7 +50,8 @@ export function setPartKind(rows: WorshipRow[], from: number, to: number, kind: 
 
   const out = rows.map((r) => ({ ...r }));
   const current = out[from].part;
-  out[from].part = { kind, mood: current?.kind === kind ? current.mood : defaultMood(kind) };
+  // Mesmo tipo: fica como estava (com o nome próprio, se houver).
+  out[from].part = current?.kind === kind ? { ...current } : { kind, mood: defaultMood(kind) };
   for (let i = from + 1; i <= to; i++) delete out[i].part;
 
   let next = to + 1;
@@ -60,9 +62,12 @@ export function setPartKind(rows: WorshipRow[], from: number, to: number, kind: 
 
 /** Insere uma instrução antes da linha `beforeIndex`; ela passa a abrir o slide daquela linha. */
 export function insertCue(rows: WorshipRow[], beforeIndex: number, target: CueTarget, text: string): WorshipRow[] {
+  return placeCue(rows, beforeIndex, { id: newRowId(), type: "cue", target, text: text.trim() });
+}
+
+function placeCue(rows: WorshipRow[], beforeIndex: number, cue: WorshipRow): WorshipRow[] {
   const index = Math.max(0, Math.min(beforeIndex, rows.length));
   const out = rows.map((r) => ({ ...r }));
-  const cue: WorshipRow = { id: newRowId(), type: "cue", target, text: text.trim() };
   const following = out[index];
   if (following && !isBreak(following) && startsSlide(rows, index)) {
     // A instrução vira a primeira linha do slide: a parte e o tempo sobem para ela.
@@ -76,6 +81,67 @@ export function insertCue(rows: WorshipRow[], beforeIndex: number, target: CueTa
     delete following.timeSource;
   }
   out.splice(index, 0, cue);
+  return out;
+}
+
+/** Tira linhas em branco repetidas ou nas pontas (as que não guardam parte nem tempo). */
+function tidyBreaks(rows: WorshipRow[]): WorshipRow[] {
+  const plain = (r: WorshipRow | undefined) => !!r && r.type === "break" && !r.part && typeof r.time !== "number";
+  const out = rows.filter((r, i) => !(plain(r) && (i === 0 || isBreak(rows[i - 1]) || !!rows[i + 1]?.part)));
+  while (plain(out[out.length - 1])) out.pop();
+  return out;
+}
+
+/**
+ * Leva a instrução `id` para antes da linha `beforeIndex` (posição contada no
+ * documento de antes da mudança; `rows.length` é o fim). Ela sai deixando a
+ * parte e o tempo para quem vinha depois e, no lugar novo, vale o mesmo que
+ * uma instrução inserida ali. Instrução que é sozinha uma parte (Intro,
+ * Instrumental, Final) leva a parte junto.
+ */
+export function moveCue(rows: WorshipRow[], id: string, beforeIndex: number): WorshipRow[] {
+  const from = rows.findIndex((r) => r.id === id && r.type === "cue");
+  if (from < 0 || beforeIndex === from || beforeIndex === from + 1) return rows;
+  const cue = rows[from];
+  let after = from + 1;
+  while (after < rows.length && isBreak(rows[after])) after += 1;
+  const standalone = !!cue.part && (after >= rows.length || !!rows[after].part);
+  const at = Math.max(0, Math.min(beforeIndex > from ? beforeIndex - 1 : beforeIndex, rows.length - 1));
+  const moved: WorshipRow = { id: cue.id, type: "cue", target: cue.target ?? "ALL", text: cue.text ?? "" };
+
+  if (standalone) {
+    const out = rows.filter((r) => r.id !== id).map((r) => ({ ...r }));
+    moved.part = { ...cue.part! };
+    const following = out[at];
+    // O que vem depois continua na parte em que estava.
+    if (following && !isBreak(following) && !following.part) following.part = partAt(out, at);
+    out.splice(at, 0, moved);
+    return tidyBreaks(out);
+  }
+  return tidyBreaks(placeCue(removeRow(rows, id), at, moved));
+}
+
+/**
+ * Dá à parte que começa na linha `rowId` o tipo `kind` e, se vier, um nome
+ * próprio (`null` volta ao nome do tipo, como "Verso 2").
+ */
+export function renamePart(rows: WorshipRow[], rowId: string, kind: PartKind, name: string | null): WorshipRow[] {
+  const index = rows.findIndex((r) => r.id === rowId);
+  if (index < 0) return rows;
+  const out = rows.map((r) => ({ ...r }));
+  // A parte pode estar guardada numa linha esvaziada logo acima: passa para cá.
+  let carried: RowPart | undefined;
+  for (let i = index - 1; i >= 0 && isBreak(out[i]); i--) {
+    if (out[i].part) {
+      carried = carried ?? out[i].part;
+      delete out[i].part;
+    }
+  }
+  const current = out[index].part ?? carried ?? partAt(rows, index);
+  const part: RowPart = { kind, mood: current.kind === kind ? current.mood : defaultMood(kind) };
+  const clean = (name ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_PART_NAME);
+  if (clean) part.name = clean;
+  out[index].part = part;
   return out;
 }
 
@@ -172,7 +238,7 @@ export function setPartMood(rows: WorshipRow[], partRowId: string, mood: Mood): 
   const kinds = new Map(deriveSong(rows).parts.map((p) => [p.rowId, p.kind]));
   const kind = kinds.get(partRowId);
   if (!kind) return rows;
-  return rows.map((r) => (r.id === partRowId ? { ...r, part: { kind, mood } } : r));
+  return rows.map((r) => (r.id === partRowId ? { ...r, part: { ...r.part, kind, mood } } : r));
 }
 
 /** Reaplica a sugestão automática de clima em todas as partes. */
@@ -180,7 +246,7 @@ export function applySuggestedMoods(rows: WorshipRow[]): WorshipRow[] {
   const { parts } = deriveSong(rows);
   const moods = suggestMoods(parts.map((p) => p.kind));
   const byRow = new Map(parts.map((p, i) => [p.rowId, { kind: p.kind, mood: moods[i] }]));
-  return rows.map((r) => (byRow.has(r.id) ? { ...r, part: byRow.get(r.id) } : r));
+  return rows.map((r) => (byRow.has(r.id) ? { ...r, part: { ...r.part, ...byRow.get(r.id)! } } : r));
 }
 
 /** O que o editor lê do DOM depois de uma edição: uma entrada por linha da tela. */

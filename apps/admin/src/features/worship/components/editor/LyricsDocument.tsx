@@ -1,6 +1,10 @@
+import { Pencil } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { CUE_TARGET_LABEL, deriveSong, type WorshipRow } from "../../lib/document";
+import { CUE_TARGET_LABEL, deriveSong, type DerivedPart, type PartKind, type WorshipRow } from "../../lib/document";
+import { PART_TONE } from "../../lib/part-colors";
+import type { PartChoice } from "../../lib/part-names";
 import { pasteLines, rowsFromEditorNodes, type EditorNode } from "../../lib/row-ops";
+import { PartNamePicker } from "./PartNamePicker";
 
 export interface DocSelection {
   /** Primeira e última linha tocadas pela seleção (índices no documento). */
@@ -21,13 +25,43 @@ interface LyricsDocumentProps {
   onChange: (rows: WorshipRow[], external?: boolean) => void;
   onSelection: (selection: DocSelection | null) => void;
   onCueClick: (rowId: string) => void;
+  /** Leva a instrução para antes da linha `beforeIndex` (arrastando ou com Alt+setas). */
+  onMoveCue: (rowId: string, beforeIndex: number) => void;
+  /** Renomeia a parte que começa na linha `rowId`. */
+  onRenamePart: (rowId: string, choice: PartChoice) => void;
   /** A barrinha flutuante, desenhada sobre o trecho selecionado. */
   renderToolbar: (selection: DocSelection) => ReactNode;
 }
 
 const CHIP_CLASS =
-  "inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-amber-100 px-2.5 py-0.5 align-middle text-[13px] leading-5 text-amber-900 hover:bg-amber-200";
+  "inline-flex cursor-grab touch-none select-none items-center gap-1.5 rounded-md bg-amber-100 py-0.5 pl-1.5 pr-2.5 align-middle text-[13px] leading-5 text-amber-900 shadow-sm outline-none hover:bg-amber-200 focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing dark:bg-amber-900/60 dark:text-amber-100 dark:hover:bg-amber-900";
+const GRIP_CLASS = "text-[11px] leading-none tracking-[-2px] text-amber-700/70 dark:text-amber-200/70";
 const PART_GAP_CLASS = "mt-7";
+/** Distância (px) que o ponteiro anda antes de virar arrasto, e não clique. */
+const DRAG_THRESHOLD = 5;
+
+interface PartBox {
+  part: DerivedPart;
+  top: number;
+  bottom: number;
+}
+interface SlideBox {
+  index: number;
+  kind: PartKind;
+  top: number;
+  bottom: number;
+}
+interface Layout {
+  left: number;
+  width: number;
+  parts: PartBox[];
+  slides: SlideBox[];
+  /** Altura (relativa ao documento) de cada vão entre linhas: `gaps[k]` fica antes da linha `k`. */
+  gaps: number[];
+}
+const EMPTY_LAYOUT: Layout = { left: 0, width: 0, parts: [], slides: [], gaps: [] };
+
+const isBlankRow = (row: WorshipRow | undefined) => !row || row.type === "break" || (row.type === "lyric" && !(row.text ?? "").trim());
 
 function buildRow(row: WorshipRow): HTMLElement {
   const el = document.createElement("div");
@@ -37,9 +71,22 @@ function buildRow(row: WorshipRow): HTMLElement {
     el.contentEditable = "false";
     const chip = document.createElement("span");
     chip.className = CHIP_CLASS;
-    const who = document.createElement("b");
-    who.textContent = CUE_TARGET_LABEL[row.target ?? "ALL"];
-    chip.append(who, ` ${row.text ?? ""}`);
+    chip.tabIndex = 0;
+    chip.setAttribute("role", "button");
+    chip.dataset.cueChip = "1";
+    const who = CUE_TARGET_LABEL[row.target ?? "ALL"];
+    chip.setAttribute(
+      "aria-label",
+      `Instrução para ${who}: ${row.text ?? ""}. Enter edita; Alt com seta para cima ou para baixo muda de lugar.`,
+    );
+    chip.title = "Arraste para mudar de lugar · clique para editar";
+    const grip = document.createElement("span");
+    grip.className = GRIP_CLASS;
+    grip.setAttribute("aria-hidden", "true");
+    grip.textContent = "⋮⋮";
+    const label = document.createElement("b");
+    label.textContent = who;
+    chip.append(grip, label, ` ${row.text ?? ""}`);
     el.append(chip);
   } else if (row.type === "break" || !row.text) {
     el.append(document.createElement("br"));
@@ -122,6 +169,8 @@ export function LyricsDocument({
   onChange,
   onSelection,
   onCueClick,
+  onMoveCue,
+  onRenamePart,
   renderToolbar,
 }: LyricsDocumentProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -129,23 +178,63 @@ export function LyricsDocument({
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
   const pendingCaret = useRef<{ index: number; offset: number } | null>(null);
-  const [labels, setLabels] = useState<{ id: string; name: string; top: number }[]>([]);
+  /** Instrução que recebe o foco quando o DOM for refeito (mover pelo teclado). */
+  const pendingFocus = useRef<string | null>(null);
+  const layoutRef = useRef<Layout>(EMPTY_LAYOUT);
+  const [layout, setLayout] = useState<Layout>(EMPTY_LAYOUT);
   const [selection, setSelection] = useState<DocSelection | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [drag, setDrag] = useState<{ id: string; from: number; gap: number } | null>(null);
+  const suppressClick = useRef(false);
 
-  /** Espaço entre partes e nomes na margem: recalculado a cada mudança, sem refazer o DOM. */
+  /**
+   * Espaço entre partes, blocos coloridos, marcas de slide e nomes na margem:
+   * recalculados a cada mudança, sem refazer o DOM.
+   */
   const decorate = useCallback((current: WorshipRow[]) => {
     const container = containerRef.current;
-    if (!container) return;
-    const { parts } = deriveSong(current);
-    const starts = new Map(parts.map((p) => [p.rowId, p.name]));
-    const next: { id: string; name: string; top: number }[] = [];
-    Array.from(container.children).forEach((child, i) => {
-      const el = child as HTMLElement;
-      const name = starts.get(el.dataset.rowId ?? "");
-      el.classList.toggle(PART_GAP_CLASS, !!name && i > 0);
-      if (name) next.push({ id: el.dataset.rowId ?? String(i), name, top: el.offsetTop });
+    const wrapper = wrapperRef.current;
+    if (!container || !wrapper) return;
+    const { parts, slides } = deriveSong(current);
+    const starts = new Set(parts.map((p) => p.rowId));
+    const els = Array.from(container.children) as HTMLElement[];
+    els.forEach((el, i) => el.classList.toggle(PART_GAP_CLASS, starts.has(el.dataset.rowId ?? "") && i > 0));
+
+    // Medidas depois do espaço entre partes aplicado.
+    const base = wrapper.getBoundingClientRect();
+    const boxes = els.map((el) => {
+      const r = el.getBoundingClientRect();
+      return { top: r.top - base.top, bottom: r.bottom - base.top };
     });
-    setLabels(next);
+    const indexOf = new Map(els.map((el, i) => [el.dataset.rowId ?? "", i]));
+    /** Última linha com conteúdo antes de `end` (exclusivo). */
+    const lastFilled = (start: number, end: number) => {
+      let i = end - 1;
+      while (i > start && isBlankRow(current[i])) i -= 1;
+      return i;
+    };
+    const partBoxes: PartBox[] = [];
+    parts.forEach((part, k) => {
+      const start = indexOf.get(part.rowId);
+      if (start === undefined || !boxes[start]) return;
+      const end = k + 1 < parts.length ? (indexOf.get(parts[k + 1].rowId) ?? els.length) : els.length;
+      const last = lastFilled(start, end);
+      partBoxes.push({ part, top: boxes[start].top, bottom: boxes[last].bottom });
+    });
+    const slideBoxes: SlideBox[] = [];
+    slides.forEach((slide, k) => {
+      const start = indexOf.get(slide.rowId);
+      if (start === undefined || !boxes[start]) return;
+      const end = k + 1 < slides.length ? (indexOf.get(slides[k + 1].rowId) ?? els.length) : els.length;
+      const last = lastFilled(start, end);
+      slideBoxes.push({ index: slide.index, kind: parts[slide.part]?.kind ?? "VERSE", top: boxes[start].top, bottom: boxes[last].bottom });
+    });
+    const gaps = boxes.map((b, i) => (i === 0 ? b.top - 2 : (boxes[i - 1].bottom + b.top) / 2));
+    if (boxes.length) gaps.push(boxes[boxes.length - 1].bottom + 2);
+    const c = container.getBoundingClientRect();
+    const next: Layout = { left: c.left - base.left, width: c.width, parts: partBoxes, slides: slideBoxes, gaps };
+    layoutRef.current = next;
+    setLayout(next);
   }, []);
 
   // Refaz o DOM quando o documento muda por fora.
@@ -169,13 +258,25 @@ export function LyricsDocument({
         sel.addRange(range);
       }
     }
+    const focusId = pendingFocus.current;
+    pendingFocus.current = null;
+    if (focusId) {
+      container.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(focusId)}"] [data-cue-chip]`)?.focus();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version]);
 
+  // A largura muda (janela, menu lateral, fonte carregando): as linhas quebram diferente.
   useEffect(() => {
+    const container = containerRef.current;
     const onResize = () => decorate(rowsRef.current);
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    const observer = typeof ResizeObserver === "function" && container ? new ResizeObserver(onResize) : null;
+    if (observer && container) observer.observe(container);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      observer?.disconnect();
+    };
   }, [decorate]);
 
   /** Lê o que está na tela de volta em linhas. */
@@ -273,20 +374,173 @@ export function LyricsDocument({
     onChange(pasted.rows, true);
   }
 
-  const showToolbar = !readOnly && selection && !selection.collapsed;
+  /** Arrastar uma instrução: o vão mais perto do ponteiro é onde ela cai. */
+  function handlePointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (readOnly || event.button !== 0) return;
+    const chip = (event.target as HTMLElement).closest<HTMLElement>("[data-cue-chip]");
+    const row = chip?.closest<HTMLElement>("[data-cue]");
+    const id = row?.dataset.rowId;
+    const container = containerRef.current;
+    const wrapper = wrapperRef.current;
+    if (!chip || !row || !id || !container || !wrapper) return;
+    // Sem isto o navegador começa a selecionar texto.
+    event.preventDefault();
+    chip.focus({ preventScroll: true });
+    const from = Array.prototype.indexOf.call(container.children, row) as number;
+    const startY = event.clientY;
+    let dragging = false;
+    let gap = from;
+
+    const nearestGap = (clientY: number) => {
+      const y = clientY - wrapper.getBoundingClientRect().top;
+      const { gaps } = layoutRef.current;
+      let best = from;
+      gaps.forEach((g, k) => {
+        if (Math.abs(g - y) < Math.abs((gaps[best] ?? Infinity) - y)) best = k;
+      });
+      return best;
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!dragging && Math.abs(e.clientY - startY) < DRAG_THRESHOLD) return;
+      dragging = true;
+      row.dataset.dragging = "1";
+      gap = nearestGap(e.clientY);
+      setDrag({ id, from, gap });
+      // Perto da borda da janela, a página rola junto.
+      if (e.clientY < 64) window.scrollBy(0, -12);
+      else if (e.clientY > window.innerHeight - 64) window.scrollBy(0, 12);
+    };
+    const finish = (commit: boolean) => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      window.removeEventListener("keydown", onKey, true);
+      delete row.dataset.dragging;
+      setDrag(null);
+      if (!dragging) return;
+      // O clique que o navegador dispara ao soltar não abre a instrução; se ele não vier, o próximo vale.
+      suppressClick.current = true;
+      window.setTimeout(() => {
+        suppressClick.current = false;
+      }, 0);
+      if (commit && gap !== from && gap !== from + 1) {
+        pendingFocus.current = id;
+        onMoveCue(id, gap);
+      }
+    };
+    const onUp = () => finish(true);
+    const onCancel = () => finish(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        finish(false);
+      }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    window.addEventListener("keydown", onKey, true);
+  }
+
+  /** Teclado na instrução: Enter edita, Alt+setas muda de lugar uma linha por vez. */
+  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    // Shift+Enter criaria quebra dentro da linha; aqui cada linha é um bloco.
+    if (event.key === "Enter" && event.shiftKey) {
+      event.preventDefault();
+      return;
+    }
+    const chip = (event.target as HTMLElement).closest<HTMLElement>("[data-cue-chip]");
+    const row = chip?.closest<HTMLElement>("[data-cue]");
+    const id = row?.dataset.rowId;
+    const container = containerRef.current;
+    if (!chip || !row || !id || !container) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onCueClick(id);
+      return;
+    }
+    if (readOnly || !event.altKey || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+    event.preventDefault();
+    const index = Array.prototype.indexOf.call(container.children, row) as number;
+    const to = event.key === "ArrowUp" ? index - 1 : index + 2;
+    if (to < 0 || to > container.children.length) return;
+    pendingFocus.current = id;
+    onMoveCue(id, to);
+  }
+
+  const showToolbar = !readOnly && selection && !selection.collapsed && !drag;
 
   return (
     <div ref={wrapperRef} className="relative px-6 pb-12 pt-9 sm:px-10">
-      {labels.map((label) => (
-        <span
-          key={label.id}
+      {/* Um bloco de fundo por parte, com a cor do tipo. */}
+      {layout.parts.map(({ part, top, bottom }) => (
+        <div
+          key={`bloco-${part.rowId}`}
           aria-hidden="true"
-          className="pointer-events-none absolute left-6 w-24 select-none text-[11px] font-bold uppercase tracking-wider text-muted-foreground sm:left-10"
-          style={{ top: label.top + 10 }}
-        >
-          {label.name}
-        </span>
+          data-part-block={part.kind}
+          className={`pointer-events-none absolute rounded-xl ${PART_TONE[part.kind].block}`}
+          style={{ top: top - 8, height: bottom - top + 16, left: layout.left - 22, width: layout.width + 30 }}
+        />
       ))}
+      {/* Uma barra do começo ao fim de cada slide, com o número dele. */}
+      {layout.slides.map((slide) => (
+        <div
+          key={`slide-${slide.index}`}
+          aria-hidden="true"
+          data-slide-mark={slide.index + 1}
+          className="pointer-events-none absolute"
+          style={{ top: slide.top + 2, height: Math.max(8, slide.bottom - slide.top - 4), left: layout.left - 13, width: layout.width + 13 }}
+        >
+          <span className={`absolute inset-y-0 left-0 w-[3px] rounded-full ${PART_TONE[slide.kind].bar}`} />
+          <span className="absolute right-0 top-0 text-[10px] font-semibold tabular-nums leading-4 text-muted-foreground">
+            {slide.index + 1}
+          </span>
+        </div>
+      ))}
+      {layout.parts.map(({ part, top }) =>
+        readOnly ? (
+          <span
+            key={part.rowId}
+            aria-hidden="true"
+            className={`pointer-events-none absolute left-6 w-24 select-none text-[11px] font-bold uppercase tracking-wider sm:left-10 ${PART_TONE[part.kind].label}`}
+            style={{ top: top + 10 }}
+          >
+            {part.name}
+          </span>
+        ) : (
+          <PartNamePicker
+            key={part.rowId}
+            open={renaming === part.rowId}
+            onOpenChange={(open) => setRenaming(open ? part.rowId : null)}
+            name={part.name}
+            kind={part.kind}
+            parts={layout.parts.map((p) => p.part)}
+            onPick={(choice) => onRenamePart(part.rowId, choice)}
+          >
+            <button
+              type="button"
+              aria-label={`Renomear a parte ${part.name}`}
+              title="Clique para renomear"
+              className={`group absolute left-4 flex max-w-[6.75rem] items-start gap-1 rounded px-2 py-0.5 text-left text-[11px] font-bold uppercase leading-4 tracking-wider hover:bg-background/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:left-8 ${PART_TONE[part.kind].label}`}
+              style={{ top: top + 8 }}
+            >
+              <span className="min-w-0 break-words">{part.name}</span>
+              <Pencil className="mt-0.5 h-3 w-3 flex-none opacity-0 group-hover:opacity-70 group-focus-visible:opacity-70" aria-hidden="true" />
+            </button>
+          </PartNamePicker>
+        ),
+      )}
+      {drag && layout.gaps[drag.gap] !== undefined && (
+        <div
+          aria-hidden="true"
+          data-drop-indicator
+          className="pointer-events-none absolute z-30 flex items-center"
+          style={{ top: layout.gaps[drag.gap] - 5, left: layout.left - 18, width: layout.width + 18 }}
+        >
+          <span className="h-2.5 w-2.5 flex-none rounded-full border-2 border-primary bg-background" />
+          <span className="h-0.5 flex-1 rounded-full bg-primary" />
+        </div>
+      )}
       {showToolbar && (
         <div
           className="absolute z-20"
@@ -304,15 +558,19 @@ export function LyricsDocument({
         contentEditable={!readOnly}
         suppressContentEditableWarning
         spellCheck={false}
-        className="ml-28 min-h-[320px] whitespace-pre-wrap break-words text-xl leading-[1.55] outline-none"
+        className={`relative ml-28 min-h-[320px] whitespace-pre-wrap break-words pr-5 text-xl leading-[1.55] outline-none ${
+          drag ? "[&_[data-cue-chip]]:cursor-grabbing [&_[data-dragging]]:opacity-40" : ""
+        }`}
         onInput={() => onChange(readDom())}
         onPaste={handlePaste}
         onDrop={(e) => e.preventDefault()}
-        onKeyDown={(e) => {
-          // Shift+Enter criaria quebra dentro da linha; aqui cada linha é um bloco.
-          if (e.key === "Enter" && e.shiftKey) e.preventDefault();
-        }}
+        onPointerDown={handlePointerDown}
+        onKeyDown={handleKeyDown}
         onClick={(e) => {
+          if (suppressClick.current) {
+            suppressClick.current = false;
+            return;
+          }
           const cue = (e.target as HTMLElement).closest<HTMLElement>("[data-cue]");
           if (cue?.dataset.rowId) onCueClick(cue.dataset.rowId);
         }}

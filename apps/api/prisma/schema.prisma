@@ -81,40 +81,42 @@ model Tenant {
   createdAt                     DateTime @default(now()) @map("created_at")
   updatedAt                     DateTime @updatedAt @map("updated_at")
 
-  payerProfiles      FinancialPayerProfile[]
-  financialPlans     FinancialPlan[]
-  subscriptions      FinancialSubscription[]
-  transactions       FinancialTransaction[]
-  webhookEvents      FinancialWebhookEvent[]
-  paymentLinks       FinancialPaymentLink[]
-  linkPresets        FinancialLinkPreset[]
-  adminUsers         AdminUser[]
-  permissionGroups   PermissionGroup[]
-  signupLinks        TenantSignupLink[]
-  invitations        AdminUserInvitation[]
-  publicWebOrigins   TenantPublicWebOrigin[]
-  events             Event[]
-  eventTags          EventTag[]
-  eventFieldDefs     EventFieldDefinition[]
-  eventRegistrations EventRegistration[]
-  eventTicketTypes   EventTicketType[]
-  eventOrders        EventOrder[]
-  eventCoupons       EventCoupon[]
-  eventTickets       EventTicket[]
-  schedules          Schedule[]
-  siteContent        SiteContent[]
-  siteLayout         SiteLayout?
-  projectionSettings ProjectionSettings?
-  branches           ChurchBranch[]
-  pastors            Pastor[]
-  ministries         Ministry[]
-  churchConfig       ChurchConfig?
-  worshipSongs       WorshipSong[]
-  worshipTemplates   WorshipServiceTemplate[]
-  worshipServices    WorshipService[]
-  worshipPonteKey    WorshipPonteKey?
-  sermons            Sermon[]
-  sermonDeliveries   SermonDelivery[]
+  payerProfiles            FinancialPayerProfile[]
+  financialPlans           FinancialPlan[]
+  subscriptions            FinancialSubscription[]
+  transactions             FinancialTransaction[]
+  webhookEvents            FinancialWebhookEvent[]
+  paymentLinks             FinancialPaymentLink[]
+  linkPresets              FinancialLinkPreset[]
+  adminUsers               AdminUser[]
+  permissionGroups         PermissionGroup[]
+  signupLinks              TenantSignupLink[]
+  invitations              AdminUserInvitation[]
+  publicWebOrigins         TenantPublicWebOrigin[]
+  events                   Event[]
+  eventTags                EventTag[]
+  eventFieldDefs           EventFieldDefinition[]
+  eventRegistrations       EventRegistration[]
+  eventTicketTypes         EventTicketType[]
+  eventOrders              EventOrder[]
+  eventCoupons             EventCoupon[]
+  eventTickets             EventTicket[]
+  schedules                Schedule[]
+  siteContent              SiteContent[]
+  siteLayout               SiteLayout?
+  projectionSettings       ProjectionSettings?
+  branches                 ChurchBranch[]
+  pastors                  Pastor[]
+  ministries               Ministry[]
+  churchConfig             ChurchConfig?
+  worshipSongs             WorshipSong[]
+  worshipTemplates         WorshipServiceTemplate[]
+  worshipServices          WorshipService[]
+  worshipPonteKey          WorshipPonteKey?
+  worshipSettings          WorshipSettings?
+  worshipTimingCorrections WorshipTimingCorrection[]
+  sermons                  Sermon[]
+  sermonDeliveries         SermonDelivery[]
 
   @@map("tenants")
 }
@@ -969,12 +971,54 @@ model WorshipSong {
   createdAt            DateTime          @default(now()) @map("created_at")
   updatedAt            DateTime          @updatedAt @map("updated_at")
 
-  tenant       Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  serviceSongs WorshipServiceSong[]
+  tenant            Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  serviceSongs      WorshipServiceSong[]
+  timingCorrections WorshipTimingCorrection[]
 
   @@index([tenantId, status])
   @@index([tenantId, title])
   @@map("worship_songs")
+}
+
+/// Ajustes de Cultos que valem para a igreja toda.
+model WorshipSettings {
+  tenantId         String   @id @map("tenant_id") @db.Uuid
+  /// Quanto antes do tempo marcado (início da frase) o slide entra na projeção, em segundos.
+  slideLeadSeconds Float    @default(0.3) @map("slide_lead_seconds")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("worship_settings")
+}
+
+/// Uma correção feita à mão nos tempos de uma música (arrastar, deslocar em massa,
+/// instrução à IA). O histórico vira contexto das próximas sugestões.
+model WorshipTimingCorrection {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  songId           String   @map("song_id") @db.Uuid
+  /// DRAG, NUDGE, SHIFT_SECONDS, SHIFT_SLIDES ou INSTRUCTION.
+  source           String   @db.VarChar(20)
+  /// O pedido em texto, quando a correção veio de uma instrução à IA.
+  instruction      String?  @db.VarChar(300)
+  /// Slides que mudaram de tempo.
+  changedSlides    Int      @map("changed_slides")
+  /// Média de (final − antes) nos slides que mudaram, em segundos.
+  meanDeltaSeconds Float    @map("mean_delta_seconds")
+  /// Deslocamento inteiro em slides, quando a correção é isso (−1: cada slide pegou o tempo do anterior).
+  slideShift       Int?     @map("slide_shift")
+  /// Tempos antes e depois, um por slide.
+  before           Json
+  after            Json
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  tenant Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  song   WorshipSong @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([songId])
+  @@map("worship_timing_corrections")
 }
 
 /// Chave com que a Ponte do Culto lê o roteiro e as músicas. Só o hash é guardado.
