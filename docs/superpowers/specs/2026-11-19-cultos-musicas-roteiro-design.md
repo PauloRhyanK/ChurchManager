@@ -146,8 +146,9 @@ Roteiro:
 
 | Rota | O que faz |
 |---|---|
-| `GET /service-templates` | Modelos salvos + o Culto padrão (`id: null`). |
-| `POST /service-templates` | `{ name, fromServiceId }`: salva os momentos de um culto como modelo. |
+| `GET /service-templates` | Os modelos da igreja. Enquanto não houver nenhum, vem só o Culto padrão embutido (`id: null`). |
+| `POST /service-templates` | `{ name, fromServiceId }` salva os momentos de um culto como modelo; `{ name, startTime?, moments }` cria do zero. Mandar os dois, ou nenhum, responde 400. |
+| `PUT /service-templates/:id` | Parcial: `{ name?, startTime?, moments? }`. A lista de momentos é trocada inteira. Não altera cultos já criados. |
 | `DELETE /service-templates/:id` | |
 | `GET /services` | Lista (`id, date, startTime, name, songCount`), do mais novo para o mais antigo. |
 | `POST /services` | `{ date, startTime?, templateId? }`: cria o culto com os momentos do modelo. |
@@ -187,6 +188,8 @@ Pasta `apps/admin/src/features/worship`. Rotas atrás de `PermissionRoute module
   - **3 Climas** (4): uma linha por parte com os cinco climas; barra de energia da música; legenda. "Voltar à sugestão" reaplica a regra.
   - **4 Prévia** (5): telão e retorno do altar lado a lado seguindo o áudio (o retorno mostra a instrução e "A seguir"); tocador com parte anterior / próxima; lista de conferência (letra, áudio, tempos, climas, "prévia assistida até o fim" como lembrete que não bloqueia); **Letra para o Holyrics** (slides em maiúsculas separados por linha em branco, instruções como `//`, botão Copiar); **Pronta para o culto**.
 - **`/cultos/roteiro`** (6, 6b a 6e): seletor de culto (data e hora) e "Novo culto" (data, hora, modelo). Abas **Culto inteiro** (momentos com horário e duração; acrescentar, renomear, mudar duração, remover, arrastar para reordenar; rodapé "7 momentos · termina às 20:17") e **Louvor** (músicas na ordem, com atalho "Falta o tempo" para o passo 2; arrastar para reordenar; remover). **Adicionar música** abre o modal de busca: achou no repertório, adiciona; não achou, "Criar «nome»" abre letra + áudio opcional com **Organizar** (cria, adiciona ao roteiro e abre o editor) e **Só adicionar ao roteiro** (cria como Rascunho).
+
+- **`/cultos/roteiro/modelos`** (acrescentada em 20/11/2026, botão "Modelos de culto" no Roteiro): lista os modelos com quantidade de momentos, duração total e horário de início. "Novo modelo" e "Editar" abrem o mesmo editor de momentos da aba Culto inteiro, com o tipo de cada momento (Antes do culto, Momento, Louvor, Palavra), salvo de uma vez ao confirmar. Excluir pede confirmação. Editar ou excluir um modelo não muda os cultos já criados a partir dele. O Culto padrão do sistema continua no código e aparece só enquanto a igreja não tem modelo próprio, com "Personalizar" (cria um modelo de verdade a partir dele); assim nunca falta um modelo para criar culto, nenhuma leitura grava no banco, e excluir tudo devolve o padrão em vez de deixar a lista vazia.
 
 Cores e fonte são as do painel (`index.css`). As cores dos cinco climas são as do desenho e ficam numa constante do painel; servem só para a tela.
 
@@ -249,5 +252,4 @@ A Ponte lê um culto pronto para executar. O lado da Ponte (buscar, guardar, exe
 - Alinhamento automático da letra no áudio, e qualquer modelo de linguagem.
 - O lado da Ponte (buscar e executar) e o indicador "Na Ponte · 14:32" do desenho. A rota e a chave já existem (ver "Contrato para a Ponte").
 - Áudio no Reaper (etapa 3). Painel do culto ao vivo e tela do pastor (outra sessão).
-- Tela de editar modelos de culto: existe o Culto padrão e "Salvar este culto como modelo".
 - Mais de um bloco de louvor por culto; histórico de versões da música; envio direto ao Holyrics (o token da igreja não permite).

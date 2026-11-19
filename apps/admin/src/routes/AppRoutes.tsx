@@ -15,6 +15,7 @@ import SongsListPage from "@/features/worship/pages/SongsListPage";
 import NewSongPage from "@/features/worship/pages/NewSongPage";
 import SongEditorPage from "@/features/worship/pages/SongEditorPage";
 import ServicePlanPage from "@/features/worship/pages/ServicePlanPage";
+import ServiceTemplatesPage from "@/features/worship/pages/ServiceTemplatesPage";
 import SermonsListPage from "@/features/sermons/pages/SermonsListPage";
 import SermonSlidesPage from "@/features/sermons/pages/SermonSlidesPage";
 import UsersListPage from "@/features/access/pages/UsersListPage";
@@ -90,6 +91,7 @@ export function AppRoutes() {
           </Route>
           <Route path="/cultos/musicas/:id" element={<SongEditorRoutePage />} />
           <Route path="/cultos/roteiro" element={<ServicePlanPage />} />
+          <Route path="/cultos/roteiro/modelos" element={<ServiceTemplatesPage />} />
         </Route>
         <Route element={<PermissionRoute module="SERMONS" />}>
           <Route path="/palavras" element={<SermonsListPage />} />
