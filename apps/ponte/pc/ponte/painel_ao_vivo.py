@@ -1,0 +1,405 @@
+"""O que o painel do culto ao vivo tem a mais que o painel antigo.
+
+O app.py monta o retrato de sempre e chama `completar()`, que SO ACRESCENTA:
+nenhuma chave antiga some nem muda de sentido. E o que deixa o painel.html
+antigo (e uma versao web antiga) continuar funcionando contra este codigo.
+
+As acoes novas tambem moram aqui, e continuam sendo UMA LISTA FECHADA. Nao
+ha "rode isto": cada acao diz exatamente o que faz, e a web so pode pedir as
+duas de ACOES_DA_WEB. Passar slide pela web esta fora de proposito: entre o
+toque e o telao haveria ate 4 segundos.
+
+Este arquivo nao importa o app.py. Tudo que precisa dele chega em `dep`, um
+dicionario de funcoes; e isso que deixa testa-lo sem subir servidor nenhum.
+"""
+
+import time
+
+from . import agenda as mod_agenda
+from . import repertorio as mod_repertorio
+
+VERSAO_DO_PAINEL = 2
+
+ACOES = (
+    "cena_transmissao", "clima", "luz_seguir",
+    "louvor_assumir", "louvor_devolver", "louvor_segurar", "louvor_slide", "louvor_parte",
+    "louvor_repetir_refrao", "louvor_musica", "louvor_comecou", "louvor_acertar",
+    "imagem",
+)
+ACOES_DA_WEB = ("cena_transmissao", "clima")
+
+DISCO_AMARELO_GB = 20
+DISCO_VERMELHO_GB = 5
+ESPELHO_LENTO_MS = 1500
+ESPELHO_CAIU_S = 20
+
+# sistema do retrato antigo -> (frase quando para, frase quando volta)
+VIRADAS = {
+    "Transmissão": ("O OBS parou de responder", "O OBS voltou"),
+    "Telão": ("O Holyrics parou de responder", "O Holyrics voltou"),
+    "Luz": ("O PC do som parou de buscar a luz", "O PC do som voltou a buscar a luz"),
+    "Retorno na TV": ("O retorno na TV caiu", "O retorno na TV voltou"),
+}
+
+
+class PainelAoVivo:
+    def __init__(self, dep):
+        self._d = dep
+        self._agora = dep.get("agora") or time.time
+        self._antes = {}          # nome do sistema -> estado da ultima olhada
+        self._internet_antes = None
+
+    def _dep(self, nome, padrao=None):
+        valor = self._d.get(nome)
+        if valor is None:
+            return padrao
+        try:
+            return valor() if callable(valor) else valor
+        except Exception:
+            return padrao
+
+    # -- luz ------------------------------------------------------------------
+
+    def tabela(self):
+        motor = self._dep("motor")
+        modos = []
+        if motor is not None:
+            try:
+                modos = [m["id"] for m in motor.catalogo() if not m.get("perigoso")]
+            except Exception:
+                modos = []
+        cenas = [str(n) for n in (self._dep("looks") or {}) if str(n) != "apagar"]
+        return mod_repertorio.tabela_de_climas(self._dep("config") or {}, cenas, modos)
+
+    def aplicar_luz(self, cena, modo):
+        """Cena primeiro, movimento depois: o movimento modula o que a cena
+        pos no ar, e na ordem inversa havia um instante com o movimento sobre
+        a cena velha."""
+        cliente = self._dep("luz")
+        if cliente is None:
+            raise RuntimeError("a luz está desligada neste PC")
+        look = (self._dep("looks") or {}).get(str(cena))
+        if look is None:
+            raise RuntimeError("essa cena de luz não existe mais")
+        motor = self._dep("motor")
+        modo = str(modo or "parado")
+        if motor is not None and modo != "parado":
+            if any(m["id"] == modo and m.get("perigoso") for m in motor.catalogo()):
+                raise RuntimeError("esse movimento só pode ser ligado no estúdio de luz")
+        canais = {numero: 0 for numero in range(1, 513)}
+        for canal, valor in look.items():
+            canais[int(canal)] = int(valor)
+        cliente.aplicar(canais)
+        marcar = self._d.get("luz_escolhida")
+        if marcar:
+            marcar(str(cena))
+        if motor is not None:
+            motor.escolher(None if modo == "parado" else modo)
+            try:
+                cliente.reenviar()
+            except Exception:
+                pass
+
+    def luz_da_parte(self, parte):
+        """O que o condutor chama quando a musica entra numa parte."""
+        luz = parte.get("luz") or {}
+        if parte.get("clima"):
+            for item in self.tabela():
+                if item["id"] == parte["clima"]:
+                    luz = {"cena": item["cena"], "modo": item["modo"]}
+        if luz.get("cena"):
+            self.aplicar_luz(luz["cena"], luz.get("modo"))
+
+    def _momentos_do_louvor(self):
+        config = self._dep("config") or {}
+        momentos = (config.get("painel") or {}).get("momento_do_louvor") or ["louvor"]
+        if not isinstance(momentos, (list, tuple)):
+            momentos = [momentos]
+        return [str(m) for m in momentos]
+
+    def momento_mudou(self, momento_id):
+        """O culto saiu do louvor: o condutor larga a letra e a luz.
+
+        Sem isto, uma musica que ficou contando o tempo continuaria trocando
+        a luz no meio da pregacao.
+        """
+        condutor = self._dep("condutor")
+        if condutor is None or not condutor.tem_musica():
+            return
+        if str(momento_id) in self._momentos_do_louvor():
+            return
+        condutor.encerrar()
+        anotar = self._d.get("anotar")
+        if anotar:
+            anotar("Louvor encerrado", True, "a letra e a luz voltaram para a mão", "ponte")
+
+    def luz_mexida(self):
+        """Alguem trocou a luz pelo painel: se ha musica, o condutor larga."""
+        condutor = self._dep("condutor")
+        if condutor is not None:
+            condutor.luz_na_mao()
+
+    # -- pedacos do retrato ---------------------------------------------------
+
+    def _agenda(self, ordem):
+        cues = self._dep("cues") or {}
+        momentos = []
+        for m in ordem.get("momentos") or []:
+            minutos, antes = mod_agenda.minutos_de(m["id"], cues.get(m["id"]))
+            momentos.append({"id": m["id"], "minutos": minutos, "antes": antes})
+        return mod_agenda.calcular(self._dep("hora_do_culto"), momentos, ordem.get("atual"),
+                                   self._dep("entradas") or {}, self._agora())
+
+    def internet(self):
+        """{"estado": "boa" | "lenta" | "caiu", "detalhe"} ou None se nao ha
+        como saber (sem a web ligada e sem transmissao)."""
+        espelho = self._dep("espelho")
+        saude = self._dep("saude")
+        palavra = saude.retrato()["palavra"] if saude is not None else None
+        envio_ruim = palavra in ("Oscilando", "Ruim", "Reconectando")
+        if espelho is None:
+            if palavra is None:
+                return None
+            return {"estado": "lenta" if envio_ruim else "boa",
+                    "detalhe": "pela qualidade do envio da transmissão"}
+        if espelho.get("ok") is False:
+            ultimo = espelho.get("em")
+            if ultimo is None or self._agora() - ultimo > ESPELHO_CAIU_S:
+                return {"estado": "caiu", "detalhe": "sem contato com a versão web"}
+            return {"estado": "lenta", "detalhe": "a versão web demorou a responder"}
+        ms = espelho.get("ms")
+        if (ms is not None and ms > ESPELHO_LENTO_MS) or envio_ruim:
+            return {"estado": "lenta", "detalhe": "a transmissão está oscilando" if envio_ruim
+                    else "a versão web demorou {:.1f} s para responder".format(ms / 1000.0)}
+        return {"estado": "boa", "detalhe": ""}
+
+    def _equipamentos(self, base, internet):
+        agora = self._agora()
+        itens = [{"nome": base.get("maquina") or "PC do telão", "estado": "ligado", "cor": "verde"}]
+        vistas = {m.get("papel"): m for m in (base.get("maquinas") or []) if not m.get("esta")}
+        config = self._dep("config") or {}
+
+        obs_ligado = bool((config.get("obs") or {}).get("ativo")) or self._dep("simulacao", False)
+        notebook = vistas.get("transmissao")
+        if notebook is not None or obs_ligado:
+            vivo = bool(notebook and notebook.get("viva")) or base.get("transmissao") is not None
+            itens.append({"nome": (notebook or {}).get("nome") or "Notebook da transmissão",
+                          "estado": "ligado" if vivo else "sem contato",
+                          "cor": "verde" if vivo else "vermelho"})
+
+        som = vistas.get("som")
+        visto = self._dep("luz_vista")
+        luz_buscada = bool(visto and agora - visto < 12)
+        luz_por_agente = (config.get("luzes") or {}).get("driver") == "agente"
+        if som is not None or luz_por_agente:
+            vivo = bool(som and som.get("viva")) or luz_buscada
+            itens.append({"nome": (som or {}).get("nome") or "PC do som",
+                          "estado": "ligado" if vivo else "sem contato",
+                          "cor": "verde" if vivo else "vermelho"})
+
+        vigia = base.get("retorno_tv")
+        if vigia:
+            estado = vigia.get("estado")
+            if estado == "no_ar":
+                itens.append({"nome": "TV do altar", "estado": "retorno aberto", "cor": "verde"})
+            elif estado in ("caiu", "reconectando", "desistiu", "fora_da_janela"):
+                itens.append({"nome": "TV do altar", "estado": str(vigia.get("texto") or "retorno caiu").lower(),
+                              "cor": "vermelho" if estado in ("caiu", "desistiu") else "ambar"})
+            else:
+                itens.append({"nome": "TV do altar", "estado": str(vigia.get("texto") or "sem leitura").lower(),
+                              "cor": "cinza"})
+        if internet is not None:
+            itens.append({"nome": "Internet", "estado": internet["estado"],
+                          "cor": {"boa": "verde", "lenta": "ambar", "caiu": "vermelho"}[internet["estado"]]})
+        return itens
+
+    def _transmissao(self, transmissao):
+        obs = self._dep("estado_obs") or {}
+        nome_de_cena = self._d.get("nome_de_cena") or (lambda nome: nome)
+        config_obs = (self._dep("config") or {}).get("obs") or {}
+        todas = [str(c) for c in (obs.get("cenas") or [])]
+        escolhidas = [str(c) for c in (config_obs.get("cenas_do_painel") or []) if str(c) in todas]
+        transmissao["cenas"] = [{"id": c, "nome": nome_de_cena(c), "no_ar": c == obs.get("no_ar")}
+                                for c in (escolhidas or todas)]
+        medidor = self._dep("medidor")
+        transmissao["audios"] = medidor.retrato(config_obs.get("audios")) if medidor is not None else []
+        saude = self._dep("saude")
+        qualidade = saude.retrato() if saude is not None else {"palavra": None, "perdidos_pct": None, "kbps": None}
+        yt = transmissao.get("youtube") or {}
+        qualidade["youtube"] = yt.get("saude")
+        qualidade["youtube_lido_em"] = yt.get("lido_em")
+        disco = obs.get("disco_mb")
+        disco_gb = int(disco / 1024) if isinstance(disco, (int, float)) else None
+        transmissao["numeros"] = {
+            "assistindo": yt.get("assistindo"),
+            "assistindo_lido_em": yt.get("lido_em"),
+            "qualidade": qualidade,
+            "gravacao_ms": obs.get("gravacao_ms"),
+            "disco_gb": disco_gb,
+            "disco_cor": None if disco_gb is None else (
+                "vermelho" if disco_gb < DISCO_VERMELHO_GB else
+                "ambar" if disco_gb < DISCO_AMARELO_GB else "normal"),
+        }
+        return transmissao
+
+    def _climas(self, luz):
+        motor = self._dep("motor")
+        modo = "parado"
+        if motor is not None:
+            try:
+                modo = motor.atual() or "parado"
+            except Exception:
+                modo = "parado"
+        climas = []
+        for item in self.tabela():
+            climas.append({"id": item["id"], "nome": item["nome"], "disponivel": item["disponivel"],
+                           "ativo": bool(item["disponivel"] and luz.get("cena") == item["cena"]
+                                         and modo == item["modo"])})
+        return climas
+
+    # -- o retrato inteiro ----------------------------------------------------
+
+    def completar(self, base):
+        ordem = base.get("ordem") or {}
+        internet = self.internet()
+        base["versao_do_painel"] = VERSAO_DO_PAINEL
+        base["agora"] = self._agora()
+        base["simulacao"] = bool(self._dep("simulacao", False))
+        base["agenda"] = self._agenda(ordem)
+        base["internet"] = internet
+        base["equipamentos"] = self._equipamentos(base, internet)
+        if base.get("transmissao") is not None:
+            base["transmissao"] = self._transmissao(base["transmissao"])
+        condutor = self._dep("condutor")
+        louvor = condutor.retrato() if condutor is not None else None
+        if base.get("luz") is not None:
+            base["luz"]["climas"] = self._climas(base["luz"])
+            base["luz"]["seguindo"] = bool(louvor and louvor["musica"] and louvor["luz"] == "seguindo")
+        if louvor is not None:
+            louvor["no_momento"] = ordem.get("atual_id") in self._momentos_do_louvor()
+        base["louvor"] = louvor
+        repertorio = self._dep("repertorio")
+        base["conteudo_versao"] = repertorio.versao() if repertorio is not None else None
+        imagem = self._dep("imagem")
+        base["imagem"] = {"disponivel": imagem is not None, "ativa": bool(imagem and imagem.ativo)}
+        base["palavra"] = None     # etapa C: espera o modulo Palavras
+        return base
+
+    def conteudo(self):
+        repertorio = self._dep("repertorio")
+        if repertorio is None:
+            return {"versao": None, "musicas": []}
+        return {"versao": repertorio.versao(), "musicas": repertorio.musicas()}
+
+    # -- viradas de estado, para o "Aconteceu agora" ---------------------------
+
+    def vigiar_viradas(self, sistemas):
+        """Anota so quando um equipamento MUDA de estado, nunca a cada olhada."""
+        anotar = self._d.get("anotar")
+        if anotar is None:
+            return
+        for item in sistemas or []:
+            nome, estado = item.get("nome"), item.get("estado")
+            if nome not in VIRADAS or estado not in ("ok", "erro"):
+                continue
+            antes = self._antes.get(nome)
+            self._antes[nome] = estado
+            if antes is None or antes == estado:
+                continue
+            parou, voltou = VIRADAS[nome]
+            if estado == "erro":
+                anotar(parou, False, item.get("detalhe") or "", "ponte")
+            else:
+                anotar(voltou, True, "tudo certo", "ponte")
+        internet = self.internet()
+        agora = internet["estado"] if internet else None
+        antes, self._internet_antes = self._internet_antes, agora
+        if antes is None or agora is None or antes == agora:
+            return
+        if agora == "boa":
+            anotar("A internet voltou ao normal", True, "tudo certo", "ponte")
+        elif agora == "lenta":
+            anotar("A internet ficou lenta", False, internet["detalhe"], "ponte")
+        else:
+            anotar("A internet caiu", False, internet["detalhe"], "ponte")
+
+    # -- acoes ----------------------------------------------------------------
+
+    def acao(self, tipo, dados, origem):
+        """(corpo, codigo), ou None se `tipo` nao e uma acao nova.
+
+        `silencioso` no corpo pede para nao anotar no historico: passar slide
+        acontece dezenas de vezes por musica.
+        """
+        if tipo not in ACOES:
+            return None
+        if origem == "web" and tipo not in ACOES_DA_WEB:
+            return {"erro": "isso só pode ser feito na igreja"}, 403
+        dados = dados if isinstance(dados, dict) else {}
+        quem = dados.get("quem")
+
+        if tipo == "cena_transmissao":
+            cliente = self._dep("obs")
+            if cliente is None:
+                return {"erro": "a transmissão está desligada neste PC"}, 400
+            cena = str(dados.get("cena") or "")
+            obs = self._dep("estado_obs") or {}
+            if cena not in [str(c) for c in (obs.get("cenas") or [])]:
+                return {"erro": "essa imagem não existe na transmissão"}, 404
+            cliente.pedir("SetCurrentProgramScene", {"sceneName": cena})
+            pedir_de_novo = self._d.get("reler_obs")
+            if pedir_de_novo:
+                pedir_de_novo()
+            nome = (self._d.get("nome_de_cena") or (lambda n: n))(cena)
+            return {"ok": True, "titulo": "Imagem no ar: " + str(nome), "detalhe": "tudo certo"}, 200
+
+        if tipo == "clima":
+            chave = str(dados.get("clima") or "")
+            item = next((c for c in self.tabela() if c["id"] == chave), None)
+            if item is None:
+                return {"erro": "esse clima de luz não existe"}, 404
+            if not item["disponivel"]:
+                return {"erro": "falta configurar a luz de {} neste PC".format(item["nome"])}, 409
+            try:
+                self.aplicar_luz(item["cena"], item["modo"])
+            except RuntimeError as erro:
+                return {"erro": str(erro)}, 400
+            self.luz_mexida()
+            return {"ok": True, "titulo": "Luz: " + item["nome"], "detalhe": "tudo certo"}, 200
+
+        if tipo == "imagem":
+            imagem = self._dep("imagem")
+            if imagem is None:
+                return {"erro": "a imagem da transmissão não está disponível neste PC"}, 400
+            imagem.ativo = bool(dados.get("mostrar"))
+            return {"ok": True, "detalhe": "tudo certo",
+                    "titulo": "Imagem da transmissão " + ("ligada" if imagem.ativo else "desligada")}, 200
+
+        condutor = self._dep("condutor")
+        if condutor is None:
+            return {"erro": "o louvor não está disponível neste PC"}, 400
+        if tipo == "luz_seguir":
+            return condutor.seguir_luz()
+        if tipo == "louvor_assumir":
+            return condutor.assumir(quem)
+        if tipo == "louvor_devolver":
+            return condutor.devolver(quem)
+        if tipo == "louvor_segurar":
+            return condutor.segurar(bool(dados.get("segurar")), quem)
+        if tipo == "louvor_slide":
+            corpo, codigo = condutor.ir_slide(dados.get("para"), dados.get("visto"), quem)
+            corpo["silencioso"] = bool(corpo.get("ok"))
+            return corpo, codigo
+        if tipo == "louvor_parte":
+            corpo, codigo = condutor.ir_parte(dados.get("parte"), quem)
+            corpo["silencioso"] = bool(corpo.get("ok"))
+            return corpo, codigo
+        if tipo == "louvor_repetir_refrao":
+            return condutor.repetir_refrao(quem)
+        if tipo == "louvor_musica":
+            return condutor.ir_musica(str(dados.get("para") or "proxima"))
+        if tipo == "louvor_comecou":
+            return condutor.comecou()
+        if tipo == "louvor_acertar":
+            return condutor.acertar(dados.get("segundos"))
+        return None

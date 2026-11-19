@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Ponte do Culto — ao vivo</title>
+<link rel="stylesheet" href="/ao-vivo.css">
+</head>
+<body>
+<!--
+  O painel do culto ao vivo. A MESMA tela no PC da igreja, no celular e na
+  versao web. Ela so mostra e pede: quem decide (a ordem, a letra, a luz) e a
+  ponte do PC principal. Ver docs/superpowers/specs/2026-11-19-ponte-painel-ao-vivo-design.md
+  na raiz do repositorio. O painel antigo continua em /painel-antigo.
+-->
+<div class="tela">
+  <div class="simulacao" id="simulacao" hidden>SIMULAÇÃO — o que aparece aqui não é o equipamento da igreja</div>
+
+  <header class="topo">
+    <div class="topo-titulo">
+      <h1 id="nome">Ponte do Culto</h1>
+      <span class="relogio" id="relogio"></span>
+      <span class="atraso" id="atraso"></span>
+    </div>
+    <div class="topo-direita">
+      <div class="pilulas" id="pilulas"></div>
+      <details class="menu" id="menu">
+        <summary>Mais</summary>
+        <div class="folha" id="folha"></div>
+      </details>
+    </div>
+  </header>
+
+  <div class="faixas" id="faixas"></div>
+
+  <div class="colunas">
+    <div class="coluna esquerda">
+      <nav class="cartao justo" id="ordem" aria-label="Ordem do culto"></nav>
+      <section class="cartao" id="equipamentos" hidden></section>
+    </div>
+
+    <main class="coluna centro">
+      <section class="cartao largo" id="centro" aria-live="polite"></section>
+      <section class="cartao justo fila" id="musicas" aria-label="Músicas do louvor" hidden></section>
+      <section class="cartao" id="luz" hidden></section>
+    </main>
+
+    <aside class="coluna direita">
+      <section class="cartao" id="transmissao" hidden>
+        <div id="tx-cabeca"></div>
+        <div class="imagem-obs" id="tx-imagem" role="img" aria-label="Imagem ao vivo: o que está indo para a transmissão">
+          <img id="tx-foto" alt="" hidden>
+          <span class="etiqueta" id="tx-etiqueta"></span>
+          <span class="sem-imagem" id="tx-sem"></span>
+        </div>
+        <div id="tx-resto"></div>
+      </section>
+      <section class="cartao" id="telao" hidden></section>
+      <section class="cartao" id="historico" hidden></section>
+    </aside>
+  </div>
+</div>
+
+<dialog id="dialogo" aria-labelledby="dialogo-titulo">
+  <h2 id="dialogo-titulo"></h2>
+  <p id="dialogo-texto"></p>
+  <input type="text" id="dialogo-campo" maxlength="30" autocomplete="off" hidden>
+  <div class="dialogo-botoes">
+    <button type="button" class="bt" id="dialogo-nao">Cancelar</button>
+    <button type="button" class="bt forte" id="dialogo-sim">Confirmar</button>
+  </div>
+</dialog>
+<div class="aviso-flutuante" id="aviso" role="status" hidden></div>
+<audio id="som" preload="auto"></audio>
+
+<script src="/ao-vivo.js"></script>
+</body>
+</html>

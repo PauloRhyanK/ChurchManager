@@ -131,9 +131,10 @@ class Medidor:
 class OuvinteOBS:
     """O fio que fica ouvindo. Se cair, tenta de novo de 10 em 10 segundos."""
 
-    def __init__(self, host, porta, senha, medidor, timeout=6.0):
-        self._url = "ws://{}:{}".format(_host_para_url(host), porta)
-        self._senha = senha or ""
+    def __init__(self, endereco, medidor, timeout=6.0):
+        # `endereco` e uma funcao que devolve (host, porta, senha): o notebook
+        # pode mudar de IP com a ponte no ar, e a proxima tentativa ja usa o novo.
+        self._endereco = endereco
         self._medidor = medidor
         self._timeout = timeout
 
@@ -155,7 +156,9 @@ class OuvinteOBS:
     def _ouvir(self):
         import websocket  # pacote websocket-client
 
-        ws = websocket.create_connection(self._url, timeout=self._timeout)
+        host, porta, senha = self._endereco()
+        ws = websocket.create_connection(
+            "ws://{}:{}".format(_host_para_url(host), porta), timeout=self._timeout)
         try:
             d = (json.loads(ws.recv()).get("d") or {})
             identify = {"rpcVersion": d.get("rpcVersion", 1),
@@ -163,7 +166,7 @@ class OuvinteOBS:
             auth = d.get("authentication")
             if auth:
                 segredo = base64.b64encode(
-                    hashlib.sha256((self._senha + auth["salt"]).encode()).digest()).decode()
+                    hashlib.sha256(((senha or "") + auth["salt"]).encode()).digest()).decode()
                 identify["authentication"] = base64.b64encode(
                     hashlib.sha256((segredo + auth["challenge"]).encode()).digest()).decode()
             ws.send(json.dumps({"op": 1, "d": identify}))

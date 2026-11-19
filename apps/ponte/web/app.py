@@ -51,7 +51,7 @@ import time
 import zipfile
 from datetime import timedelta
 
-from flask import (Flask, jsonify, redirect, request, send_file,
+from flask import (Flask, Response, jsonify, redirect, request, send_file,
                    send_from_directory, session)
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
@@ -98,7 +98,10 @@ ARQUIVOS = _mod_versao.impressoes(PASTA_PC)
 SUBIU_EM = time.time()
 
 _tranca = threading.Lock()
-_igreja = {"chegada": None, "painel": None, "em": 0.0, "maquina": ""}
+_igreja = {"chegada": None, "painel": None, "em": 0.0, "maquina": "",
+           # a letra das musicas do dia: grande e muda pouco, entao a igreja
+           # so manda quando muda (ver pc/ponte/espelho.py)
+           "conteudo": None}
 _fila = collections.deque(maxlen=50)
 _tentativas = {}          # ip -> [quantas erradas, ate quando esta bloqueado]
 _codigos = {}             # codigo de instalacao -> [vale ate, usos que restam]
@@ -276,10 +279,36 @@ def raiz():
     return redirect("/painel")
 
 
+def _painel_novo():
+    """A igreja ja manda o retrato do painel ao vivo? Um PC com codigo antigo
+    nao manda `versao_do_painel`, e para ele a tela certa e a antiga."""
+    with _tranca:
+        painel = _igreja["painel"] or {}
+    try:
+        return int(painel.get("versao_do_painel") or 1) >= 2
+    except (TypeError, ValueError):
+        return False
+
+
 @app.get("/painel")
 def pagina_painel():
     """O painel do culto: o MESMO arquivo que o PC da igreja usa."""
+    return send_from_directory(PASTA_PC, "ao-vivo.html" if _painel_novo() else "painel.html")
+
+
+@app.get("/painel-antigo")
+def pagina_painel_antigo():
     return send_from_directory(PASTA_PC, "painel.html")
+
+
+@app.get("/ao-vivo.css")
+def ao_vivo_css():
+    return send_from_directory(PASTA_PC, "ao-vivo.css")
+
+
+@app.get("/ao-vivo.js")
+def ao_vivo_js():
+    return send_from_directory(PASTA_PC, "ao-vivo.js")
 
 
 @app.get("/chegada")
@@ -370,7 +399,10 @@ def aqui_imagem():
 # (_acao_do_painel no pc/app.py) e pode recusar tudo com uma chave no painel
 # local. "ordem" (trocar a ordem do culto inteira) fica de fora de proposito.
 ACOES_DO_PAINEL = ("ir", "gravar", "transmitir", "tela_preta", "recado", "cena_luz",
-                   "apagar_luz", "modo_luz", "cortar", "visibilidade", "retorno")
+                   "apagar_luz", "modo_luz", "cortar", "visibilidade", "retorno",
+                   # do painel ao vivo. Passar slide do louvor NAO entra: entre
+                   # o toque e o telao haveria ate 4 segundos.
+                   "cena_transmissao", "clima")
 
 
 @app.get("/api/painel")
@@ -406,6 +438,20 @@ def painel_acao():
                     "titulo": "Pedido enviado para a igreja", "detalhe": "acompanhe na tela"})
 
 
+@app.get("/api/painel/conteudo")
+def painel_conteudo():
+    with _tranca:
+        conteudo = _igreja["conteudo"]
+    return jsonify(conteudo or {"versao": None, "musicas": []})
+
+
+@app.get("/api/painel/imagem")
+def painel_imagem():
+    """A imagem ao vivo do OBS nao vem para a web, de proposito: pesaria a
+    internet da igreja durante a transmissao."""
+    return Response(status=204)
+
+
 @app.get("/api/versao")
 def versao():
     return jsonify({"versao": VERSAO, "em": SUBIU_EM, "arquivos": ARQUIVOS})
@@ -434,11 +480,19 @@ def espelho():
         painel = dados.get("painel")
         _igreja.update({"chegada": chegada, "em": agora, "maquina": str(dados.get("maquina") or ""),
                         "painel": painel if isinstance(painel, dict) else None})
+        conteudo = dados.get("conteudo")
+        if isinstance(conteudo, dict) and conteudo.get("versao"):
+            _igreja["conteudo"] = conteudo
+        # Se a igreja anuncia uma versao do conteudo que nao esta aqui (a web
+        # reiniciou, por exemplo), pede: ela manda na proxima volta.
+        anunciada = (painel or {}).get("conteudo_versao") if isinstance(painel, dict) else None
+        quer_conteudo = bool(anunciada) and (_igreja["conteudo"] or {}).get("versao") != anunciada
         # Pedido velho nao e entregue: "abrir o retorno na TV" de 10 minutos
         # atras, chegando agora porque a internet voltou, e uma surpresa ruim.
         comandos = [c for c in _fila if agora - c["em"] <= 60]
         _fila.clear()
-    return jsonify({"comandos": [{k: c[k] for k in ("tipo", "passo", "corpo")} for c in comandos]})
+    return jsonify({"comandos": [{k: c[k] for k in ("tipo", "passo", "corpo")} for c in comandos],
+                    "quer_conteudo": quer_conteudo})
 
 
 @app.get("/saude")
