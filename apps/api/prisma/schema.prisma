@@ -31,6 +31,7 @@ enum PermissionModule {
   SETTINGS
   USERS
   CHURCH
+  WORSHIP
 }
 
 enum PermissionLevel {
@@ -108,6 +109,9 @@ model Tenant {
   pastors            Pastor[]
   ministries         Ministry[]
   churchConfig       ChurchConfig?
+  worshipSongs       WorshipSong[]
+  worshipTemplates   WorshipServiceTemplate[]
+  worshipServices    WorshipService[]
 
   @@map("tenants")
 }
@@ -936,4 +940,114 @@ model ChurchConfig {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("church_configs")
+}
+
+// --- Cultos: músicas e roteiro -------------------------------------------
+
+enum WorshipSongStatus {
+  DRAFT
+  NEEDS_TIMING
+  READY
+}
+
+enum WorshipMomentKind {
+  PRE_SERVICE
+  GENERIC
+  WORSHIP
+}
+
+model WorshipSong {
+  id                   String            @id @default(uuid()) @db.Uuid
+  tenantId             String            @map("tenant_id") @db.Uuid
+  title                String            @db.VarChar(255)
+  artist               String?           @db.VarChar(255)
+  musicalKey           String?           @map("musical_key") @db.VarChar(16)
+  bpm                  Int?
+  timeSignature        String?           @map("time_signature") @db.VarChar(8)
+  /// A letra como foi colada; serve ao "Organizar de novo".
+  rawLyrics            String            @default("") @map("raw_lyrics") @db.Text
+  /// O documento da letra: lista plana de linhas. Ver `worship-document.ts`.
+  rows                 Json              @default("[]")
+  /// Calculado pelo servidor a cada escrita (`songStatus`).
+  status               WorshipSongStatus @default(DRAFT)
+  audioUrl             String?           @map("audio_url") @db.VarChar(512)
+  audioFileName        String?           @map("audio_file_name") @db.VarChar(255)
+  audioDurationSeconds Float?            @map("audio_duration_seconds")
+  audioSizeBytes       Int?              @map("audio_size_bytes")
+  readyAt              DateTime?         @map("ready_at")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @updatedAt @map("updated_at")
+
+  tenant       Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  serviceSongs WorshipServiceSong[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, title])
+  @@map("worship_songs")
+}
+
+model WorshipServiceTemplate {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  name      String   @db.VarChar(120)
+  /// HH:MM
+  startTime String   @map("start_time") @db.VarChar(5)
+  /// [{ name, kind, durationMinutes }]
+  moments   Json     @default("[]")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant   Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  services WorshipService[]
+
+  @@index([tenantId])
+  @@map("worship_service_templates")
+}
+
+model WorshipService {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  date       DateTime @db.Date
+  /// HH:MM
+  startTime  String   @map("start_time") @db.VarChar(5)
+  name       String   @db.VarChar(120)
+  templateId String?  @map("template_id") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  tenant   Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  template WorshipServiceTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  moments  WorshipServiceMoment[]
+  songs    WorshipServiceSong[]
+
+  @@index([tenantId, date])
+  @@map("worship_services")
+}
+
+model WorshipServiceMoment {
+  id              String            @id @default(uuid()) @db.Uuid
+  serviceId       String            @map("service_id") @db.Uuid
+  name            String            @db.VarChar(120)
+  kind            WorshipMomentKind @default(GENERIC)
+  durationMinutes Int               @map("duration_minutes")
+  sortOrder       Int               @default(0) @map("sort_order")
+
+  service WorshipService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId])
+  @@map("worship_service_moments")
+}
+
+model WorshipServiceSong {
+  id        String @id @default(uuid()) @db.Uuid
+  serviceId String @map("service_id") @db.Uuid
+  songId    String @map("song_id") @db.Uuid
+  sortOrder Int    @default(0) @map("sort_order")
+
+  service WorshipService @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  song    WorshipSong    @relation(fields: [songId], references: [id], onDelete: Restrict)
+
+  @@index([serviceId])
+  @@index([songId])
+  @@map("worship_service_songs")
 }

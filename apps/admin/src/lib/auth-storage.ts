@@ -19,7 +19,8 @@ export type PermissionModule =
   | "SITE"
   | "SETTINGS"
   | "USERS"
-  | "CHURCH";
+  | "CHURCH"
+  | "WORSHIP";
 
 export type PermissionLevel = "VIEW" | "EDIT";
 
