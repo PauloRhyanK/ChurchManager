@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { randomUUID } from 'crypto';
 import { Prisma, WorshipServiceMoment, WorshipServiceTemplate } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SermonDeliveryService } from '../sermons/sermon-delivery.service';
 import {
   CreateServiceDto,
   CreateTemplateDto,
@@ -40,7 +41,9 @@ function templateMoments(template: Pick<WorshipServiceTemplate, 'moments'>): Tem
   });
 }
 
-function toServiceResponse(service: ServiceWithAll) {
+type SermonSummary = { title: string; preacherName: string; estimatedMinutes: number };
+
+function toServiceResponse(service: ServiceWithAll, sermon: SermonSummary | null = null) {
   const schedule = computeSchedule(
     service.startTime,
     service.moments.map((m: WorshipServiceMoment) => ({
@@ -61,13 +64,23 @@ function toServiceResponse(service: ServiceWithAll) {
     endsAt: schedule.endsAt,
     worshipStartsAt: schedule.worshipStartsAt,
     songs: service.songs.map((s) => ({ entryId: s.id, ...toSongSummary(s.song) })),
+    sermon: sermon ? { title: sermon.title, preacherName: sermon.preacherName, estimatedMinutes: sermon.estimatedMinutes } : null,
     updatedAt: service.updatedAt,
   };
 }
 
 @Injectable()
 export class WorshipServicesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly deliveries: SermonDeliveryService,
+  ) {}
+
+  /** A palavra do culto, lida só da cópia pública (`sermon_deliveries`). */
+  private async respond(tenantId: string, service: ServiceWithAll) {
+    const sermon = (await this.deliveries.summaries(tenantId, [service.id])).get(service.id) ?? null;
+    return toServiceResponse(service, sermon);
+  }
 
   // --- modelos ---------------------------------------------------------------
 
@@ -118,6 +131,7 @@ export class WorshipServicesService {
       take: 200,
       include: { _count: { select: { songs: true } } },
     });
+    const sermons = await this.deliveries.summaries(tenantId, services.map((s) => s.id));
     return {
       items: services.map((s) => ({
         id: s.id,
@@ -125,6 +139,7 @@ export class WorshipServicesService {
         startTime: s.startTime,
         name: s.name,
         songCount: s._count.songs,
+        hasSermon: sermons.has(s.id),
       })),
     };
   }
@@ -139,7 +154,7 @@ export class WorshipServicesService {
   }
 
   async get(tenantId: string, id: string) {
-    return toServiceResponse(await this.find(tenantId, id));
+    return this.respond(tenantId, await this.find(tenantId, id));
   }
 
   async create(tenantId: string, dto: CreateServiceDto) {
@@ -154,25 +169,29 @@ export class WorshipServicesService {
       if (!saved) throw new NotFoundException('Modelo não encontrado');
       template = { id: saved.id, name: saved.name, startTime: saved.startTime, moments: templateMoments(saved) };
     }
-    const created = await this.prisma.worshipService.create({
-      data: {
-        tenantId,
-        date: toDate(dto.date),
-        startTime: dto.startTime ?? template.startTime,
-        name: template.name,
-        templateId: template.id,
-        moments: {
-          create: template.moments.map((m, sortOrder) => ({
-            name: m.name,
-            kind: m.kind,
-            durationMinutes: m.durationMinutes,
-            sortOrder,
-          })),
+    const created = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.worshipService.create({
+        data: {
+          tenantId,
+          date: toDate(dto.date),
+          startTime: dto.startTime ?? template.startTime,
+          name: template.name,
+          templateId: template.id,
+          moments: {
+            create: template.moments.map((m, sortOrder) => ({
+              name: m.name,
+              kind: m.kind,
+              durationMinutes: m.durationMinutes,
+              sortOrder,
+            })),
+          },
         },
-      },
-      include: SERVICE_INCLUDE,
+        include: SERVICE_INCLUDE,
+      });
+      await this.deliveries.rematch(tx, tenantId, [ymd(row.date)]);
+      return row;
     });
-    return toServiceResponse(created);
+    return this.respond(tenantId, created);
   }
 
   async update(tenantId: string, id: string, dto: UpdateServiceDto) {
@@ -181,17 +200,30 @@ export class WorshipServicesService {
     if (dto.date !== undefined) data.date = toDate(dto.date);
     if (dto.startTime !== undefined) data.startTime = dto.startTime;
     if (dto.name !== undefined) data.name = dto.name;
-    const updated = await this.prisma.worshipService.update({
-      where: { id: service.id },
-      data,
-      include: SERVICE_INCLUDE,
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.worshipService.update({
+        where: { id: service.id },
+        data,
+        include: SERVICE_INCLUDE,
+      });
+      const newDate = dto.date ?? ymd(service.date);
+      const newTime = dto.startTime ?? service.startTime;
+      if (newDate !== ymd(service.date) || newTime !== service.startTime) {
+        await this.deliveries.followService(tx, tenantId, { id: row.id, date: newDate, startTime: newTime });
+        await this.deliveries.rematch(tx, tenantId, [ymd(service.date), newDate]);
+      }
+      return row;
     });
-    return toServiceResponse(updated);
+    return this.respond(tenantId, updated);
   }
 
   async remove(tenantId: string, id: string) {
     const service = await this.find(tenantId, id);
-    await this.prisma.worshipService.delete({ where: { id: service.id } });
+    await this.prisma.$transaction(async (tx) => {
+      await this.deliveries.releaseService(tx, tenantId, service.id);
+      await tx.worshipService.delete({ where: { id: service.id } });
+      await this.deliveries.rematch(tx, tenantId, [ymd(service.date)]);
+    });
     return { success: true };
   }
 
