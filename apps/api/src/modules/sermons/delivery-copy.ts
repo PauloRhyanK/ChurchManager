@@ -1,6 +1,6 @@
 import type { Prisma, SermonSlideStyle } from '@prisma/client';
 import { deliveryHasPassed } from './delivery-match';
-import { parseStoredSlides, publicSlides, type PublicSlide } from './sermon-slides';
+import { SLIDE_LAYOUTS, parseStoredSlides, publicSlides, slideFace, type PublicSlide, type SlideLayout } from './sermon-slides';
 
 const ymd = (date: Date) => date.toISOString().slice(0, 10);
 const PUBLIC_KINDS: PublicSlide['kind'][] = ['TITLE', 'VERSE', 'POINT', 'SUMMARY'];
@@ -40,7 +40,12 @@ export async function syncDeliveryCopy(
   return true;
 }
 
-/** Lê os slides de um envio devolvendo só `kind`, `text` e `reference`; o que estiver fora do formato cai. */
+const textOrNull = (v: unknown): v is string | null => v === null || typeof v === 'string';
+
+/**
+ * Lê os slides de um envio: `kind`, `text` e os campos de `slideFace`; o que estiver fora do formato cai.
+ * Linha gravada antes dos modelos (só `kind`, `text` e `reference`) é completada com `slideFace`.
+ */
 export function readDeliverySlides(value: unknown): PublicSlide[] {
   if (!Array.isArray(value)) return [];
   const out: PublicSlide[] = [];
@@ -48,8 +53,23 @@ export function readDeliverySlides(value: unknown): PublicSlide[] {
     if (typeof v !== 'object' || v === null) continue;
     const o = v as Record<string, unknown>;
     if (!PUBLIC_KINDS.includes(o.kind as PublicSlide['kind']) || typeof o.text !== 'string') continue;
-    if (!(o.reference === null || typeof o.reference === 'string')) continue;
-    out.push({ kind: o.kind as PublicSlide['kind'], text: o.text, reference: o.reference });
+    if (!textOrNull(o.reference)) continue;
+    const kind = o.kind as PublicSlide['kind'];
+    const hasFace =
+      SLIDE_LAYOUTS.includes(o.layout as SlideLayout) && typeof o.title === 'string' && textOrNull(o.subtitle) && textOrNull(o.verse);
+    out.push(
+      hasFace
+        ? {
+            kind,
+            text: o.text,
+            layout: o.layout as SlideLayout,
+            title: o.title as string,
+            subtitle: o.subtitle as string | null,
+            verse: o.verse as string | null,
+            reference: o.reference,
+          }
+        : { kind, text: o.text, ...slideFace({ kind, text: o.text, reference: o.reference }) },
+    );
   }
   return out;
 }

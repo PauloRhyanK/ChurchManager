@@ -513,7 +513,8 @@ test('send copia os slides públicos atuais e o estilo para o envio, sem PRIVATE
   assert.equal(deliveries[0].slideStyle, 'BACKGROUND');
   assert.deepEqual(deliveries[0].slides.map((x: Row) => x.kind), ['TITLE', 'VERSE', 'POINT', 'VERSE']);
   assert.equal(JSON.stringify(deliveries[0].slides).includes('Dois minutos'), false);
-  for (const x of deliveries[0].slides) assert.deepEqual(Object.keys(x).sort(), ['kind', 'reference', 'text']);
+  for (const x of deliveries[0].slides) assert.deepEqual(Object.keys(x).sort(), ['kind', 'layout', 'reference', 'subtitle', 'text', 'title', 'verse']);
+  assert.equal(deliveries[0].slides[1].reference, 'João 8:12 · BLIVRE');
 });
 
 test('reenviar (mover) recopia os slides atuais', async () => {
@@ -536,7 +537,7 @@ test('summaries conta os slides do envio', async () => {
   assert.equal((await service.summaries(TENANT, [SV_B])).get(SV_B)!.slideCount, 2);
 });
 
-test('slidesForService lê só o envio do tenant: kind, text e reference; mySermonId só para o autor', async () => {
+test('slidesForService lê só o envio do tenant (linha antiga completada com slideFace); mySermonId só para o autor', async () => {
   const slides = [
     { kind: 'VERSE', text: 'Eu sou a luz', reference: 'João 8:12' },
     { kind: 'PRIVATE', text: 'segredo', reference: null },
@@ -552,8 +553,8 @@ test('slidesForService lê só o envio do tenant: kind, text e reference; mySerm
     preacherName: 'Paulo',
     slideStyle: 'BACKGROUND',
     slides: [
-      { kind: 'VERSE', text: 'Eu sou a luz', reference: 'João 8:12' },
-      { kind: 'POINT', text: 'A luz chama', reference: null },
+      { kind: 'VERSE', text: 'Eu sou a luz', layout: 'M03', title: 'João 8:12', subtitle: null, verse: 'Eu sou a luz', reference: 'João 8:12' },
+      { kind: 'POINT', text: 'A luz chama', layout: 'M01', title: 'A luz chama', subtitle: null, verse: null, reference: null },
     ],
     mySermonId: S1,
   });
