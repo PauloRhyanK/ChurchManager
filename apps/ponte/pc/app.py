@@ -2746,6 +2746,17 @@ def _louvor_lembrado():
     return dados.get("musica") if dados.get("dia") == time.strftime("%Y-%m-%d") else None
 
 
+def _lembrar_se_ainda_e_louvor(ao_vivo):
+    """A musica em que o louvor estava, se a ponte reiniciou NO MEIO dele. Se
+    o culto ja esta em outro momento, nao ha o que retomar."""
+    with _tranca_ordem:
+        momentos, atual = _ordem["momentos"], _ordem["atual"]
+        momento = momentos[atual] if atual is not None and atual < len(momentos) else None
+    if momento not in ao_vivo.momentos_do_louvor():
+        return None
+    return _louvor_lembrado()
+
+
 def _slides_do_holyrics(identificador):
     """O texto dos slides de uma musica. None se o Holyrics nao respondeu."""
     cliente = _contexto.get("holyrics_saude")
@@ -2818,7 +2829,7 @@ def _montar_ao_vivo():
     _pecas["condutor"] = mod_condutor.Condutor(
         _pecas["relogio"], _pecas["repertorio"].musicas, _musica_no_telao, _slide_no_telao,
         ao_vivo.luz_da_parte, lambda titulo, ok, detalhe: _anotar(titulo, ok, detalhe, "local"),
-        lembrado=_louvor_lembrado(), guardar=_guardar_louvor)
+        lembrado=_lembrar_se_ainda_e_louvor(ao_vivo), guardar=_guardar_louvor)
     _pecas["condutor"].comecar()
 
     if _contexto.get("obs") is not None:

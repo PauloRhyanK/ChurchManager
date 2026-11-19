@@ -985,3 +985,67 @@ web:
 #   max_falhas: 3
 #   janela: ["18:30", "22:30"]   # se quiser restringir ao horário de culto
 #   log: 'C:\Program Files\Sunshine\config\sunshine.log'
+
+
+# ===========================================================================
+#  PAINEL DO CULTO AO VIVO (opcional; sem nada disto ele já funciona)
+#
+#  Tudo aqui é ajuste. Vão soltos na raiz deste arquivo, menos os dois
+#  marcados com "dentro de obs:".
+# ===========================================================================
+#
+# HORÁRIOS. A hora do culto vem do formulário do guia de chegada. Os minutos
+# de cada momento já vêm de fábrica para os momentos deste exemplo (pré-culto
+# 15, abertura 5, louvor 17, avisos 5, ofertório 5, pregação 40, encerrar 5).
+# Para mudar, ou para um momento novo, escreva na própria cue:
+#
+#   - id: louvor
+#     minutos: 25
+#   - id: ensaio
+#     minutos: 30
+#     antes: true        # acontece antes da hora do culto: conta para trás
+#
+# CLIMAS DE LUZ. Os cinco nomes são fixos; o que cada um acende é desta
+# igreja: uma cena de luz e um movimento que já existem. De fábrica:
+#
+# climas:
+#   contemplativo: { cena: oracao,     modo: respiro }
+#   adoracao:      { cena: louvor,     modo: lento }
+#   crescendo:     { cena: louvor,     modo: onda }
+#   celebracao:    { cena: celebracao, modo: animado }
+#   explosao:      { cena: celebracao, modo: batida }
+#
+# MÚSICAS DE HOJE. Quais músicas de `louvores` entram no culto, e em que
+# ordem. Sem esta linha, entram todas.
+#
+# louvor_do_dia: [avante, sou_grato]
+#
+# O TEMPO DA MÚSICA. Quem diz à ponte em que segundo a música está:
+#   navegador    uma tela tocando o áudio (só para ensaio); é o de fábrica
+#   cronometro   o operador toca em "Começou" e a ponte conta sozinha
+#   reaper       o PC do som avisa (ainda não existe quem avise)
+# `adiantar_ms` adianta a letra, para compensar o atraso do telão.
+#
+# relogio:
+#   fonte: cronometro
+#   adiantar_ms: 0
+#
+# A IMAGEM DA TRANSMISSÃO no painel (só na igreja; nunca vai para a web).
+# Se o notebook da transmissão sentir, aumente o intervalo ou desligue.
+#
+# painel:
+#   imagem: { ativo: true, intervalo: 1.0, largura: 480 }
+#   momento_do_louvor: [louvor]     # em que momentos o centro da tela é o louvor
+#
+# dentro de obs: quais entradas de áudio do OBS viram barra no painel, e com
+# que nome. `palavra: true` marca o microfone de quem prega. Sem esta lista,
+# aparecem as quatro primeiras, com o nome que têm no OBS.
+#
+#   audios:
+#     - { entrada: "Mesa de som", nome: "Som do louvor" }
+#     - { entrada: "Microfone",   nome: "Microfone", palavra: true }
+#
+# dentro de obs: quais cenas viram botão no painel, e em que ordem. Sem esta
+# lista, todas.
+#
+#   cenas_do_painel: ["1. Abertura", "2. Louvor", "3. Pregação", "4. Ofertório"]

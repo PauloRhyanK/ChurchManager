@@ -193,9 +193,125 @@ arquivo solto na pasta da ponte. Agora só sai o que uma atualização anterior 
   - a confirmação pelas portas UDP 47998-48010 não foi feita: só o registro decide;
   - os cinco passos do teste com a TV, da seção 7 da sua especificação.
 
+### 12. Painel do culto ao vivo (19/11/2026)
+
+Especificação: `docs/superpowers/specs/2026-11-19-ponte-painel-ao-vivo-design.md`, na
+raiz do repositório. Feito num Mac, com OBS e Holyrics de mentira.
+
+**O que mudou**
+
+- **A tela de `/` agora é `ao-vivo.html`** (mais `ao-vivo.css` e `ao-vivo.js`): tema
+  escuro, ordem do culto com horários e atraso, equipamentos, louvor no centro,
+  transmissão à direita. **`painel.html` não foi tocado** e continua em
+  `/painel-antigo` (há um atalho no menu Mais da tela nova). Se a tela nova der
+  problema num culto, é para lá que se vai.
+- **`/api/painel` só cresceu.** Todas as chaves antigas continuam. As novas:
+  `versao_do_painel: 2`, `agenda`, `equipamentos`, `internet`, `louvor`, `imagem`,
+  `conteudo_versao`, e dentro de `transmissao`: `cenas`, `audios`, `numeros`; dentro de
+  `luz`: `climas`, `seguindo`.
+- **Quem conduz o louvor agora é a ponte, não a aba do navegador.** `ponte/condutor.py`
+  roda no PC principal e é o único que passa letra e troca luz durante uma música. A
+  tela só mostra e pede. A `/louvor` continua igual e serve para **marcar os tempos**;
+  no culto usa-se uma ou outra, não as duas.
+- **Ações novas** (lista fechada, em `ponte/painel_ao_vivo.py`): `cena_transmissao`,
+  `clima`, `luz_seguir`, `louvor_assumir`, `louvor_devolver`, `louvor_segurar`,
+  `louvor_slide`, `louvor_parte`, `louvor_repetir_refrao`, `louvor_musica`,
+  `louvor_comecou`, `louvor_acertar`, `imagem`. **Pela web só `cena_transmissao` e
+  `clima`**; passar slide pela web não existe.
+- **Clicar numa cena da transmissão põe no ar na hora** (`SetCurrentProgramScene`), sem
+  o passo de preparar. O botão "Pôr no ar" continua aparecendo quando o OBS tem uma cena
+  preparada diferente.
+- **Imagem do OBS no painel**: `GetSourceScreenshot`, 480 px, no máximo uma por segundo
+  e só com alguém olhando (`ponte/obs_imagem.py`, rota `GET /api/painel/imagem`).
+  **Não vai para a web.** Desliga no menu Mais.
+- **Nível de áudio**: uma conexão separada com o OBS, só para o evento
+  `InputVolumeMeters` (`ponte/obs_ouvinte.py`). O cliente das cues continua sem eventos.
+- **Números**: tempo de gravação e espaço no disco (`GetRecordStatus`, `GetStats`),
+  qualidade do envio pelos quadros perdidos dos últimos 30 s (`ponte/saude_envio.py`),
+  e, na consulta de 2 minutos ao YouTube, quantos assistem e como o YouTube diz que
+  está recebendo.
+- **Horários e atraso** (`ponte/agenda.py`): a hora do culto é a do formulário do guia
+  de chegada; os minutos de cada momento vêm de fábrica para os ids do
+  `config.exemplo.yaml` e podem ser escritos na cue (`minutos:`, `antes: true`). A ponte
+  passou a guardar a hora de entrada em cada momento, em `_ordem_atual.json`.
+- **Climas de luz**: cinco nomes fixos que apontam para uma cena e um movimento que já
+  existem (bloco `climas` do config; há valores de fábrica).
+- **O tempo da música** (`ponte/relogio.py`, rota `POST /api/relogio`): hoje a fonte é
+  o áudio tocando num navegador (ensaio) ou o botão **"Começou"** (fonte `cronometro`).
+  O Reaper vai entrar como mais uma fonte, pela mesma rota.
+- **Espelho**: mede quanto cada volta leva (é daí que sai "Internet lenta") e manda a
+  letra das músicas do dia só quando ela muda.
+- **Sair do momento do louvor encerra a música**: o condutor larga letra e luz.
+- **`PONTE_SIMULAR=1`** no ambiente troca OBS e Holyrics por versões de mentira
+  (`ponte/simulados.py`) e a tela mostra a faixa "SIMULAÇÃO". Só pelo ambiente, nunca
+  pelo config. Para ver o painel sem equipamento:
+  `PONTE_SIMULAR=1 PONTE_CONFIG=config.exemplo.yaml PONTE_PORTA=8711 python app.py`.
+- Chaves novas e opcionais do `config.yaml`: ver o fim do `config.exemplo.yaml`
+  ("PAINEL DO CULTO AO VIVO").
+- Arquivos novos em `PACOTE`: `ao-vivo.html`, `ao-vivo.css`, `ao-vivo.js`. Arquivo de
+  estado novo: `_louvor_atual.json` (fica fora do Git e do pacote, como os outros
+  `_*.json`). Nenhuma dependência nova, nenhum `.ps1` alterado.
+
+**O que não foi construído** (está na especificação, etapa C): a tela da palavra, o
+celular do pregador, os versículos e a leitura das músicas pelo módulo Cultos. Na hora
+da palavra o centro da tela mostra o momento, o tempo e o que o Holyrics diz que está
+no telão.
+
+**Testes novos**, todos sem equipamento: `_testar_agenda.py`, `_testar_saude_envio.py`,
+`_testar_audio_obs.py`, `_testar_relogio.py`, `_testar_repertorio.py`,
+`_testar_condutor.py`, `_testar_painel_ao_vivo.py` (este sobe o `app.py` e a versão web
+dentro do teste).
+
+**O que só dá para conferir aí, e como**
+
+1. **A imagem pesa no notebook?** Num dia sem culto, com a transmissão ligada para um
+   destino de teste: 10 minutos com o painel aberto e a imagem ligada, 10 com ela
+   desligada (menu Mais). Comparar "Quadros perdidos" nas estatísticas do OBS. Se pesar,
+   aumentar `painel.imagem.intervalo` ou desligar.
+2. **A imagem chega?** A chamada é a mesma do guia de chegada, em tamanho menor. Conferir
+   se aparece e se troca quando a cena troca.
+3. **O nível de áudio chega?** As barras aparecem em "Transmissão". Se não aparecerem em
+   15 segundos: o evento `InputVolumeMeters` não está chegando pela rede. Anotar a versão
+   do obs-websocket. Conferir os **nomes reais das entradas** e escrevê-los em
+   `obs.audios`. Conferir se "bom" e "estourando" batem com o que se ouve; os limites
+   estão em `palavra()` de `ponte/obs_ouvinte.py`. **Não sei se uma entrada no mudo vem
+   com nível zero**; se vier com nível, "fechado" não vai aparecer para ela.
+4. **Trocar de cena pelo painel**, com o OBS em modo estúdio e fora dele. A ação usa
+   `SetCurrentProgramScene`; em modo estúdio isso troca o programa direto, sem passar
+   pela prévia.
+5. **Os números**: "Gravação" andando, "Espaço no disco" (é o do disco onde o OBS grava;
+   conferir com o Explorer), "Qualidade" numa transmissão de teste (derrubar a internet
+   por 20 segundos deve dar "Oscilando" ou "Ruim" e depois voltar a "Boa"), e
+   "Assistindo" com alguém assistindo de verdade.
+6. **A ordem das cenas** nos botões. O código inverte a lista do `GetSceneList` para
+   ficar como no OBS; se sair de trás para a frente, é essa linha em `_ler_estado_obs`.
+7. **Os cinco climas no refletor**, com alguém olhando o palco: cada um parece o nome
+   que tem? Ajustar no bloco `climas`.
+8. **O louvor com o Holyrics de verdade**:
+   - `GetSong` devolve o texto dos slides com o token da igreja? (A `/louvor` já usa
+     essa ação, então deve.) Sem isso a tela mostra "slide 3 de 34" no lugar da letra.
+   - Escolher uma música no painel põe a letra no telão (`ShowLyrics`) no primeiro slide?
+   - Na tela manual, Próximo e Anterior chegam ao telão? Quanto demora entre o toque e a
+     letra? Esse atraso vai em `relogio.adiantar_ms`.
+   - Com `relogio.fonte: cronometro`, marcar uma música na `/louvor`, tocar o mesmo áudio
+     no som, apertar "Começou" na primeira batida e ver se a letra acompanha até o fim.
+9. **Duas pessoas**: o PC e um celular na rede da igreja, um assume, o outro passa slide.
+   A faixa amarela tem que dizer o nome certo nos dois.
+10. **A tela** no monitor do PC do telão e num celular.
+11. **A atualização em dois tempos**: PC principal novo com a VPS ainda antiga (a web
+    tem que continuar mostrando o painel antigo, funcionando), e depois a VPS nova.
+12. **Internet**: com a igreja ligada à web, tirar o cabo do roteador: em até 20
+    segundos a luz "Internet" fica vermelha e o "Aconteceu agora" anota; o resto do
+    painel continua.
+
 ## O que NÃO foi testado
 
-Tudo foi verificado num Mac, com OBS, Holyrics e YouTube desligados e a luz no driver
+Do painel do culto ao vivo (seção 12): nada rodou contra OBS, Holyrics, YouTube ou
+refletor de verdade, nem em Windows. O que foi visto no Mac: os testes novos, a tela
+no navegador em tela larga e em 375 px contra os simuladores, a versão web local
+recebendo o retrato pelo espelho, e o painel antigo funcionando contra o código novo.
+
+O restante, de 12/11: tudo foi verificado num Mac, com OBS, Holyrics e YouTube desligados e a luz no driver
 `agente`. Nunca rodou em Windows nem com equipamento:
 
 - `instalar-do-zero.ps1` e o `instalar-ponte.bat` gerado pela web;

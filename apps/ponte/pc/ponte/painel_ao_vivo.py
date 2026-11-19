@@ -110,7 +110,7 @@ class PainelAoVivo:
         if luz.get("cena"):
             self.aplicar_luz(luz["cena"], luz.get("modo"))
 
-    def _momentos_do_louvor(self):
+    def momentos_do_louvor(self):
         config = self._dep("config") or {}
         momentos = (config.get("painel") or {}).get("momento_do_louvor") or ["louvor"]
         if not isinstance(momentos, (list, tuple)):
@@ -126,7 +126,7 @@ class PainelAoVivo:
         condutor = self._dep("condutor")
         if condutor is None or not condutor.tem_musica():
             return
-        if str(momento_id) in self._momentos_do_louvor():
+        if str(momento_id) in self.momentos_do_louvor():
             return
         condutor.encerrar()
         anotar = self._d.get("anotar")
@@ -276,7 +276,7 @@ class PainelAoVivo:
             base["luz"]["climas"] = self._climas(base["luz"])
             base["luz"]["seguindo"] = bool(louvor and louvor["musica"] and louvor["luz"] == "seguindo")
         if louvor is not None:
-            louvor["no_momento"] = ordem.get("atual_id") in self._momentos_do_louvor()
+            louvor["no_momento"] = ordem.get("atual_id") in self.momentos_do_louvor()
         base["louvor"] = louvor
         repertorio = self._dep("repertorio")
         base["conteudo_versao"] = repertorio.versao() if repertorio is not None else None

@@ -308,6 +308,8 @@ A cada volta, se `letra == sozinho` e não está `segurando`: acha o slide do se
 
 **Próxima música.** Encerra a atual, põe a seguinte no telão (`ShowLyrics`) no primeiro slide, e volta letra e luz para sozinho/seguindo se ela for pronta. Se a atual ainda está tocando, pede confirmação. Tocar numa música da faixa faz o mesmo, para aquela música. Quando o áudio chega ao fim, a ponte **não** passa sozinha: a faixa destaca a próxima e espera o toque.
 
+**Sair do momento do louvor** (o operador vai para Avisos, por exemplo) encerra a música: o condutor larga a letra e a luz, e isso fica anotado. Sem essa regra, uma música que ficou contando o tempo trocaria a luz no meio da pregação. Quais momentos contam como louvor: `painel.momento_do_louvor` no config (de fábrica, `louvor`). Escolher uma música fora desse momento continua possível (um cântico no encerramento): o centro da tela vira o louvor enquanto houver música escolhida.
+
 **Música "à mão"** (sem tempo marcado). Não tem Sozinho, Segurar nem Devolver. O centro já abre na tela manual, com a faixa "Esta música é à mão" no lugar de "Você está no comando", e sem linha do tempo. A luz fica na mão; os atalhos de parte aplicam o clima da parte, se houver. Na faixa das músicas ela aparece como "Depois · à mão".
 
 #### Duas pessoas e a web

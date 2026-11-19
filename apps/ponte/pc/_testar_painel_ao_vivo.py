@@ -189,6 +189,11 @@ ponte._pecas["relogio"].avisar("navegador", "avante", 11.0, True)
 ponte._pecas["condutor"].passo()
 conferir("depois disso o relogio nao mexe mais na luz", motor.atual() == luzes)
 
+conferir("ponte reiniciada fora do louvor: nao retoma a musica", ponte._lembrar_se_ainda_e_louvor(ponte._ao_vivo["valor"]) is None)
+ponte._guardar_louvor("avante")
+acao({"tipo": "ir", "momento": "louvor"})
+conferir("reiniciada no meio do louvor: retoma", ponte._lembrar_se_ainda_e_louvor(ponte._ao_vivo["valor"]) == "avante")
+
 print("\nImagem do OBS")
 
 

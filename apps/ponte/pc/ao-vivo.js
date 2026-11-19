@@ -376,7 +376,7 @@ function htmlManual(d) {
       (l.quem ? ' Quem tocou por último: ' + esc(l.quem) + '.' : '') + '</span>';
   } else {
     const meu = eu && l.quem === eu;
-    h += '<span class="quem">' + (meu ? 'Você está no comando' : esc(l.quem || 'Alguém') + ' está no comando') + '</span>';
+    h += '<span class="quem">' + (meu ? 'Você está no comando' : l.quem ? esc(l.quem) + ' está no comando' : 'A letra está na mão') + '</span>';
     if (pode) {
       if (!meu) h += botao('Assumir', {tipo: 'louvor_assumir'}, {classe: 'bt'});
       h += botao('Devolver', {tipo: 'louvor_devolver'}, {classe: 'bt claro', desligado: !l.pode_devolver, titulo: l.motivo_devolver || ''});

@@ -82,6 +82,13 @@ dela, `configurar-este-pc.bat` pergunta o papel da máquina e faz o resto. Detal
   (`/estudio`), com animação por luz e limites de velocidade no motor. **Nada disso foi
   visto com refletor, OBS ou Holyrics de verdade.** As animações do estúdio só chegam à
   igreja depois que o PC do som for atualizado; até lá aparecem só na prévia da tela.
+- **Feito e testado só localmente (19/11/2026):** o painel do culto ao vivo
+  (`ao-vivo.html`, que passa a ser a tela de `/`): ordem com horários e atraso,
+  equipamentos, imagem e números da transmissão, climas de luz, e o louvor conduzido
+  pela ponte (Sozinho, Assumir, Segurar, Repetir o refrão). O painel anterior continua
+  em `/painel-antigo`. **Nunca rodou com OBS, Holyrics ou refletor de verdade**; o que
+  conferir na igreja está na seção 12 de `docs/PARA-A-SESSAO-DO-PC.md`. A tela da
+  palavra e o celular do pregador estão especificados e ainda não construídos.
 - **Feito e testado só localmente:** instalador `configurar-este-pc`; o cofre da versão
   web e o envio da configuração pelo PC principal.
 - **Escrito e ainda não testado num Windows:** `instalar-do-zero.ps1`, o instalador de
