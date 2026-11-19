@@ -1,0 +1,4 @@
+# Arquivos de fonte comercial não entram no repositório (ver LEIA-ME.md).
+*
+!.gitignore
+!LEIA-ME.md

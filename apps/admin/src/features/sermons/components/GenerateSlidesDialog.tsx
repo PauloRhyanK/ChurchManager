@@ -9,9 +9,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { cn } from "@/lib/utils";
 import { generateSlides, getSermonAi, type Sermon } from "../api/sermons-api";
 import type { SermonDoc } from "../lib/document";
+import { SLIDE_THEMES } from "../lib/slide-identity";
 import { slideErrorMessage } from "../lib/slide-errors";
 import { countSlides, type SlideMode, type SlideStyle } from "../lib/slides";
-import { SLIDE_BACKGROUNDS } from "./SlidePreview";
 
 type Choice = SlideMode;
 
@@ -21,10 +21,7 @@ const FORMATS: { mode: Choice; name: string; text: string }[] = [
   { mode: "FULL", name: "Slides completos", text: "Cada parte resumida numa frase por IA" },
 ];
 
-const STYLES: { style: SlideStyle; name: string }[] = [
-  { style: "MINIMAL", name: "Minimalista" },
-  { style: "BACKGROUND", name: "Com fundo" },
-];
+const STYLES: SlideStyle[] = ["MINIMAL", "BACKGROUND"];
 
 const AI_NOTICE = "O texto da palavra é enviado ao provedor de IA para gerar os resumos. As anotações “Só para mim” nunca são enviadas.";
 const GENERATE_ERROR = "Não foi possível gerar os slides.";
@@ -178,8 +175,8 @@ export function GenerateSlidesDialog({
         >
           {STYLES.map((s) => (
             <RadioGroupPrimitive.Item
-              key={s.style}
-              value={s.style}
+              key={s}
+              value={s}
               className={cn(
                 "flex flex-col gap-2 rounded-xl border-2 p-2 text-sm font-semibold",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
@@ -189,11 +186,11 @@ export function GenerateSlidesDialog({
               <span
                 aria-hidden="true"
                 className="flex aspect-video w-full items-center justify-center rounded-md text-xs"
-                style={{ backgroundColor: SLIDE_BACKGROUNDS[s.style], color: "#F5F6FA" }}
+                style={{ backgroundColor: SLIDE_THEMES[s].background, color: SLIDE_THEMES[s].color }}
               >
                 Aa
               </span>
-              {s.name}
+              {SLIDE_THEMES[s].name}
             </RadioGroupPrimitive.Item>
           ))}
         </RadioGroupPrimitive.Root>
