@@ -159,13 +159,19 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
   }
 
   const duplicate = useMutation({
-    mutationFn: async () => {
-      await autosave.flush();
-      return duplicateSermon(sermon.id);
-    },
+    mutationFn: () => duplicateSermon(sermon.id),
     onSuccess: (copy) => navigate(`${LIST_PATH}/${copy.id}`),
     onError: (error) => toast.error(getApiErrorMessage(error)),
   });
+  /** Só duplica o que o servidor já tem: com texto sem salvar, fica na página. */
+  async function handleDuplicate() {
+    await autosave.flush();
+    if (autosave.isDirty()) {
+      toast.error("Salve a palavra antes de duplicar.");
+      return;
+    }
+    duplicate.mutate();
+  }
   const remove = useMutation({
     mutationFn: () => deleteSermon(sermon.id),
     onSuccess: () => navigate(LIST_PATH),
@@ -222,7 +228,7 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => duplicate.mutate()}>Duplicar</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={handleDuplicate}>Duplicar</DropdownMenuItem>
                   <DropdownMenuItem className="text-destructive" onSelect={() => setDeleteOpen(true)}>
                     Apagar
                   </DropdownMenuItem>

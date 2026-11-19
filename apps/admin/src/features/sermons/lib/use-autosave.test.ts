@@ -103,4 +103,62 @@ describe("useAutosave", () => {
     await act(() => vi.advanceTimersByTimeAsync(5000));
     expect(save).toHaveBeenCalledTimes(1);
   });
+
+  it("unmount com mudança pendente envia a mudança", async () => {
+    const save = vi.fn().mockResolvedValue({ revision: 4 });
+    const { result, unmount } = setup(save);
+    act(() => result.current.setDocument(docA));
+    unmount();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith({ document: docA, baseRevision: 3 });
+  });
+
+  it("unmount em conflito não envia", async () => {
+    const save = vi.fn().mockRejectedValue({ response: { status: 409 } });
+    const { result, unmount } = setup(save);
+    act(() => result.current.setDocument(docA));
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    unmount();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it("mudar initialRevision com mudança pendente não descarta nem troca a revisão", async () => {
+    const save = vi.fn().mockResolvedValue({ revision: 4 });
+    const { result, rerender } = renderHook(
+      ({ rev }) => useAutosave({ sermonId: "s1", initialRevision: rev, save, delayMs: 1500 }),
+      { initialProps: { rev: 3 } },
+    );
+    act(() => result.current.setDocument(docA));
+    rerender({ rev: 9 });
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    expect(save).toHaveBeenCalledWith({ document: docA, baseRevision: 3 });
+  });
+
+  it("save que lança de forma síncrona não trava as próximas tentativas", async () => {
+    const save = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw new Error("boom");
+      })
+      .mockResolvedValueOnce({ revision: 4 });
+    const { result } = setup(save);
+    act(() => result.current.setDocument(docA));
+    await act(() => vi.advanceTimersByTimeAsync(1500));
+    expect(result.current.state).toBe("error");
+    act(() => result.current.retry());
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(result.current.state).toBe("saved");
+  });
+
+  it("erro HTTP 400 vira error, sem nova tentativa automática", async () => {
+    const save = vi.fn().mockRejectedValue({ response: { status: 400 } });
+    const { result } = setup(save);
+    act(() => result.current.setDocument(docA));
+    await act(() => vi.advanceTimersByTimeAsync(20000));
+    expect(result.current.state).toBe("error");
+    expect(save).toHaveBeenCalledTimes(1);
+  });
 });

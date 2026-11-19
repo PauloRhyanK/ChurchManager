@@ -34,14 +34,21 @@ export function useAutosave({ sermonId, initialRevision, save, delayMs = DEFAULT
   const saveRef = useRef(save);
   saveRef.current = save;
 
-  // Outra palavra (ou recarregada pelo servidor): recomeça do zero.
+  const mounted = useRef(true);
+  const update = (next: SaveState) => {
+    if (mounted.current) setState(next);
+  };
+
+  // Outra palavra: recomeça do zero. A revisão vem só daqui; depois quem manda é a devolvida pelo servidor
+  // (recarregar remonta o editor com `key`, então o hook nasce de novo).
   useEffect(() => {
     revision.current = initialRevision;
     pending.current = {};
     failed.current = false;
     conflict.current = false;
     setState("idle");
-  }, [sermonId, initialRevision]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sermonId]);
 
   const hasPending = () => pending.current.title !== undefined || pending.current.document !== undefined;
 
@@ -57,17 +64,17 @@ export function useAutosave({ sermonId, initialRevision, save, delayMs = DEFAULT
       body.baseRevision = revision.current;
     }
     failed.current = false;
-    setState("saving");
+    update("saving");
     const task = (async () => {
       try {
-        const result = await saveRef.current(body);
+        const result = await Promise.resolve().then(() => saveRef.current(body));
         revision.current = result.revision;
       } catch (error) {
         // O que não foi salvo volta para a fila, sem passar por cima do que mudou depois.
         pending.current = { ...taken, ...pending.current };
         if (isConflict(error)) conflict.current = true;
         else failed.current = true;
-        setState(conflict.current ? "conflict" : "error");
+        update(conflict.current ? "conflict" : "error");
         return;
       } finally {
         inFlight.current = null;
@@ -75,9 +82,9 @@ export function useAutosave({ sermonId, initialRevision, save, delayMs = DEFAULT
       if (hasPending()) {
         // Mudou durante o salvamento: se o prazo já passou, salva já; senão o timer pendente cuida.
         if (!timer.current) await run();
-        else setState("saving");
+        else update("saving");
       } else {
-        setState("saved");
+        update("saved");
       }
     })();
     inFlight.current = task;
@@ -127,6 +134,7 @@ export function useAutosave({ sermonId, initialRevision, save, delayMs = DEFAULT
   }, [run]);
 
   useEffect(() => {
+    mounted.current = true;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       if (!hasPending() && !inFlight.current) return;
       e.preventDefault();
@@ -136,7 +144,13 @@ export function useAutosave({ sermonId, initialRevision, save, delayMs = DEFAULT
     return () => {
       window.removeEventListener("beforeunload", onBeforeUnload);
       if (timer.current) clearTimeout(timer.current);
+      timer.current = null;
+      mounted.current = false;
+      // Saiu da página com mudança pendente: manda uma vez, sem mexer em estado (se já há um salvamento
+      // em andamento, ele mesmo manda o resto quando terminar, pois o timer foi limpo).
+      if (!conflict.current && hasPending()) void run();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /** Há algo que o servidor ainda não confirmou. */
