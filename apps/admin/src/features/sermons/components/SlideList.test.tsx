@@ -1,18 +1,18 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { SlideItem } from "../lib/slides";
 import { SlideList } from "./SlideList";
 
-const NEW_FIELDS = { subtitleEdited: false, heading: null, subtitle: null, version: null } as const;
+const NEW_FIELDS = { heading: null, items: null, start: null, version: null } as const;
 const ITEMS: SlideItem[] = [
-  { id: "title", kind: "TITLE", sourceBlockId: null, text: "Luz que não se apaga", reference: null, included: true, edited: false, ...NEW_FIELDS, layout: "M01" },
-  { id: "v1:0", kind: "VERSE", sourceBlockId: "v1", text: "Eu sou a luz do mundo", reference: "João 8:12", included: true, edited: false, ...NEW_FIELDS, layout: "M03", heading: "Luz", version: "BLIVRE" },
-  { id: "p1:0", kind: "POINT", sourceBlockId: "p1", text: "A luz chama", reference: null, included: false, edited: false, ...NEW_FIELDS, layout: "M01" },
-  { id: "n1:0", kind: "PRIVATE", sourceBlockId: "n1", text: "História da lanterna", reference: null, included: false, edited: false, ...NEW_FIELDS, layout: "M01" },
+  { id: "title", kind: "TITLE", sourceBlockId: null, text: "Luz que não se apaga", reference: null, included: true, edited: false, ...NEW_FIELDS, layout: "TITLE" },
+  { id: "v1:0", kind: "VERSE", sourceBlockId: "v1", text: "Eu sou a luz do mundo", reference: "João 8:12", included: true, edited: false, ...NEW_FIELDS, layout: "VERSE", heading: "Luz", version: "BLIVRE" },
+  { id: "p1:0", kind: "POINT", sourceBlockId: "p1", text: "A luz chama", reference: null, included: false, edited: false, ...NEW_FIELDS, layout: "TITLE" },
+  { id: "n1:0", kind: "PRIVATE", sourceBlockId: "n1", text: "História da lanterna", reference: null, included: false, edited: false, ...NEW_FIELDS, layout: "TITLE" },
 ];
 
 function renderList(readOnly = false, items: SlideItem[] = ITEMS) {
-  const handlers = { onToggle: vi.fn(), onMove: vi.fn(), onEdit: vi.fn(), onSubtitle: vi.fn() };
+  const handlers = { onToggle: vi.fn(), onMove: vi.fn(), onEdit: vi.fn() };
   render(<SlideList items={items} readOnly={readOnly} {...handlers} />);
   return handlers;
 }
@@ -22,11 +22,11 @@ const row = (text: string | RegExp) => screen.getByText(text).closest("li") as H
 describe("SlideList", () => {
   it("mostra tipo, texto e a referência do versículo", () => {
     renderList();
-    expect(within(row("Luz que não se apaga")).getByText("Título")).toBeInTheDocument();
+    expect(within(row("Luz que não se apaga")).getByText("Capa")).toBeInTheDocument();
     expect(within(row("João 8:12")).getByText("Versículo")).toBeInTheDocument();
     expect(within(row("João 8:12")).getByText("Eu sou a luz do mundo")).toBeInTheDocument();
     expect(within(row("A luz chama")).getByText("Ponto")).toBeInTheDocument();
-    expect(within(row("História da lanterna")).getByText("Só você")).toBeInTheDocument();
+    expect(within(row("História da lanterna")).getByText("Só para mim")).toBeInTheDocument();
   });
 
   it("marcar e desmarcar avisa com o id", () => {
@@ -52,7 +52,7 @@ describe("SlideList", () => {
     const { onEdit } = renderList();
     fireEvent.click(screen.getByRole("button", { name: "A luz chama" }));
     const input = screen.getByLabelText("Texto do slide");
-    expect(input).toHaveAttribute("maxLength", "75");
+    expect(input).toHaveAttribute("maxLength", "120");
     fireEvent.change(input, { target: { value: "A luz convida" } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onEdit).toHaveBeenCalledWith("p1:0", "A luz convida");
@@ -95,83 +95,24 @@ describe("SlideList", () => {
     expect(screen.queryByRole("button", { name: "A luz chama" })).not.toBeInTheDocument();
   });
 
-  describe("resumos", () => {
-    const SUMMARY: SlideItem = {
-      id: "i1:0", kind: "SUMMARY", sourceBlockId: "i1", text: "A lanterna mostra o caminho", reference: null, included: true, edited: false,
-      ...NEW_FIELDS, layout: "M02", heading: "A luz chama",
+  describe("visão geral e listas", () => {
+    const OVERVIEW: SlideItem = {
+      id: "overview", kind: "SUMMARY", sourceBlockId: null, text: "A luz chama\nA luz mostra", reference: null, included: true, edited: false,
+      ...NEW_FIELDS, layout: "NUMBERED", heading: "Luz que não se apaga", items: ["A luz chama", "A luz mostra"], start: 1,
     };
+    const LIST: SlideItem = { ...OVERVIEW, id: "list:p1:0:0", layout: "BULLETS", heading: "1. A luz chama", items: ["Lanterna", "Farol"], start: null };
 
-    it("mostra o rótulo Resumo e o selo IA enquanto não foi editado", () => {
-      renderList(false, [...ITEMS, SUMMARY]);
-      const li = row("A lanterna mostra o caminho");
-      expect(within(li).getByText("Resumo")).toBeInTheDocument();
-      expect(within(li).getByText("IA")).toBeInTheDocument();
-    });
-
-    it("o selo IA some depois de editado", () => {
-      renderList(false, [...ITEMS, { ...SUMMARY, edited: true }]);
-      const li = row("A lanterna mostra o caminho");
-      expect(within(li).getByText("Resumo")).toBeInTheDocument();
-      expect(within(li).queryByText("IA")).not.toBeInTheDocument();
-    });
-
-    it("editar o resumo manda o texto novo (até 150, o limite do subtítulo do modelo 02)", () => {
-      const { onEdit } = renderList(false, [...ITEMS, SUMMARY]);
-      fireEvent.click(screen.getByRole("button", { name: "A lanterna mostra o caminho" }));
-      const input = screen.getByLabelText("Texto do slide");
-      expect(input).toHaveAttribute("maxLength", "150");
-      fireEvent.change(input, { target: { value: "A lanterna guia" } });
-      fireEvent.keyDown(input, { key: "Enter" });
-      expect(onEdit).toHaveBeenCalledWith("i1:0", "A lanterna guia");
-    });
-  });
-
-  describe("modelos e subtítulo", () => {
-    it("cada linha mostra o selo do modelo; o privado não", () => {
-      renderList();
-      expect(within(row("Luz que não se apaga")).getByText("Modelo 01")).toBeInTheDocument();
-      expect(within(row("João 8:12")).getByText("Modelo 03")).toBeInTheDocument();
-      expect(within(row("História da lanterna")).queryByText(/Modelo/)).not.toBeInTheDocument();
-      const m02: SlideItem = { ...ITEMS[2], layout: "M02", subtitle: "Antes de procurar" };
-      renderList(false, [m02]);
-      expect(screen.getByText("Modelo 02")).toBeInTheDocument();
-    });
-
-    it("ponto: Adicionar subtítulo abre a edição e salva com Enter (até 150)", () => {
-      const { onSubtitle } = renderList();
-      fireEvent.click(within(row("A luz chama")).getByRole("button", { name: "Adicionar subtítulo" }));
-      const input = screen.getByLabelText("Subtítulo do slide");
-      expect(input).toHaveAttribute("maxLength", "150");
-      fireEvent.change(input, { target: { value: "  Antes de procurar  " } });
-      fireEvent.keyDown(input, { key: "Enter" });
-      expect(onSubtitle).toHaveBeenCalledWith("p1:0", "Antes de procurar");
-    });
-
-    it("subtítulo existente: clicar edita; vazio remove", () => {
-      const { onSubtitle } = renderList(false, [{ ...ITEMS[2], layout: "M02", subtitle: "Antes de procurar" }]);
-      fireEvent.click(screen.getByRole("button", { name: "Antes de procurar" }));
-      const input = screen.getByLabelText("Subtítulo do slide");
-      fireEvent.change(input, { target: { value: "   " } });
-      fireEvent.keyDown(input, { key: "Enter" });
-      expect(onSubtitle).toHaveBeenCalledWith("p1:0", "");
-    });
-
-    it("versículo: subtítulo até 90; com mais de 160 caracteres, ou fora do primeiro pedaço, o controle não aparece", () => {
-      renderList();
-      fireEvent.click(within(row("João 8:12")).getByRole("button", { name: "Adicionar subtítulo" }));
-      expect(screen.getByLabelText("Subtítulo do slide")).toHaveAttribute("maxLength", "90");
-      cleanup();
-      renderList(false, [{ ...ITEMS[1], text: "a".repeat(161) }, { ...ITEMS[1], id: "v1:1", reference: "João 8:13" }]);
-      expect(screen.queryByRole("button", { name: "Adicionar subtítulo" })).not.toBeInTheDocument();
-    });
-
-    it("ponto com mais de 60 caracteres não ganha subtítulo; somente leitura mostra o subtítulo sem botão", () => {
-      renderList(false, [{ ...ITEMS[2], text: "a".repeat(61) }]);
-      expect(screen.queryByRole("button", { name: "Adicionar subtítulo" })).not.toBeInTheDocument();
-      cleanup();
-      renderList(true, [{ ...ITEMS[2], layout: "M02", subtitle: "Antes de procurar" }]);
-      expect(screen.getByText("Antes de procurar")).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Antes de procurar" })).not.toBeInTheDocument();
+    it("mostram o rótulo do tipo, o título e os itens, sem edição", () => {
+      renderList(false, [OVERVIEW, LIST]);
+      const overview = row("A luz chama · A luz mostra");
+      expect(within(overview).getByText("Visão geral")).toBeInTheDocument();
+      expect(within(overview).getByText("Luz que não se apaga")).toBeInTheDocument();
+      const list = row("Lanterna · Farol");
+      expect(within(list).getByText("Lista")).toBeInTheDocument();
+      expect(within(list).getByText("1. A luz chama")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /A luz chama|Lanterna|Luz que não/ })).not.toBeInTheDocument();
+      expect(screen.queryByText(/Modelo/)).not.toBeInTheDocument();
+      expect(screen.queryByText("Adicionar subtítulo")).not.toBeInTheDocument();
     });
   });
 });

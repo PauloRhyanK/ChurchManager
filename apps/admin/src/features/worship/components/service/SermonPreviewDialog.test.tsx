@@ -47,20 +47,24 @@ describe("SermonPreviewDialog", () => {
     expect(await screen.findByRole("link", { name: "Abrir a palavra" })).toHaveAttribute("href", "/palavras/s9");
   });
 
-  it("cópia nova (com a face do modelo) e cópia antiga (só kind, text e reference) aparecem na identidade", async () => {
+  it("cópia nova (com a face), cópia dos modelos antigos e cópia só com kind, text e reference aparecem na identidade", async () => {
     api.getServiceSermon.mockResolvedValue({
       ...PREVIEW,
       slides: [
-        { kind: "VERSE", text: "Eu sou a luz do mundo", layout: "M04", title: "A luz chama", subtitle: "Ninguém acha o caminho sozinho", verse: "Eu sou a luz do mundo", reference: "João 8:12 · BLIVRE" },
+        { kind: "VERSE", text: "Eu sou a luz do mundo", layout: "VERSE", title: "1. A luz chama", verse: "Eu sou a luz do mundo", reference: "João 8:12", items: null, start: null },
+        { kind: "POINT", text: "A luz guia", layout: "M02", title: "A luz guia", subtitle: "Antes de procurar", verse: null, reference: null },
         { kind: "VERSE", text: "Vós sois a luz do mundo", reference: "Mateus 5:14" },
       ],
     });
     renderDialog();
-    expect(await screen.findAllByTestId("slide-card")).toHaveLength(2);
-    expect(screen.getByText("Ninguém acha o caminho sozinho")).toHaveAttribute("data-slide-role", "subtitle");
-    expect(screen.getByText("João 8:12 · BLIVRE")).toHaveAttribute("data-slide-role", "reference");
-    expect(screen.getByText("Vós sois a luz do mundo")).toHaveAttribute("data-slide-role", "verse");
-    expect(screen.getAllByText("Mateus 5:14").map((e) => e.dataset.slideRole)).toEqual(["title", "reference"]);
+    expect(await screen.findAllByTestId("slide-card")).toHaveLength(3);
+    const role = (text: string) => screen.getAllByText(text).map((e) => e.closest<HTMLElement>("[data-slide-role]")!.dataset.slideRole);
+    expect(role("1. A luz chama")).toEqual(["title"]);
+    expect(role("João 8:12")).toEqual(["reference"]);
+    expect(role("A luz guia")).toEqual(["title"]);
+    expect(screen.queryByText("Antes de procurar")).not.toBeInTheDocument();
+    expect(role("Vós sois a luz do mundo")).toEqual(["verse"]);
+    expect(role("Mateus 5:14")).toEqual(["title", "reference"]);
   });
 
   it("ao reabrir, mostra o carregando em vez dos slides antigos enquanto busca de novo", async () => {

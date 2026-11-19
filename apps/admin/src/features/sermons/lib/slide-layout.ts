@@ -1,237 +1,275 @@
-// Geometria pura de um slide na identidade visual: a prévia e a apresentação desenham a partir daqui.
-// Tudo em pixels numa tela de 1920×1080. Números em slide-identity.ts.
-import {
-  SLIDE_CANVAS,
-  SLIDE_FONT_SIZES,
-  SLIDE_GLYPH_WIDTH,
-  SLIDE_LEFT_ALIGN_OVER,
-  SLIDE_LINE_HEIGHT,
-  SLIDE_OPTICAL_SHIFT,
-  SLIDE_SAFE_AREA,
-  SLIDE_SPACING,
-  SLIDE_THEMES,
-  SLIDE_TITLE_VERSE_MAX_GAP,
-  SLIDE_TRACKING,
-  SLIDE_WEIGHTS,
-  type FontRange,
-} from "./slide-identity";
-import { SLIDE_MODEL_LIMITS, type SlideFace, type SlideLayout, type SlideStyle } from "./slides";
+// Desenho de um slide na identidade "painel" (docs/identidade-slides.md), numa tela de 1920×1080.
+// Função pura: a prévia (SlidePreview) e a apresentação (.pptx) desenham a mesma geometria.
+// As medidas e a estimativa de linhas são as do gerador (PANEL e wrapLines em slides.ts): o texto é quebrado aqui, em
+// palavra inteira, e cada linha vai pronta; a fonte nunca encolhe (o gerador já divide o que não cabe).
+import { SLIDE_THEMES, type SlideTheme } from "./slide-identity";
+import { PANEL, wrapLines, type SlideFace, type SlideLayout, type SlideStyle } from "./slides";
 
-export type SlideBlock = {
-  role: "title" | "subtitle" | "verse" | "reference";
-  text: string;
-  fontFamily: "title" | "body";
-  fontSize: number;
-  fontWeight: 500 | 600 | 700;
-  italic: boolean;
-  tracking: number; // em milésimos de em (ex.: -70)
-  lineHeight: number;
-  align: "center" | "left";
+export type ColorRole = "text" | "accent";
+
+/** Trecho de uma linha com cor e peso próprios (ex.: a referência entre parênteses em dourado negrito). */
+export type TextRun = { text: string; color: ColorRole; weight: number };
+
+export type TextRole = "title" | "quote" | "verse" | "reference" | "marker" | "item";
+
+/** Caixa de texto em px da tela 1920×1080. `lines` já vem quebrado; cada linha tem `lineHeight` px de altura. */
+export type TextBox = {
+  role: TextRole;
   x: number;
   y: number;
   width: number;
-  height: number; // caixa estimada, para a exportação (no título com bloco abaixo, com uma linha de reserva)
-  gapBefore: number; // espaço do manual até o bloco anterior, para a prévia (sem reserva)
-  /** Linhas estimadas (no texto cortado, as que ficam). */
-  maxLines: number;
-  /** Só texto acima do limite do modelo: a prévia corta em `maxLines` linhas. Dentro do limite nada é cortado. */
-  clamped: boolean;
+  height: number;
+  fontSize: number;
+  weight: number;
+  color: ColorRole;
+  /** Altura de cada linha, em px. */
+  lineHeight: number;
+  /** Espaço entre letras, em px. */
+  letterSpacing: number;
+  align: "left" | "center" | "right";
+  lines: TextRun[][];
+};
+
+export type ShapeBox = {
+  role: "rule" | "panel";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  radius: number;
+  fill: "accent" | "panel";
+  border: { width: number; color: "border" } | null;
 };
 
 export type SlideDrawing = {
-  width: 1920;
-  height: 1080;
-  background: string;
-  color: string;
   layout: SlideLayout;
-  align: "center" | "left";
-  /** Topo do primeiro bloco na prévia (sem a reserva do título, que só vale nas caixas da exportação). */
-  previewTop: number;
-  blocks: SlideBlock[];
+  theme: SlideTheme;
+  /** O bloco inteiro (título, traço e painel), centralizado na vertical. */
+  block: { y: number; height: number };
+  /** Desenhados antes dos textos, nesta ordem. */
+  shapes: ShapeBox[];
+  texts: TextBox[];
 };
 
-type Role = SlideBlock["role"];
+const CENTER_X = PANEL.canvas.width / 2;
+/** Coluna do número ou do marcador nas listas e o espaço até o texto do item. */
+const MARKER = { width: 44, gap: 18 } as const;
+const MARKER_COLUMN = MARKER.width + MARKER.gap;
+/** Largura média de um caractere (em) na Montserrat, medida nos slides aprovados, para centralizar a lista no painel. */
+const LIST_CHAR_EM = { NUMBERED: 0.57, BULLETS: 0.53 } as const;
 
-const ROLES: Record<SlideLayout, Role[]> = {
-  M01: ["title"],
-  M02: ["title", "subtitle"],
-  M03: ["title", "verse", "reference"],
-  M04: ["title", "subtitle", "verse", "reference"],
-};
-/** Ordem em que as linhas são cortadas quando o texto (acima do limite) não cabe na área segura. */
-const SHRINK_ORDER: Role[] = ["verse", "subtitle", "title", "reference"];
-
-const SAFE_TOP = SLIDE_SAFE_AREA.vertical;
-const SAFE_BOTTOM = SLIDE_CANVAS.height - SLIDE_SAFE_AREA.vertical;
-const SAFE_HEIGHT = SAFE_BOTTOM - SAFE_TOP;
-const BOX_X = SLIDE_SAFE_AREA.side;
-const BOX_WIDTH = SLIDE_CANVAS.width - 2 * SLIDE_SAFE_AREA.side;
-
-const chars = (s: string) => Array.from(s).length;
-
-function textOf(face: SlideFace, role: Role): string {
-  const value = role === "title" ? face.title : face[role];
-  return (value ?? "").trim();
-}
-
-function rangeOf(layout: SlideLayout, role: Role): FontRange {
-  return (SLIDE_FONT_SIZES[layout] as Record<string, FontRange>)[role];
-}
-
-function limitOf(layout: SlideLayout, role: Role): number {
-  return (SLIDE_MODEL_LIMITS[layout] as Record<string, number>)[role] ?? 0;
-}
-
-/** Três degraus pelo comprimento: até 1/3 do limite, o maior da faixa; até 2/3, o do meio; acima, o menor. */
-function stepOf(length: number, limit: number): 0 | 1 | 2 {
-  if (length <= Math.ceil(limit / 3)) return 0;
-  if (length <= Math.ceil((2 * limit) / 3)) return 1;
-  return 2;
-}
-
-function sizeAt(range: FontRange, step: 0 | 1 | 2): number {
-  if (step === 0) return range.max;
-  if (step === 1) return Math.round((range.min + range.max) / 2);
-  return range.min;
-}
-
-function gapBetween(previous: Role, role: Role): number {
-  if (role === "subtitle") return SLIDE_SPACING.titleSubtitle;
-  if (role === "verse") return previous === "subtitle" ? SLIDE_SPACING.subtitleVerse : SLIDE_SPACING.titleVerse;
-  return SLIDE_SPACING.verseReference;
-}
-
-const isUpper = (c: string) => c !== c.toLowerCase() && c === c.toUpperCase();
+const plain = (lines: string[], color: ColorRole, weight: number): TextRun[][] => lines.map((text) => [{ text, color, weight }]);
 
 /**
- * Linhas estimadas: quebra por palavra somando a largura de cada caractere (maiúscula mais larga); palavra maior
- * que a linha ocupa várias.
+ * Linhas de um item de lista com marcador: o trecho final entre parênteses (a referência) vai em dourado negrito,
+ * mesmo quando cai na linha seguinte.
  */
-function countLines(text: string, fontSize: number, glyphEm: number, tracking: number): number {
-  const widthOf = (c: string) => fontSize * ((isUpper(c) ? SLIDE_GLYPH_WIDTH.upper : glyphEm) + tracking / 1000);
-  const space = widthOf(" ");
-  let lines = 1;
-  let used = 0;
-  for (const word of text.split(/\s+/).filter(Boolean)) {
-    const glyphs = Array.from(word).map(widthOf);
-    const width = glyphs.reduce((a, b) => a + b, 0);
-    if (used > 0 && used + space + width <= BOX_WIDTH) {
-      used += space + width;
-      continue;
-    }
-    if (used > 0) {
-      lines += 1;
-      used = 0;
-    }
-    for (const g of glyphs) {
-      if (used > 0 && used + g > BOX_WIDTH) {
-        lines += 1;
-        used = 0;
+export function bulletRuns(item: string, lines: string[], weight: number): TextRun[][] {
+  const text = item.replace(/\s+/g, " ").trim();
+  const match = /\([^()]*\)$/.exec(text);
+  if (!match) return plain(lines, "text", weight);
+  const from = match.index;
+  let cursor = 0;
+  return lines.map((line): TextRun[] => {
+    const start = Math.max(cursor, text.indexOf(line, cursor));
+    const end = start + line.length;
+    cursor = end;
+    if (end <= from) return [{ text: line, color: "text", weight }];
+    if (start >= from) return [{ text: line, color: "accent", weight: 700 }];
+    const k = from - start;
+    return [
+      { text: line.slice(0, k), color: "text", weight },
+      { text: line.slice(k), color: "accent", weight: 700 },
+    ];
+  });
+}
+
+type Content = { height: number; place(top: number): TextBox[] };
+
+function verseContent(face: SlideFace): Content {
+  const lines = wrapLines(face.verse ?? "", PANEL.verse.chars);
+  const verseLines = Math.max(1, lines.length);
+  const reference = face.reference?.trim() || null;
+  const inner = PANEL.quote.height + PANEL.quote.gap + verseLines * PANEL.verse.line + (reference ? PANEL.reference.gap + PANEL.reference.height : 0);
+  const x = PANEL.panel.x + PANEL.panel.padX;
+  const width = PANEL.panel.innerWidth;
+  return {
+    height: inner + 2 * PANEL.panel.padY,
+    place(top) {
+      let y = top + PANEL.panel.padY;
+      const out: TextBox[] = [
+        {
+          role: "quote",
+          x,
+          y,
+          width,
+          height: PANEL.quote.height,
+          fontSize: PANEL.quote.size,
+          weight: PANEL.quote.weight,
+          color: "accent",
+          lineHeight: PANEL.quote.height,
+          letterSpacing: 0,
+          align: "center",
+          lines: plain(["“"], "accent", PANEL.quote.weight),
+        },
+      ];
+      y += PANEL.quote.height + PANEL.quote.gap;
+      out.push({
+        role: "verse",
+        x,
+        y,
+        width,
+        height: verseLines * PANEL.verse.line,
+        fontSize: PANEL.verse.size,
+        weight: PANEL.verse.weight,
+        color: "text",
+        lineHeight: PANEL.verse.line,
+        letterSpacing: 0,
+        align: "center",
+        lines: plain(lines, "text", PANEL.verse.weight),
+      });
+      y += verseLines * PANEL.verse.line;
+      if (reference) {
+        y += PANEL.reference.gap;
+        out.push({
+          role: "reference",
+          x,
+          y,
+          width,
+          height: PANEL.reference.height,
+          fontSize: PANEL.reference.size,
+          weight: PANEL.reference.weight,
+          color: "accent",
+          lineHeight: PANEL.reference.height,
+          letterSpacing: PANEL.reference.letterSpacing,
+          align: "center",
+          lines: plain([reference], "accent", PANEL.reference.weight),
+        });
       }
-      used += g;
-    }
-  }
-  return lines;
+      return out;
+    },
+  };
 }
 
-type Draft = Omit<SlideBlock, "x" | "y" | "width" | "height" | "gapBefore"> & { reserve: number };
-/** Altura da caixa: as linhas estimadas e, no título com bloco abaixo, uma linha de reserva (a estimativa pode errar). */
-const heightOf = (b: Draft) => (b.maxLines + b.reserve) * b.fontSize * b.lineHeight;
+function listContent(face: SlideFace, layout: "NUMBERED" | "BULLETS"): Content {
+  const spec = layout === "NUMBERED" ? PANEL.numbered : PANEL.bullets;
+  const items = face.items ?? [];
+  const wrapped = items.map((item) => wrapLines(item, spec.chars));
+  const rows = wrapped.map((lines) => Math.max(1, lines.length));
+  const longest = Math.max(0, ...wrapped.flat().map((l) => Array.from(l).length));
+  const textWidth = Math.min(PANEL.panel.innerWidth - MARKER_COLUMN, Math.ceil(longest * spec.size * LIST_CHAR_EM[layout]));
+  const left = CENTER_X - (MARKER_COLUMN + textWidth) / 2;
+  const height = rows.reduce((n, r) => n + r * spec.line, 0) + Math.max(0, items.length - 1) * spec.gap;
+  const start = face.start ?? 1;
+  return {
+    height: height + 2 * PANEL.panel.padY,
+    place(top) {
+      const out: TextBox[] = [];
+      let y = top + PANEL.panel.padY;
+      items.forEach((item, i) => {
+        const marker = layout === "NUMBERED" ? String(start + i) : "•";
+        out.push({
+          role: "marker",
+          x: left,
+          y,
+          width: MARKER.width,
+          height: spec.line,
+          fontSize: spec.size,
+          weight: 800,
+          color: "accent",
+          lineHeight: spec.line,
+          letterSpacing: 0,
+          align: "right",
+          lines: plain([marker], "accent", 800),
+        });
+        out.push({
+          role: "item",
+          x: left + MARKER_COLUMN,
+          y,
+          width: textWidth,
+          height: rows[i] * spec.line,
+          fontSize: spec.size,
+          weight: spec.weight,
+          color: "text",
+          lineHeight: spec.line,
+          letterSpacing: 0,
+          align: "left",
+          lines: layout === "BULLETS" ? bulletRuns(item, wrapped[i], spec.weight) : plain(wrapped[i], "text", spec.weight),
+        });
+        y += rows[i] * spec.line + spec.gap;
+      });
+      return out;
+    },
+  };
+}
 
-/** Desenho do slide no modelo do manual: cores do visual, fontes, tamanhos dentro da faixa e posições na área segura. */
+/**
+ * Geometria absoluta do slide em 1920×1080:
+ * - título (centralizado, em até 1664 de largura), traço dourado e painel formam um bloco centralizado na vertical;
+ * - painel em x = 210, 1500 de largura, raio 28 e borda de 2, com altura do conteúdo;
+ * - VERSE: aspa, versículo centralizado e referência; NUMBERED/BULLETS: número ou marcador dourado e o item,
+ *   alinhados à esquerda, com a lista centralizada no painel;
+ * - TITLE: só título e traço, sem painel.
+ */
 export function drawSlide(face: SlideFace, style: SlideStyle): SlideDrawing {
-  const layout = face.layout;
   const theme = SLIDE_THEMES[style];
-  const { background, color } = layout === "M01" ? theme.impact : theme;
-  const align: SlideDrawing["align"] =
-    chars(face.verse ?? "") > SLIDE_LEFT_ALIGN_OVER.verse || chars(face.title) > SLIDE_LEFT_ALIGN_OVER.title ? "left" : "center";
-  const verseStep = stepOf(chars(textOf(face, "verse")), limitOf(layout, "verse"));
+  const titleLines = wrapLines(face.title ?? "", PANEL.title.chars);
+  const titleHeight = titleLines.length * PANEL.title.line;
+  const content = face.layout === "VERSE" ? verseContent(face) : face.layout === "TITLE" ? null : listContent(face, face.layout);
+  const hasTitle = titleLines.length > 0;
+  const ruleHeight = hasTitle ? PANEL.rule.gap + PANEL.rule.height : 0;
+  const panelHeight = content ? (hasTitle ? PANEL.rule.gap : 0) + content.height : 0;
+  const total = titleHeight + ruleHeight + panelHeight;
+  const top = (PANEL.canvas.height - total) / 2;
 
-  const drafts: Draft[] = ROLES[layout]
-    .map((role) => ({ role, text: textOf(face, role) }))
-    .filter((p) => p.text)
-    .map(({ role, text }) => {
-      const fontFamily = role === "title" ? "title" : "body";
-      const fontSize = sizeAt(rangeOf(layout, role), role === "reference" ? verseStep : stepOf(chars(text), limitOf(layout, role)));
-      const tracking = role === "title" ? (layout === "M04" ? SLIDE_TRACKING.smallTitle : SLIDE_TRACKING.title) : SLIDE_TRACKING[role];
-      return {
-        role,
-        text,
-        fontFamily,
-        fontSize,
-        fontWeight: SLIDE_WEIGHTS[role],
-        italic: role === "title",
-        tracking,
-        lineHeight: SLIDE_LINE_HEIGHT[role],
-        align,
-        maxLines: countLines(text, fontSize, SLIDE_GLYPH_WIDTH[fontFamily], tracking),
-        clamped: role !== "reference" && chars(text) > limitOf(layout, role),
-        reserve: 0,
-      };
+  const shapes: ShapeBox[] = [];
+  const texts: TextBox[] = [];
+  let y = top;
+  if (hasTitle) {
+    texts.push({
+      role: "title",
+      x: PANEL.margin.x,
+      y,
+      width: PANEL.area.width,
+      height: titleHeight,
+      fontSize: PANEL.title.size,
+      weight: PANEL.title.weight,
+      color: "text",
+      lineHeight: PANEL.title.line,
+      letterSpacing: 0,
+      align: "center",
+      lines: plain(titleLines, "text", PANEL.title.weight),
     });
-
-  const gaps = drafts.map((b, i) => (i === 0 ? 0 : gapBetween(drafts[i - 1].role, b.role)));
-  const total = () => drafts.reduce((sum, b, i) => sum + heightOf(b) + gaps[i], 0);
-  // Só texto acima do limite do modelo passa da área segura: corta linhas, a fonte fica no mínimo da faixa.
-  while (total() > SAFE_HEIGHT) {
-    const next = SHRINK_ORDER.map((role) => drafts.find((b) => b.role === role && b.maxLines > 1)).find(Boolean);
-    if (!next) break;
-    next.maxLines -= 1;
-    next.clamped = true;
+    y += titleHeight + PANEL.rule.gap;
+    shapes.push({
+      role: "rule",
+      x: CENTER_X - PANEL.rule.width / 2,
+      y,
+      width: PANEL.rule.width,
+      height: PANEL.rule.height,
+      radius: PANEL.rule.radius,
+      fill: "accent",
+      border: null,
+    });
+    y += PANEL.rule.height + (content ? PANEL.rule.gap : 0);
   }
-  // Reserva de uma linha no título que tem bloco abaixo, só quando ainda cabe na área segura.
-  if (drafts.length > 1 && drafts[0].role === "title") {
-    drafts[0].reserve = 1;
-    if (total() > SAFE_HEIGHT) drafts[0].reserve = 0;
+  if (content) {
+    shapes.push({
+      role: "panel",
+      x: PANEL.panel.x,
+      y,
+      width: PANEL.panel.width,
+      height: content.height,
+      radius: PANEL.panel.radius,
+      fill: "panel",
+      border: { width: PANEL.panel.border, color: "border" },
+    });
+    texts.push(...content.place(y));
   }
-
-  // Prévia: posições sem a reserva (o navegador quebra as linhas de verdade, numa coluna com os espaços do manual).
-  // Exportação: caixas com a reserva do título, para uma linha a mais não cobrir o bloco de baixo.
-  const preview = place(drafts.map((b) => ({ ...b, reserve: 0 })), gaps, layout);
-  const boxes = place(drafts, gaps, layout);
-
-  const blocks: SlideBlock[] = drafts.map(({ reserve: _reserve, ...b }, i) => ({
-    ...b,
-    x: BOX_X,
-    y: boxes.tops[i],
-    width: BOX_WIDTH,
-    height: heightOf(drafts[i]),
-    gapBefore: preview.before[i],
-  }));
-  return { width: SLIDE_CANVAS.width, height: SLIDE_CANVAS.height, background, color, layout, align, previewTop: preview.tops[0] ?? SAFE_TOP, blocks };
+  return { layout: face.layout, theme, block: { y: top, height: total }, shapes, texts };
 }
 
-/** Topo de cada bloco e espaço até o anterior: M01 no centro óptico; M03 título no topo; M02/M04 coluna centralizada. */
-function place(drafts: Draft[], gaps: number[], layout: SlideLayout): { tops: number[]; before: number[] } {
-  const tops: number[] = [];
-  const before = [...gaps];
-  const total = drafts.reduce((sum, b, i) => sum + heightOf(b) + gaps[i], 0);
-  if (layout === "M01" && drafts.length === 1) {
-    const h = heightOf(drafts[0]);
-    const center = SLIDE_CANVAS.height / 2 - SLIDE_OPTICAL_SHIFT * SLIDE_CANVAS.height;
-    tops.push(Math.min(Math.max(center - h / 2, SAFE_TOP), SAFE_BOTTOM - h));
-  } else if (layout === "M03" && drafts[0]?.role === "title" && drafts.length > 1) {
-    // Título no topo da área segura; versículo e referência centralizados no espaço que sobra.
-    const titleBottom = SAFE_TOP + heightOf(drafts[0]);
-    const rest = drafts.slice(1).reduce((sum, b, i) => sum + heightOf(b) + (i === 0 ? 0 : gaps[i + 1]), 0);
-    const start = titleBottom + gaps[1];
-    // Centralizado no que sobra, mas o espaço até o título não passa de 90: o resto fica abaixo da referência.
-    const extra = Math.min(Math.max(0, (SAFE_BOTTOM - start - rest) / 2), SLIDE_TITLE_VERSE_MAX_GAP - gaps[1]);
-    let y = start + extra;
-    before[1] = y - titleBottom;
-    tops.push(SAFE_TOP);
-    drafts.slice(1).forEach((b, i) => {
-      if (i > 0) y += gaps[i + 1];
-      tops.push(y);
-      y += heightOf(b);
-    });
-  } else {
-    let y = SAFE_TOP + Math.max(0, (SAFE_HEIGHT - total) / 2);
-    drafts.forEach((b, i) => {
-      y += gaps[i];
-      tops.push(y);
-      y += heightOf(b);
-    });
-  }
-  return { tops, before };
+/** Cor de um papel no tema. */
+export function roleColor(theme: SlideTheme, role: ColorRole | ShapeBox["fill"] | "border"): string {
+  return theme[role];
 }

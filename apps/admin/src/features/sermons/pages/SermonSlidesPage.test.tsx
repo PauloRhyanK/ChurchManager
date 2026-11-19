@@ -17,7 +17,6 @@ const api = vi.hoisted(() => ({
   sendSermon: vi.fn(),
   cancelDelivery: vi.fn(),
   listBibleTranslations: vi.fn(),
-  getSermonAi: vi.fn(),
 }));
 vi.mock("../api/sermons-api", () => api);
 const perms = vi.hoisted(() => ({ canEdit: true }));
@@ -42,10 +41,10 @@ vi.mock("../components/SlideList", async (importOriginal) => {
   };
 });
 
-const NEW_FIELDS = { subtitleEdited: false, layout: "M01", heading: null, subtitle: null, version: null } as const;
+const NEW_FIELDS = { layout: "TITLE", heading: null, items: null, start: null, version: null } as const;
 const SLIDES: SlideItem[] = [
   { id: "title", kind: "TITLE", sourceBlockId: null, text: "Luz que não se apaga", reference: null, included: true, edited: false, ...NEW_FIELDS },
-  { id: "v1:0", kind: "VERSE", sourceBlockId: "v1", text: "Eu sou a luz do mundo", reference: "João 8:12", included: true, edited: false, ...NEW_FIELDS, layout: "M03" },
+  { id: "v1:0", kind: "VERSE", sourceBlockId: "v1", text: "Eu sou a luz do mundo", reference: "João 8:12", included: true, edited: false, ...NEW_FIELDS, layout: "VERSE", heading: "1. A luz chama" },
   { id: "p1:0", kind: "POINT", sourceBlockId: "p1", text: "A luz chama", reference: null, included: true, edited: false, ...NEW_FIELDS },
   { id: "n1:0", kind: "PRIVATE", sourceBlockId: "n1", text: "História da lanterna", reference: null, included: false, edited: false, ...NEW_FIELDS },
 ];
@@ -107,7 +106,6 @@ beforeEach(() => {
   api.getSermon.mockResolvedValue(sermon());
   api.listServiceOptions.mockResolvedValue([]);
   api.listBibleTranslations.mockResolvedValue([]);
-  api.getSermonAi.mockResolvedValue({ enabled: false, models: [] });
 });
 
 describe("SermonSlidesPage", () => {
@@ -115,7 +113,7 @@ describe("SermonSlidesPage", () => {
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Exportar" }));
     expect(await screen.findByRole("heading", { name: "Exportar" })).toBeInTheDocument();
-    expect(screen.getByText("3 slides, no visual escolhido")).toBeInTheDocument();
+    expect(screen.getByText("3 slides, nas cores escolhidas")).toBeInTheDocument();
   });
 
   it("Exportar fica desligado enquanto a lista está travada (atualizando)", async () => {
@@ -190,18 +188,6 @@ describe("SermonSlidesPage", () => {
     await settle();
   });
 
-  it("adicionar subtítulo a um ponto manda subtitle (sem text) e a prévia mostra o modelo 02", async () => {
-    api.saveSlides.mockResolvedValue(sermon());
-    renderPage();
-    fireEvent.click(within((await screen.findByRole("button", { name: "A luz chama" })).closest("li")!).getByRole("button", { name: "Adicionar subtítulo" }));
-    const input = screen.getByLabelText("Subtítulo do slide");
-    fireEvent.change(input, { target: { value: "Antes de procurar" } });
-    fireEvent.keyDown(input, { key: "Enter" });
-    expect(lastBody().items[2]).toEqual({ id: "p1:0", included: true, subtitle: "Antes de procurar" });
-    expect(within(screen.getByRole("region", { name: "No telão" })).getByText("Antes de procurar")).toHaveAttribute("data-slide-role", "subtitle");
-    await settle();
-  });
-
   it("editar o texto de um ponto manda text", async () => {
     api.saveSlides.mockResolvedValue(sermon());
     renderPage();
@@ -246,47 +232,23 @@ describe("SermonSlidesPage", () => {
   it("trocar o visual salva o estilo", async () => {
     api.saveSlides.mockResolvedValue(sermon({ slideStyle: "BACKGROUND" }));
     renderPage();
-    fireEvent.click(await screen.findByRole("button", { name: "Azul institucional · trocar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Verde · trocar" }));
     expect(lastBody().style).toBe("BACKGROUND");
-    expect(await screen.findByRole("button", { name: "Verde profundo · trocar" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Azul-marinho · trocar" })).toBeInTheDocument();
   });
 
   it("esboço alterado: aviso e Atualizar gera com o modo atual", async () => {
-    api.getSermon.mockResolvedValue(sermon({ slidesStale: true, slideMode: "VERSES" }));
-    api.generateSlides.mockResolvedValue(sermon({ slidesStale: false, slideMode: "VERSES" }));
+    api.getSermon.mockResolvedValue(sermon({ slidesStale: true, slideMode: "TITLES" }));
+    api.generateSlides.mockResolvedValue(sermon({ slidesStale: false, slideMode: "TITLES" }));
     renderPage();
     expect(await screen.findByText("O esboço mudou depois destes slides.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Atualizar" }));
-    await waitFor(() => expect(api.generateSlides).toHaveBeenCalledWith("s1", { mode: "VERSES" }));
+    await waitFor(() => expect(api.generateSlides).toHaveBeenCalledWith("s1", { mode: "TITLES" }));
     await waitFor(() => expect(screen.queryByText("O esboço mudou depois destes slides.")).not.toBeInTheDocument());
   });
 
-  const summary = (edited: boolean): SlideItem => ({
-    id: "i1:0", kind: "SUMMARY", sourceBlockId: "i1", text: "A lanterna mostra o passo", reference: null, included: true, edited, ...NEW_FIELDS, layout: "M02", heading: "A luz chama",
-  });
-
-  it("faixa de aviso dos resumos quando há resumo da IA não editado", async () => {
-    api.getSermon.mockResolvedValue(sermon({ slideMode: "FULL", slides: [...SLIDES.slice(0, 3), summary(false), SLIDES[3]] }));
-    renderPage();
-    expect(await screen.findByText("Os resumos foram escritos por IA. Confira antes de enviar.")).toBeInTheDocument();
-  });
-
-  it("sem a faixa quando todos os resumos foram editados ou não há resumo, mesmo em Slides completos", async () => {
-    api.getSermon.mockResolvedValue(sermon({ slideMode: "FULL", slides: [...SLIDES.slice(0, 3), summary(true), SLIDES[3]] }));
-    renderPage();
-    await screen.findByText("Tirado do esboço");
-    expect(screen.queryByText(/Os resumos foram escritos por IA/)).not.toBeInTheDocument();
-  });
-
-  it("sem a faixa em Slides completos sem nenhum item de resumo", async () => {
-    api.getSermon.mockResolvedValue(sermon({ slideMode: "FULL" }));
-    renderPage();
-    await screen.findByText("Tirado do esboço");
-    expect(screen.queryByText(/Os resumos foram escritos por IA/)).not.toBeInTheDocument();
-  });
-
   it("Atualizar com erro do servidor mostra a mensagem da API", async () => {
-    api.getSermon.mockResolvedValue(sermon({ slidesStale: true, slideMode: "FULL" }));
+    api.getSermon.mockResolvedValue(sermon({ slidesStale: true, slideMode: "VERSES_AND_POINTS" }));
     api.generateSlides.mockRejectedValue(
       new AxiosError("Request failed with status code 503", "ERR_BAD_RESPONSE", undefined, undefined, {
         status: 503,
@@ -301,21 +263,15 @@ describe("SermonSlidesPage", () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("O modelo configurado não aceitou o pedido. Avise o administrador."));
   });
 
-  it("sem a faixa dos resumos fora de Slides completos", async () => {
-    renderPage();
-    await screen.findByText("Tirado do esboço");
-    expect(screen.queryByText(/Os resumos foram escritos por IA/)).not.toBeInTheDocument();
-  });
-
-  it("Atualizar em Slides completos gera em FULL (sem model) e mostra Resumindo…", async () => {
+  it("Atualizar com um modo antigo gravado gera em Com versículos e trava o botão enquanto gera", async () => {
     api.getSermon.mockResolvedValue(sermon({ slidesStale: true, slideMode: "FULL" }));
     const gen = deferred<ReturnType<typeof sermon>>();
     api.generateSlides.mockReturnValue(gen.promise);
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Atualizar" }));
-    expect(await screen.findByRole("button", { name: "Resumindo…" })).toBeDisabled();
-    expect(api.generateSlides).toHaveBeenCalledWith("s1", { mode: "FULL" });
-    gen.resolve(sermon({ slidesStale: false, slideMode: "FULL" }));
+    expect(await screen.findByRole("button", { name: "Atualizar" })).toBeDisabled();
+    expect(api.generateSlides).toHaveBeenCalledWith("s1", { mode: "VERSES_AND_POINTS" });
+    gen.resolve(sermon({ slidesStale: false, slideMode: "VERSES_AND_POINTS" }));
     await waitFor(() => expect(screen.queryByText("O esboço mudou depois destes slides.")).not.toBeInTheDocument());
   });
 
@@ -448,7 +404,7 @@ describe("SermonSlidesPage", () => {
     api.getSermon.mockReturnValue(reset.promise);
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
     expect(box(/Luz que não se apaga/)).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Azul institucional · trocar" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Verde · trocar" })).toBeDisabled();
     await act(async () => reset.resolve(sermon()));
     expect(box(/Luz que não se apaga/)).not.toBeDisabled();
     expect(api.saveSlides).toHaveBeenCalledTimes(1);
