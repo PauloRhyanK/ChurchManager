@@ -28,6 +28,7 @@ from ponte import rastreio as mod_rastreio
 from ponte import obs_ouvinte as mod_obs_ouvinte
 from ponte import painel_ao_vivo as mod_ao_vivo
 from ponte import palavra as mod_palavra
+from ponte import slides_da_palavra as mod_slides
 from ponte import musico as mod_musico
 from ponte import passador as mod_passador
 from ponte import roteiro as mod_roteiro
@@ -2833,15 +2834,25 @@ def _acao_do_painel(dados, origem):
             titulo = "Pix no telão" if ligar else "Pix tirado do telão"
             resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
         elif tipo == "slides_palavra":
-            # Os slides que o site gera ficam numa pasta de imagens do Holyrics
-            # ("Pregação"). ShowImage com o nome da pasta abre a pasta inteira.
-            cliente = _contexto.get("holyrics")
-            if cliente is None:
+            # Poe no telao o slide da palavra em que o culto esta (o primeiro,
+            # se nenhum foi ainda). A imagem pronta quando ela ja esta na
+            # pasta do Holyrics (ponte/slides_da_palavra.py); senao, o texto.
+            # ANTES isto pedia ao Holyrics a pasta "Pregação" inteira, que
+            # ninguem enchia: dai o "file not allowed" de 19/11/2026.
+            if _contexto.get("holyrics") is None:
                 return {"erro": "o telão está desligado neste PC"}, 400
-            pasta = str(((_config.get("palavra") or {}).get("pasta_de_imagens")) or "Pregação")
-            cliente.pedir("ShowImage", {"file": pasta})
-            titulo = "Slides da Palavra no telão"
-            resultado = {"ok": True, "titulo": titulo, "detalhe": "pasta " + pasta}
+            palavra = _pecas.get("palavra")
+            dela = palavra.retrato() if palavra is not None else {}
+            if not dela.get("ativa") or not dela.get("total"):
+                return {"erro": "não há slides da Palavra para o culto de hoje. Confira no ChurchManager "
+                                "se a palavra está ligada ao culto e tem slides."}, 409
+            atual = dela.get("slide")
+            resultado, codigo = palavra.ir(0 if atual is None else atual, None, dados.get("quem"))
+            if codigo != 200:
+                return resultado, codigo
+            resultado.pop("aviso", None)
+            titulo = "Slides da Palavra no telão" if resultado.get("ok") else "Slides da Palavra: não chegou ao telão"
+            resultado["titulo"] = titulo
         elif tipo == "live":
             titulo = "Live configurada no YouTube"
             resultado = _configurar_live(str(dados.get("titulo") or ""))
@@ -3381,6 +3392,7 @@ CAMINHO_LOUVOR = os.path.join(RAIZ, "_louvor_atual.json")
 # A palavra de hoje, no formato que o modulo Palavras do ChurchManager propos
 # (ver ponte/palavra.py). Enquanto a rota de la nao existe, e este arquivo.
 CAMINHO_PALAVRA = os.path.join(RAIZ, "_palavra_do_dia.json")
+CAMINHO_SLIDES_DA_PALAVRA = os.path.join(RAIZ, "_slides_da_palavra.json")
 
 
 def _ordem_agora():
@@ -3564,6 +3576,15 @@ def _achar_no_holyrics(titulo):
     return _musicas_do_holyrics["por_titulo"].get(_sem_acento(titulo).strip().lower())
 
 
+def _imagem_do_slide(fonte, slide):
+    """O nome, no Holyrics, da imagem pronta deste slide. None = vai como texto."""
+    slides = _pecas.get("slides_da_palavra")
+    palavra = fonte()
+    if slides is None or palavra is None:
+        return None
+    return slides.arquivo(palavra["versao"], slide["indice"])
+
+
 def _fonte_da_palavra(fonte_cultos):
     """O arquivo local vale primeiro (e o que a equipe consegue corrigir a
     mao na hora); sem ele, a palavra que veio do ChurchManager."""
@@ -3723,10 +3744,34 @@ def _montar_ao_vivo():
     if _pecas["passador"].ativo:
         if mod_passador.OuvinteDoTeclado(_pecas["passador"].tecla, _pecas["passador"].presentes).comecar():
             print("  [passador] ouvindo o passador de slides, com qualquer janela em foco")
-    telao = mod_palavra.TelaoDaPalavra(lambda: _contexto.get("holyrics"), lambda: _config)
-    _pecas["palavra"] = mod_palavra.Palavra(
-        _fonte_da_palavra(fonte_cultos), telao.mostrar, telao.tirar,
+    fonte_da_palavra = _fonte_da_palavra(fonte_cultos)
+    # As imagens prontas dos slides, baixadas para a pasta de imagens do
+    # Holyrics. So faz sentido no PC que tem o Holyrics.
+    config_da_palavra = _config.get("palavra") or {}
+    if SIMULAR:
+        import tempfile
+        from ponte import simulados
+        pasta_simulada = tempfile.mkdtemp(prefix="ponte-imagens-")
+        if _contexto.get("holyrics") is not None:
+            _contexto["holyrics"].pasta_de_imagens = pasta_simulada
+        achar_pasta, baixar_imagem = (lambda: pasta_simulada), simulados.imagem_de_slide
+    else:
+        achar_pasta = lambda: (mod_slides.pasta_de_imagens_do_holyrics(_config, _contexto.get("holyrics"))
+                               if _contexto.get("holyrics") is not None else None)
+        baixar_imagem = mod_slides.baixar_pela_rede
+    _pecas["slides_da_palavra"] = mod_slides.SlidesDaPalavra(
+        fonte_da_palavra, achar_pasta, config_da_palavra.get("pasta_de_imagens") or "Palavra",
+        os.path.join(pasta_simulada, "_lista.json") if SIMULAR else CAMINHO_SLIDES_DA_PALAVRA, baixar_imagem,
         lambda titulo, ok, detalhe: _anotar(titulo, ok, detalhe, "local"))
+    if _contexto.get("holyrics") is not None and config_da_palavra.get("baixar_imagens", True):
+        _pecas["slides_da_palavra"].comecar()
+    telao = mod_palavra.TelaoDaPalavra(
+        lambda: _contexto.get("holyrics"), lambda: _config,
+        lambda slide: _imagem_do_slide(fonte_da_palavra, slide))
+    _pecas["palavra"] = mod_palavra.Palavra(
+        fonte_da_palavra, telao.mostrar, telao.tirar,
+        lambda titulo, ok, detalhe: _anotar(titulo, ok, detalhe, "local"),
+        aviso=lambda: telao.aviso, imagens=_pecas["slides_da_palavra"].retrato)
 
     if _contexto.get("obs") is not None:
         if SIMULAR:

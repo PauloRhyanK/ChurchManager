@@ -49,10 +49,17 @@ def normalizar(bruto):
             tipo = "POINT"
         texto = str(item.get("text") or "").strip()[:600]
         referencia = str(item.get("reference") or "").strip()[:80] or None
-        if not texto and not referencia:
+        titulo_do_slide = str(item.get("title") or "").strip()[:200]
+        # A imagem pronta do slide (PNG 1920x1080 na identidade visual), que o
+        # ChurchManager passou a mandar. Ver ponte/slides_da_palavra.py.
+        imagem = str(item.get("imageUrl") or "").strip() or None
+        if imagem and not imagem.lower().startswith(("https://", "http://")):
+            imagem = None
+        if not texto and not referencia and not imagem and not titulo_do_slide:
             continue
         slides.append({"indice": len(slides), "tipo": tipo, "rotulo": ROTULOS[tipo],
-                       "texto": texto, "referencia": referencia})
+                       "texto": texto or titulo_do_slide, "referencia": referencia,
+                       "titulo": titulo_do_slide, "imagem_url": imagem})
     titulo = str(bruto.get("title") or "").strip()[:200]
     if not titulo and not slides:
         return None
@@ -62,8 +69,12 @@ def normalizar(bruto):
         minutos = None
     palavra = {"titulo": titulo or "Palavra", "pregador": str(bruto.get("preacherName") or "").strip()[:120],
                "minutos": minutos, "slides": slides}
+    # A versao muda quando qualquer coisa da palavra muda, e tambem quando o
+    # ChurchManager diz que mudou (`version`): as imagens podem ser refeitas
+    # sem que o texto mude.
     palavra["versao"] = hashlib.sha1(
-        json.dumps(palavra, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()[:12]
+        (json.dumps(palavra, sort_keys=True, ensure_ascii=False) + "|" + str(bruto.get("version") or ""))
+        .encode("utf-8")).hexdigest()[:12]
     return palavra
 
 
@@ -97,6 +108,17 @@ class FontePalavraLocal:
             return self._palavra
 
 
+def explicar_recusa(erro, arquivo):
+    """A recusa do Holyrics para uma imagem, em palavras de gente."""
+    texto = str(erro)
+    if "not allowed" in texto.lower() or "not found" in texto.lower():
+        return ("o Holyrics não achou «{}» nas imagens dele: a pasta não existe, está vazia, "
+                "ou ele ainda não enxergou o arquivo novo".format(arquivo))
+    if "unauthorized" in texto.lower() or "recusou o token" in texto.lower():
+        return "o token do Holyrics não tem permissão para mostrar imagem (ShowImage)"
+    return "o Holyrics recusou a imagem: " + texto[:120]
+
+
 class TelaoDaPalavra:
     """Poe um slide da palavra no telao, pelo Holyrics.
 
@@ -116,10 +138,14 @@ class TelaoDaPalavra:
         "tirar": {"acao": "CloseCurrentPresentation"},
     }
 
-    def __init__(self, cliente, config=None):
+    def __init__(self, cliente, config=None, imagem=None):
         self._cliente = cliente      # funcao que devolve o cliente do Holyrics, ou None
         self._config = config or (lambda: {})
+        # funcao (slide) -> o nome, na aba Imagens do Holyrics, da imagem
+        # pronta deste slide ("Palavra/03-ab12cd.png"), ou None se nao ha.
+        self._imagem = imagem
         self._no_ar = None           # referencia do versiculo que esta no telao
+        self.aviso = None            # por que o ultimo slide foi como texto, quando devia ir como imagem
 
     def _conf(self, qual):
         escrito = (self._config() or {}).get("palavra") or {}
@@ -132,6 +158,22 @@ class TelaoDaPalavra:
         cliente = self._cliente()
         if cliente is None:
             raise RuntimeError("o telão está desligado neste PC")
+        # IMAGEM PRIMEIRO. Quando o ChurchManager mandou o slide pronto e a
+        # Ponte ja o pos na pasta do Holyrics, e ele que vai ao telao, pelo
+        # nome ("pasta/arquivo.png", como a documentacao do ShowImage pede).
+        # Se o Holyrics recusar, o slide vai como texto e o motivo fica em
+        # `aviso`: o culto nao para por causa de uma imagem.
+        self.aviso = None
+        arquivo = self._imagem(slide) if self._imagem is not None else None
+        if arquivo:
+            try:
+                cliente.pedir("ShowImage", {"file": arquivo})
+                self._no_ar = None
+                return
+            except Exception as erro:
+                self.aviso = explicar_recusa(erro, arquivo)
+        elif slide.get("imagem_url"):
+            self.aviso = "a imagem deste slide ainda não está na pasta do Holyrics"
         if slide["tipo"] == "VERSE" and slide.get("referencia"):
             # Um versiculo comprido vem do ChurchManager em mais de um slide,
             # todos com a mesma referencia. O Holyrics mostra o versiculo
@@ -156,7 +198,11 @@ class TelaoDaPalavra:
 
 
 class Palavra:
-    def __init__(self, fonte, mostrar, tirar, anotar, agora=time.time, validade=VALIDADE_DO_LINK):
+    def __init__(self, fonte, mostrar, tirar, anotar, agora=time.time, validade=VALIDADE_DO_LINK,
+                 aviso=None, imagens=None):
+        self._aviso_do_telao = aviso   # funcao: por que o ultimo slide foi como texto (ou None)
+        self._imagens = imagens        # funcao: o estado das imagens (ponte/slides_da_palavra.py)
+        self._aviso = None
         self._fonte = fonte
         self._mostrar = mostrar
         self._tirar = tirar
@@ -203,9 +249,18 @@ class Palavra:
             if self._link_vale():
                 link = {"expira_em": self._expira,
                         "resumo": hashlib.sha256(self._codigo.encode("utf-8")).hexdigest()}
+            imagens = None
+            if self._imagens is not None:
+                try:
+                    imagens = self._imagens()
+                except Exception:
+                    imagens = None
             if palavra is None:
-                return {"ativa": False, "link": link}
+                if self._imagens is None:
+                    return {"ativa": False, "link": link}
+                return {"ativa": False, "link": link, "imagens": imagens}
             return {
+                "imagens": imagens, "aviso": self._aviso,
                 "ativa": True, "titulo": palavra["titulo"], "pregador": palavra["pregador"],
                 "minutos": palavra["minutos"], "versao": palavra["versao"],
                 "slide": self._slide, "total": len(palavra["slides"]), "visivel": self._visivel,
@@ -255,14 +310,24 @@ class Palavra:
             erro = None
         except Exception as falha:
             erro = str(falha)[:160] or "o slide não chegou ao telão"
+        aviso = None
+        if erro is None and self._aviso_do_telao is not None:
+            try:
+                aviso = self._aviso_do_telao()
+            except Exception:
+                aviso = None
         with self._tranca:
             if self._slide == alvo:
                 self._erro = erro
+                self._aviso = aviso
         titulo = "Palavra: slide {} de {}".format(alvo + 1, total)
         if erro:
             # A lista segue mesmo assim: o operador abre a mao no Holyrics.
             return {"ok": False, "titulo": titulo, "detalhe": "abra no Holyrics: " + (
                 slide.get("referencia") or slide["texto"][:60]) + " (" + erro + ")"}, 200
+        if aviso:
+            # Chegou ao telao, mas como texto e nao como a imagem pronta.
+            return {"ok": True, "titulo": titulo, "detalhe": "foi como texto: " + aviso, "aviso": aviso}, 200
         return {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}, 200
 
     def tirar(self, quem):
@@ -272,6 +337,7 @@ class Palavra:
             self._visivel = False
             self._quem = self._nome(quem)
             self._erro = None
+            self._aviso = None
         try:
             self._tirar()
         except Exception as falha:
