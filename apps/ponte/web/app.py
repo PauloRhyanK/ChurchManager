@@ -413,6 +413,9 @@ def aqui_imagem():
 # local. "ordem" (trocar a ordem do culto inteira) fica de fora de proposito.
 ACOES_DO_PAINEL = ("ir", "gravar", "transmitir", "tela_preta", "recado", "cena_luz",
                    "apagar_luz", "modo_luz", "cortar", "visibilidade", "retorno",
+                   # ligar e parar a luz do teto que segue alguem (o botao do
+                   # cartao da Luz). A igreja so mexe a luz com tudo pronto.
+                   "seguir_ligar", "parar_seguir",
                    # do painel ao vivo. Passar slide do louvor NAO entra: entre
                    # o toque e o telao haveria ate 4 segundos.
                    "cena_transmissao", "clima",

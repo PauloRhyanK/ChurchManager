@@ -202,32 +202,37 @@ if TEM_CV:
         except rastreio.ErroRastreio as erro:
             conferir("OpenCV sem HOG e sem modelo: diz o que falta", "requirements-seguir" in str(erro))
 
+    conferir("o modelo YOLOX vem junto e e o padrao", rastreio.montar_detector({}, AQUI).nome == "yolox")
+
     class RedeDeMentira:
-        """Responde como um YOLO11n de 320: 1 x 84 x N, so a pessoa marcada."""
+        """Responde como o YOLOX nano: 1 x 3549 x 85, crua (antes da grade)."""
         def setInput(self, blob):
             self.forma = blob.shape
 
         def forward(self):
-            saida = np.zeros((1, 84, 3), dtype=np.float32)
-            saida[0, :5, 0] = [160, 120, 64, 96, 0.9]      # pessoa
-            saida[0, :5, 1] = [161, 121, 64, 96, 0.8]      # a mesma, repetida
-            saida[0, :4, 2] = [50, 50, 20, 20]             # nao e pessoa
-            saida[0, 4 + 5, 2] = 0.95                      # (classe 5, onibus)
+            saida = np.zeros((1, 3549, 85), dtype=np.float32)
+            celula = 15 * 52 + 20                      # grade de passo 8, coluna 20, linha 15
+            saida[0, celula, :6] = [0.5, 0.5, np.log(8), np.log(12), 0.9, 1.0]       # pessoa 64 x 96
+            saida[0, celula + 1, :6] = [0.5, 0.5, np.log(8), np.log(12), 0.8, 1.0]   # a mesma, ao lado
+            saida[0, celula + 2, :5] = [0.5, 0.5, 1, 1, 0.95]                        # objeto que
+            saida[0, celula + 2, 5 + 5] = 1.0                                        # e onibus
             return saida
 
-    yolo = object.__new__(rastreio.DetectorYolo)
-    yolo._rede, yolo._entrada, yolo._confianca = RedeDeMentira(), 320, 0.4
-    achou = yolo.detectar(np.zeros((360, 640, 3), dtype=np.uint8))
-    conferir("YOLO: so pessoas, sem repetir", len(achou) == 1, achou)
-    conferir("YOLO: a caixa volta para a imagem original",
-             achou and achou[0]["caixa"] == [0.4, 0.4, 0.6, 0.9333], achou)
-    conferir("YOLO: a rede recebe 320 x 320", yolo._rede.forma == (1, 3, 320, 320), yolo._rede.forma)
+    yolox = object.__new__(rastreio.DetectorYolox)
+    yolox._rede, yolox._confianca = RedeDeMentira(), 0.4
+    yolox._montar_grade()
+    achou = yolox.detectar(np.zeros((360, 640, 3), dtype=np.uint8))
+    conferir("YOLOX: so pessoas, sem repetir", len(achou) == 1, achou)
+    esperado = [0.3173, 0.3248, 0.4712, 0.735]
+    conferir("YOLOX: a caixa sai da grade e volta para a imagem original",
+             achou and all(abs(a - b) < 0.002 for a, b in zip(achou[0]["caixa"], esperado)), achou)
+    conferir("YOLOX: a rede recebe 416 x 416", yolox._rede.forma == (1, 3, 416, 416), yolox._rede.forma)
 
     print("\nApp: rotas do seguir, no modo simulado")
     import yaml
     with open(os.path.join(AQUI, "config.exemplo.yaml"), encoding="utf-8") as arquivo:
         conf = yaml.safe_load(arquivo)
-    conf["seguir"] = {"ativo": True, "fonte": "Câmera aberta", "grupo": "teto", "fps": 8}
+    conf["seguir"] = {"fonte": "Câmera aberta", "grupo": "teto", "fps": 8}
     caminho_conf = os.path.join(pasta, "config.yaml")
     with open(caminho_conf, "w", encoding="utf-8") as arquivo:
         yaml.safe_dump(conf, arquivo, allow_unicode=True)
@@ -246,7 +251,8 @@ if TEM_CV:
         def detectar(self, imagem):
             return [dict(c) for c in self.caixas]
 
-    ponte.CAMINHO_SEGUIR = os.path.join(pasta, "_seguir.json")
+    ponte.CAMINHO_SEGUIR = os.path.join(pasta, "_seguir_calibracao.json")
+    ponte.CAMINHO_SEGUIR_LIGADO = os.path.join(pasta, "_seguir.json")
     for nome in ("CAMINHO_PONTEIRO", "CAMINHO_LOUVOR", "CAMINHO_MARCAS"):
         setattr(ponte, nome, os.path.join(pasta, nome + ".json"))
     ponte._config = ponte.carregar_config()
@@ -256,9 +262,23 @@ if TEM_CV:
     ponte._estado["obs"] = ponte._ler_estado_obs()
     ponte._pecas["seguir_detector"] = DetectorDeMentira()
     ponte._ao_vivo["valor"] = ponte._montar_ao_vivo()
-    rast = ponte._pecas["seguir"]
-    rast.parar()        # o teste anda o laco na mao, com rast.passo()
     cliente = ponte.app.test_client()
+
+    print("\nPainel: o Seguir vem desligado e liga num botao")
+    conferir("vem desligado: nada monta, nada captura", ponte._pecas["seguir"] is None)
+    luz = cliente.get("/api/painel").get_json()["luz"]
+    conferir("o cartao da Luz oferece ligar", luz.get("seguir_pessoa") == {"estado": "desligado"}, luz.get("seguir_pessoa"))
+    r = cliente.get("/api/seguir").get_json()
+    conferir("a tela /seguir tambem oferece ligar", not r["disponivel"] and r["pode_ligar"], r)
+    corpo, codigo = ponte._acao_do_painel({"tipo": "seguir_ligar"}, "local")
+    rast = ponte._pecas["seguir"]
+    conferir("o botao do painel liga e prepara", codigo == 200 and rast is not None and rast.seguindo, corpo)
+    conferir("e a escolha fica gravada para depois de religar",
+             json.load(open(ponte.CAMINHO_SEGUIR_LIGADO))["ligado"] is True)
+    rast.parar()        # o teste anda o laco na mao, com rast.passo()
+    luz = cliente.get("/api/painel").get_json()["luz"]
+    conferir("ligado sem calibrar, o cartao diz o que falta",
+             luz["seguir_pessoa"]["estado"] == "falta_calibrar", luz["seguir_pessoa"])
 
     r = cliente.get("/api/seguir").get_json()
     conferir("o seguir esta disponivel", r["disponivel"] and r["detector"] == "teste", r)
@@ -267,7 +287,9 @@ if TEM_CV:
     r = cliente.get("/api/seguir").get_json()
     conferir("depois de uma foto, acha a pessoa", len(r["pessoas"]) == 1, r["pessoas"])
     conferir("e tem imagem marcada para a tela", rast.imagem()[0][:2] == b"\xff\xd8")
-    conferir("sem calibrar, nao liga", cliente.post("/api/seguir/ligar", json={"ligar": True}).status_code == 400)
+    conferir("sem calibrar, a luz nao recebe alvo", "seguir" not in cliente.get("/api/luz/quadro").get_json())
+    conferir("com uma pessoa so, ela vira o alvo sozinha", rast.alvo.situacao() == "seguindo")
+    rast.soltar()
     conferir("clique no vazio nao escolhe", cliente.post("/api/seguir/escolher", json={"x": 0.05, "y": 0.05}).status_code == 404)
     conferir("clique na pessoa escolhe", cliente.post("/api/seguir/escolher", json={"x": 0.45, "y": 0.5}).status_code == 200)
 
@@ -275,6 +297,8 @@ if TEM_CV:
     canais = ponte._contexto["luzes"].retrato()["canais"]
     conferir("mirar mexe so o pan e o tilt daquela luz", resp.status_code == 200
              and canais.get("113") == 90 and canais.get("114") == 120, (resp.get_json(), canais))
+    conferir("e calibrar desliga o Seguir", not rast.seguindo
+             and json.load(open(ponte.CAMINHO_SEGUIR_LIGADO))["ligado"] is False)
     conferir("mirar em luz de fora do grupo recusa",
              cliente.post("/api/seguir/mirar", json={"endereco": 49, "pan": 1, "tilt": 1}).status_code == 400)
 
@@ -287,7 +311,7 @@ if TEM_CV:
     conferir("com 4 pontos a luz fica calibrada", r["luzes"][0]["calibrada"] and r["luzes"][0]["conta"] == "homografia",
              r["luzes"][0])
 
-    conferir("liga o seguir", cliente.post("/api/seguir/ligar", json={"ligar": True}).get_json() == {"seguindo": True})
+    conferir("liga o seguir", cliente.post("/api/seguir/ligar", json={"ligar": True}).get_json()["seguindo"] is True)
     DetectorDeMentira.caixas = [{"caixa": [0.42, 0.3, 0.52, 0.9], "nota": 0.9}]
     rast.passo()
     quadro = cliente.get("/api/luz/quadro").get_json()
@@ -300,7 +324,7 @@ if TEM_CV:
     rast.passo()
     quadro = cliente.get("/api/luz/quadro").get_json()
     conferir("perdeu a pessoa: o alvo fica onde estava", quadro["seguir"]["alvos"]["113"] == alvo_antes)
-    conferir("desliga o seguir", cliente.post("/api/seguir/ligar", json={"ligar": False}).get_json() == {"seguindo": False})
+    conferir("desliga o seguir", cliente.post("/api/seguir/ligar", json={"ligar": False}).get_json()["seguindo"] is False)
     conferir("e o quadro deixa de levar o alvo", "seguir" not in cliente.get("/api/luz/quadro").get_json())
 
     print("\nApp: o painel recebe a imagem em fluxo")
@@ -311,6 +335,102 @@ if TEM_CV:
     primeiro, segundo = next(pedacos), next(pedacos)
     conferir("e a primeira foto vem logo", primeiro == b"--quadro\r\n" and b"Content-Type: image/" in segundo)
     resp.close()
+
+if TEM_CV:
+    print("\nCamera achada sozinha no OBS")
+    conferir("so a camera de verdade conta", rastreio.cameras_do_obs(OBS) == ["Câmera aberta"])
+    cal_auto = rastreio.Calibracao(os.path.join(pasta, "_auto.json"))
+    auto = rastreio.Rastreador(OBS, "", DetectorDeMentira(), ponte._contexto.get("movimento"), cal_auto, [113])
+    auto.passo()
+    conferir("com uma camera so, escolhe ela e guarda", auto.fonte == "Câmera aberta"
+             and rastreio.Calibracao(os.path.join(pasta, "_auto.json")).fonte() == "Câmera aberta")
+    cal_auto.acrescentar(113, 0.5, 0.5, 100, 100)
+    OBS.entradas = [("Câmera aberta", "dshow_input"), ("Câmera do púlpito", "dshow_input")]
+    auto.escolher_camera("Câmera do púlpito")
+    conferir("trocar de camera apaga a calibracao", auto.fonte == "Câmera do púlpito" and cal_auto.pontos(113) == [])
+    try:
+        auto.escolher_camera("Não existe")
+        conferir("camera que o OBS nao tem recusa", False)
+    except rastreio.ErroRastreio:
+        conferir("camera que o OBS nao tem recusa", True)
+    sem = rastreio.Rastreador(OBS, "", DetectorDeMentira(), None,
+                              rastreio.Calibracao(os.path.join(pasta, "_sem.json")), [113])
+    try:
+        sem.passo()
+        conferir("com duas cameras e nenhuma escolhida, pede para escolher", False)
+    except rastreio.ErroRastreio as erro:
+        conferir("com duas cameras e nenhuma escolhida, pede para escolher", "escolha" in str(erro), erro)
+    r = cliente.get("/api/seguir").get_json()
+    conferir("a tela recebe a lista de cameras", r["cameras"] == ["Câmera aberta", "Câmera do púlpito"], r.get("cameras"))
+    conferir("e sabe que a do config e fixa", r["fonte_fixa"] is True)
+    conferir("camera fixa no config nao troca pela tela",
+             cliente.post("/api/seguir/camera", json={"nome": "Câmera do púlpito"}).status_code == 400)
+    OBS.entradas = simulados.ObsSimulado.entradas
+
+    print("\nPainel do culto: ver e parar a luz seguindo")
+    for x, y, pan, tilt in [(0.45, 0.9, 90, 120), (0.1, 0.6, 60, 110), (0.9, 0.6, 190, 110), (0.2, 0.95, 70, 160)]:
+        rast.calibracao.acrescentar(113, x, y, pan, tilt)
+    rast.recalibrou()
+    DetectorDeMentira.caixas = [{"caixa": [0.4, 0.3, 0.5, 0.9], "nota": 0.9}]
+    ponte._acao_do_painel({"tipo": "seguir_ligar"}, "local")
+    rast.passo()
+    luz = cliente.get("/api/painel").get_json()["luz"]
+    conferir("o painel mostra que a luz segue alguem", luz["seguir_pessoa"] == {"estado": "seguindo"}, luz["seguir_pessoa"])
+    corpo, codigo = ponte._acao_do_painel({"tipo": "parar_seguir"}, "local")
+    conferir("Parar de seguir no painel desliga", codigo == 200 and not rast.seguindo
+             and ponte._contexto["movimento"].seguir() is None, corpo)
+    conferir("e o cartao volta a oferecer ligar",
+             cliente.get("/api/painel").get_json()["luz"]["seguir_pessoa"] == {"estado": "desligado"})
+    ponte._acao_do_painel({"tipo": "seguir_ligar"}, "local")
+    rast.passo()
+    ponte._acao_do_painel({"tipo": "modo_luz", "modo": "parado"}, "local")
+    rast.passo()
+    conferir("Parado no painel para de verdade (a foto seguinte nao religa)",
+             ponte._contexto["movimento"].seguir() is None and not rast.seguindo)
+    ponte._acao_do_painel({"tipo": "seguir_ligar"}, "local")
+    rast.passo()
+    cliente.post("/api/luz/modo/lento")
+    rast.passo()
+    conferir("um modo do culto tambem desliga o Seguir", ponte._contexto["movimento"].atual() == "lento"
+             and not rast.seguindo)
+    ponte._contexto["movimento"].escolher(None)
+    with open(os.path.join(AQUI, "..", "web", "app.py"), encoding="utf-8") as arquivo:
+        web = arquivo.read()
+    conferir("a web aceita ligar e parar", '"seguir_ligar", "parar_seguir"' in web)
+
+    print("\nPreparar na primeira vez, e o bloqueio do config")
+    ponte._acao_do_painel({"tipo": "parar_seguir"}, "local")
+    rast.parar()
+    ponte._pecas["seguir"] = None
+    ponte._pecas.pop("seguir_detector", None)
+    chamadas = []
+    original = rastreio.montar_detector
+    rastreio.montar_detector = lambda conf, raiz: (_ for _ in ()).throw(rastreio.FaltaOpenCV("falta"))
+    instalar_original = ponte._instalar_opencv
+    ponte._instalar_opencv = lambda cliente=None: chamadas.append(cliente)
+    ponte.SIMULAR = False
+    ponte._acao_do_painel({"tipo": "seguir_ligar"}, "local")
+    import time as _t
+    _t.sleep(0.2)
+    conferir("sem OpenCV, ligar comeca a instalar", len(chamadas) == 1)
+    conferir("e o cartao mostra 'preparando'",
+             cliente.get("/api/painel").get_json()["luz"]["seguir_pessoa"] == {"estado": "preparando"})
+    ponte._instalando_opencv["rodando"] = False
+    ponte._pecas["seguir_motivo"] = "não consegui instalar (sem internet)"
+    estado = cliente.get("/api/painel").get_json()["luz"]["seguir_pessoa"]
+    conferir("se falhar, o cartao diz o motivo", estado["estado"] == "erro" and "internet" in estado["motivo"], estado)
+    ponte._acao_do_painel({"tipo": "seguir_ligar"}, "local")
+    _t.sleep(0.2)
+    conferir("tocar em ligar de novo tenta de novo", len(chamadas) == 2)
+    ponte.SIMULAR = True
+    rastreio.montar_detector = original
+    ponte._instalar_opencv = instalar_original
+    ponte._instalando_opencv.update({"tentou": False, "rodando": False})
+
+    ponte._config["seguir"] = {"ativo": False}
+    corpo, codigo = ponte._acao_do_painel({"tipo": "seguir_ligar"}, "local")
+    conferir("seguir.ativo: false bloqueia ligar", codigo == 400, corpo)
+    conferir("e o cartao nem aparece", "seguir_pessoa" not in cliente.get("/api/painel").get_json()["luz"])
 
 print("\n" + "-" * 58)
 print("FALHAS: {}".format(len(FALHAS)))
