@@ -207,12 +207,20 @@ class PainelAoVivo:
             estado = vigia.get("estado")
             if estado == "no_ar":
                 itens.append({"nome": "TV do altar", "estado": "retorno aberto", "cor": "verde"})
-            elif estado in ("caiu", "reconectando", "desistiu", "fora_da_janela"):
+            elif estado in ("caiu", "reconectando", "desistiu", "fora_da_janela", "esperando_tv", "abrindo",
+                            "outro_app"):
                 itens.append({"nome": "TV do altar", "estado": str(vigia.get("texto") or "retorno caiu").lower(),
                               "cor": "vermelho" if estado in ("caiu", "desistiu") else "ambar"})
             else:
                 itens.append({"nome": "TV do altar", "estado": str(vigia.get("texto") or "sem leitura").lower(),
                               "cor": "cinza"})
+        telas = base.get("telas")
+        if telas and telas.get("suportado"):
+            cor = {"ok": "verde", "mudou": "vermelho", "sunshine_sem_tela": "vermelho"}.get(telas["estado"], "cinza")
+            itens.append({"nome": "Telas deste PC", "cor": cor,
+                          "estado": {"ok": "como foi guardado", "mudou": "mudaram",
+                                     "sunshine_sem_tela": "a tela do retorno sumiu",
+                                     "sem_referencia": "sem disposição guardada"}.get(telas["estado"], "sem leitura")})
         if internet is not None:
             itens.append({"nome": "Internet", "estado": internet["estado"],
                           "cor": {"boa": "verde", "lenta": "ambar", "caiu": "vermelho"}[internet["estado"]]})
