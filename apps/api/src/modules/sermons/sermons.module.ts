@@ -10,6 +10,7 @@ import { GenerationLimiter } from './ai/generation-limiter';
 import { SERMON_AI_CONFIG, describeSermonAiConfig, readSermonAiConfig, type SermonAiConfig } from './ai/sermon-ai.config';
 import { STRUCTURERS } from './ai/sermon-structurer';
 import { STRUCTURE_LIMITER, SermonImportService } from './sermon-import.service';
+import { SermonDeliveryImagesService } from './delivery-images.service';
 import { SermonDeliveryService } from './sermon-delivery.service';
 import { SermonSlidesService } from './sermon-slides.service';
 import { SermonsController } from './sermons.controller';
@@ -26,6 +27,8 @@ const ANTHROPIC_CLIENT = Symbol('ANTHROPIC_CLIENT');
   providers: [
     SermonsService,
     SermonDeliveryService,
+    // StorageModule é global: o StorageService chega sem import.
+    SermonDeliveryImagesService,
     SermonSlidesService,
     SermonImportService,
     BibleService,

@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { AuthUser } from '../auth/auth-user';
 import { deliveryCopy, readDeliverySlides } from './delivery-copy';
+import { SLIDE_IMAGE_HEIGHT, SLIDE_IMAGE_WIDTH, deliveryVersion, readSlideImages, slideHash } from './delivery-images';
 import { deliveryHasPassed } from './delivery-match';
 import { rematchDeliveries } from './delivery-rematch';
 import type { SendSermonDto } from './dto/delivery.dto';
@@ -24,6 +25,22 @@ export interface DeliverySummary {
   preacherName: string;
   estimatedMinutes: number;
   slideCount: number;
+}
+/** Um slide no formato da Ponte. Sem imagem (`imageUrl: null`), a Ponte mostra o texto. */
+export interface PonteSlide {
+  index: number;
+  kind: PublicSlide['kind'];
+  title: string;
+  text: string;
+  reference: string | null;
+  imageUrl: string | null;
+  width: number | null;
+  height: number | null;
+}
+/** A palavra para a Ponte: os campos do resumo e mais a versão e os slides com as imagens. */
+export interface PonteSermon extends DeliverySummary {
+  version: string;
+  slides: PonteSlide[];
 }
 export interface ServiceSlides {
   title: string;
@@ -287,6 +304,48 @@ export class SermonDeliveryService {
       });
     }
     return out;
+  }
+
+  /**
+   * A palavra do culto para a Ponte (contrato em docs/api/ponte-palavra.md). Os campos do resumo
+   * continuam; `version` e `slides` são acréscimos. Só vale imagem cujo hash é o de um slide atual.
+   */
+  async forPonte(tenantId: string, serviceId: string): Promise<PonteSermon | null> {
+    const row = await this.prisma.sermonDelivery.findFirst({
+      where: { tenantId, serviceId },
+      select: {
+        title: true,
+        preacherName: true,
+        estimatedSeconds: true,
+        slideStyle: true,
+        slides: true,
+        slideImages: true,
+      },
+    });
+    if (!row) return null;
+    const slides = readDeliverySlides(row.slides);
+    const images = readSlideImages(row.slideImages);
+    const hashes = slides.map((slide) => slideHash(row.slideStyle, slide));
+    return {
+      title: row.title,
+      preacherName: row.preacherName,
+      estimatedMinutes: Math.ceil(row.estimatedSeconds / 60),
+      slideCount: slides.length,
+      version: deliveryVersion(row.slideStyle, row.title, hashes),
+      slides: slides.map((slide, index) => {
+        const imageUrl = images[hashes[index]] ?? null;
+        return {
+          index,
+          kind: slide.kind,
+          title: slide.title,
+          text: slide.text,
+          reference: slide.reference,
+          imageUrl,
+          width: imageUrl ? SLIDE_IMAGE_WIDTH : null,
+          height: imageUrl ? SLIDE_IMAGE_HEIGHT : null,
+        };
+      }),
+    };
   }
 
   /** Os slides do culto para a prévia do roteiro. Lê só `sermonDelivery`, do tenant de quem chama. */
