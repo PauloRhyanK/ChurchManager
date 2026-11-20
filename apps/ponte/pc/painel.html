@@ -385,7 +385,7 @@ function desenharMenu(d) {
     }
     const at = d.atualizacao || {};
     m += '<div class="bloco"><span class="miudo">Versão deste PC: ' + esc(at.aqui || '?') +
-      (at.erro ? ' · não consegui falar com a versão web' : at.disponivel ? ' · há uma mais nova' : at.la ? ' · é a mais nova' : '') + '</span>' +
+      (at.desligada ? ' · atualização desligada neste PC' : at.erro ? ' · não consegui falar com a versão web' : at.disponivel ? ' · há uma mais nova' : at.la ? ' · é a mais nova' : '') + '</span>' +
       '<button type="button" class="bt" id="bt-conferir">Procurar atualização</button></div>';
     m += '<div class="bloco"><span class="miudo">Painel na web</span><div class="par">' +
       '<button type="button" data-remoto="1" aria-pressed="' + (d.remoto && d.remoto.aceita ? 'true' : 'false') + '">Aceita comandos</button>' +

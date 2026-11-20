@@ -19,12 +19,20 @@ nao seria.
 """
 
 import hashlib
+import re
 import threading
 import time
 
 from .repertorio import _texto_do_slide
 
 PAUSA = 1.0
+# A miniatura de cada slide, pedida ao Holyrics junto com a lista. Sem ela,
+# uma apresentacao de IMAGENS (a pasta Pregacao, por exemplo) aparecia no
+# painel pelo NOME do arquivo (19/11/2026). 320x180 basta para a tela e
+# mantem o conteudo leve para ir a versao web.
+PREVIA = "320x180"
+PREVIA_MAXIMA = 300 * 1024          # caracteres de base64 por slide
+NOME_DE_ARQUIVO = re.compile(r"^[^\n]{1,200}\.(jpe?g|png|gif|bmp|webp|tiff?)$", re.I)
 
 
 class Telao:
@@ -79,13 +87,27 @@ class Telao:
         if chave != self._chave:
             slides = []
             try:
-                com_slides = self._dados(cliente.pedir("GetCurrentPresentation", {"include_slides": True}))
+                try:
+                    com_slides = self._dados(cliente.pedir("GetCurrentPresentation", {
+                        "include_slides": True, "include_slide_preview": True,
+                        "slide_preview_size": PREVIA}))
+                except Exception:
+                    # Holyrics antigo, ou sem permissao para a previa: vai sem.
+                    com_slides = self._dados(cliente.pedir("GetCurrentPresentation", {"include_slides": True}))
                 for item in (com_slides or {}).get("slides") or []:
                     if not isinstance(item, dict):
                         continue
                     linhas, instrucoes = _texto_do_slide(item)
-                    slides.append({"indice": len(slides), "linhas": linhas, "instrucoes": instrucoes,
-                                   "descricao": str(item.get("slide_description") or "")})
+                    # Slide de imagem: o "texto" e o nome do arquivo. Nao serve
+                    # para ninguem no painel; a miniatura e que mostra.
+                    if len(linhas) == 1 and NOME_DE_ARQUIVO.match(linhas[0]):
+                        linhas = []
+                    previa = item.get("preview")
+                    slide = {"indice": len(slides), "linhas": linhas, "instrucoes": instrucoes,
+                             "descricao": str(item.get("slide_description") or "")}
+                    if isinstance(previa, str) and 0 < len(previa) <= PREVIA_MAXIMA:
+                        slide["imagem"] = previa
+                    slides.append(slide)
             except Exception:
                 # Versiculo nao tem lista, e um Holyrics antigo nao conhece o
                 # parametro: a tela mostra "slide 3 de 12" e os botoes seguem.
