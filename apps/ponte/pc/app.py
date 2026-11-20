@@ -3626,24 +3626,36 @@ def _na_janela_do_culto(agora):
     conf = _config.get("vigia_tv") or {}
     if conf.get("janela_do_culto"):
         return mod_vigia_tv._dentro_da_janela(conf["janela_do_culto"], agora)
+    # A janela pode atravessar a meia-noite: um culto as 00:10 tem a janela
+    # comecando as 23:10 da vespera; uma vigilia as 23:00 termina no dia
+    # seguinte. Por isso o inicio e procurado na data certa (a do culto, quando
+    # o ChurchManager diz) ou, so com a hora, em ontem, hoje e amanha.
+    dias = (-1, 0, 1)
     hora = None
     repertorio = _pecas.get("repertorio")
     culto = repertorio.culto() if repertorio is not None and hasattr(repertorio, "culto") else None
-    if culto and culto.get("date") == time.strftime("%Y-%m-%d", time.localtime(agora)):
-        hora = culto.get("startTime")
-    hora = hora or _hora_do_culto()
+    if culto and culto.get("date") and culto.get("startTime"):
+        for d in dias:
+            if culto["date"] == time.strftime("%Y-%m-%d", time.localtime(agora + d * 86400)):
+                hora, dias = culto["startTime"], (d,)
+                break
+    if hora is None:
+        hora = _hora_do_culto()
     try:
         horas, minutos = [int(p) for p in str(hora).split(":")[:2]]
     except (TypeError, ValueError):
         return False
-    hoje = time.localtime(agora)
-    inicio = time.mktime((hoje.tm_year, hoje.tm_mon, hoje.tm_mday, horas, minutos, 0, 0, 0, -1))
     with _tranca_ordem:
         momentos = list(_ordem["momentos"])
     duracao = sum(m or 0 for m, antes in (mod_agenda.minutos_de(i, _cues_por_id.get(i)) for i in momentos) if not antes)
     antes = float(conf.get("antes_min", 60)) * 60
     depois = (duracao or 120) * 60 + float(conf.get("depois_min", 30)) * 60
-    return inicio - antes <= agora <= inicio + depois
+    for d in dias:
+        dia = time.localtime(agora + d * 86400)
+        inicio = time.mktime((dia.tm_year, dia.tm_mon, dia.tm_mday, horas, minutos, 0, 0, 0, -1))
+        if inicio - antes <= agora <= inicio + depois:
+            return True
+    return False
 
 
 def _hora_do_culto():

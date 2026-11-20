@@ -409,6 +409,24 @@ conferir("duas horas antes ainda nao", ponte._na_janela_do_culto(agora) is False
 ponte._config["vigia_tv"] = {"antes_min": 180}
 conferir("`antes_min` do config estica a janela", ponte._na_janela_do_culto(agora) is True)
 
+# A meia-noite no meio da janela (20/11/2026: o teste acima falhava quando
+# rodava as 22h, porque o culto "duas horas depois" caia no dia seguinte).
+# Horas fixas, para o resultado nao depender de quando o teste roda.
+def _as(ano, mes, dia, h, m):
+    return time.mktime((ano, mes, dia, h, m, 0, 0, 0, -1))
+
+
+ponte._config["vigia_tv"] = {}
+ponte._hora_do_culto = lambda: "00:10"
+conferir("22:10, culto as 00:10: ainda nao", ponte._na_janela_do_culto(_as(2026, 11, 20, 22, 10)) is False)
+conferir("23:30, culto as 00:10 de amanha: ja e janela", ponte._na_janela_do_culto(_as(2026, 11, 20, 23, 30)) is True)
+ponte._config["vigia_tv"] = {"antes_min": 180}
+conferir("22:10, culto as 00:10 com antes_min 180: ja e janela", ponte._na_janela_do_culto(_as(2026, 11, 20, 22, 10)) is True)
+ponte._config["vigia_tv"] = {}
+ponte._hora_do_culto = lambda: "23:00"
+conferir("vigilia as 23:00: 00:30 do dia seguinte ainda e janela", ponte._na_janela_do_culto(_as(2026, 11, 21, 0, 30)) is True)
+conferir("vigilia as 23:00: 11:00 do dia seguinte nao e", ponte._na_janela_do_culto(_as(2026, 11, 21, 11, 0)) is False)
+
 print("\n" + "-" * 58)
 print("FALHAS: {}".format(len(FALHAS)))
 sys.exit(1 if FALHAS else 0)
