@@ -160,6 +160,8 @@ class HolyricsSimulado:
         self.slide = 0
         self.preta = False
         self.historico = []
+        self.pasta = None            # ShowImage: uma pasta de imagens no telao
+        self.alerta = {"text": "PIX: igreja@exemplo.com.br", "show": False}
 
     @staticmethod
     def slides_de(identificador):
@@ -176,6 +178,30 @@ class HolyricsSimulado:
         with self._tranca:
             self.historico.append((acao, payload))
             del self.historico[:-200]
+            if acao == "ShowImage":
+                self.pasta, self.musica, self.slide = str(payload.get("file") or ""), None, 0
+                return {"status": "ok"}
+            if acao == "GetAlert":
+                return {"status": "ok", "data": dict(self.alerta)}
+            if acao == "SetAlert":
+                if "text" in payload:
+                    self.alerta["text"] = str(payload["text"])
+                if "show" in payload:
+                    self.alerta["show"] = bool(payload["show"])
+                return {"status": "ok"}
+            if acao == "GetCurrentPresentation" and self.pasta is not None:
+                dados = {"id": "pasta", "type": "image", "name": self.pasta,
+                         "slide_number": self.slide + 1, "total_slides": 6}
+                if payload.get("include_slides"):
+                    dados["slides"] = []
+                    for i in range(6):
+                        item = {"number": i + 1, "text": "slide-{:02d}.jpg".format(i + 1), "slide_description": ""}
+                        if payload.get("include_slide_preview"):
+                            tom = 40 + 35 * i
+                            item["preview"] = base64.b64encode(
+                                _png(32, 18, lambda x, y, t=tom: (t, 60, 255 - t))).decode("ascii")
+                        dados["slides"].append(item)
+                return {"status": "ok", "data": dados}
             if acao == "GetCurrentPresentation":
                 if self.musica is None:
                     return {"status": "ok", "data": None}
@@ -186,7 +212,7 @@ class HolyricsSimulado:
                                        for s in self.slides_de(self.musica)]
                 return {"status": "ok", "data": dados}
             if acao == "ActionNext":
-                self.slide = min(39, self.slide + 1)
+                self.slide = min(5 if self.pasta is not None else 39, self.slide + 1)
                 return {"status": "ok"}
             if acao == "ActionPrevious":
                 self.slide = max(0, self.slide - 1)
@@ -200,6 +226,7 @@ class HolyricsSimulado:
                 return {"status": "ok", "data": {"id": str(payload.get("id")), "title": "Música",
                                                  "slides": self.slides_de(payload.get("id"))}}
             if acao == "ShowLyrics":
+                self.pasta = None
                 self.musica = str(payload.get("id"))
                 self.slide = 0
                 return {"status": "ok"}
@@ -208,5 +235,6 @@ class HolyricsSimulado:
                 return {"status": "ok"}
             if acao == "CloseCurrentPresentation":
                 self.musica = None
+                self.pasta = None
                 return {"status": "ok"}
             return {"status": "ok"}

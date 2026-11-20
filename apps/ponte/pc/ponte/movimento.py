@@ -82,6 +82,10 @@ class Movimento:
         # deste arquivo. Enquanto ninguem usa o estudio, isto fica None e o
         # motor se comporta exatamente como antes de o estudio existir.
         self._estudio = None
+        # O modo SEGUIR (ver ponte/rastreio.py e o fim deste arquivo): para
+        # onde cada cabeca deve apontar, vindo da camera. None = nao ha.
+        self._seguir = None
+        self.configurar_seguir()
         self._lock = threading.Lock()
 
     # -- configuracao --------------------------------------------------------
@@ -151,6 +155,7 @@ class Movimento:
                 # "Parado" para TUDO, inclusive o que o estudio deixou
                 # rodando: e o botao de abortar, e nao pode sobrar movimento.
                 self._estudio = None
+                self._seguir = None
             return None
         chave = str(nome)
         if chave not in self._modos:
@@ -158,6 +163,7 @@ class Movimento:
         with self._lock:
             self._atual = chave
             self._estudio = None    # modo do culto e estudio nao se somam
+            self._seguir = None
         return chave
 
     def atual(self):
@@ -166,7 +172,8 @@ class Movimento:
 
     def ativo(self):
         with self._lock:
-            return self._atual is not None or self._estudio is not None
+            return (self._atual is not None or self._estudio is not None
+                    or self._seguir is not None)
 
     def e_perigoso(self, nome):
         """Se ESTE lado considera o modo perigoso.
@@ -188,6 +195,10 @@ class Movimento:
         """
         chave = self.atual()
         if chave is None:
+            with self._lock:
+                seguindo = self._seguir is not None
+            if seguindo:
+                return self._aplicar_seguir(quadro, t)
             return self._aplicar_estudio(quadro, t)
         for efeito in self._modos[chave]["efeitos"]:
             try:
@@ -617,6 +628,7 @@ class Movimento:
                     estado["raio"] = anterior["raio"]
             self._estudio = estado
             self._atual = None
+            self._seguir = None
         return dict(limpo)
 
     def estudio(self):
@@ -800,3 +812,134 @@ class Movimento:
         de, para = cores[atual], cores[(atual + 1) % total]
         for canal, a, b in zip(canais, de, para):
             quadro[canal - 1] = max(0, min(255, int(round(a + (b - a) * mistura))))
+
+
+    # =======================================================================
+    #  SEGUIR — as cabecas do teto acompanhando alguem, pela camera
+    # =======================================================================
+    #
+    # QUEM DECIDE PARA ONDE e a ponte principal (ponte/rastreio.py), que olha
+    # a camera. O que chega aqui e so o ALVO de cada cabeca: {endereco:
+    # [pan, tilt]}. Quem decide COMO chegar la e este motor, com os limites
+    # DESTA maquina — exatamente como no estudio:
+    #
+    #   - so endereco de grupo com pan/tilt no config local entra;
+    #   - o alvo e preso na cerca do config local (seguir.cerca);
+    #   - a cabeca nunca anda mais que SEGUIR_VELOCIDADE passos por segundo,
+    #     e chega no alvo amaciando, sem tranco;
+    #   - cabeca apagada nao se mexe (_escrever_posicao);
+    #   - "Parado", qualquer modo do culto ou o estudio desligam o seguir.
+    #
+    # Se a camera perde a pessoa, o alvo para de mudar e a luz FICA onde
+    # esta. Se a rede cai, a mesma coisa. Nada aqui apaga ou recentraliza.
+
+    SEGUIR_VELOCIDADE = 60.0     # passos de pan/tilt por segundo, no maximo
+    SEGUIR_AMACIAR = 5.0         # quanto do caminho anda por segundo (1/s)
+
+    def configurar_seguir(self, cerca=None, velocidade=None):
+        """Limites LOCAIS do seguir. Vem do config desta maquina."""
+        limpa = {"pan_min": 0, "pan_max": 255, "tilt_min": 0, "tilt_max": 255}
+        for chave in limpa:
+            try:
+                limpa[chave] = max(0, min(255, int((cerca or {})[chave])))
+            except (KeyError, TypeError, ValueError):
+                pass
+        self._seguir_cerca = limpa
+        try:
+            v = float(velocidade)
+            self._seguir_velocidade = max(5.0, min(self.SEGUIR_VELOCIDADE, v))
+        except (TypeError, ValueError):
+            self._seguir_velocidade = self.SEGUIR_VELOCIDADE
+
+    def _bases_moveis(self):
+        mapa = {}
+        for grupo in self._grupos.values():
+            if grupo.get("pan") is None and grupo.get("tilt") is None:
+                continue
+            for base in grupo["bases"]:
+                mapa.setdefault(base, grupo)
+        return mapa
+
+    def normalizar_seguir(self, bruto):
+        """{"alvos": {endereco: [pan, tilt]}} limpo, ou None. Recusa o resto."""
+        if not isinstance(bruto, dict):
+            return None
+        alvos = bruto.get("alvos")
+        if not isinstance(alvos, dict):
+            return None
+        moveis = self._bases_moveis()
+        cerca = self._seguir_cerca
+        limpos = {}
+        for endereco, par in alvos.items():
+            try:
+                base = int(endereco)
+                pan, tilt = float(par[0]), float(par[1])
+            except (TypeError, ValueError, IndexError, KeyError):
+                continue
+            if base not in moveis or not (math.isfinite(pan) and math.isfinite(tilt)):
+                continue
+            limpos[base] = (max(cerca["pan_min"], min(cerca["pan_max"], pan)),
+                            max(cerca["tilt_min"], min(cerca["tilt_max"], tilt)))
+        return limpos or None
+
+    def definir_seguir(self, bruto):
+        """Liga ou atualiza o seguir. Alvo invalido ou vazio DESLIGA.
+
+        Atualizar NAO recomeca nada: a posicao atual de cada cabeca continua,
+        e e dela que a cabeca anda ate o alvo novo. Ligar desliga o modo do
+        culto e o estudio — os tres nunca se somam.
+        """
+        limpos = self.normalizar_seguir(bruto)
+        with self._lock:
+            if limpos is None:
+                self._seguir = None
+                return None
+            anterior = self._seguir or {"t": None, "posicao": {}}
+            self._seguir = {"alvos": limpos, "t": anterior["t"],
+                            "posicao": dict(anterior["posicao"])}
+            self._atual = None
+            self._estudio = None
+        return {str(b): [round(p, 1), round(t, 1)] for b, (p, t) in limpos.items()}
+
+    def parar_seguir(self):
+        with self._lock:
+            self._seguir = None
+
+    def seguir(self):
+        """O que esta valendo, no formato do fio, ou None."""
+        with self._lock:
+            if self._seguir is None:
+                return None
+            return {"alvos": {str(b): [round(p, 1), round(t, 1)]
+                              for b, (p, t) in self._seguir["alvos"].items()}}
+
+    def _aplicar_seguir(self, quadro, t):
+        with self._lock:
+            estado = self._seguir
+        if estado is None:
+            return quadro
+        try:
+            anterior = estado["t"]
+            passo = 0.0 if anterior is None else max(0.0, min(0.25, t - anterior))
+            estado["t"] = t
+            moveis = self._bases_moveis()
+            for base, (alvo_pan, alvo_tilt) in estado["alvos"].items():
+                grupo = moveis.get(base)
+                if grupo is None:
+                    continue
+                ultima = estado["posicao"].get(base)
+                if ultima is None:
+                    # Primeira vez: parte de onde a CENA deixou a cabeca.
+                    ultima = self._centro(quadro, grupo, base, {})
+                fracao = min(1.0, self.SEGUIR_AMACIAR * passo)
+                folga = self._seguir_velocidade * passo
+                pan = ultima[0] + max(-folga, min(folga, (alvo_pan - ultima[0]) * fracao))
+                tilt = ultima[1] + max(-folga, min(folga, (alvo_tilt - ultima[1]) * fracao))
+                estado["posicao"][base] = (pan, tilt)
+                # Sem cerca aqui, pelo mesmo motivo do estudio: o alvo ja esta
+                # dentro dela, e a saida fica sempre entre a posicao anterior
+                # e o alvo. Cabeca apagada continua sem se mexer.
+                self._escrever_posicao(quadro, grupo, base, pan, tilt, {})
+        except Exception:
+            pass
+        return quadro

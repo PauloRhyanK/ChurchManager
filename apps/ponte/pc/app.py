@@ -19,9 +19,11 @@ import time
 import yaml
 from flask import Flask, Response, jsonify, request, send_from_directory
 
+from ponte import achar_principal as mod_achar
 from ponte import atualizar as mod_atualizar
 from ponte import condutor as mod_condutor
 from ponte import obs_imagem as mod_obs_imagem
+from ponte import rastreio as mod_rastreio
 from ponte import obs_ouvinte as mod_obs_ouvinte
 from ponte import painel_ao_vivo as mod_ao_vivo
 from ponte import palavra as mod_palavra
@@ -143,6 +145,10 @@ def montar_contexto(config):
         contexto["movimento"] = mod_movimento.Movimento(
             config.get("grupos_de_luz") or {}, config.get("movimentos") or {}
         )
+        # Os limites do SEGUIR sao sempre os DESTA maquina (ver movimento.py).
+        conf_seguir = config.get("seguir") or {}
+        contexto["movimento"].configurar_seguir(conf_seguir.get("cerca"),
+                                                conf_seguir.get("velocidade"))
     except Exception as erro:
         print("[aviso] movimento desligado: {}".format(erro))
         contexto["movimento"] = None
@@ -594,9 +600,17 @@ def _ler_estado_holyrics():
         atual = cliente.pedir("GetCurrentPresentation").get("data")
     except Exception:
         return None
-    dados = {"preta": None}
+    dados = {"preta": None, "alerta": None}
     try:
         dados["preta"] = bool(cliente.pedir("GetF10").get("data"))
+    except Exception:
+        pass
+    try:
+        # O Alerta do Holyrics: a faixa embaixo da tela. E nele que mora o Pix
+        # do ofertorio.
+        alerta = cliente.pedir("GetAlert").get("data") or {}
+        dados["alerta"] = {"mostrando": bool(alerta.get("show")),
+                           "tem_texto": bool(str(alerta.get("text") or "").strip())}
     except Exception:
         pass
     if not atual:
@@ -838,6 +852,7 @@ def louvor_slide(indice):
 
 EXTENSOES_DE_AUDIO = {".wav", ".mp3", ".ogg", ".m4a", ".flac"}
 CAMINHO_MARCAS = os.path.join(RAIZ, "_marcas_louvor.json")
+CAMINHO_SEGUIR = os.path.join(RAIZ, "_seguir_calibracao.json")
 
 
 @app.get("/api/louvor/audio/<nome>")
@@ -1094,6 +1109,9 @@ def luz_quadro():
     corpo = cliente.retrato()
     corpo["modo"] = (motor.atual() if motor else None) or "parado"
     _estudio_no_quadro(corpo, motor)    # so acrescenta algo com o estudio em uso
+    seguir = motor.seguir() if motor else None
+    if seguir is not None:
+        corpo["seguir"] = seguir        # o alvo de cada cabeca, vindo da camera
     return jsonify(corpo)
 
 
@@ -1187,7 +1205,7 @@ def luz_remover_look(nome):
 # Por isso a animacao NAO vai no campo "modo" do quadro: vai numa chave nova,
 # "estudio", que a versao antiga ignora. Para ela o modo segue "parado" e a
 # luz fica quieta, na cor certa. Ver ponte/seguidor.py.
-_estudio_visto = {"em": None, "sabe": False}
+_estudio_visto = {"em": None, "sabe": False, "seguir": False}
 
 
 def _estudio_no_quadro(corpo, motor):
@@ -1195,7 +1213,9 @@ def _estudio_no_quadro(corpo, motor):
     quem = request.remote_addr or ""
     if quem not in ("127.0.0.1", "::1"):
         _estudio_visto["em"] = time.time()
-        _estudio_visto["sabe"] = request.args.get("sabe") == "estudio"
+        sabe = str(request.args.get("sabe") or "").split(",")
+        _estudio_visto["sabe"] = "estudio" in sabe
+        _estudio_visto["seguir"] = "seguir" in sabe
     espec = motor.estudio() if motor else None
     if espec is not None:
         corpo["estudio"] = espec
@@ -1573,6 +1593,8 @@ def _trocar_host_obs(host):
     _contexto["obs_saude"] = ClienteOBS(*argumentos, timeout=3.5, tentativas=1)
     if _pecas.get("imagem") is not None:
         _pecas["imagem"].trocar_cliente(ClienteOBS(*argumentos, timeout=3.5, tentativas=1))
+    if _pecas.get("seguir") is not None:
+        _pecas["seguir"].trocar_cliente(ClienteOBS(*argumentos, timeout=2.0, tentativas=1))
 
 
 def _cue_interna(cue_id):
@@ -1747,6 +1769,9 @@ def _carregar_maquina():
         papel = "holyrics"
     principal = os.environ.get("PONTE_PRINCIPAL") or dados.get("principal")
     _maquina.update({
+        # `atualizar: nunca` no maquina.yaml: este PC nao se atualiza sozinho
+        # nem mostra o aviso (e o PC de quem desenvolve o projeto).
+        "atualizar": str(dados.get("atualizar") or "").strip().lower(),
         "papel": papel,
         "nome": str(dados.get("nome") or PAPEIS[papel]),
         # A principal nao tem principal: ela e a ponta da linha.
@@ -1872,7 +1897,12 @@ def _montar_espelho():
         return None
     return mod_espelho.Espelho(url, chave, _chegada.retrato, _pedido_da_web,
                                nome=_maquina["nome"],
-                               extra=lambda: {"painel": _retrato_do_painel()},
+                               # `rede`: onde este PC atende na rede da igreja.
+                               # E o que deixa o PC do som achar este aqui
+                               # quando o roteador troca o endereco.
+                               extra=lambda: {"painel": _retrato_do_painel(),
+                                              "rede": {"enderecos": mod_achar.enderecos_locais(
+                                                  _porta["valor"])}},
                                conteudo=_conteudo_para_a_web)
 
 
@@ -1935,7 +1965,43 @@ def aqui_retrato():
     except Exception as erro:
         corpo["principal_ok"] = False
         corpo["erro"] = "sem contato com o PC do Holyrics: {}".format(erro)
+        explicacao = _procurador["valor"].explicar() if _procurador["valor"] else None
+        if explicacao:
+            corpo["erro"] = explicacao
     return jsonify(corpo)
+
+
+# -- achar o principal quando o endereco dele muda -----------------------------
+_procurador = {"valor": None}
+
+
+def _gravar_texto(nome, transformar):
+    caminho = os.path.join(RAIZ, nome)
+    try:
+        with open(caminho, encoding="utf-8") as arq:
+            antes = arq.read()
+    except OSError:
+        return
+    depois = transformar(antes)
+    if depois == antes:
+        return
+    provisorio = caminho + ".novo"
+    with open(provisorio, "w", encoding="utf-8", newline="") as arq:
+        arq.write(depois)
+    os.replace(provisorio, caminho)
+
+
+def _trocar_principal(url):
+    """Passa a falar com o principal em `url`, agora e nos proximos boots."""
+    _maquina["principal"] = url
+    seguidor = _contexto.get("seguidor")
+    if seguidor is not None:
+        seguidor.trocar_url(url)
+    try:
+        _gravar_texto("maquina.yaml", lambda t: mod_achar.com_principal(t, url))
+        _gravar_texto("config.yaml", lambda t: mod_achar.com_url_do_seguidor(t, url))
+    except OSError as erro:
+        print("  [principal] troquei o endereco, mas nao consegui gravar: {}".format(erro))
 
 
 def _local_ou_principal(caminho, local, timeout=4.0):
@@ -2370,8 +2436,13 @@ def _retrato_da_atualizacao():
         disponivel = bool(a["faltam"])
     else:
         disponivel = bool(a["aqui"] and a["la"] and a["aqui"] != a["la"])
+    # Num PC com `atualizar: nunca` o aviso nao aparece. "Diferente da web"
+    # nao quer dizer "atras da web": o PC de quem desenvolve esta A FRENTE, e
+    # o botao Atualizar ali traria o codigo antigo por cima do novo.
+    desligada = _maquina.get("atualizar") in ("nunca", "false", "nao", "manual")
     return {"aqui": a["aqui"], "la": a["la"], "erro": a["erro"], "aplicando": a["aplicando"],
-            "disponivel": disponivel, "faltam": (a["faltam"] or [])[:8]}
+            "disponivel": disponivel and not desligada, "desligada": desligada,
+            "faltam": (a["faltam"] or [])[:8]}
 
 
 def _maquinas_do_painel():
@@ -2407,7 +2478,7 @@ def _retrato_do_painel():
     if holyrics is not None:
         telao = {"vazio": bool(holyrics.get("vazio")), "nome": holyrics.get("nome") or "",
                  "slide": holyrics.get("slide"), "total": holyrics.get("total"),
-                 "preta": holyrics.get("preta")}
+                 "preta": holyrics.get("preta"), "alerta": holyrics.get("alerta")}
     luz = None
     if _contexto.get("luzes") is not None:
         motor = _contexto.get("movimento")
@@ -2438,6 +2509,8 @@ def _retrato_do_painel():
         "recados": recados,
         "tem_recado_limpar": "recado_limpar" in _cues_por_id,
         "retorno_tv": _vigia["valor"].retrato() if _vigia["valor"] else None,
+        "live": {"titulo": _titulo_da_live(),
+                 "pode": any(c["cliente"].autorizado() for c in (_contexto.get("youtube") or {}).values())},
         "historico": list(_historico)[:12],
         "remoto": dict(_remoto),
         "atualizacao": _retrato_da_atualizacao(),
@@ -2620,6 +2693,35 @@ def _acao_do_painel(dados, origem):
             titulo = ("Transmissão aberta ao público" if valor == "public"
                       else "Transmissão só para quem tem o link")
             resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
+        elif tipo == "pix":
+            # O texto do Pix fica no Alerta do Holyrics. Mostrar e so ligar o
+            # alerta; `ofertorio.pix_texto` no config.yaml, se existir, escreve
+            # o texto antes (a API nao escolhe um alerta salvo pelo nome).
+            cliente = _contexto.get("holyrics")
+            if cliente is None:
+                return {"erro": "o telão está desligado neste PC"}, 400
+            ligar = bool(dados.get("ligar"))
+            pedido = {"show": ligar}
+            texto_pix = str(((_config.get("ofertorio") or {}).get("pix_texto")) or "").strip()
+            if ligar and texto_pix:
+                pedido["text"] = texto_pix
+            cliente.pedir("SetAlert", pedido)
+            titulo = "Pix no telão" if ligar else "Pix tirado do telão"
+            resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
+        elif tipo == "slides_palavra":
+            # Os slides que o site gera ficam numa pasta de imagens do Holyrics
+            # ("Pregação"). ShowImage com o nome da pasta abre a pasta inteira.
+            cliente = _contexto.get("holyrics")
+            if cliente is None:
+                return {"erro": "o telão está desligado neste PC"}, 400
+            pasta = str(((_config.get("palavra") or {}).get("pasta_de_imagens")) or "Pregação")
+            cliente.pedir("ShowImage", {"file": pasta})
+            titulo = "Slides da Palavra no telão"
+            resultado = {"ok": True, "titulo": titulo, "detalhe": "pasta " + pasta}
+        elif tipo == "live":
+            titulo = "Live configurada no YouTube"
+            resultado = _configurar_live(str(dados.get("titulo") or ""))
+            titulo = resultado["titulo"]
         elif tipo == "retorno":
             vigia = _vigia["valor"]
             if vigia is None:
@@ -2680,6 +2782,107 @@ def _anotar_quem_falou():
             "versao": request.headers.get("X-Ponte-Versao", "")[:20] or None,
             "em": time.time()}
     return None
+
+
+# -- configurar a live com um botao ---------------------------------------------
+
+_TITULO_DE_PASTOR = re.compile(
+    r"(?i)^(pr|pra|pastor|pastora|ap|ap[oó]stolo|ap[oó]stola|bispo|bispa|ev|evangelista|"
+    r"miss|mission[aá]rio|mission[aá]ria|dc|di[aá]cono|presb|presb[ií]tero|rev|reverendo)\b\.?")
+TITULO_PADRAO_DA_LIVE = "Culto de Celebração"
+
+
+def _titulo_da_live():
+    """'Titulo || Pr. Nome' da palavra de hoje, ou o titulo padrao."""
+    palavra = None
+    try:
+        if _pecas.get("palavra") is not None:
+            palavra = _pecas["palavra"].retrato()
+    except Exception:
+        palavra = None
+    if not palavra or not palavra.get("ativa") or not str(palavra.get("titulo") or "").strip():
+        return TITULO_PADRAO_DA_LIVE
+    titulo = str(palavra["titulo"]).strip()
+    pregador = str(palavra.get("pregador") or "").strip()
+    if pregador and not _TITULO_DE_PASTOR.match(pregador):
+        pregador = "Pr. " + pregador
+    completo = "{} || {}".format(titulo, pregador) if pregador else titulo
+    return completo[:100]
+
+
+def _miniatura_padrao():
+    """(bytes, de_onde) da imagem padrao da live, ou (None, motivo).
+
+    A imagem mora na versao web (ponte.igrejaparaiso.com.br/miniatura), onde
+    qualquer um da equipe troca. Sem web, vale `youtube.miniatura` do config."""
+    import urllib.error
+    import urllib.request
+    conf = _config.get("web") or {}
+    url = os.environ.get("PONTE_WEB_URL") or conf.get("url") or mod_atualizar.ENDERECO_PADRAO
+    chave = os.environ.get("PONTE_WEB_CHAVE") or conf.get("chave")
+    if chave and not str(chave).startswith("COLE-AQUI"):
+        try:
+            pedido = urllib.request.Request(str(url).rstrip("/") + "/api/miniatura",
+                                            headers={"X-Ponte-Chave": str(chave)})
+            with urllib.request.urlopen(pedido, timeout=15) as resposta:
+                return resposta.read(3 * 1024 * 1024), "web"
+        except urllib.error.HTTPError as erro:
+            if erro.code != 404:
+                return None, "a versão web não entregou a imagem ({})".format(erro.code)
+        except Exception as erro:
+            return None, "não consegui falar com a versão web: {}".format(type(erro).__name__)
+    local = (_config.get("youtube") or {}).get("miniatura")
+    if local:
+        caminho = local if os.path.isabs(local) else os.path.join(RAIZ, local)
+        try:
+            with open(caminho, "rb") as arq:
+                return arq.read(), "este PC"
+        except OSError:
+            pass
+    return None, "não há imagem padrão: suba uma em ponte.igrejaparaiso.com.br/miniatura"
+
+
+def _configurar_live(titulo):
+    """Um botao: titulo e imagem padrao na transmissao de hoje.
+
+    Se a transmissao ja existe (agendada ou no ar), troca o titulo dela. Se
+    nao, prepara uma presa a chave do OBS (ver ClienteYouTube.preparar), so
+    com o link, como sempre. A visibilidade se troca depois, no cartao."""
+    titulo = titulo.strip()[:100]
+    if not titulo:
+        return {"ok": False, "titulo": "Live não configurada", "detalhe": "o título está vazio"}
+    canal = next((c for c in (_contexto.get("youtube") or {}).values() if c["cliente"].autorizado()), None)
+    if canal is None:
+        return {"ok": False, "titulo": "Live não configurada",
+                "detalhe": "nenhum canal do YouTube autorizado neste PC (veja Transmissão no YouTube)"}
+    cliente = canal["cliente"]
+    try:
+        atual = cliente.transmissao("active") or cliente.transmissao("upcoming")
+        if atual:
+            cliente.atualizar(atual, titulo=titulo)
+            video, como = atual["id"], "título trocado na transmissão de hoje"
+        else:
+            id_stream, _de_onde = _chave_do_obs_no_youtube(cliente)
+            if not id_stream:
+                return {"ok": False, "titulo": "Live não configurada",
+                        "detalhe": "não consegui saber qual chave o OBS usa"}
+            ultima = cliente.ultima_concluida()
+            nova, _criada = cliente.preparar(
+                titulo, id_stream, privacidade="unlisted",
+                descricao=((ultima or {}).get("snippet") or {}).get("description"))
+            video, como = nova["id"], "transmissão preparada, só com o link"
+    except mod_youtube.ErroYouTube as erro:
+        return {"ok": False, "titulo": "Live não configurada", "detalhe": str(erro)[:200]}
+    _yt_painel["pedir"] = True
+    imagem, de_onde = _miniatura_padrao()
+    if imagem is None:
+        return {"ok": False, "titulo": "Live configurada sem imagem", "detalhe": como + "; " + de_onde}
+    try:
+        cliente.definir_miniatura_bytes(video, imagem)
+    except mod_youtube.ErroYouTube as erro:
+        return {"ok": False, "titulo": "Live configurada sem imagem",
+                "detalhe": como + "; a imagem falhou: " + str(erro)[:160]}
+    return {"ok": True, "titulo": "Live configurada", "detalhe": como + ", com a imagem padrão"}
 
 
 @app.post("/api/retorno/pausar")
@@ -2750,6 +2953,217 @@ def painel_imagem():
     resposta = Response(dados, mimetype=tipo)
     resposta.headers["Cache-Control"] = "no-store"
     return resposta
+
+
+@app.get("/api/painel/video")
+def painel_video():
+    """A mesma imagem, em FLUXO (MJPEG): a tela abre uma conexao e as fotos
+    vao chegando. Ver ponte/obs_imagem.py. Some sozinho em 5 minutos; a tela
+    reabre."""
+    imagem = _pecas.get("imagem")
+    if imagem is None or not imagem.ativo:
+        return Response(status=204)
+    return _resposta_mjpeg(imagem.pegar, max(0.1, imagem._intervalo / 2))
+
+
+def _resposta_mjpeg(pegar, intervalo):
+    resposta = Response(mod_obs_imagem.fluxo_mjpeg(pegar, intervalo),
+                        mimetype="multipart/x-mixed-replace; boundary=" + mod_obs_imagem.FRONTEIRA)
+    resposta.headers["Cache-Control"] = "no-store"
+    resposta.headers["X-Accel-Buffering"] = "no"
+    return resposta
+
+
+# -- seguir: as cabecas do teto acompanhando alguem, pela camera -----------------
+#
+# Tela /seguir. Tudo aqui so existe na maquina principal e na rede da igreja.
+# A luz so anda com "Seguir" ligado; escolher a pessoa e calibrar nao mexem
+# em nada sozinhos (calibrar mira a cabeca, a pedido, como o ajuste fino).
+
+@app.get("/seguir")
+def pagina_seguir():
+    return send_from_directory(RAIZ, "seguir.html")
+
+
+def _seguir_ou_erro():
+    rastreador = _pecas.get("seguir")
+    if rastreador is None:
+        motivo = _pecas.get("seguir_motivo") or "o seguir nao roda neste PC"
+        return None, (jsonify({"erro": motivo}), 400)
+    return rastreador, None
+
+
+def _cabecas_do_seguir():
+    conf = _config.get("seguir") or {}
+    grupo = ((_config.get("grupos_de_luz") or {}).get(str(conf.get("grupo") or "teto")) or {})
+    nomes = conf.get("nomes") or {}
+    return grupo, [{"endereco": int(b), "nome": str(nomes.get(b) or nomes.get(str(b)) or "Luz {}".format(i + 1))}
+                   for i, b in enumerate(grupo.get("bases") or [])]
+
+
+@app.get("/api/seguir")
+def seguir_estado():
+    rastreador = _pecas.get("seguir")
+    _, cabecas = _cabecas_do_seguir()
+    if rastreador is None:
+        return jsonify({"disponivel": False,
+                        "motivo": _pecas.get("seguir_motivo") or "o seguir nao roda neste PC",
+                        "luzes": cabecas})
+    rastreador.olhar()
+    mapas = rastreador.mapas()
+    for cabeca in cabecas:
+        pontos = rastreador.calibracao.pontos(cabeca["endereco"])
+        mapa = mapas.get(cabeca["endereco"])
+        cabeca.update({"pontos": pontos, "calibrada": mapa is not None,
+                       "conta": mapa.tipo if mapa else None,
+                       "erro": round(mapa.erro, 1) if mapa else None})
+    corpo = rastreador.retrato()
+    corpo.update({"disponivel": True, "luzes": cabecas})
+    # Com driver agente, quem leva a luz e o PC do som. Ponte antiga la ignora
+    # o alvo, e a luz nao segue: a tela precisa dizer isso.
+    cliente = _contexto.get("luzes")
+    if cliente is not None and hasattr(cliente, "retrato"):
+        recente = _estudio_visto["em"] is not None and time.time() - _estudio_visto["em"] < 10
+        corpo["pc_da_luz"] = {"recente": recente, "entende": bool(recente and _estudio_visto["seguir"])}
+    return jsonify(corpo)
+
+
+@app.get("/api/seguir/video")
+def seguir_video():
+    rastreador, falha = _seguir_ou_erro()
+    if falha:
+        return Response(status=204)
+    return _resposta_mjpeg(rastreador.imagem, 0.05)
+
+
+def _numero(corpo, chave, lo, hi):
+    valor = float(corpo.get(chave))
+    if not (lo <= valor <= hi):
+        raise ValueError(chave)
+    return valor
+
+
+@app.post("/api/seguir/escolher")
+def seguir_escolher():
+    """Quem operou clicou numa pessoa da imagem (x, y de 0 a 1)."""
+    rastreador, falha = _seguir_ou_erro()
+    if falha:
+        return falha
+    corpo = request.get_json(silent=True) or {}
+    try:
+        x, y = _numero(corpo, "x", 0, 1), _numero(corpo, "y", 0, 1)
+    except (TypeError, ValueError):
+        return jsonify({"erro": "x e y vao de 0 a 1"}), 400
+    if not rastreador.escolher(x, y):
+        return jsonify({"erro": "nao achei uma pessoa ai — clique em cima dela"}), 404
+    return jsonify({"ok": True})
+
+
+@app.post("/api/seguir/soltar")
+def seguir_soltar():
+    rastreador, falha = _seguir_ou_erro()
+    if falha:
+        return falha
+    rastreador.soltar()
+    return jsonify({"ok": True})
+
+
+@app.post("/api/seguir/ligar")
+def seguir_ligar():
+    """Liga ou desliga a luz seguindo. Desligar devolve as cabecas a cena."""
+    rastreador, falha = _seguir_ou_erro()
+    if falha:
+        return falha
+    ligar = bool((request.get_json(silent=True) or {}).get("ligar"))
+    try:
+        rastreador.ligar(ligar)
+    except mod_rastreio.ErroRastreio as erro:
+        return jsonify({"erro": str(erro)}), 400
+    _reenviar_luz()
+    _anotar("Seguir " + ("ligado" if ligar else "desligado"), True, "", "local")
+    return jsonify({"seguindo": rastreador.seguindo})
+
+
+def _reenviar_luz():
+    cliente = _contexto.get("luzes")
+    if cliente is not None:
+        try:
+            cliente.reenviar()
+        except Exception:
+            pass
+
+
+@app.post("/api/seguir/mirar")
+def seguir_mirar():
+    """Calibracao: aponta UMA cabeca para pan/tilt dados. Desliga o seguir,
+    senao o seguir passaria por cima da mira."""
+    rastreador, falha = _seguir_ou_erro()
+    if falha:
+        return falha
+    cliente, falha = _cliente_de_luz()
+    if falha:
+        return falha
+    grupo, cabecas = _cabecas_do_seguir()
+    corpo = request.get_json(silent=True) or {}
+    try:
+        base = int(corpo.get("endereco"))
+        pan, tilt = int(_numero(corpo, "pan", 0, 255)), int(_numero(corpo, "tilt", 0, 255))
+    except (TypeError, ValueError):
+        return jsonify({"erro": "endereco, pan e tilt (0-255) sao obrigatorios"}), 400
+    if base not in [c["endereco"] for c in cabecas] or grupo.get("pan") is None or grupo.get("tilt") is None:
+        return jsonify({"erro": "essa luz nao e do grupo do seguir"}), 400
+    if rastreador.seguindo:
+        rastreador.ligar(False)
+    try:
+        cliente.aplicar({base + int(grupo["pan"]): pan, base + int(grupo["tilt"]): tilt})
+    except Exception as erro:
+        return jsonify({"erro": str(erro)}), 400
+    return jsonify({"ok": True})
+
+
+@app.post("/api/seguir/ponto")
+def seguir_ponto():
+    """Calibracao: grava (onde a pessoa esta na imagem) -> (pan, tilt atuais).
+    Se o clique cai numa pessoa detectada, vale o PE dela."""
+    rastreador, falha = _seguir_ou_erro()
+    if falha:
+        return falha
+    _, cabecas = _cabecas_do_seguir()
+    corpo = request.get_json(silent=True) or {}
+    try:
+        base = int(corpo.get("endereco"))
+        x, y = _numero(corpo, "x", 0, 1), _numero(corpo, "y", 0, 1)
+        pan, tilt = int(_numero(corpo, "pan", 0, 255)), int(_numero(corpo, "tilt", 0, 255))
+    except (TypeError, ValueError):
+        return jsonify({"erro": "endereco, x, y, pan e tilt sao obrigatorios"}), 400
+    if base not in [c["endereco"] for c in cabecas]:
+        return jsonify({"erro": "essa luz nao e do grupo do seguir"}), 400
+    for pessoa in rastreador.retrato()["pessoas"]:
+        x1, y1, x2, y2 = pessoa["caixa"]
+        if x1 <= x <= x2 and y1 <= y <= y2:
+            x, y = (x1 + x2) / 2.0, y2
+            break
+    try:
+        rastreador.calibracao.acrescentar(base, x, y, pan, tilt)
+    except mod_rastreio.ErroRastreio as erro:
+        return jsonify({"erro": str(erro)}), 400
+    rastreador.recalibrou()
+    return jsonify({"ok": True, "ponto": {"x": round(x, 4), "y": round(y, 4)}})
+
+
+@app.post("/api/seguir/limpar")
+def seguir_limpar():
+    rastreador, falha = _seguir_ou_erro()
+    if falha:
+        return falha
+    try:
+        base = int((request.get_json(silent=True) or {}).get("endereco"))
+    except (TypeError, ValueError):
+        return jsonify({"erro": "endereco obrigatorio"}), 400
+    rastreador.calibracao.limpar(base)
+    rastreador.recalibrou()
+    _reenviar_luz()
+    return jsonify({"ok": True})
 
 
 @app.post("/api/relogio")
@@ -3109,9 +3523,36 @@ def _montar_ao_vivo():
             mod_obs_ouvinte.OuvinteOBS(_args_obs, _pecas["medidor"]).comecar()
         _pecas["imagem"] = mod_obs_imagem.ImagemDoOBS(
             cliente_da_imagem, lambda: (_estado.get("obs") or {}).get("no_ar"),
-            intervalo=conf_imagem.get("intervalo", 1.0), largura=conf_imagem.get("largura", 480))
+            intervalo=conf_imagem.get("intervalo", 0.25), largura=conf_imagem.get("largura", 480))
         _pecas["imagem"].ativo = conf_imagem.get("ativo", True) is not False
+        _montar_seguir(cliente_da_imagem if SIMULAR else None)
     return ao_vivo
+
+
+def _montar_seguir(cliente=None):
+    """O SEGUIR (ponte/rastreio.py). So nasce com seguir.ativo no config, e
+    so nesta maquina, que fala com o OBS. Sem OpenCV, fica o motivo para a
+    tela /seguir mostrar — a ponte segue igual."""
+    conf = _config.get("seguir") or {}
+    _pecas["seguir"] = None
+    _pecas["seguir_motivo"] = None
+    if not conf.get("ativo"):
+        _pecas["seguir_motivo"] = "desligado no config (seguir.ativo)"
+        return
+    try:
+        detector = _pecas.get("seguir_detector") or mod_rastreio.montar_detector(conf, RAIZ)
+    except mod_rastreio.ErroRastreio as erro:
+        _pecas["seguir_motivo"] = str(erro)
+        print("[aviso] seguir desligado: {}".format(erro))
+        return
+    grupo = ((_config.get("grupos_de_luz") or {}).get(str(conf.get("grupo") or "teto")) or {})
+    rastreador = mod_rastreio.Rastreador(
+        cliente or ClienteOBS(*_args_obs(), timeout=2.0, tentativas=1),
+        conf.get("fonte"), detector, _contexto.get("movimento"),
+        mod_rastreio.Calibracao(CAMINHO_SEGUIR), grupo.get("bases") or [],
+        fps=conf.get("fps", 8), largura=conf.get("largura", 416))
+    rastreador.comecar()
+    _pecas["seguir"] = rastreador
 
 
 # -- atualizacao ---------------------------------------------------------------
@@ -3318,6 +3759,11 @@ def main():
         # montar, a ponte sobe mesmo assim e /painel-antigo continua valendo.
         print("  [aviso] painel ao vivo desligado: {}".format(erro))
     threading.Thread(target=_vigiar_atualizacao, daemon=True).start()
+    if _maquina["principal"] is not None:
+        _procurador["valor"] = mod_achar.Procurador(
+            atual=lambda: _maquina["principal"], trocar=_trocar_principal,
+            web=_endereco_de_atualizacao)
+        _procurador["valor"].comecar()
     if _contexto.get("youtube"):
         threading.Thread(target=_vigiar_youtube, daemon=True).start()
     _cofre["valor"] = _montar_cofre()
