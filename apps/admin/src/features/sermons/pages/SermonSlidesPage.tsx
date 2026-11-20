@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ArrowLeft, ArrowRight, Download, Loader2, RefreshCw, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, Download, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -17,6 +17,7 @@ import { formatSituation, formatSpeech } from "../lib/format";
 import { editSlide, moveSlide, slidesBody, toggleSlide } from "../lib/slide-edits";
 import { SLIDE_THEMES } from "../lib/slide-identity";
 import { slideErrorMessage } from "../lib/slide-errors";
+import { useDeliveryImages, type DeliveryImagesState } from "../lib/use-delivery-images";
 import { publicSlides, readSlideMode, type SlideItem, type SlideMode, type SlideStyle } from "../lib/slides";
 
 const LIST_PATH = "/palavras";
@@ -31,6 +32,36 @@ const plural = (n: number) => `${n} ${n === 1 ? "slide" : "slides"}`;
 const detailKey = (id: string) => ["sermons", "detail", id] as const;
 
 type Draft = { items: SlideItem[]; style: SlideStyle };
+
+/** Situação discreta das imagens que a Ponte usa no telão. */
+function DeliveryImagesStatus({ state, onRetry }: { state: DeliveryImagesState; onRetry(): void }) {
+  if (state.phase === "running")
+    return (
+      <span role="status" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+        {state.missing > 0
+          ? `Imagens para a Ponte: enviando ${Math.min(state.done + 1, state.missing)} de ${state.missing}…`
+          : "Imagens para a Ponte: conferindo…"}
+      </span>
+    );
+  if (state.phase === "ready")
+    return (
+      <span role="status" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Check className="h-3 w-3" aria-hidden="true" />
+        Imagens para a Ponte prontas
+      </span>
+    );
+  if (state.phase === "failed")
+    return (
+      <span role="status" className="flex items-center gap-2 text-xs text-destructive">
+        Imagens para a Ponte: falhou
+        <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={onRetry}>
+          Tentar de novo
+        </Button>
+      </span>
+    );
+  return null;
+}
 
 function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Sermon; canEdit: boolean }) {
   const queryClient = useQueryClient();
@@ -131,6 +162,8 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
   const locked = busy || resetting;
   const readOnly = !canChange || locked;
 
+  const images = useDeliveryImages(sermon, canEdit);
+
   const currentMode: SlideMode = readSlideMode(sermon.slideMode) ?? "VERSES_AND_POINTS";
 
   async function refresh() {
@@ -175,6 +208,7 @@ function SlidesView({ initial, server, canEdit }: { initial: Sermon; server: Ser
             <h1 className="min-w-0 truncate text-[22px] font-bold">{sermon.title.trim() || "Sem título"}</h1>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            <DeliveryImagesStatus state={images.state} onRetry={images.retry} />
             <Button type="button" variant="outline" size="icon" className="h-11 w-11" aria-label="Exportar" disabled={locked} onClick={() => void openExport()}>
               <Download aria-hidden="true" />
             </Button>

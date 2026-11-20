@@ -1,24 +1,13 @@
 import "../slide-identity.css";
 import { SLIDE_FONT_STACK } from "../lib/slide-identity";
-import { drawSlide } from "../lib/slide-layout";
-import { PANEL, SLIDE_LAYOUTS, slideFace, type SlideFace, type SlideFaceInput, type SlideStyle } from "../lib/slides";
+import { drawSlide, toFace, type PreviewSlide } from "../lib/slide-layout";
+import { PANEL, type SlideStyle } from "../lib/slides";
 
 type Size = "sm" | "md" | "lg";
 /** Largura do cartão (px) em cada tamanho. */
 const SIZES: Record<Size, number> = { sm: 168, md: 288, lg: 480 };
 
-/** Slide já no formato da tela (PublicSlide) ou ainda por montar (item do editor, cópia antiga só com kind/text/reference). */
-export type PreviewSlide = SlideFace | (SlideFaceInput & { title?: string });
-
-function toFace(slide: PreviewSlide): SlideFace {
-  const s = slide as Partial<SlideFace> & Partial<SlideFaceInput>;
-  if (typeof s.title === "string" && s.layout && SLIDE_LAYOUTS.includes(s.layout)) {
-    return { layout: s.layout, title: s.title, verse: s.verse ?? null, reference: s.reference ?? null, items: s.items ?? null, start: s.start ?? null };
-  }
-  // Item do editor ou cópia antiga (modelos M01–M04): o padrão do tipo, com o título antigo como heading.
-  const input = slide as SlideFaceInput & { title?: string };
-  return slideFace({ ...input, heading: input.heading ?? input.title ?? null });
-}
+export type { PreviewSlide };
 
 interface SlidePreviewProps {
   slide: PreviewSlide;
