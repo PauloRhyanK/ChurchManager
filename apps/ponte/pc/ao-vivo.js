@@ -125,6 +125,25 @@ function desenhar() {
   andar();
 }
 
+// O OBS diz que envia; o YouTube concorda?
+//   'ok'          os dois concordam (ou este PC nao confere o YouTube)
+//   'conferindo'  ainda nao deu para saber
+//   'alerta'      o OBS envia e o YouTube nao recebe / nao esta no ar
+const ALERTAS_DO_YOUTUBE = ['nao_recebe', 'outra_chave', 'nao_iniciada', 'sem_transmissao'];
+function noAr(t) {
+  if (!t || !t.no_ar || !t.recepcao) return 'ok';
+  if (ALERTAS_DO_YOUTUBE.indexOf(t.recepcao.caso) >= 0) return 'alerta';
+  return t.recepcao.caso === 'ok' ? 'ok' : 'conferindo';
+}
+const ACOES_DO_YOUTUBE = {
+  iniciar: ['Iniciar no YouTube', {tipo: 'yt_iniciar'},
+    {titulo: 'Iniciar a transmissão no YouTube?', texto: 'Quem abrir o link passa a ver o culto agora.', sim: 'Iniciar'}],
+  usar_chave: ['Usar a chave desta transmissão', {tipo: 'yt_usar_chave'},
+    {titulo: 'Trocar a chave do OBS?', texto: 'O OBS passa a enviar para a transmissão de hoje. Depois é preciso reconectar para a chave nova valer.', sim: 'Trocar a chave'}],
+  reconectar: ['Reconectar o OBS', {tipo: 'yt_reconectar'},
+    {titulo: 'Reconectar o OBS ao YouTube?', texto: 'O envio para e começa de novo. Leva alguns segundos; a gravação não é interrompida.', sim: 'Reconectar', perigo: true}],
+};
+
 function desenharPilulas(d) {
   const p = [];
   const por = (nome, cor, alerta) => p.push('<span class="pilula' + (alerta ? ' ' + alerta : '') + '">' +
@@ -132,7 +151,12 @@ function desenharPilulas(d) {
   const tx = sistema('Transmissão'), t = d.transmissao;
   if (tx && tx.estado === 'erro') por('Transmissão sem contato', 'vermelho', 'grave');
   else if (t) {
-    por(t.no_ar ? 'Transmitindo' : 'Fora do ar', t.no_ar ? 'vermelho' : '');
+    // "Transmitindo" so quando o YouTube confirma que recebe (ponte/recepcao.py).
+    // Sem YouTube autorizado neste PC, vale o que o OBS diz, como sempre.
+    const rc = noAr(t);
+    if (rc === 'alerta') por('Fora do ar no YouTube', 'vermelho', 'grave');
+    else if (rc === 'conferindo') por('Enviando, sem confirmação', 'ambar', 'alerta');
+    else por(t.no_ar ? 'Transmitindo' : 'Fora do ar', t.no_ar ? 'verde' : '');
     por(t.gravando ? 'Gravando' : 'Sem gravar', t.gravando ? 'verde' : '');
   }
   const som = (d.equipamentos || []).filter(e => e.nome === 'PC do som' || /som/i.test(e.nome))[0];
@@ -158,6 +182,29 @@ function desenharFaixas(d) {
       (d.local === false ? 'Confira a internet deste aparelho.' : 'A janela preta ainda está aberta no PC?') + '</span></div>');
   }
   if (d.erro) f.push('<div class="faixa erro"><span>' + esc(d.erro) + '</span></div>');
+  // As telas deste PC mudaram (um cabo solto, um monitor desligado): a TV do
+  // altar pode estar recebendo a tela errada, ou uma tela preta.
+  const tl = d.telas;
+  if (tl && (tl.estado === 'mudou' || tl.estado === 'sunshine_sem_tela')) {
+    f.push('<div class="faixa erro"><span><b>' + (tl.estado === 'mudou' ? 'As telas deste PC mudaram.' : 'A tela que vai para a TV sumiu.') + '</b> ' +
+      esc(tl.diferencas.length ? tl.diferencas.join('; ') : tl.texto) + '. Confira o que a TV do altar está mostrando.</span>' +
+      (d.local !== false ? '<span class="linha" style="flex-wrap:wrap">' +
+        (tl.tem_boa ? botao('Restaurar a disposição', {tipo: 'telas_restaurar'}, {classe: 'bt pequeno', confirmar: {titulo: 'Restaurar a disposição das telas?',
+          texto: 'As telas piscam por um instante, inclusive o telão. Um monitor desligado ou sem cabo não volta por aqui.', sim: 'Restaurar'}}) : '') +
+        botao('Esta é a disposição certa', {tipo: 'telas_guardar'}, {classe: 'bt pequeno fantasma', confirmar: {titulo: 'Guardar a disposição de agora?',
+          texto: 'A Ponte passa a considerar certa a disposição que está no ar agora, e avisa quando ela mudar.', sim: 'Guardar'}}) + '</span>' : '') +
+      '</div>');
+  }
+  const rc = d.transmissao && d.transmissao.recepcao;
+  if (noAr(d.transmissao) === 'alerta') {
+    // O alerta que importa: do lado da igreja tudo parece certo, e quem
+    // esta em casa nao ve nada. Cada caso traz a saida dele, a um toque.
+    f.push('<div class="faixa erro"><span><b>' + esc(rc.texto) + '.</b> ' + esc(rc.detalhe || '') +
+      (rc.lido_em ? ' <span class="miudo">Conferido às ' + esc(rc.lido_em) + '.</span>' : '') + '</span>' +
+      (d.local !== false ? '<span class="linha" style="flex-wrap:wrap">' + (rc.acoes || []).map(a => ACOES_DO_YOUTUBE[a]
+        ? botao(ACOES_DO_YOUTUBE[a][0], ACOES_DO_YOUTUBE[a][1], {classe: 'bt pequeno', confirmar: ACOES_DO_YOUTUBE[a][2]}) : '').join('') + '</span>' : '') +
+      '</div>');
+  }
   if (d.local === false && d.viva && d.remoto && !d.remoto.aceita) {
     f.push('<div class="faixa aviso"><span><b>Só para acompanhar.</b> Os comandos pela web estão desligados no PC da igreja.</span></div>');
   }
@@ -213,6 +260,11 @@ function desenharMenu(d) {
     m += '<div class="bloco"><span class="miudo">PCs da igreja</span><div class="pcs">' + pcs.map(p =>
       '<span><b>' + esc(p.nome) + '</b> — ' + (p.viva ? 'ligado' : 'sem resposta') +
       (p.versao ? (la && p.versao !== la ? ', precisa atualizar' : ', atualizado') : '') + '</span>').join('') + '</div></div>';
+  }
+  if (local && d.telas && d.telas.suportado) {
+    m += '<div class="bloco"><span class="miudo">Telas deste PC: ' + esc(d.telas.texto) + '</span>' +
+      botao('Esta é a disposição certa', {tipo: 'telas_guardar'}, {classe: 'bt pequeno', confirmar: {titulo: 'Guardar a disposição de agora?',
+        texto: 'A Ponte passa a considerar certa a disposição que está no ar agora, e avisa quando ela mudar.', sim: 'Guardar'}}) + '</div>';
   }
   m += '<div class="bloco"><a href="/painel-antigo" style="padding:0">Abrir o painel antigo</a></div>';
   const aberto = $('menu').open;
@@ -679,11 +731,14 @@ function desenharTransmissao(d) {
     pintar('tx-resto', '');
     return;
   }
-  pintar('tx-cabeca', '<div class="cabeca"><h2 class="rotulo">Transmissão</h2>' + (t.no_ar
-    ? '<span class="no-ar sim"><span class="ponto vermelho" aria-hidden="true"></span>No ar · ' + duracao(t.tempo_ms) + '</span>'
-    : '<span class="no-ar"><span class="ponto" aria-hidden="true"></span>Fora do ar</span>') + '</div>');
-  $('tx-imagem').className = 'imagem-obs' + (t.no_ar ? ' no-ar-sim' : '');
-  $('tx-etiqueta').textContent = t.imagem ? (t.no_ar ? 'NO AR · ' : 'IMAGEM · ') + String(t.imagem).toUpperCase() : '';
+  const rc = noAr(t), confirmado = t.no_ar && rc === 'ok';
+  let selo = '<span class="no-ar"><span class="ponto" aria-hidden="true"></span>Fora do ar</span>';
+  if (confirmado) selo = '<span class="no-ar sim"><span class="ponto verde" aria-hidden="true"></span>No ar · ' + duracao(t.tempo_ms) + '</span>';
+  else if (t.no_ar && rc === 'alerta') selo = '<span class="no-ar nao"><span class="ponto vermelho" aria-hidden="true"></span>O OBS envia, o YouTube não · ' + duracao(t.tempo_ms) + '</span>';
+  else if (t.no_ar) selo = '<span class="no-ar duvida"><span class="ponto ambar" aria-hidden="true"></span>Enviando · conferindo o YouTube</span>';
+  pintar('tx-cabeca', '<div class="cabeca"><h2 class="rotulo">Transmissão</h2>' + selo + '</div>');
+  $('tx-imagem').className = 'imagem-obs' + (confirmado ? ' no-ar-sim' : '');
+  $('tx-etiqueta').textContent = t.imagem ? (confirmado ? 'NO AR · ' : t.no_ar ? 'ENVIANDO · ' : 'IMAGEM · ') + String(t.imagem).toUpperCase() : '';
   const comFoto = local && d.imagem && d.imagem.ativa;
   if (!comFoto) $('tx-foto').hidden = true;
   $('tx-sem').textContent = !local ? 'A imagem ao vivo aparece só na igreja.'
@@ -761,11 +816,16 @@ function desenharTelao(d) {
       (d.tem_recado_limpar ? botao('Tirar o recado', {tipo: 'recado', id: 'recado_limpar'}, {classe: 'bt pequeno fantasma'}) : '') + '</div></div>';
   }
   if (rt) {
-    const ruim = ['caiu', 'reconectando', 'desistiu', 'fora_da_janela'].indexOf(rt.estado) >= 0;
-    h += '<div class="empilha" style="gap:6px"><span class="miudo">TV do altar: <b style="color:' + (ruim ? 'var(--ambar-texto)' : 'var(--texto)') + '">' + esc(rt.texto) + '</b></span>' +
+    const ruim = ['caiu', 'reconectando', 'desistiu', 'fora_da_janela', 'esperando_tv', 'abrindo', 'outro_app'].indexOf(rt.estado) >= 0;
+    h += '<div class="empilha" style="gap:6px"><span class="miudo">TV do altar: <b style="color:' + (ruim ? 'var(--ambar-texto)' : 'var(--texto)') + '">' + esc(rt.texto) + '</b>' +
+      (rt.motivo ? ' <span>(' + esc(rt.motivo) + ')</span>' : '') + '</span>' +
       '<div class="grade2">' +
-      botao(rt.estado === 'no_ar' ? 'Reabrir o retorno' : 'Abrir o retorno', {tipo: 'retorno', acao: 'reabrir'}, {classe: 'bt pequeno',
-        confirmar: rt.estado === 'no_ar' ? {titulo: 'Reabrir o retorno na TV?', texto: 'A TV já está recebendo a letra. Reabrir faz a imagem sumir por uns 20 segundos.', sim: 'Reabrir'} : null}) +
+      // Com o retorno no ar, "Reabrir" (derruba e abre). Sem ele, "Tentar de
+      // novo": o ciclo inteiro do vigia (ligar a TV pela rede, abrir, conferir).
+      (rt.estado === 'no_ar'
+        ? botao('Reabrir o retorno', {tipo: 'retorno', acao: 'reabrir'}, {classe: 'bt pequeno',
+            confirmar: {titulo: 'Reabrir o retorno na TV?', texto: 'A TV já está recebendo a letra. Reabrir faz a imagem sumir por uns 20 segundos.', sim: 'Reabrir'}})
+        : botao('Tentar de novo', {tipo: 'retorno', acao: 'tentar'}, {classe: 'bt pequeno forte'})) +
       (rt.pausado ? botao('Voltar a vigiar', {tipo: 'retorno', acao: 'retomar'}, {classe: 'bt pequeno forte'})
         : botao('Pausar o vigia', {tipo: 'retorno', acao: 'pausar'}, {classe: 'bt pequeno',
             confirmar: {titulo: 'Pausar o vigia do retorno?', texto: 'Até o fim do dia, a ponte não reabre o retorno sozinha se a TV soltar.', sim: 'Pausar'}})) +

@@ -121,6 +121,7 @@ class Chegada:
         self._dia = _hoje()
         self._tv_ip = None
         self._vigia = None      # o vigia do retorno na TV, quando este PC tem um
+        self._app_da_tv = (0.0, None)   # (quando perguntei, o que a TV disse que esta na tela)
         self._obs = None
         self._holyrics = None
         self._agindo = set()
@@ -435,6 +436,45 @@ class Chegada:
 
     def ip_da_tv(self):
         return self._ip_da_tv()
+
+    def _mede_tv_mostrando_retorno(self):
+        """O item automatico da chegada: verde so com a TV ligada, o
+        Moonlight na tela e a sessao no Sunshine. As tres coisas."""
+        if self._vigia is None:
+            return None, "este PC nao vigia o retorno na TV"
+        r = self._vigia.retrato()
+        if r["estado"] == "sem_sinal":
+            return None, r["texto"]
+        ligada, ip = self._vigia.tv()
+        if not ligada:
+            return False, "a TV nao esta na rede" + (": " + r["motivo"] if r.get("motivo") else ""), r["desde"]
+        if r["estado"] != "no_ar":
+            return False, r["texto"] + (": " + r["motivo"] if r.get("motivo") else ""), r["desde"]
+        # Perguntar o aplicativo a TV custa um PowerShell: no maximo de 30 em 30 s.
+        agora = time.time()
+        if agora - self._app_da_tv[0] > 30:
+            self._app_da_tv = (agora, self.tela_da_tv(ip))
+        app = self._app_da_tv[1]
+        if app and app != "com.limelight.webos":
+            return False, "a TV recebe o retorno, mas esta com outro aplicativo na tela ({})".format(app), r["desde"]
+        return True, "TV ligada, retorno na tela e o Sunshine transmitindo" + (
+            "" if app else " (a TV nao disse o que esta na tela)"), r["desde"]
+
+    def _faz_retorno_protocolo(self, dados):
+        """"Tentar de novo": o ciclo inteiro do vigia, agora (ligar a TV pela
+        rede, esperar ela aparecer, abrir o retorno, conferir no Sunshine)."""
+        if self._vigia is None:
+            raise ErroChegada("este PC nao vigia o retorno na TV")
+        self._vigia.tentar_agora()
+        return True, "tentando: ligar a TV, abrir o retorno e conferir. Leva ate um minuto; acompanhe aqui."
+
+    def mac_da_tv(self):
+        return (self._roteiro["rede"].get("tv") or {}).get("mac")
+
+    def palpite_do_ip_da_tv(self):
+        """O ultimo IP em que a TV respondeu, ou o do chegada.yaml: para onde
+        mandar o "ligar pela rede" quando ela esta desligada."""
+        return self._tv_ip or (self._roteiro["rede"].get("tv") or {}).get("ip")
 
     def tela_da_tv(self, ip):
         """O id do aplicativo que esta na tela da TV, ou None se nao deu para
