@@ -68,6 +68,10 @@ class ObsSimulado:
     def definir_visibilidade(self, cena, fonte, visivel):
         self.pedidos.append(("visibilidade", cena, fonte, bool(visivel)))
 
+    # O que o GetInputList devolve. Um teste pode trocar a lista.
+    entradas = [("Câmera aberta", "dshow_input"), ("Mesa de som", "wasapi_input_capture"),
+                ("Vídeo de abertura", "ffmpeg_source")]
+
     def pedir(self, tipo, dados=None):
         dados = dados or {}
         agora = self._agora()
@@ -128,6 +132,10 @@ class ObsSimulado:
                 return {"cpuUsage": 12.5, "availableDiskSpace": 217088.0, "activeFps": 30.0,
                         "renderSkippedFrames": 0, "renderTotalFrames": 1000,
                         "outputSkippedFrames": 0, "outputTotalFrames": 1000}
+            if tipo == "GetInputList":
+                # Uma camera de verdade (a aberta do palco) e o que nao e
+                # camera: o seguir tem que escolher so a primeira.
+                return {"inputs": [{"inputName": n, "inputKind": k} for n, k in self.entradas]}
             if tipo == "GetSourceScreenshot":
                 return {"imageData": "data:image/png;base64," + base64.b64encode(self._imagem(agora)).decode()}
         raise RuntimeError("o OBS simulado nao conhece {}".format(tipo))

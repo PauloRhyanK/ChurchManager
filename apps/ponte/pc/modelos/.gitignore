@@ -1,1 +1,3 @@
+# Só o modelo que vai junto com a ponte entra no projeto.
 *.onnx
+!yolox_nano.onnx

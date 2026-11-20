@@ -8,12 +8,11 @@ COMO FUNCIONA, em quatro pecas pequenas:
      esta com a tela /seguir aberta ou enquanto a luz esta seguindo.
 
   2. DETECTOR. Acha as pessoas na foto. Dois, do melhor para o mais simples:
-       yolo  um modelo YOLO "nano" exportado para ONNX, rodado pelo proprio
-             OpenCV (cv2.dnn). Sem PyTorch, sem placa de video: 15-30 por
-             segundo numa CPU comum, com imagem de 320.
-       hog   o detector de pessoas que ja vem no OpenCV. Nao precisa baixar
-             modelo nenhum, mas erra mais (pessoa de lado, sentada, longe).
-     Sem o arquivo do modelo, usa o hog e avisa na tela.
+       yolox o YOLOX nano (Megvii, licenca Apache-2.0, 3,6 MB), em ONNX,
+             rodado pelo proprio OpenCV (cv2.dnn). Sem PyTorch, sem placa de
+             video. Vem junto com a ponte, em modelos/.
+       hog   o detector de pessoas que ja vem no OpenCV. Erra mais (pessoa de
+             lado, sentada, longe). So entra se o modelo sumir da pasta.
 
   3. ALVO. Quem opera clica na pessoa. Dali em diante ela e acompanhada de
      uma foto para a outra pela caixa que mais se sobrepoe a anterior. Sumiu
@@ -47,13 +46,29 @@ class ErroRastreio(Exception):
     pass
 
 
+class FaltaOpenCV(ErroRastreio):
+    """O OpenCV nao esta instalado. A ponte instala sozinha (ver app.py)."""
+
+
+# Os tipos de entrada do OBS que sao CAMERA de verdade: placa de captura,
+# webcam, NDI. Fica de fora arquivo de video, imagem, navegador, texto.
+TIPOS_DE_CAMERA = ("dshow_input", "av_capture_input", "av_capture_input_v2", "macos-avcapture",
+                   "v4l2_input", "decklink-input", "ndi_source", "aja_source")
+
+
+def cameras_do_obs(cliente):
+    """[nome, ...] das entradas de camera do OBS, na ordem dele."""
+    resposta = cliente.pedir("GetInputList", {})
+    return [str(e.get("inputName")) for e in (resposta.get("inputs") or [])
+            if str(e.get("inputKind") or "") in TIPOS_DE_CAMERA and e.get("inputName")]
+
+
 def _cv():
     try:
         import cv2          # noqa: F401
         import numpy        # noqa: F401
     except Exception as erro:
-        raise ErroRastreio(
-            "falta o OpenCV neste PC (pip install -r requirements-seguir.txt): {}".format(erro))
+        raise FaltaOpenCV("falta o OpenCV neste PC: {}".format(erro))
     import cv2
     import numpy
     global _UMA_THREAD
@@ -61,7 +76,7 @@ def _cv():
         # UMA THREAD SO, de proposito. Duas razoes: o PC principal tem mais o
         # que fazer (Holyrics, painel, OBS) e o seguir nao pode tomar a CPU
         # dele; e o HOG em paralelo derrubou o processo inteiro (Bus error)
-        # num teste em 19/11. A 320 px o YOLO nano cabe folgado numa thread.
+        # num teste em 19/11. O YOLOX nano cabe folgado numa thread.
         cv2.setNumThreads(1)
         _UMA_THREAD = True
     return cv2, numpy
@@ -149,51 +164,66 @@ class Mapa:
 
 # -- detectores ---------------------------------------------------------------
 
-class DetectorYolo:
-    """YOLOv8/YOLO11 exportado para ONNX (saida 1 x 84 x N), so a classe pessoa."""
+class DetectorYolox:
+    """YOLOX nano em ONNX (Megvii, Apache-2.0), so a classe pessoa.
 
-    nome = "yolo"
+    Entrada fixa de 416 x 416, BGR, sem normalizar, com o resto preenchido de
+    cinza 114. A saida e CRUA (1 x 3549 x 85): cada linha e uma celula das
+    grades de passo 8, 16 e 32, e a caixa precisa ser decodificada pela grade.
+    E o mesmo pos-processamento do exemplo oficial do YOLOX.
+    """
 
-    def __init__(self, caminho, entrada=320, confianca=0.4):
-        cv2, _ = _cv()
+    nome = "yolox"
+    LADO = 416
+    PASSOS = (8, 16, 32)
+
+    def __init__(self, caminho, confianca=0.4):
+        cv2, np = _cv()
         if not os.path.isfile(caminho):
             raise ErroRastreio("nao achei o modelo {}".format(caminho))
         self._rede = cv2.dnn.readNetFromONNX(caminho)
-        self._entrada = int(entrada)
         self._confianca = float(confianca)
+        self._montar_grade()
+
+    def _montar_grade(self):
+        _, np = _cv()
+        grades, passos = [], []
+        for passo in self.PASSOS:
+            n = self.LADO // passo
+            xs, ys = np.meshgrid(np.arange(n), np.arange(n))
+            grades.append(np.stack((xs, ys), 2).reshape(-1, 2))
+            passos.append(np.full((n * n, 1), passo))
+        self._grade = np.concatenate(grades).astype(np.float32)
+        self._passo = np.concatenate(passos).astype(np.float32)
 
     def detectar(self, imagem):
         cv2, np = _cv()
         alto, largo = imagem.shape[:2]
-        lado = self._entrada
-        escala = lado / max(alto, largo)
-        novo = cv2.resize(imagem, (int(round(largo * escala)), int(round(alto * escala))))
+        lado = self.LADO
+        escala = min(lado / alto, lado / largo)
+        novo = cv2.resize(imagem, (int(largo * escala), int(alto * escala)))
         quadro = np.full((lado, lado, 3), 114, dtype=np.uint8)
         quadro[:novo.shape[0], :novo.shape[1]] = novo
-        blob = cv2.dnn.blobFromImage(quadro, 1 / 255.0, (lado, lado), swapRB=True)
+        blob = quadro.transpose(2, 0, 1)[None].astype(np.float32)
         self._rede.setInput(blob)
-        saida = self._rede.forward()
-        saida = np.squeeze(saida)
-        if saida.ndim != 2:
+        saida = np.squeeze(self._rede.forward())
+        if saida.ndim != 2 or saida.shape[0] != len(self._grade) or saida.shape[1] < 6:
             return []
-        # O YOLO devolve 84 linhas (4 da caixa + 80 classes) por N caixas.
-        # Decide pelas 84, e nao por "qual lado e menor": com poucas caixas
-        # a comparacao inverteria.
-        if saida.shape[0] == 84 or (saida.shape[1] != 84 and saida.shape[0] < saida.shape[1]):
-            saida = saida.T                       # N x 84
-        pessoas = saida[saida[:, 4] >= self._confianca]
-        caixas, notas = [], []
-        for cx, cy, w, h, nota in pessoas[:, :5]:
-            caixas.append([float(cx - w / 2), float(cy - h / 2), float(w), float(h)])
-            notas.append(float(nota))
-        if not caixas:
+        centros = (saida[:, :2] + self._grade) * self._passo
+        tamanhos = np.exp(saida[:, 2:4]) * self._passo
+        notas = saida[:, 4] * saida[:, 5]           # objeto x classe pessoa
+        boas = notas >= self._confianca
+        if not boas.any():
             return []
-        manter = cv2.dnn.NMSBoxes(caixas, notas, self._confianca, 0.45)
+        caixas = [[float(cx - w / 2), float(cy - h / 2), float(w), float(h)]
+                  for (cx, cy), (w, h) in zip(centros[boas], tamanhos[boas])]
+        valores = [float(n) for n in notas[boas]]
+        manter = cv2.dnn.NMSBoxes(caixas, valores, self._confianca, 0.45)
         resultado = []
         for i in np.array(manter).flatten():
             x, y, w, h = caixas[int(i)]
             resultado.append(_normalizar(x / escala, y / escala, w / escala, h / escala,
-                                         largo, alto, notas[int(i)]))
+                                         largo, alto, valores[int(i)]))
         return resultado
 
 
@@ -247,10 +277,10 @@ def _normalizar(x, y, w, h, largo, alto, nota):
 def montar_detector(conf, raiz):
     """yolo se o modelo existe, senao hog. Levanta ErroRastreio sem OpenCV."""
     _cv()
-    modelo = str(conf.get("modelo") or "modelos/yolo11n.onnx")
+    modelo = str(conf.get("modelo") or "modelos/yolox_nano.onnx")
     caminho = modelo if os.path.isabs(modelo) else os.path.join(raiz, modelo)
     if os.path.isfile(caminho):
-        return DetectorYolo(caminho, conf.get("entrada", 320), conf.get("confianca", 0.4))
+        return DetectorYolox(caminho, conf.get("confianca", 0.4))
     return DetectorHog()
 
 
@@ -345,17 +375,19 @@ class Calibracao:
         self._caminho = caminho
         self._tranca = threading.Lock()
         self._pontos = {}
+        self._fonte = None
         try:
             with open(caminho, encoding="utf-8") as arquivo:
-                bruto = json.load(arquivo).get("luzes") or {}
-            self._pontos = {int(k): list(v) for k, v in bruto.items()}
+                tudo = json.load(arquivo)
+            self._pontos = {int(k): list(v) for k, v in (tudo.get("luzes") or {}).items()}
+            self._fonte = tudo.get("fonte") or None
         except (OSError, ValueError, AttributeError):
             self._pontos = {}
 
     def _gravar(self):
         temporario = self._caminho + ".tmp"
         with open(temporario, "w", encoding="utf-8") as arquivo:
-            json.dump({"luzes": {str(k): v for k, v in self._pontos.items()}},
+            json.dump({"fonte": self._fonte, "luzes": {str(k): v for k, v in self._pontos.items()}},
                       arquivo, ensure_ascii=False, indent=1)
         os.replace(temporario, self._caminho)
 
@@ -373,6 +405,22 @@ class Calibracao:
         with self._tranca:
             self._pontos.pop(int(base), None)
             self._gravar()
+
+    def fonte(self):
+        with self._tranca:
+            return self._fonte
+
+    def trocar_fonte(self, nome):
+        """A camera escolhida. Trocar de camera APAGA a calibracao: os pontos
+        foram medidos na imagem da outra, e nao valem para esta."""
+        nome = str(nome or "") or None
+        with self._tranca:
+            if nome == self._fonte:
+                return False
+            self._fonte = nome
+            self._pontos = {}
+            self._gravar()
+        return True
 
     def pontos(self, base):
         with self._tranca:
@@ -403,9 +451,11 @@ class Rastreador:
     OLHANDO_POR = 8.0       # segundos que um pedido da tela mantem a captura
 
     def __init__(self, cliente, fonte, detector, motor, calibracao, bases,
-                 fps=8, largura=416, agora=time.monotonic, aviso=print):
+                 fps=6, largura=416, agora=time.monotonic, aviso=print):
         self._cliente = cliente
-        self.fonte = str(fonte or "")
+        # A camera: a do config, se alguem escreveu; senao a escolhida na tela
+        # (guardada com a calibracao); senao, se o OBS tem UMA camera so, ela.
+        self._fonte_do_config = str(fonte or "")
         self.detector = detector
         self._motor = motor
         self.calibracao = calibracao
@@ -465,19 +515,56 @@ class Rastreador:
             if self._motor is not None:
                 self._motor.parar_seguir()
             return True
-        if not self._mapas:
-            raise ErroRastreio("nenhuma luz calibrada ainda")
+        # Ligar sem calibracao e permitido: a luz so anda com luz calibrada E
+        # pessoa escolhida (ver passo). Enquanto falta, o painel diz o que e.
         self.seguindo = True
         self._acordar.set()
         return True
 
     def recalibrou(self):
         self._mapas = self.calibracao.mapas()
-        if not self._mapas and self.seguindo:
-            self.ligar(False)
+        if not self._mapas and self._motor is not None:
+            self._motor.parar_seguir()
 
     def mapas(self):
         return dict(self._mapas)
+
+    @property
+    def fonte(self):
+        return self._fonte_do_config or self.calibracao.fonte() or ""
+
+    def cameras(self):
+        """As cameras que o OBS tem agora. [] se o OBS nao responde."""
+        with self._tranca:
+            cliente = self._cliente
+        try:
+            return cameras_do_obs(cliente)
+        except Exception:
+            return []
+
+    def escolher_camera(self, nome):
+        """Troca a camera. Apaga a calibracao e desliga o seguir."""
+        if self._fonte_do_config:
+            raise ErroRastreio("a camera esta fixa no config.yaml (seguir.fonte)")
+        if nome not in self.cameras():
+            raise ErroRastreio("o OBS nao tem a camera {!r}".format(nome))
+        if self.calibracao.trocar_fonte(nome):
+            # Sem calibracao a luz para sozinha (recalibrou); o Seguir continua
+            # ligado, e o painel passa a dizer "falta calibrar".
+            self.soltar()
+            self.recalibrou()
+        return True
+
+    def _achar_fonte(self):
+        if self.fonte:
+            return self.fonte
+        cameras = self.cameras()
+        if len(cameras) == 1:
+            self.calibracao.trocar_fonte(cameras[0])
+            return cameras[0]
+        if not cameras:
+            raise ErroRastreio("o OBS nao tem nenhuma camera (ou nao respondeu)")
+        raise ErroRastreio("o OBS tem {} cameras: escolha qual olha o palco".format(len(cameras)))
 
     # -- leitura --------------------------------------------------------------
 
@@ -488,6 +575,16 @@ class Rastreador:
             idade = None if self._jpeg_em is None else self._agora() - self._jpeg_em
             return self._jpeg, "image/jpeg", idade
 
+    def situacao(self):
+        """O que o painel do culto mostra, numa palavra."""
+        if not self.seguindo:
+            return "desligado"
+        if self._erro:
+            return "erro"
+        if not self._mapas:
+            return "falta_calibrar"
+        return self.alvo.situacao()      # ninguem, seguindo ou perdido
+
     def retrato(self):
         with self._tranca:
             pessoas = [dict(p) for p in self._pessoas]
@@ -495,6 +592,7 @@ class Rastreador:
             caixa = list(self.alvo.caixa) if self.alvo.caixa else None
         return {
             "fonte": self.fonte,
+            "fonte_fixa": bool(self._fonte_do_config),
             "detector": getattr(self.detector, "nome", "?"),
             "seguindo": self.seguindo,
             "alvo": {"situacao": situacao, "caixa": caixa},
@@ -539,15 +637,14 @@ class Rastreador:
         cv2, np = _cv()
         with self._tranca:
             cliente = self._cliente
-        if not self.fonte:
-            raise ErroRastreio("falta dizer a fonte da camera (seguir.fonte no config)")
+        fonte = self._achar_fonte()
         foto = cliente.pedir("GetSourceScreenshot", {
-            "sourceName": self.fonte, "imageFormat": "jpg",
+            "sourceName": fonte, "imageFormat": "jpg",
             "imageWidth": self._largura, "imageCompressionQuality": 60,
         })
         bruto = str(foto.get("imageData") or "")
         if "," not in bruto:
-            raise ErroRastreio("o OBS nao devolveu imagem da fonte {!r}".format(self.fonte))
+            raise ErroRastreio("o OBS nao devolveu imagem da camera {!r}".format(fonte))
         import base64
         dados = np.frombuffer(base64.b64decode(bruto.split(",", 1)[1]), dtype=np.uint8)
         imagem = cv2.imdecode(dados, cv2.IMREAD_COLOR)
@@ -557,6 +654,11 @@ class Rastreador:
         pessoas = self.detector.detectar(imagem)
         with self._tranca:
             self._pessoas = pessoas
+            # Seguindo e ninguem escolhido: se ha UMA pessoa so na imagem, e
+            # ela. Com duas ou mais, quem opera escolhe na tela /seguir.
+            if self.seguindo and self.alvo.caixa is None and len(pessoas) == 1:
+                c = pessoas[0]["caixa"]
+                self.alvo.escolher(pessoas, (c[0] + c[2]) / 2.0, (c[1] + c[3]) / 2.0)
             self.alvo.atualizar(pessoas)
             situacao = self.alvo.situacao()
             pes = self.alvo.pes

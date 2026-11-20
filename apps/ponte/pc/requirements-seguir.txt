@@ -1,6 +1,7 @@
-# So para o SEGUIR (luz do teto acompanhando alguem pela camera). Opcional:
-# sem isto a ponte funciona igual e a tela /seguir diz o que falta.
-#   pip install -r requirements-seguir.txt
+# So para o SEGUIR (luz do teto acompanhando alguem pela camera). NINGUEM
+# precisa rodar isto: a ponte do PC principal instala sozinha na primeira vez
+# (app.py, _instalar_opencv). Fica fora do requirements.txt porque o
+# atualizador desfaz tudo se o pip falhar, e isso travaria todos os PCs.
 # OpenCV 4.x: o 5 tirou o detector simples de pessoas (HOG) do pacote.
 opencv-python-headless==4.10.0.84
 numpy>=1.26,<3
