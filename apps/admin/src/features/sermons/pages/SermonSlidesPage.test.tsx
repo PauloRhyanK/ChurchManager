@@ -19,6 +19,9 @@ const api = vi.hoisted(() => ({
   listBibleTranslations: vi.fn(),
 }));
 vi.mock("../api/sermons-api", () => api);
+// As imagens da Ponte (canvas e envio) ficam de fora: só o gatilho e o status são conferidos aqui.
+const images = vi.hoisted(() => ({ syncDeliveryImages: vi.fn() }));
+vi.mock("../lib/delivery-images", () => images);
 const perms = vi.hoisted(() => ({ canEdit: true }));
 vi.mock("@/features/access/hooks/use-permissions", () => ({ usePermissions: () => ({ can: () => perms.canEdit }) }));
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
@@ -106,6 +109,7 @@ beforeEach(() => {
   api.getSermon.mockResolvedValue(sermon());
   api.listServiceOptions.mockResolvedValue([]);
   api.listBibleTranslations.mockResolvedValue([]);
+  images.syncDeliveryImages.mockResolvedValue({ total: 0, missing: 0, uploaded: 0, failed: 0 });
 });
 
 describe("SermonSlidesPage", () => {
@@ -440,5 +444,54 @@ describe("SermonSlidesPage", () => {
     expect(await screen.findByText("Pregada · dom 22/11")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Pregada/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Enviar para um culto" })).not.toBeInTheDocument();
+  });
+
+  describe("imagens para a Ponte", () => {
+    const SENT = { status: "SENT", delivery: { date: "2026-11-22", startTime: "19:00", serviceId: "c1", serviceName: "Culto" } };
+
+    it("sem envio não gera imagens", async () => {
+      renderPage();
+      await screen.findByRole("button", { name: "Enviar para um culto" });
+      await act(() => new Promise((r) => setTimeout(r, 1700)));
+      expect(images.syncDeliveryImages).not.toHaveBeenCalled();
+      expect(screen.queryByText(/Imagens para a Ponte/)).not.toBeInTheDocument();
+    });
+
+    it("com envio, gera as que faltam e mostra o andamento e o fim", async () => {
+      let finish!: (v: unknown) => void;
+      images.syncDeliveryImages.mockImplementation((_id: string, onProgress: (p: { done: number; missing: number }) => void) => {
+        onProgress({ done: 2, missing: 3 });
+        return new Promise((r) => (finish = r));
+      });
+      api.getSermon.mockResolvedValue(sermon(SENT));
+      renderPage();
+      expect(await screen.findByText("Imagens para a Ponte: enviando 3 de 3…", undefined, { timeout: 3000 })).toBeInTheDocument();
+      expect(images.syncDeliveryImages).toHaveBeenCalledWith("s1", expect.any(Function));
+      await act(async () => finish({ total: 3, missing: 3, uploaded: 3, failed: 0 }));
+      expect(screen.getByText("Imagens para a Ponte prontas")).toBeInTheDocument();
+    });
+
+    it("falha mostra Tentar de novo, que roda outra vez", async () => {
+      images.syncDeliveryImages
+        .mockResolvedValueOnce({ total: 3, missing: 3, uploaded: 1, failed: 2 })
+        .mockResolvedValue({ total: 3, missing: 2, uploaded: 2, failed: 0 });
+      api.getSermon.mockResolvedValue(sermon(SENT));
+      renderPage();
+      expect(await screen.findByText("Imagens para a Ponte: falhou", undefined, { timeout: 3000 })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Tentar de novo" }));
+      expect(await screen.findByText("Imagens para a Ponte prontas")).toBeInTheDocument();
+      expect(images.syncDeliveryImages).toHaveBeenCalledTimes(2);
+    });
+
+    it("salvar os slides de uma palavra enviada confere as imagens de novo", async () => {
+      images.syncDeliveryImages.mockResolvedValue({ total: 3, missing: 0, uploaded: 0, failed: 0 });
+      api.getSermon.mockResolvedValue(sermon({ ...SENT, updatedAt: "2026-11-19T10:00:00.000Z" }));
+      api.saveSlides.mockResolvedValue(sermon({ ...SENT, updatedAt: "2026-11-19T10:05:00.000Z" }));
+      renderPage();
+      await waitFor(() => expect(images.syncDeliveryImages).toHaveBeenCalledTimes(1), { timeout: 3000 });
+      fireEvent.click(screen.getByRole("checkbox", { name: /João 8:12/ }));
+      await waitFor(() => expect(api.saveSlides).toHaveBeenCalled());
+      await waitFor(() => expect(images.syncDeliveryImages).toHaveBeenCalledTimes(2), { timeout: 3000 });
+    }, 10_000);
   });
 });

@@ -23,6 +23,9 @@ const api = vi.hoisted(() => ({
   listBibleTranslations: vi.fn(),
 }));
 vi.mock("../api/sermons-api", () => api);
+// As imagens da Ponte (canvas e envio) ficam de fora: só o gatilho e o status são conferidos aqui.
+const images = vi.hoisted(() => ({ syncDeliveryImages: vi.fn() }));
+vi.mock("../lib/delivery-images", () => images);
 const perms = vi.hoisted(() => ({ canEdit: true }));
 vi.mock("@/features/access/hooks/use-permissions", () => ({ usePermissions: () => ({ can: () => perms.canEdit }) }));
 const toast = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
@@ -106,6 +109,7 @@ describe("SermonEditorPage", () => {
     vi.clearAllMocks();
     perms.canEdit = true;
     api.getSermonAi.mockResolvedValue({ enabled: false, models: [] });
+    images.syncDeliveryImages.mockResolvedValue({ total: 0, missing: 0, uploaded: 0, failed: 0 });
   });
   afterEach(() => vi.restoreAllMocks());
 
@@ -392,5 +396,25 @@ describe("SermonEditorPage", () => {
     await waitFor(() => expect(api.updateSermon).toHaveBeenCalled());
     await screen.findByText("Não foi possível salvar.");
     expect(api.generateSlides).not.toHaveBeenCalled();
+  });
+
+  it("palavra enviada: as imagens da Ponte são conferidas ao abrir e de novo depois de salvar", async () => {
+    const delivery = { date: "2026-11-22", startTime: "19:00", serviceId: "c1", serviceName: "Culto" };
+    api.getSermon.mockResolvedValue({ ...sermon, status: "SENT", delivery, updatedAt: "2026-11-19T10:00:00.000Z" });
+    api.updateSermon.mockResolvedValue({ ...sermon, status: "SENT", delivery, revision: 2, updatedAt: "2026-11-19T10:05:00.000Z" });
+    renderPage();
+    await waitFor(() => expect(images.syncDeliveryImages).toHaveBeenCalledTimes(1), { timeout: 3000 });
+    expect(images.syncDeliveryImages).toHaveBeenCalledWith("s1", expect.any(Function));
+    fireEvent.click(screen.getByRole("button", { name: "Digitar no texto" }));
+    await waitFor(() => expect(api.updateSermon).toHaveBeenCalled(), { timeout: 3000 });
+    await waitFor(() => expect(images.syncDeliveryImages).toHaveBeenCalledTimes(2), { timeout: 3000 });
+  }, 10_000);
+
+  it("rascunho sem envio não confere imagens", async () => {
+    api.getSermon.mockResolvedValue(sermon);
+    renderPage();
+    await screen.findByLabelText("Título da palavra");
+    await new Promise((r) => setTimeout(r, 1700));
+    expect(images.syncDeliveryImages).not.toHaveBeenCalled();
   });
 });

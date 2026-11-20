@@ -29,6 +29,7 @@ import { SermonToolbar } from "../editor/SermonToolbar";
 import { deriveSermon, sameJson, type SermonDoc } from "../lib/document";
 import { formatDay, formatHour, formatSpeech } from "../lib/format";
 import { useAutosave } from "../lib/use-autosave";
+import { useDeliveryImages } from "../lib/use-delivery-images";
 
 const LIST_PATH = "/palavras";
 const UNTITLED = "Sem título";
@@ -146,12 +147,15 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
     style: sermon.slideStyle,
     items: sermon.slides,
   });
+  // Última gravação conhecida: a cópia entregue pode ter mudado e as imagens da Ponte são conferidas de novo.
+  const [savedAt, setSavedAt] = useState(sermon.updatedAt);
 
   const autosave = useAutosave({
     sermonId: sermon.id,
     initialRevision: sermon.revision,
     save: async (body) => {
       const saved = await updateSermon(sermon.id, body);
+      setSavedAt(saved.updatedAt);
       // A cópia em cache acompanha o servidor (o editor aberto não relê dela; quem abrir depois parte daqui).
       queryClient.setQueryData<Sermon>(detailKey(sermon.id), (old) =>
         old
@@ -178,6 +182,8 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
       return { revision: server.revision };
     },
   });
+
+  useDeliveryImages({ id: sermon.id, delivery: situation.delivery, updatedAt: savedAt }, canEdit);
 
   const derived = useMemo(() => deriveSermon(doc), [doc]);
 
@@ -278,11 +284,13 @@ function EditorView({ sermon, canEdit, onReload }: EditorViewProps) {
   }
   function handleSent(updated: Sermon) {
     setSituation({ status: updated.status, delivery: updated.delivery });
+    setSavedAt(updated.updatedAt);
     queryClient.setQueryData<Sermon>(detailKey(sermon.id), (old) =>
       old ? { ...old, status: updated.status, delivery: updated.delivery } : old,
     );
   }
   function handleGenerated(updated: Sermon) {
+    setSavedAt(updated.updatedAt);
     setSlidesInfo({ count: updated.slideCount, has: updated.slides.length > 0, style: updated.slideStyle, items: updated.slides });
     // Só os slides mudam na cópia em cache; o texto e a revisão ficam como estão.
     queryClient.setQueryData<Sermon>(["sermons", "detail", sermon.id], (old) =>
