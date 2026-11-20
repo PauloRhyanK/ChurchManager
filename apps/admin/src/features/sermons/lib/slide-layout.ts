@@ -3,7 +3,7 @@
 // As medidas e a estimativa de linhas são as do gerador (PANEL e wrapLines em slides.ts): o texto é quebrado aqui, em
 // palavra inteira, e cada linha vai pronta; a fonte nunca encolhe (o gerador já divide o que não cabe).
 import { SLIDE_THEMES, type SlideTheme } from "./slide-identity";
-import { PANEL, wrapLines, type SlideFace, type SlideLayout, type SlideStyle } from "./slides";
+import { PANEL, SLIDE_LAYOUTS, slideFace, wrapLines, type SlideFace, type SlideFaceInput, type SlideLayout, type SlideStyle } from "./slides";
 
 export type ColorRole = "text" | "accent";
 
@@ -272,4 +272,18 @@ export function drawSlide(face: SlideFace, style: SlideStyle): SlideDrawing {
 /** Cor de um papel no tema. */
 export function roleColor(theme: SlideTheme, role: ColorRole | ShapeBox["fill"] | "border"): string {
   return theme[role];
+}
+
+/** Slide já no formato da tela (PublicSlide) ou ainda por montar (item do editor, cópia antiga só com kind/text/reference). */
+export type PreviewSlide = SlideFace | (SlideFaceInput & { title?: string });
+
+/** O que a tela mostra de um slide, em qualquer dos formatos acima. */
+export function toFace(slide: PreviewSlide): SlideFace {
+  const s = slide as Partial<SlideFace> & Partial<SlideFaceInput>;
+  if (typeof s.title === "string" && s.layout && SLIDE_LAYOUTS.includes(s.layout)) {
+    return { layout: s.layout, title: s.title, verse: s.verse ?? null, reference: s.reference ?? null, items: s.items ?? null, start: s.start ?? null };
+  }
+  // Item do editor ou cópia antiga (modelos M01–M04): o padrão do tipo, com o título antigo como heading.
+  const input = slide as SlideFaceInput & { title?: string };
+  return slideFace({ ...input, heading: input.heading ?? input.title ?? null });
 }

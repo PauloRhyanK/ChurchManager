@@ -1,6 +1,6 @@
 import { api } from "@/lib/api";
 import type { SermonDoc } from "../lib/document";
-import type { SlideItem, SlideMode, SlideStyle } from "../lib/slides";
+import type { PublicSlide, SlideItem, SlideMode, SlideStyle } from "../lib/slides";
 
 export type { SlideItem, SlideKind, SlideMode, SlideStyle } from "../lib/slides";
 
@@ -161,6 +161,38 @@ export async function saveSlides(id: string, input: { style?: SlideStyle; items:
   };
   if (input.style !== undefined) body.style = input.style;
   return (await api.put<Sermon>(`${SERMONS}/${id}/slides`, body)).data;
+}
+
+// ---- Imagens dos slides para a Ponte (o painel desenha, a API guarda) ----
+
+export interface DeliveryImageSlide {
+  index: number;
+  hash: string;
+  /** O slide da cópia entregue: é isto que se desenha, não o que está na tela. */
+  slide: PublicSlide;
+  imageUrl: string | null;
+}
+
+export interface DeliveryImages {
+  style: SlideStyle;
+  version: string;
+  slides: DeliveryImageSlide[];
+}
+
+/** Slides da cópia entregue, com a imagem de cada um (ou null). 404 quando a palavra não tem envio. */
+export async function getDeliveryImages(id: string): Promise<DeliveryImages> {
+  return (await api.get<DeliveryImages>(`${SERMONS}/${id}/delivery/images`)).data;
+}
+
+/** Envia o PNG 1920×1080 de um slide da cópia entregue. */
+export async function uploadDeliveryImage(id: string, hash: string, png: Blob): Promise<{ hash: string; imageUrl: string }> {
+  const form = new FormData();
+  form.append("file", png, `${hash}.png`);
+  return (
+    await api.put<{ hash: string; imageUrl: string }>(`${SERMONS}/${id}/delivery/images/${encodeURIComponent(hash)}`, form, {
+      headers: { "Content-Type": "multipart/form-data" },
+    })
+  ).data;
 }
 
 // ---- Bíblia (tabelas globais; espelha apps/api/src/modules/sermons/bible) ----
