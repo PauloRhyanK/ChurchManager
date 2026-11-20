@@ -86,12 +86,53 @@ def saida_do_sunshine(caminho=SUNSHINE_CONF):
     return achado.group(1).strip() if achado else ""
 
 
-def sunshine_tem_a_tela(saida, telas):
-    """A tela escrita no sunshine.conf ainda existe? None se nao da para saber."""
+# O Sunshine novo (2024 em diante) escreve no output_name o ID dele para a tela,
+# entre chaves ("{9acddf6d-43cc-...}"), e nao o nome do Windows ("\\.\DISPLAY2").
+# Esse ID nao aparece em nada que o Windows devolve: comparar direto dava
+# "a tela sumiu" com a TV funcionando (visto em 19/11/2026). Quem sabe a que
+# tela o ID corresponde e o proprio Sunshine, que lista no registro dele as
+# telas que achou, com "device_id" e "display_name".
+SUNSHINE_LOG = r"C:\Program Files\Sunshine\config\sunshine.log"
+_ID_DO_SUNSHINE = re.compile(r"^\{[0-9a-fA-F-]{36}\}$")
+CAUDA_DO_LOG = 2 * 1024 * 1024
+
+
+def tela_do_id_no_log(identificador, caminho=SUNSHINE_LOG):
+    """O display_name ("\\\\.\\DISPLAY2") que o Sunshine deu ao ID, pela ultima
+    vez que listou as telas no registro. "" se ele listou o ID sem tela (a tela
+    esta desligada); None se o registro nao diz nada sobre o ID."""
+    try:
+        with open(caminho, "rb") as arquivo:
+            arquivo.seek(0, os.SEEK_END)
+            tamanho = arquivo.tell()
+            arquivo.seek(max(0, tamanho - CAUDA_DO_LOG))
+            texto = arquivo.read().decode("utf-8", errors="replace")
+    except OSError:
+        return None
+    padrao = re.compile(r'"device_id"\s*:\s*"' + re.escape(identificador) + r'"(.{0,400}?)"display_name"\s*:\s*"([^"]*)"',
+                        re.IGNORECASE | re.DOTALL)
+    achados = padrao.findall(texto)
+    if not achados:
+        return None
+    nome = achados[-1][1]
+    return nome.replace("\\\\", "\\")
+
+
+def sunshine_tem_a_tela(saida, telas, log=SUNSHINE_LOG):
+    """A tela escrita no sunshine.conf ainda existe? None se nao da para saber.
+    Na duvida, None: um alarme falso no meio do culto atrapalha mais do que
+    ajuda."""
     if saida is None:
         return None
     if saida == "":
         return True       # sem nada escrito, ele transmite a principal, que sempre existe
+    if _ID_DO_SUNSHINE.match(saida.strip()):
+        nome = tela_do_id_no_log(saida.strip(), log)
+        if nome is None:
+            return None   # o registro nao diz: nao da para saber
+        if nome == "":
+            return False  # o Sunshine conhece o ID, mas a tela esta desligada
+        saida = nome
     alvo = saida.strip().lower()
     for tela in telas or []:
         for campo in ("nome", "id", "monitor"):
@@ -199,11 +240,13 @@ def restaurar_disposicao(boa):
 
 class VigiaDasTelas:
     def __init__(self, caminho_da_boa, ler=ler_disposicao, restaurar=restaurar_disposicao,
-                 sunshine_conf=SUNSHINE_CONF, anotar=None, suportado=None, agora=time.time):
+                 sunshine_conf=SUNSHINE_CONF, anotar=None, suportado=None, agora=time.time,
+                 sunshine_log=SUNSHINE_LOG):
         self._caminho = caminho_da_boa
         self._ler = ler
         self._restaurar = restaurar
         self._sunshine_conf = sunshine_conf
+        self._sunshine_log = sunshine_log
         self._anotar = anotar
         self._suportado = no_windows() if suportado is None else bool(suportado)
         self._agora = agora
@@ -271,7 +314,7 @@ class VigiaDasTelas:
             corpo.update({"estado": "sem_leitura", "texto": erro or "ainda não li as telas"})
             return corpo
         saida = saida_do_sunshine(self._sunshine_conf)
-        existe = sunshine_tem_a_tela(saida, atual)
+        existe = sunshine_tem_a_tela(saida, atual, self._sunshine_log)
         corpo["sunshine"] = {"saida": saida, "existe": existe}
         if existe is False:
             corpo.update({"estado": "sunshine_sem_tela",
