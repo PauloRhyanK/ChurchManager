@@ -25,6 +25,7 @@ Documentação orientada ao consumo pelo site/app. Os caminhos assumem o **prefi
 | [public-payment-links.md](./public-payment-links.md) | **`POST .../links`** — link de pagamento Asaas (único vs mensal, valor opcional) |
 | [site-content-contract.md](./site-content-contract.md) | **`GET .../site-content`** — conteúdo institucional editável no painel (missão, células, igrejas, pastores, ministérios, ofertório, rodapé) |
 | [ponte-roteiro.md](./ponte-roteiro.md) | **`GET .../worship/services/next`** — o culto que a Ponte do Culto executa: campos de sempre e o `roteiro` (momentos e músicas intercalados, na ordem). Exemplo real em [exemplos/ponte-services-next.json](./exemplos/ponte-services-next.json) |
+| [ponte-palavra.md](./ponte-palavra.md) | **`sermon`** na resposta da Ponte — a palavra do culto com `version` e os `slides`, cada um com a imagem PNG 1920×1080 (`imageUrl`) ou `null` para cair no texto |
 
 ## Implementação vs planeamento
 

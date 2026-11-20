@@ -6,7 +6,7 @@ import {
   PayloadTooLargeException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { MAX_IMAGE_BYTES, StorageService } from './storage.service';
+import { MAX_IMAGE_BYTES, MAX_SLIDE_PNG_BYTES, StorageService, pngDimensions } from './storage.service';
 
 const TENANT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const FOLDER = `tenants/${TENANT}/church`;
@@ -201,5 +201,42 @@ test('áudio: acima de 90 MB resulta em 413 e nada é gravado', withEnv(FULL_ENV
   const big = Buffer.alloc(90 * 1024 * 1024 + 1);
   WAV.copy(big);
   await assert.rejects(() => service.uploadAudio(big, AUDIO_FOLDER), PayloadTooLargeException);
+  assert.equal(sent.length, 0);
+}));
+
+/** PNG mínimo com IHDR de `w`×`h`. */
+const pngOf = (w: number, h: number) => {
+  const ihdr = Buffer.alloc(25);
+  ihdr.writeUInt32BE(13, 0);
+  ihdr.write('IHDR', 4, 'latin1');
+  ihdr.writeUInt32BE(w, 8);
+  ihdr.writeUInt32BE(h, 12);
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), ihdr, Buffer.alloc(16)]);
+};
+
+test('pngDimensions lê largura e altura do IHDR; o que não é PNG dá null', () => {
+  assert.deepEqual(pngDimensions(pngOf(1920, 1080)), { width: 1920, height: 1080 });
+  assert.equal(pngDimensions(JPEG), null);
+  assert.equal(pngDimensions(PNG), null); // assinatura sem IHDR
+  assert.equal(pngDimensions(Buffer.alloc(0)), null);
+});
+
+test('uploadPng grava na chave exata, com image/png e cache longo', withEnv(FULL_ENV, async () => {
+  const { service, sent } = createService();
+  const key = `tenants/${TENANT}/sermons/d1/0123456789abcdef.png`;
+  const url = await service.uploadPng(pngOf(1920, 1080), key);
+  assert.equal(url, `https://cdn.exemplo.org/${key}`);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].Key, key);
+  assert.equal(sent[0].ContentType, 'image/png');
+  assert.equal(sent[0].CacheControl, 'public, max-age=31536000, immutable');
+}));
+
+test('uploadPng recusa o que não é PNG (400) e passa de 1,5 MB (413), sem gravar', withEnv(FULL_ENV, async () => {
+  const { service, sent } = createService();
+  await assert.rejects(() => service.uploadPng(JPEG, 'k.png'), BadRequestException);
+  await assert.rejects(() => service.uploadPng(undefined, 'k.png'), BadRequestException);
+  const big = Buffer.concat([pngOf(1920, 1080), Buffer.alloc(MAX_SLIDE_PNG_BYTES)]);
+  await assert.rejects(() => service.uploadPng(big, 'k.png'), PayloadTooLargeException);
   assert.equal(sent.length, 0);
 }));

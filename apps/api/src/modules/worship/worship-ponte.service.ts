@@ -149,7 +149,9 @@ export class WorshipPonteService {
   }
 
   private async payload(tenantId: string, service: ServiceWithAll) {
-    const sermon = (await this.deliveries.summaries(tenantId, [service.id])).get(service.id) ?? null;
+    // Os campos de sempre (title, preacherName, estimatedMinutes, slideCount) e, desde 25/11/2026,
+    // `version` e `slides` com as imagens. Contrato em docs/api/ponte-palavra.md.
+    const sermon = await this.deliveries.forPonte(tenantId, service.id);
     const settings = await this.prisma.worshipSettings.findUnique({ where: { tenantId } });
     const lead = settings?.slideLeadSeconds ?? LEAD_LIMITS.default;
     const schedule = computeSchedule(

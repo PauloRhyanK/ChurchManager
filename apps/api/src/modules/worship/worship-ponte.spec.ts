@@ -22,6 +22,15 @@ const SONG = {
   createdAt: new Date('2026-11-19T10:00:00Z'), updatedAt: new Date('2026-11-20T10:00:00Z'),
 };
 
+const PONTE_SERMON = {
+  title: 'A luz', preacherName: 'Pr. João', estimatedMinutes: 35, slideCount: 2, version: '0123456789abcdef',
+  slides: [
+    { index: 0, kind: 'VERSE', title: 'A luz', text: 'Eu sou a luz do mundo', reference: 'João 8:12',
+      imageUrl: 'https://cdn/tenants/b/sermons/d/0123456789abcdef.png', width: 1920, height: 1080 },
+    { index: 1, kind: 'POINT', title: '1. A luz chama', text: '1. A luz chama', reference: null, imageUrl: null, width: null, height: null },
+  ],
+};
+
 function build(options: { keys?: Record<string, string>; lastUsedAt?: Date | null } = {}) {
   const writes: string[] = [];
   const keys = new Map(Object.entries(options.keys ?? {}));
@@ -73,7 +82,8 @@ function build(options: { keys?: Record<string, string>; lastUsedAt?: Date | nul
     },
   };
   const deliveries = {
-    summaries: async () => new Map([[SERVICE_B, { title: 'A luz', preacherName: 'Pr. João', estimatedMinutes: 35 }]]),
+    forPonte: async (tenantId: string, serviceId: string) =>
+      tenantId === TENANT_B && serviceId === SERVICE_B ? PONTE_SERMON : null,
   };
   return { svc: new WorshipPonteService(prisma as never, deliveries as never), writes, keys };
 }
@@ -156,7 +166,9 @@ test('próximo culto: formato do contrato, com versão estável', async () => {
       momento: { kind: 'SERMON', palavra: { titulo: 'A luz', pregador: 'Pr. João' } },
     },
   ]);
-  assert.deepEqual(out.sermon, { title: 'A luz', preacherName: 'Pr. João', estimatedMinutes: 35 });
+  // A palavra: os campos de sempre continuam; `version` e `slides` são acréscimos.
+  assert.deepEqual(out.sermon, PONTE_SERMON);
+  for (const key of ['title', 'preacherName', 'estimatedMinutes', 'slideCount']) assert.ok(key in out.sermon!, key);
   const song = out.songs[0];
   assert.equal(song.status, 'READY');
   assert.equal(song.holyricsId, '1741522267781');
