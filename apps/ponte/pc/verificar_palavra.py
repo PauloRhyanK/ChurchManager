@@ -71,6 +71,48 @@ def perguntar(base, token, acao, payload):
     return veredito(resposta.status_code, corpo), corpo
 
 
+def imagens(config, base, token):
+    """As imagens prontas dos slides (ponte/slides_da_palavra.py): a Ponte acha
+    a pasta de imagens do Holyrics no disco? O token pode mostrar imagem?
+    Nao mostra nada no telao. Devolve quantas coisas faltam."""
+    from ponte import slides_da_palavra
+
+    class Cliente:
+        def pedir(self, acao, payload=None):
+            return requests.post("{}/{}".format(base, acao), params={"token": token},
+                                 json=payload or {}, timeout=6).json()
+
+    print()
+    print("As imagens prontas dos slides:")
+    falta = 0
+    subpasta = str((config.get("palavra") or {}).get("pasta_de_imagens") or "Palavra")
+    try:
+        pasta = slides_da_palavra.pasta_de_imagens_do_holyrics(config, Cliente())
+    except Exception:
+        pasta = None
+    if pasta is None:
+        falta += 1
+        print("  NAO ACHEI      a pasta de imagens do Holyrics no disco deste PC.")
+        print("                 No Holyrics, aba Imagens > botao direito > abrir a pasta; copie o")
+        print("                 caminho para `palavra: { pasta_no_disco: ... }` no config.yaml.")
+    else:
+        dentro = os.path.join(pasta, subpasta)
+        quantos = len(os.listdir(dentro)) if os.path.isdir(dentro) else 0
+        print("  ACHEI          {}".format(pasta))
+        print("                 subpasta `{}`: {} arquivo(s)".format(subpasta, quantos))
+    try:
+        # Um nome que nao existe: o Holyrics confere a permissao antes de procurar.
+        resultado, corpo = perguntar(base, token, "ShowImage", {"file": "ponte-do-culto-nao-existe.png"})
+    except requests.RequestException as erro:
+        print("  SEM RESPOSTA   Mostrar uma imagem (ShowImage): {}".format(str(erro).replace(token, "***")[:120]))
+        return falta + 1
+    print("  {:<14} Mostrar uma imagem (ShowImage)".format(resultado.upper()))
+    if resultado != "liberada":
+        falta += 1
+        print("                 o Holyrics disse: {}".format(json.dumps(corpo, ensure_ascii=False)[:160].replace(token, "***")))
+    return falta
+
+
 def main():
     mostrar = "--mostrar" in sys.argv
     caminho = os.environ.get("PONTE_CONFIG") or os.path.join(AQUI, "config.yaml")
@@ -106,6 +148,7 @@ def main():
             ruim += 1
             detalhe = json.dumps(corpo, ensure_ascii=False)[:160].replace(token, "***")
             print("                 o Holyrics disse: {}".format(detalhe))
+    ruim += imagens(config, base, token)
     print()
     if ruim:
         print("Falta alguma coisa. Para liberar: Holyrics > Arquivo > Configuracoes > API Server >")

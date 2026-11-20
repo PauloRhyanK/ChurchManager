@@ -669,6 +669,57 @@ passando.
 **Para desligar** sem mexer em código: `vigia_tv: { abrir_sozinho: false }` e
 `telas: { ativo: false }`.
 
+### 19. Os slides da Palavra: imagens baixadas sozinhas (19/11/2026)
+
+Branch `claude/ponte-slides-da-palavra`. **Nunca rodou com o Holyrics de verdade.**
+
+**O defeito do culto.** O botão "Abrir os slides da Palavra" pedia ao Holyrics
+`ShowImage {file: "Pregação"}` (a pasta inteira) e o Holyrics respondia
+`file not allowed: Pregação`. A pasta não existia nas imagens dele: ninguém punha os
+slides lá. A API do Holyrics **não tem ação para receber arquivo**; `ShowImage` só
+mostra o que já está na aba Imagens, pelo nome (`arquivo.jpg`, `pasta` ou
+`pasta/arquivo.jpg`).
+
+**O que mudou**
+
+- `ponte/slides_da_palavra.py` (novo): quando a palavra do culto muda, baixa o
+  `imageUrl` de cada slide para `<pasta de imagens do Holyrics>\Palavra\01-ab12cd.png`…
+  Só troca quando **todas** chegaram; só apaga o que a própria Ponte pôs (lista em
+  `_slides_da_palavra.json`); tenta de novo a cada minuto se falhar. Roda só no PC que
+  tem o Holyrics configurado.
+- O telão da palavra (`ponte/palavra.py`) mostra a **imagem** do slide
+  (`ShowImage {file: "Palavra/01-ab12cd.png"}`, um pedido por slide) quando ela está
+  pronta. Se não está, se a palavra veio sem imagens ou se o Holyrics recusa, o slide vai
+  como **texto** (o caminho de antes) e o painel diz por quê, em português.
+- O botão "Abrir os slides da Palavra" agora põe no telão o slide em que a palavra está
+  (o primeiro, se nenhum foi). Anterior/Próximo, o celular do pregador e o passador já
+  andavam pela palavra: passam a andar pelas imagens sem mudança nenhuma.
+- O painel mostra "Slides da Palavra prontos (13)", "Trazendo…" ou o motivo.
+- `palavra.pasta_de_imagens` mudou de sentido e de padrão: é a **subpasta** que a Ponte
+  enche, e o padrão é `Palavra` (sem acento).
+
+**Para conferir aí, nesta ordem, fora do culto**
+
+1. `python verificar_palavra.py`: tem um bloco novo, "As imagens prontas dos slides".
+   Diz se achou a pasta de imagens do Holyrics no disco e se o token pode `ShowImage`.
+2. Se "NAO ACHEI": no Holyrics, aba Imagens, abrir a pasta no Explorer, copiar o caminho
+   para `palavra: { pasta_no_disco: '...' }`. O palpite da Ponte é
+   `<baseDir do GetVersion>\Holyrics\files\media\image`.
+3. Com uma palavra com slides ligada ao culto: o painel deve dizer "Slides da Palavra
+   prontos (N)" em até uns 20 segundos, e os PNGs devem estar na subpasta.
+4. **A dúvida principal**: o Holyrics enxerga na hora um arquivo novo posto na pasta por
+   fora? Aperte "Abrir os slides da Palavra". Se o painel disser "o Holyrics não achou
+   «Palavra/01-…png»" com o arquivo lá, ele só lê a pasta ao abrir (ou ao recarregar a
+   aba Imagens). Anote o que resolve (recarregar a aba? reiniciar?) e avise.
+5. Passar com Próximo/Anterior, com o celular do pregador e com o passador. Ver se a
+   troca de imagem pisca (cada slide é um `ShowImage` novo).
+6. Se o Holyrics roda em **outro** PC que não o da Ponte (`holyrics.host` diferente de
+   127.0.0.1), a pasta é a do outro PC: `pasta_no_disco` teria que ser um caminho de
+   rede. Não foi pensado para isso; avise se for o caso.
+
+**Para desligar** sem mexer em código: `palavra: { baixar_imagens: false }`. Tudo volta
+a ir como texto.
+
 ## O que NÃO foi testado
 
 Do painel do culto ao vivo (seções 12 e 13): nada rodou contra OBS, Holyrics, YouTube ou

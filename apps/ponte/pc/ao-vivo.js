@@ -486,6 +486,16 @@ function htmlManual(d) {
   return h;
 }
 
+// "Slides da Palavra prontos (13)", ou por que as imagens não estão prontas.
+// Sem imagens na palavra não aparece nada: o texto é o caminho normal.
+function linhaDasImagens(p) {
+  const i = p && p.imagens;
+  if (!i || i.estado === 'sem_palavra' || i.estado === 'sem_imagens') return '';
+  const bom = i.estado === 'prontos', meio = i.estado === 'baixando';
+  return '<span class="' + (bom || meio ? 'rotulo das-imagens' : 'falha') + '">' + esc(i.texto) +
+    (!bom && !meio && i.motivo ? ': ' + esc(i.motivo) + '. Os slides vão como texto.' : '') + '</span>';
+}
+
 function htmlPalavra(d) {
   const p = d.palavra, slides = (C && C.palavra) || [], pode = podeConduzir();
   const atual = p.slide != null ? slides[p.slide] : null;
@@ -510,7 +520,9 @@ function htmlPalavra(d) {
     (noTelao ? '<span class="letra' + (atual.tipo === 'VERSE' ? ' versiculo' : '') + '">' + esc(atual.texto || atual.referencia) + '</span>' +
       (atual.referencia && atual.texto ? '<span class="referencia">' + esc(atual.referencia) + '</span>' : '')
       : '<span class="letra fraca">' + (atual ? 'O slide ' + (p.slide + 1) + ' está guardado. "Próximo" traz de volta.' : 'Nenhum slide da palavra foi ao telão ainda.') + '</span>') +
-    (p.erro ? '<span class="falha">Abra no Holyrics: ' + esc((atual && (atual.referencia || atual.texto)) || '') + '</span>' : '') + '</div>' +
+    (p.erro ? '<span class="falha">Abra no Holyrics: ' + esc((atual && (atual.referencia || atual.texto)) || '') + '</span>' : '') +
+    (!p.erro && p.aviso && noTelao ? '<span class="falha">Foi como texto: ' + esc(p.aviso) + '</span>' : '') +
+    (p.erro || (p.aviso && noTelao) ? '' : linhaDasImagens(p)) + '</div>' +
     '<div class="ao-lado"><div class="a-seguir"><span class="rotulo">A seguir</span><span class="letra">' +
     (seguinte ? esc(seguinte.referencia && seguinte.tipo === 'VERSE' ? seguinte.referencia : seguinte.texto) : 'fim dos slides') + '</span></div>';
   const mic = ((d.transmissao && d.transmissao.audios) || []).filter(a => a.palavra);
@@ -616,6 +628,8 @@ function htmlMomento(d) {
     const extras = [];
     if (/palavra|prega|serm|mensagem/.test(quem)) {
       extras.push(botao('Abrir os slides da Palavra', {tipo: 'slides_palavra'}, {classe: 'bt forte'}));
+      const dasImagens = linhaDasImagens(d.palavra);
+      if (dasImagens) extras.push(dasImagens);
     }
     if (/ofert|d[ií]zimo/.test(quem)) {
       const al = d.telao && d.telao.alerta;

@@ -1187,13 +1187,26 @@ web:
 # ===========================================================================
 #  BOTÕES DO MOMENTO (opcional; sem isto valem os padrões)
 #
-#  No momento da Palavra, o painel mostra "Abrir os slides da Palavra": abre
-#  no Holyrics a pasta de imagens que o site gera. No Ofertório, "Mostrar o
-#  Pix": liga o Alerta do Holyrics (a faixa embaixo da tela), com o texto que
-#  já está nele.
+#  No momento da Palavra, o painel mostra "Abrir os slides da Palavra": põe no
+#  telão o slide em que a palavra está (o primeiro, se nenhum foi ainda). No
+#  Ofertório, "Mostrar o Pix": liga o Alerta do Holyrics (a faixa embaixo da
+#  tela), com o texto que já está nele.
+#
+#  AS IMAGENS DOS SLIDES. O ChurchManager manda um PNG pronto de cada slide.
+#  Quando a palavra muda, este PC baixa os PNGs para uma subpasta da pasta de
+#  imagens do Holyrics e apaga os da versão anterior (só os que ele mesmo pôs).
+#  O painel mostra "Slides da Palavra prontos (13)", ou por que não estão.
+#  Enquanto não estão, ou se a palavra veio sem imagens, o slide vai como texto.
 #
 #  palavra:
-#    pasta_de_imagens: Pregação    # o nome da pasta no Holyrics
+#    pasta_de_imagens: Palavra     # a subpasta, dentro das imagens do Holyrics.
+#                                  # Sem acento, de propósito.
+#    pasta_no_disco: 'C:\Holyrics\Holyrics\files\media\image'
+#                                  # onde ficam as imagens do Holyrics neste PC.
+#                                  # Sem esta linha a Ponte pergunta ao Holyrics
+#                                  # onde ele está instalado. Para conferir:
+#                                  # `python verificar_palavra.py`.
+#    baixar_imagens: false         # desliga o download: tudo vai como texto
 #
 #  ofertorio:
 #    pix_texto: "PIX: ..."         # se existir, escreve este texto no Alerta
