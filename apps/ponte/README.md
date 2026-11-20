@@ -182,6 +182,26 @@ no painel. A tela do retorno passa a existir sempre, com ou sem monitor.
 **Nada disto rodou com a TV, o Sunshine ou um Windows de verdade.** Ver a seção 18 de
 `docs/PARA-A-SESSAO-DO-PC.md`.
 
+## Os slides da Palavra, como imagem
+
+O pregador monta os slides no ChurchManager, e ele manda para a Ponte um PNG pronto de
+cada um. A API do Holyrics não recebe arquivos: só mostra o que já está na aba Imagens
+dele. Então o PC principal **baixa os PNGs para uma subpasta da pasta de imagens do
+Holyrics** (`Palavra`), sozinho, sempre que a palavra muda, e apaga os da versão
+anterior (só os que ele mesmo pôs). Peça: `pc/ponte/slides_da_palavra.py`.
+
+- O painel diz "Slides da Palavra prontos (13)", ou por que não estão.
+- "Abrir os slides da Palavra", Anterior/Próximo, o celular do pregador e o passador
+  mostram a imagem do slide. Sem imagem pronta (ou se o Holyrics recusar), o mesmo slide
+  vai como texto, e o painel avisa. O culto não para por causa de uma imagem.
+- Onde fica a pasta no disco: `palavra.pasta_no_disco` no `config.yaml`; sem isso a
+  Ponte pergunta ao Holyrics onde ele está instalado. `python verificar_palavra.py`
+  mostra o que ela achou.
+- Teste: `python _testar_slides_da_palavra.py` (sem Holyrics e sem internet).
+
+Ainda não rodou com o Holyrics de verdade: ver a seção 19 de
+`docs/PARA-A-SESSAO-DO-PC.md`.
+
 ## "No ar" só quando o YouTube confirma
 
 O OBS dizer que está enviando não quer dizer que o YouTube está recebendo. Já aconteceu

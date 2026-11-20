@@ -12,6 +12,7 @@ inventada.
 
 import base64
 import math
+import os
 import struct
 import threading
 import time
@@ -168,6 +169,12 @@ class ObsSimulado:
                 {"inputName": "Microfone", "inputLevelsMul": [[mic * 0.7, mic, mic]]}]
 
 
+def imagem_de_slide(url):
+    """No lugar de baixar da internet: um PNG pequeno, de uma cor por endereco."""
+    tom = sum(str(url).encode("utf-8")) % 200
+    return _png(64, 36, lambda x, y: (tom, 60, 255 - tom))
+
+
 class HolyricsSimulado:
     def __init__(self):
         self._tranca = threading.Lock()
@@ -176,6 +183,10 @@ class HolyricsSimulado:
         self.preta = False
         self.historico = []
         self.pasta = None            # ShowImage: uma pasta de imagens no telao
+        self.imagem = None           # ShowImage: um arquivo so ("Palavra/01-ab12cd.png")
+        # Com isto preenchido, o ShowImage so aceita o que existe nesta pasta
+        # do disco, e recusa o resto com o mesmo "file not allowed" do Holyrics.
+        self.pasta_de_imagens = None
         self.alerta = {"text": "PIX: igreja@exemplo.com.br", "show": False}
 
     @staticmethod
@@ -194,7 +205,15 @@ class HolyricsSimulado:
             self.historico.append((acao, payload))
             del self.historico[:-200]
             if acao == "ShowImage":
-                self.pasta, self.musica, self.slide = str(payload.get("file") or ""), None, 0
+                nome = str(payload.get("file") or "")
+                if self.pasta_de_imagens is not None:
+                    caminho = os.path.join(self.pasta_de_imagens, *nome.split("/"))
+                    if not nome or not os.path.exists(caminho) or (os.path.isdir(caminho) and not os.listdir(caminho)):
+                        raise RuntimeError("file not allowed: " + nome)
+                    if os.path.isfile(caminho):
+                        self.imagem, self.pasta, self.musica = nome, None, None
+                        return {"status": "ok"}
+                self.pasta, self.imagem, self.musica, self.slide = nome, None, None, 0
                 return {"status": "ok"}
             if acao == "GetAlert":
                 return {"status": "ok", "data": dict(self.alerta)}
@@ -241,7 +260,7 @@ class HolyricsSimulado:
                 return {"status": "ok", "data": {"id": str(payload.get("id")), "title": "Música",
                                                  "slides": self.slides_de(payload.get("id"))}}
             if acao == "ShowLyrics":
-                self.pasta = None
+                self.pasta = self.imagem = None
                 self.musica = str(payload.get("id"))
                 self.slide = 0
                 return {"status": "ok"}
@@ -250,7 +269,7 @@ class HolyricsSimulado:
                 return {"status": "ok"}
             if acao == "CloseCurrentPresentation":
                 self.musica = None
-                self.pasta = None
+                self.pasta = self.imagem = None
                 return {"status": "ok"}
             return {"status": "ok"}
 
