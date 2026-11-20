@@ -1,0 +1,6 @@
+# So para o SEGUIR (luz do teto acompanhando alguem pela camera). Opcional:
+# sem isto a ponte funciona igual e a tela /seguir diz o que falta.
+#   pip install -r requirements-seguir.txt
+# OpenCV 4.x: o 5 tirou o detector simples de pessoas (HOG) do pacote.
+opencv-python-headless==4.10.0.84
+numpy>=1.26,<3

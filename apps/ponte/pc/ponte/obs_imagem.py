@@ -12,6 +12,13 @@ notebook que transmite o culto. Entao:
 
 ESTA IMAGEM NAO VAI PARA A WEB. 20 KB por segundo de subida, durante a
 transmissao, competem com o proprio envio do culto.
+
+FLUXO EM VEZ DE PERGUNTA. A tela antiga perguntava "tem foto nova?" uma vez
+por segundo: cada pergunta era uma ida e volta, e a imagem andava a 1 quadro
+por segundo. Agora a tela abre UMA conexao (/api/painel/video, MJPEG) e a
+ponte vai empurrando cada foto nova assim que ela sai do OBS — o <img> do
+navegador mostra sozinho, sem JavaScript. Com intervalo 0.2 sao 5 quadros
+por segundo. Continua uma captura so, por mais telas que estejam abertas.
 """
 
 import base64
@@ -25,7 +32,7 @@ class ImagemDoOBS:
         self._cliente = cliente
         self._cena_no_ar = cena_no_ar
         try:
-            self._intervalo = max(0.5, float(intervalo))
+            self._intervalo = max(0.15, float(intervalo))
         except (TypeError, ValueError):
             self._intervalo = 1.0
         try:
@@ -84,3 +91,31 @@ class ImagemDoOBS:
         self._tipo = tipo if tipo.startswith("image/") else "image/jpeg"
         self._dados = base64.b64decode(corpo)
         self._em = self._agora()
+
+
+FRONTEIRA = "quadro"
+
+
+def fluxo_mjpeg(pegar, intervalo, duracao=300.0, idade_maxima=5.0,
+                agora=time.monotonic, dormir=time.sleep):
+    """Gera um fluxo multipart/x-mixed-replace a partir de `pegar()`.
+
+    `pegar` devolve (bytes, tipo, idade) — ImagemDoOBS.pegar ou a camera do
+    seguir. So manda quando a foto mudou. Acaba sozinho depois de `duracao`
+    segundos: a tela reabre, e uma aba esquecida nao prende uma thread para
+    sempre. Quando o navegador fecha a conexao, o Flask encerra o gerador.
+    """
+    # A FRONTEIRA VAI DEPOIS DE CADA FOTO, e nao antes: o navegador so
+    # desenha uma parte quando ve a fronteira seguinte. Com ela antes, cada
+    # foto apareceria uma foto atrasada.
+    fim = agora() + float(duracao)
+    ultimo = None
+    yield "--{}\r\n".format(FRONTEIRA).encode("ascii")
+    while agora() < fim:
+        dados, tipo, idade = pegar()
+        if dados and dados is not ultimo and idade is not None and idade <= idade_maxima:
+            ultimo = dados
+            yield (("Content-Type: {}\r\nContent-Length: {}\r\n\r\n"
+                    .format(tipo, len(dados))).encode("ascii") + dados
+                   + "\r\n--{}\r\n".format(FRONTEIRA).encode("ascii"))
+        dormir(intervalo)
