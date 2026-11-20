@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "./",
+    "outDir": "./dist/tools",
+    "incremental": false,
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": ["scripts/*.ts", "prisma/seed.ts"],
+  "exclude": ["node_modules", "dist", "scripts/test-*.ts", "scripts/migrate-supabase-*.ts", "**/*.spec.ts"]
+}

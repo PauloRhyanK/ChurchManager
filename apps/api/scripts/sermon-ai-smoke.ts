@@ -1,7 +1,7 @@
 /**
  * Confere a chave e TODOS os modelos configurados da IA da Palavra ("Colar texto") com um texto de exemplo embutido.
  *   Local:            npm run script:sermon-ai-smoke
- *   QA/produção:      dentro do contêiner da API, npx tsx scripts/sermon-ai-smoke.ts
+ *   QA/produção:      dentro do contêiner da API, node dist/tools/scripts/sermon-ai-smoke.js
  * Faz UMA chamada real por modelo (custa centavos). Não roda em teste nem no CI. Ver src/modules/sermons/ai/README.md.
  */
 import Anthropic from '@anthropic-ai/sdk';
