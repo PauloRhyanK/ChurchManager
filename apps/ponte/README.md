@@ -97,6 +97,59 @@ slide com a janela do Holyrics em foco. A Ponte, no PC principal, ouve o passado
 - **Nunca foi testado com o passador nem em Windows.** Ver a seção 15 de
   `docs/PARA-A-SESSAO-DO-PC.md`.
 
+## A TV do altar e as telas do PC
+
+O retorno do altar é a tela do PC do Holyrics, transmitida pelo Sunshine e recebida pelo
+Moonlight na TV (LG webOS), pelo Wi-Fi. Duas coisas davam problema, e a Ponte passou a
+cuidar das duas.
+
+**A TV liga e abre o retorno sozinha, na janela do culto.** Dentro da janela (de uma hora
+antes do culto até meia hora depois do fim, ou o horário escrito em
+`vigia_tv.janela_do_culto`), o PC principal:
+
+1. fica olhando, de 5 em 5 segundos, se a TV está na rede. Enquanto não está, manda
+   "ligar pela rede" a cada 30 segundos e o painel mostra "esperando a TV". Não há limite
+   de tentativas nesta fase: é só olhar;
+2. assim que a TV responde (ligada pela rede ou por alguém no controle), espera uns
+   segundos e manda abrir o retorno;
+3. só dá por certo quando o Sunshine registra que a TV entrou.
+
+Se a TV for desligada e religada no meio do culto, o ciclo recomeça. O que não muda: com
+**outro aplicativo na tela** da TV a Ponte não mexe; e se a TV responde mas o retorno não
+conecta em três tentativas, ela para e pede uma pessoa (e volta a tentar quando a TV for
+religada). Fora da janela do culto, vale a regra antiga: nunca liga a TV nem abre o que
+ninguém abriu. Cada passo aparece no "Aconteceu agora".
+
+- **Para a TV acordar pela rede** é preciso ligar na própria TV: Configurações > Geral >
+  Dispositivos > Dispositivos externos > **"Ligar via Wi-Fi"** (o nome muda com o ano do
+  modelo: "LG Connect Apps", "Mobile TV On"). Sem isso a Ponte só espera alguém ligar a TV
+  no controle, e faz o resto. Pelo Wi-Fi nem toda LG acorda; pelo cabo de rede, sim.
+- Na **chegada**, o item "TV do altar mostrando o retorno" fica verde só com a TV ligada,
+  o retorno na tela dela e o Sunshine transmitindo. "Tentar de novo" refaz o ciclo.
+
+**As telas do PC.** Quando o Windows reorganiza as telas (um monitor desligado, um cabo
+HDMI solto ou encaixado, uma resolução trocada), o Sunshine pode passar a capturar a tela
+errada. No menu Mais do painel, **"Esta é a disposição certa"** guarda a disposição de
+agora. Daí em diante a Ponte avisa, em vermelho, quando ela muda, dizendo o que mudou, e
+oferece **"Restaurar a disposição"**. Também avisa quando a tela escrita em `output_name`
+do `sunshine.conf` deixou de existir. Restaurar não traz de volta um monitor desligado ou
+sem cabo.
+
+**A recomendação que resolve de vez: uma tela só para o retorno.** Enquanto o retorno
+depender de um monitor de verdade, desligar esse monitor ou soltar o cabo dele derruba a
+TV. Duas saídas, das quais a primeira é a mais simples:
+
+- um **plugue HDMI fantasma** (um adaptador pequeno, que faz o PC achar que há um monitor
+  1080p ligado) numa saída de vídeo livre do PC do Holyrics;
+- ou um **driver de tela virtual** instalado no Windows.
+
+Nos dois casos: estender a área de trabalho para essa tela, pôr nela a saída de retorno do
+Holyrics, escrever o nome dela em `output_name` no `sunshine.conf`, e guardar a disposição
+no painel. A tela do retorno passa a existir sempre, com ou sem monitor.
+
+**Nada disto rodou com a TV, o Sunshine ou um Windows de verdade.** Ver a seção 18 de
+`docs/PARA-A-SESSAO-DO-PC.md`.
+
 ## Estado em 12/11/2026
 
 - **No ar no PC do Holyrics:** papéis, página por PC, guia pelo celular, letras por

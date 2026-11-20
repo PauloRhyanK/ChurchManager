@@ -20,6 +20,7 @@ import yaml
 from flask import Flask, Response, jsonify, request, send_from_directory
 
 from ponte import achar_principal as mod_achar
+from ponte import agenda as mod_agenda
 from ponte import atualizar as mod_atualizar
 from ponte import condutor as mod_condutor
 from ponte import obs_imagem as mod_obs_imagem
@@ -28,6 +29,7 @@ from ponte import painel_ao_vivo as mod_ao_vivo
 from ponte import palavra as mod_palavra
 from ponte import passador as mod_passador
 from ponte import telao as mod_telao
+from ponte import telas as mod_telas
 from ponte import relogio as mod_relogio
 from ponte import repertorio as mod_repertorio
 from ponte import saude_envio as mod_saude_envio
@@ -2220,6 +2222,7 @@ def _retomar_ordem(config):
 # ---------------------------------------------------------------------------
 _historico = collections.deque(maxlen=40)
 _vigia = {"valor": None}      # o vigia do retorno na TV (ponte/vigia_tv.py)
+_telas = {"valor": None}      # o vigia das telas deste PC (ponte/telas.py)
 _remoto = {"aceita": True}
 _luz_escolhida = {"cena": None}
 _ao_vivo = {"valor": None}    # ponte/painel_ao_vivo.py, montado no main()
@@ -2476,6 +2479,8 @@ def _retrato_do_painel():
         "recados": recados,
         "tem_recado_limpar": "recado_limpar" in _cues_por_id,
         "retorno_tv": _vigia["valor"].retrato() if _vigia["valor"] else None,
+        # As telas deste PC (ponte/telas.py): mudaram desde a disposicao guardada?
+        "telas": _telas["valor"].retrato() if _telas["valor"] else None,
         "historico": list(_historico)[:12],
         "remoto": dict(_remoto),
         "atualizacao": _retrato_da_atualizacao(),
@@ -2622,6 +2627,16 @@ def _acao_do_painel(dados, origem):
             cliente.pedir("TriggerStudioModeTransition")
             titulo = "Imagem preparada posta no ar"
             resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
+        elif tipo in ("telas_guardar", "telas_restaurar"):
+            # A disposicao das telas deste PC. So na igreja, e so a pedido.
+            if origem == "web":
+                return {"erro": "isso só pode ser feito na igreja"}, 403
+            if _telas["valor"] is None:
+                return {"erro": "este PC não vigia as telas"}, 400
+            resultado, codigo = (_telas["valor"].guardar() if tipo == "telas_guardar"
+                                 else _telas["valor"].restaurar())
+            if codigo != 200:
+                return resultado, codigo
         elif tipo == "visibilidade":
             valor = str(dados.get("valor") or "")
             if valor not in ("public", "unlisted"):
@@ -2654,6 +2669,12 @@ def _acao_do_painel(dados, origem):
             elif oque == "retomar":
                 vigia.retomar()
                 titulo = "Vigia do retorno retomado"
+            elif oque == "tentar":
+                # O ciclo inteiro, agora: ligar a TV pela rede, esperar ela
+                # aparecer, abrir o retorno, conferir no Sunshine.
+                vigia.tentar_agora()
+                return {"ok": True, "titulo": "Tentando abrir o retorno na TV",
+                        "detalhe": "ligar a TV, abrir e conferir: leva até um minuto"}, 200
             elif oque == "reabrir":
                 # Abrir o retorno leva uns 20 segundos: vai numa thread, e a
                 # tela acompanha pelo estado do vigia.
@@ -2789,6 +2810,23 @@ def relogio_avisar():
     aceito = relogio.avisar(str(corpo.get("fonte") or ""), corpo.get("musica"),
                             corpo.get("posicao"), bool(corpo.get("tocando")))
     return jsonify({"aceito": aceito})
+
+
+@app.post("/api/tv/simular")
+def tv_simular():
+    """So existe com PONTE_SIMULAR=1: liga e desliga a TV de mentira, e muda
+    as telas de mentira deste PC."""
+    if not SIMULAR:
+        return jsonify({"erro": "só na simulação"}), 404
+    corpo = request.get_json(silent=True) or {}
+    tv, telas = _pecas.get("tv_simulada"), _pecas.get("telas_simuladas")
+    if tv is not None and "ligada" in corpo:
+        tv.ligar() if corpo["ligada"] else tv.desligar()
+    if tv is not None and "app" in corpo:
+        tv.app = corpo["app"]
+    if telas is not None and corpo.get("telas"):
+        telas.mudar(str(corpo["telas"]))
+    return jsonify({"tv": bool(tv and tv.ligada), "telas": corpo.get("telas")})
 
 
 @app.post("/api/passador/simular")
@@ -2959,6 +2997,38 @@ def _slide_no_telao(musica, slide):
     if cliente is None:
         raise RuntimeError("o telão está desligado neste PC")
     cliente.pedir("ActionGoToIndex", {"index": int(slide["indice"])})
+
+
+def _na_janela_do_culto(agora):
+    """Estamos na janela do culto? E dentro dela que o vigia da TV liga a TV
+    e abre o retorno sozinho (ponte/vigia_tv.py).
+
+    Vale, nesta ordem: a janela escrita em `vigia_tv.janela_do_culto`; a hora
+    do culto de hoje (a do ChurchManager, ou a que o voluntario informou no
+    guia de chegada), de `antes_min` antes ate o fim dos momentos mais
+    `depois_min`. Sem nenhuma das duas, nao ha janela: vale a regra antiga.
+    """
+    conf = _config.get("vigia_tv") or {}
+    if conf.get("janela_do_culto"):
+        return mod_vigia_tv._dentro_da_janela(conf["janela_do_culto"], agora)
+    hora = None
+    repertorio = _pecas.get("repertorio")
+    culto = repertorio.culto() if repertorio is not None and hasattr(repertorio, "culto") else None
+    if culto and culto.get("date") == time.strftime("%Y-%m-%d", time.localtime(agora)):
+        hora = culto.get("startTime")
+    hora = hora or _hora_do_culto()
+    try:
+        horas, minutos = [int(p) for p in str(hora).split(":")[:2]]
+    except (TypeError, ValueError):
+        return False
+    hoje = time.localtime(agora)
+    inicio = time.mktime((hoje.tm_year, hoje.tm_mon, hoje.tm_mday, horas, minutos, 0, 0, 0, -1))
+    with _tranca_ordem:
+        momentos = list(_ordem["momentos"])
+    duracao = sum(m or 0 for m, antes in (mod_agenda.minutos_de(i, _cues_por_id.get(i)) for i in momentos) if not antes)
+    antes = float(conf.get("antes_min", 60)) * 60
+    depois = (duracao or 120) * 60 + float(conf.get("depois_min", 30)) * 60
+    return inicio - antes <= agora <= inicio + depois
 
 
 def _hora_do_culto():
@@ -3232,13 +3302,41 @@ def main():
     # diz onde esta o script que fala com a TV.
     conf_vigia = _config.get("vigia_tv") or {}
     if (_maquina["principal"] is None and conf_vigia.get("ativo", True) is not False
-            and _chegada.tem_tv()):
+            and _chegada.tem_tv() and not SIMULAR):
+        ligar = None
+        if conf_vigia.get("ligar_pela_rede", True) is not False and _chegada.mac_da_tv():
+            ligar = lambda: mod_vigia_tv.ligar_pela_rede(_chegada.mac_da_tv(), _chegada.palpite_do_ip_da_tv())
         _vigia["valor"] = mod_vigia_tv.VigiaDaTV(
             conf_vigia, ip_da_tv=_chegada.ip_da_tv, na_tela=_chegada.tela_da_tv,
-            reabrir=lambda: _chegada.reabrir_retorno(do_vigia=True))
+            reabrir=lambda: _chegada.reabrir_retorno(do_vigia=True),
+            janela_do_culto=_na_janela_do_culto, ligar=ligar,
+            anotar=lambda titulo, ok, detalhe: _anotar(titulo, ok, detalhe, "ponte"))
         _chegada.ligar_vigia(_vigia["valor"])
         _vigia["valor"].comecar()
-        print("  [retorno] vigia ligado: reabre o retorno na TV se ele cair")
+        print("  [retorno] vigia ligado: na janela do culto liga a TV e abre o retorno; fora dela, reabre se cair")
+    elif SIMULAR and _maquina["principal"] is None:
+        # Uma TV de mentira, para ver o ciclo inteiro sem a TV da igreja.
+        from ponte import simulados
+        tv = simulados.TvSimulada()
+        _pecas["tv_simulada"] = tv
+        _vigia["valor"] = mod_vigia_tv.VigiaDaTV(
+            dict(conf_vigia, log=tv.log, assentar_s=4, entre_aberturas_s=10), ip_da_tv=tv.ip, na_tela=tv.na_tela,
+            reabrir=tv.abrir_retorno, janela_do_culto=lambda agora: True, ligar=tv.ligar_pela_rede,
+            anotar=lambda titulo, ok, detalhe: _anotar(titulo, ok, detalhe, "ponte"))
+        _chegada.ligar_vigia(_vigia["valor"])
+        _vigia["valor"].comecar()
+    # As telas deste PC: so no principal, que e quem transmite para a TV.
+    if _maquina["principal"] is None and (_config.get("telas") or {}).get("ativo", True) is not False:
+        conf_telas = _config.get("telas") or {}
+        argumentos = {"sunshine_conf": conf_telas.get("sunshine_conf") or mod_telas.SUNSHINE_CONF,
+                      "anotar": lambda titulo, ok, detalhe: _anotar(titulo, ok, detalhe, "ponte")}
+        if SIMULAR:
+            from ponte import simulados
+            _pecas["telas_simuladas"] = simulados.TelasSimuladas()
+            argumentos.update({"ler": _pecas["telas_simuladas"].ler, "restaurar": _pecas["telas_simuladas"].restaurar,
+                               "suportado": True, "sunshine_conf": _pecas["telas_simuladas"].conf})
+        _telas["valor"] = mod_telas.VigiaDasTelas(os.path.join(RAIZ, "_telas_boas.json"), **argumentos)
+        _telas["valor"].comecar()
     try:
         with open(CAMINHO_REMOTO, encoding="utf-8") as arq:
             _remoto["aceita"] = bool(json.load(arq).get("aceita", True))

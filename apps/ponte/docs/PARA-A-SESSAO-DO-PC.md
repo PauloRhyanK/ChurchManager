@@ -494,6 +494,84 @@ passador.**
 
 **Para desligar** sem mexer em código: `passador: { ativo: false }` no `config.yaml`.
 
+### 18. A TV do altar liga e abre sozinha; as telas do PC são vigiadas (20/11/2026)
+
+Branch `claude/ponte-tv-e-monitor`. **Nunca rodou com a TV, o Sunshine nem um Windows.**
+
+**O que mudou no vigia da TV (`ponte/vigia_tv.py`)**
+
+- **Na janela do culto**, o ciclo é: olhar a TV de 5 em 5 segundos; enquanto não está na
+  rede, mandar "ligar pela rede" a cada 30 s (estado `esperando_tv`, sem limite); assim
+  que aparece, esperar `assentar_s` (12 s) e mandar abrir (estado `abrindo`); confirmar
+  pelo `CLIENT CONNECTED`. Não depende mais de alguém ter aberto antes.
+- **TV desligada e religada** no meio do culto: o ciclo recomeça, com a conta de falhas
+  zerada.
+- **O limite de falhas** (`max_falhas`) vale só para abrir. Depois dele, estado
+  `desistiu`, e volta a tentar quando a TV sumir e reaparecer.
+- **Outro aplicativo na tela**: não mexe. Mas a tela inicial e a TV aberta
+  (`com.webos.app.home`, `com.webos.app.livetv`, `com.webos.app.screensaver`) não contam
+  como "alguém usando", senão a TV recém-ligada nunca abriria. **Esses três ids são
+  palpite meu**; a lista é `vigia_tv.apps_livres`.
+- **Fora da janela**, tudo como em 12/11.
+- **`ligar_pela_rede(mac, ip)`**: o pacote do Wake-on-LAN, mandado para o broadcast, para a
+  rede da TV e para o último IP dela, nas portas 9 e 7.
+- **`tentar_agora()`**: o botão "Tentar de novo" (chegada e painel) faz o ciclo já, mesmo
+  fora da janela.
+- **Cada passo vai para o "Aconteceu agora"**: "Esperando a TV do altar", "TV apareceu na
+  rede", "Abrindo o retorno na TV", "Retorno no ar na TV", "A TV soltou o retorno", "A TV
+  não conectou ao retorno (1 de 3)", "Outro aplicativo na TV: não mexi". Abrir o Moonlight
+  e conectar são um passo só no `tv-control.ps1`, então aparecem como uma linha.
+- **Corrigido de passagem**: com o `sunshine.log` vazio (o Sunshine acabou de reiniciar) o
+  vigia dizia "não achei o registro" e ficava parado. Agora entende que não há sessão.
+- A janela do culto vem de `vigia_tv.janela_do_culto`, ou da hora do culto de hoje (a do
+  ChurchManager, ou a do formulário da chegada), com `antes_min` (60) e `depois_min` (30).
+
+**As telas (`ponte/telas.py`, novo)**: lê a disposição por `EnumDisplayDevices` e
+`EnumDisplaySettingsEx`, guarda em `_telas_boas.json`, compara de 10 em 10 segundos,
+restaura por `ChangeDisplaySettingsEx`, e confere o `output_name` do `sunshine.conf`.
+Ações novas, só locais: `telas_guardar`, `telas_restaurar`. Usei essas funções, e não
+`QueryDisplayConfig`/`SetDisplayConfig`, porque cabem em ctypes sem estruturas aninhadas;
+o que elas não fazem é religar uma tela que o Windows desativou.
+
+**Na chegada**: medida nova `tv_mostrando_retorno` e ação nova `retorno_protocolo`. O
+`chegada.yaml` **do repositório** já usa as duas no passo `p_retorno`. **O `chegada.yaml`
+daí é da igreja e não é atualizado**: troque nele, no passo `p_retorno`,
+`confere: tv_mostrando_retorno`, `acao: retorno_protocolo` e
+`rotulo_acao: Tentar de novo`.
+
+**Testes**: `_testar_tv_e_telas.py` (TV de mentira que aparece depois de um tempo,
+`sunshine.log` de exemplo, telas falsas) e os 34 de `_testar_vigia_tv.py`, que continuam
+passando.
+
+**O que só dá para conferir aí, com a TV e o Windows de verdade, nesta ordem**
+
+1. **A TV acorda pela rede?** Ligar "Ligar via Wi-Fi" na TV, desligar no controle, esperar
+   um minuto e ver se a Ponte a acorda. Se não acordar pelo Wi-Fi, testar com cabo de
+   rede. Se não acordar de jeito nenhum, a Ponte ainda faz todo o resto quando alguém
+   liga a TV no controle.
+2. **Quanto a TV leva para aceitar comando depois de ligar.** Se a primeira tentativa de
+   abrir falhar sempre e a segunda der certo, aumentar `assentar_s`.
+3. **O que a TV diz que está na tela logo depois de ligar** (`tv-control.ps1 -Action
+   Status`). Se for um id que não está em `apps_livres`, o vigia vai dizer "outro
+   aplicativo" e não vai abrir: acrescentar o id na lista.
+4. O ciclo completo: TV desligada, ponte ligada dentro da janela, sem tocar em nada. A
+   letra aparece na TV? Em quanto tempo?
+5. Desligar e religar a TV no meio: o retorno volta sozinho?
+6. Abrir o YouTube na TV: a Ponte **não** pode trocar para o retorno.
+7. **As telas**: no menu Mais, "Esta é a disposição certa". Depois soltar o cabo da tela
+   do retorno, desligar um monitor, trocar a resolução. A faixa vermelha aparece dizendo
+   o que mudou? "Restaurar a disposição" devolve posição e resolução? **Eu não sei como o
+   Windows numera as telas (`DISPLAY1`, `DISPLAY2`) depois de tirar e pôr um cabo**; se
+   ele trocar os números, a comparação vai acusar mudança mesmo com tudo no lugar.
+8. **O `output_name` do `sunshine.conf` daí**: é um nome como `\\.\DISPLAY2`, ou um
+   código entre chaves? A Ponte aceita os dois, mas só conferi com exemplos meus.
+9. Se o Sunshine precisa ser reiniciado depois de restaurar as telas para voltar a
+   capturar a tela certa. A Ponte não reinicia o Sunshine.
+10. O plugue HDMI fantasma (ver o README): com ele, o item 7 deixa de depender de monitor.
+
+**Para desligar** sem mexer em código: `vigia_tv: { abrir_sozinho: false }` e
+`telas: { ativo: false }`.
+
 ## O que NÃO foi testado
 
 Do painel do culto ao vivo (seções 12 e 13): nada rodou contra OBS, Holyrics, YouTube ou
