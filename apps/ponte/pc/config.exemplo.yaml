@@ -985,6 +985,44 @@ web:
 #   max_falhas: 3
 #   janela: ["18:30", "22:30"]   # se quiser restringir ao horário de culto
 #   log: 'C:\Program Files\Sunshine\config\sunshine.log'
+#
+#   # NA JANELA DO CULTO (20/11/2026) o vigia faz o ciclo sozinho: fica olhando
+#   # se a TV está na rede, manda ligar pela rede enquanto não está, e assim
+#   # que ela responde abre o retorno e confere no Sunshine. Sem limite para
+#   # esperar a TV; o limite (`max_falhas`) vale só para abrir.
+#   abrir_sozinho: true          # false volta ao comportamento de 12/11
+#   # A janela do culto. Sem esta linha, ela sai da hora do culto de hoje (a do
+#   # ChurchManager, ou a informada no guia de chegada): de `antes_min` antes
+#   # até o fim dos momentos mais `depois_min`. Sem hora nenhuma, não há janela.
+#   janela_do_culto: ["18:00", "21:30"]
+#   antes_min: 60
+#   depois_min: 30
+#   # "Ligar pela rede" usa o MAC da TV que está em chegada.yaml (rede.tv.mac).
+#   # NA TV: Configurações > Geral > Dispositivos > Dispositivos externos >
+#   # "Ligar via Wi-Fi" (em modelos mais antigos, "LG Connect Apps" ou "Mobile
+#   # TV On"). Sem isso a TV não acorda, e a Ponte só espera alguém ligar.
+#   ligar_pela_rede: true
+#   ligar_a_cada_s: 30
+#   assentar_s: 12               # depois de a TV aparecer, quanto esperar antes de mandar abrir
+#   entre_aberturas_s: 45        # entre uma tentativa de abrir e outra, na janela do culto
+#   # Aplicativos da TV que NÃO são "alguém usando de propósito" (a tela
+#   # inicial e a TV aberta). Com outro aplicativo na tela, o vigia não mexe.
+#   apps_livres: ["com.webos.app.home", "com.webos.app.livetv", "com.webos.app.screensaver"]
+
+
+# ===========================================================================
+#  AS TELAS DESTE PC (opcional; sem este bloco já funciona, só no Windows)
+#
+#  O retorno da TV é a tela deste PC. Quando o Windows reorganiza as telas (um
+#  monitor desligado, um cabo HDMI solto, uma resolução trocada), a TV pode
+#  passar a mostrar a tela errada. A Ponte guarda a "disposição boa" (botão
+#  "Esta é a disposição certa", no menu Mais do painel), avisa quando ela muda
+#  e oferece restaurar. Também confere se a tela escrita em `output_name` do
+#  sunshine.conf ainda existe.
+# ===========================================================================
+# telas:
+#   ativo: true
+#   sunshine_conf: 'C:\Program Files\Sunshine\config\sunshine.conf'
 
 
 # ===========================================================================

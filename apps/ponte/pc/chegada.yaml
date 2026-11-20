@@ -111,17 +111,21 @@ passos:
     confere: tv
     se_falhar: "A TV não respondeu na rede. Ela está ligada? Se está, desligue e ligue no controle e espere uns 20 segundos."
 
+  # ITEM AUTOMATICO (20/11/2026). Dentro da janela do culto a Ponte liga a TV
+  # pela rede e abre o retorno sozinha; este passo so mostra se deu certo. O
+  # verde exige as tres coisas: TV ligada, o retorno na tela dela, e o Sunshine
+  # transmitindo (ver ponte/vigia_tv.py). O botao refaz o ciclo inteiro.
+  # Antes era `acao: retorno_tv` e `confere: retorno_tv`, que continuam
+  # existindo para quem preferir o passo antigo.
   - id: p_retorno
     ilha: projecao
-    titulo: Retorno aberto na TV
-    frase: Abra o retorno na TV do altar.
-    apoio: Um clique. Leva uns 20 segundos. Depois olhe para a TV.
-    acao: retorno_tv
-    # O verde vem do Sunshine dizer que a TV esta recebendo, nao de o comando
-    # ter saido (ver ponte/vigia_tv.py).
-    confere: retorno_tv
-    se_falhar: A TV não está recebendo o retorno.
-    rotulo_acao: Abrir o retorno na TV
+    titulo: TV do altar mostrando o retorno
+    frase: A TV do altar tem que estar mostrando a letra.
+    apoio: A Ponte liga a TV e abre o retorno sozinha. Se ficar vermelho, toque em Tentar de novo e olhe para a TV.
+    acao: retorno_protocolo
+    confere: tv_mostrando_retorno
+    se_falhar: A TV do altar não está mostrando o retorno.
+    rotulo_acao: Tentar de novo
     como:
       - "O botão abre o Moonlight na TV e entra neste PC sozinho."
       - "Depois olhe para a TV: tem que aparecer a letra em fonte grande."

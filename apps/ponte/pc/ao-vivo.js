@@ -158,6 +158,19 @@ function desenharFaixas(d) {
       (d.local === false ? 'Confira a internet deste aparelho.' : 'A janela preta ainda está aberta no PC?') + '</span></div>');
   }
   if (d.erro) f.push('<div class="faixa erro"><span>' + esc(d.erro) + '</span></div>');
+  // As telas deste PC mudaram (um cabo solto, um monitor desligado): a TV do
+  // altar pode estar recebendo a tela errada, ou uma tela preta.
+  const tl = d.telas;
+  if (tl && (tl.estado === 'mudou' || tl.estado === 'sunshine_sem_tela')) {
+    f.push('<div class="faixa erro"><span><b>' + (tl.estado === 'mudou' ? 'As telas deste PC mudaram.' : 'A tela que vai para a TV sumiu.') + '</b> ' +
+      esc(tl.diferencas.length ? tl.diferencas.join('; ') : tl.texto) + '. Confira o que a TV do altar está mostrando.</span>' +
+      (d.local !== false ? '<span class="linha" style="flex-wrap:wrap">' +
+        (tl.tem_boa ? botao('Restaurar a disposição', {tipo: 'telas_restaurar'}, {classe: 'bt pequeno', confirmar: {titulo: 'Restaurar a disposição das telas?',
+          texto: 'As telas piscam por um instante, inclusive o telão. Um monitor desligado ou sem cabo não volta por aqui.', sim: 'Restaurar'}}) : '') +
+        botao('Esta é a disposição certa', {tipo: 'telas_guardar'}, {classe: 'bt pequeno fantasma', confirmar: {titulo: 'Guardar a disposição de agora?',
+          texto: 'A Ponte passa a considerar certa a disposição que está no ar agora, e avisa quando ela mudar.', sim: 'Guardar'}}) + '</span>' : '') +
+      '</div>');
+  }
   if (d.local === false && d.viva && d.remoto && !d.remoto.aceita) {
     f.push('<div class="faixa aviso"><span><b>Só para acompanhar.</b> Os comandos pela web estão desligados no PC da igreja.</span></div>');
   }
@@ -212,6 +225,11 @@ function desenharMenu(d) {
     m += '<div class="bloco"><span class="miudo">PCs da igreja</span><div class="pcs">' + pcs.map(p =>
       '<span><b>' + esc(p.nome) + '</b> — ' + (p.viva ? 'ligado' : 'sem resposta') +
       (p.versao ? (la && p.versao !== la ? ', precisa atualizar' : ', atualizado') : '') + '</span>').join('') + '</div></div>';
+  }
+  if (local && d.telas && d.telas.suportado) {
+    m += '<div class="bloco"><span class="miudo">Telas deste PC: ' + esc(d.telas.texto) + '</span>' +
+      botao('Esta é a disposição certa', {tipo: 'telas_guardar'}, {classe: 'bt pequeno', confirmar: {titulo: 'Guardar a disposição de agora?',
+        texto: 'A Ponte passa a considerar certa a disposição que está no ar agora, e avisa quando ela mudar.', sim: 'Guardar'}}) + '</div>';
   }
   m += '<div class="bloco"><a href="/painel-antigo" style="padding:0">Abrir o painel antigo</a></div>';
   const aberto = $('menu').open;
@@ -731,11 +749,16 @@ function desenharTelao(d) {
       (d.tem_recado_limpar ? botao('Tirar o recado', {tipo: 'recado', id: 'recado_limpar'}, {classe: 'bt pequeno fantasma'}) : '') + '</div></div>';
   }
   if (rt) {
-    const ruim = ['caiu', 'reconectando', 'desistiu', 'fora_da_janela'].indexOf(rt.estado) >= 0;
-    h += '<div class="empilha" style="gap:6px"><span class="miudo">TV do altar: <b style="color:' + (ruim ? 'var(--ambar-texto)' : 'var(--texto)') + '">' + esc(rt.texto) + '</b></span>' +
+    const ruim = ['caiu', 'reconectando', 'desistiu', 'fora_da_janela', 'esperando_tv', 'abrindo', 'outro_app'].indexOf(rt.estado) >= 0;
+    h += '<div class="empilha" style="gap:6px"><span class="miudo">TV do altar: <b style="color:' + (ruim ? 'var(--ambar-texto)' : 'var(--texto)') + '">' + esc(rt.texto) + '</b>' +
+      (rt.motivo ? ' <span>(' + esc(rt.motivo) + ')</span>' : '') + '</span>' +
       '<div class="grade2">' +
-      botao(rt.estado === 'no_ar' ? 'Reabrir o retorno' : 'Abrir o retorno', {tipo: 'retorno', acao: 'reabrir'}, {classe: 'bt pequeno',
-        confirmar: rt.estado === 'no_ar' ? {titulo: 'Reabrir o retorno na TV?', texto: 'A TV já está recebendo a letra. Reabrir faz a imagem sumir por uns 20 segundos.', sim: 'Reabrir'} : null}) +
+      // Com o retorno no ar, "Reabrir" (derruba e abre). Sem ele, "Tentar de
+      // novo": o ciclo inteiro do vigia (ligar a TV pela rede, abrir, conferir).
+      (rt.estado === 'no_ar'
+        ? botao('Reabrir o retorno', {tipo: 'retorno', acao: 'reabrir'}, {classe: 'bt pequeno',
+            confirmar: {titulo: 'Reabrir o retorno na TV?', texto: 'A TV já está recebendo a letra. Reabrir faz a imagem sumir por uns 20 segundos.', sim: 'Reabrir'}})
+        : botao('Tentar de novo', {tipo: 'retorno', acao: 'tentar'}, {classe: 'bt pequeno forte'})) +
       (rt.pausado ? botao('Voltar a vigiar', {tipo: 'retorno', acao: 'retomar'}, {classe: 'bt pequeno forte'})
         : botao('Pausar o vigia', {tipo: 'retorno', acao: 'pausar'}, {classe: 'bt pequeno',
             confirmar: {titulo: 'Pausar o vigia do retorno?', texto: 'Até o fim do dia, a ponte não reabre o retorno sozinha se a TV soltar.', sim: 'Pausar'}})) +
