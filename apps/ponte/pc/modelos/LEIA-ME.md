@@ -8,6 +8,7 @@ A ponte usa só a classe "pessoa", para achar quem está no palco.
   (arquivo `yolox_nano.onnx`, 3.659.407 bytes).
 - **SHA-256:** `c789161ed43c8269fcd4e67c67eeeb4e80c622da2eb296a20bc6007bd18a0b7d`
 - **Licença:** Apache-2.0, Copyright (c) Megvii Inc. Texto completo em
+  `LICENSE-YOLOX-Apache-2.0.txt`, nesta pasta, e em
   https://github.com/Megvii-BaseDetection/YOLOX/blob/main/LICENSE.
   É compatível com a licença MIT deste projeto e pode ir junto com ele.
 
