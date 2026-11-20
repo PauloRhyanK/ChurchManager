@@ -51,6 +51,10 @@ ol{margin:6px 0 0;padding-left:20px;color:var(--suave);font-size:14px}
 <main>
   <h1>Seguir com a luz</h1>
   <div id="indisponivel" class="aviso" hidden></div>
+  <div id="desligado" class="caixa" hidden>
+    <p id="desligado-texto" style="margin:0 0 10px"></p>
+    <button class="bt forte" id="bt-ligar" type="button">Ligar o Seguir</button>
+  </div>
   <div id="falha" class="erro" hidden></div>
 
   <div id="tudo" hidden>
@@ -61,6 +65,10 @@ ol{margin:6px 0 0;padding-left:20px;color:var(--suave);font-size:14px}
           <button class="bt" id="bt-soltar" type="button">Soltar a pessoa</button>
           <button class="bt forte" id="bt-seguir" type="button">Seguir: desligado</button>
         </div>
+      </div>
+      <div id="camera-linha" class="linha" style="margin-bottom:10px" hidden>
+        <label for="camera" style="margin:0">Câmera que olha o palco</label>
+        <select id="camera" class="bt"></select>
       </div>
       <div class="tela" id="tela"><img id="video" alt="Câmera aberta, com as pessoas que a ponte encontrou"></div>
       <p class="status" id="dica">Clique numa pessoa para escolher quem a luz vai seguir.</p>
@@ -108,9 +116,18 @@ function luzAtual() { return E && E.luzes.find(l => String(l.endereco) === $('lu
 
 function desenhar() {
   if (!E.disponivel) {
-    $('indisponivel').textContent = 'O seguir não está disponível neste PC: ' + E.motivo;
-    $('indisponivel').hidden = false; $('tudo').hidden = true; return;
+    // Desligado (o normal) ou preparando: a tela oferece ligar, que é o que
+    // instala o que faltar. Bloqueado no config: só o motivo.
+    $('tudo').hidden = true; $('indisponivel').hidden = true;
+    $('desligado').hidden = false;
+    $('desligado-texto').textContent = E.preparando ? 'Preparando o Seguir (instalando, só na primeira vez)…'
+      : (E.pode_ligar ? 'O Seguir está desligado. Ligar prepara tudo; a luz só anda depois de calibrada e com a pessoa escolhida.'
+        : 'O Seguir não está disponível neste PC: ' + E.motivo);
+    if (E.pode_ligar && E.motivo && !/^desligado/.test(E.motivo)) $('desligado-texto').textContent += ' (' + E.motivo + ')';
+    $('bt-ligar').hidden = !E.pode_ligar;
+    return;
   }
+  $('desligado').hidden = true;
   $('indisponivel').hidden = true; $('tudo').hidden = false;
   const pc = E.pc_da_luz;
   if (pc && !pc.entende) {
@@ -123,18 +140,26 @@ function desenhar() {
 
   const situacao = {ninguem: 'ninguém escolhido', seguindo: 'acompanhando a pessoa',
     perdido: 'perdi a pessoa — a luz fica parada onde está'}[E.alvo.situacao] || E.alvo.situacao;
-  const detector = E.detector === 'yolo' ? 'YOLO' : 'detector simples (sem o modelo YOLO)';
+  const detector = E.detector === 'yolox' ? 'YOLOX' : 'detector simples (sem o modelo em modelos/)';
   $('status').innerHTML = (E.erro ? '<span style="color:var(--erro-texto)">' + esc(E.erro) + '</span> · ' : '') +
     esc(E.pessoas.length + (E.pessoas.length === 1 ? ' pessoa' : ' pessoas')) + ' · ' + esc(situacao) +
     ' · ' + esc(E.fps) + ' quadros/s · <span class="pilula">' + esc(detector) + '</span>';
   const bt = $('bt-seguir');
   bt.textContent = 'Seguir: ' + (E.seguindo ? 'ligado' : 'desligado');
   bt.className = 'bt ' + (E.seguindo ? 'ligado' : 'forte');
-  bt.disabled = !E.seguindo && !E.luzes.some(l => l.calibrada);
-  bt.title = bt.disabled ? 'Calibre pelo menos uma luz primeiro' : '';
+  bt.title = E.seguindo && !E.luzes.some(l => l.calibrada) ? 'Ligado, mas a luz só anda depois de calibrada' : '';
 
   // So reescreve a lista quando ela muda: reescrever a cada segundo fecharia
   // a lista aberta na mao de quem esta escolhendo.
+  // A câmera: só aparece para escolher quando o OBS tem mais de uma (com
+  // uma só, a ponte escolhe sozinha). Fixa no config, não aparece.
+  const cams = E.cameras || [];
+  const mostrarCam = !E.fonte_fixa && cams.length > 1;
+  $('camera-linha').hidden = !mostrarCam;
+  const opcoesCam = (E.fonte ? '' : '<option value="">Escolha…</option>') +
+    cams.map(c => '<option' + (c === E.fonte ? ' selected' : '') + '>' + esc(c) + '</option>').join('');
+  if ($('camera').dataset.opcoes !== opcoesCam) { $('camera').innerHTML = opcoesCam; $('camera').dataset.opcoes = opcoesCam; }
+
   const escolhida = $('luz').value;
   const opcoes = E.luzes.map(l => '<option value="' + l.endereco + '">' + esc(l.nome) +
     ' (endereço ' + l.endereco + ') — ' + (l.calibrada ? 'calibrada' : (l.pontos || []).length + ' ponto(s)') +
@@ -187,6 +212,9 @@ $('bt-limpar').addEventListener('click', async () => {
 $('bt-soltar').addEventListener('click', async () => {
   try { await chamar('/api/seguir/soltar'); atualizar(); } catch (e) { falhar(e); }
 });
+$('bt-ligar').addEventListener('click', async () => {
+  try { await chamar('/api/seguir/ligar', {ligar: true}); atualizar(); } catch (e) { falhar(e); }
+});
 $('bt-seguir').addEventListener('click', async () => {
   try { await chamar('/api/seguir/ligar', {ligar: !E.seguindo}); atualizar(); } catch (e) { falhar(e); }
 });
@@ -202,6 +230,14 @@ function mirar() {
 $('pan').addEventListener('input', mirar);
 $('tilt').addEventListener('input', mirar);
 $('luz').addEventListener('change', desenhar);
+$('camera').addEventListener('change', async () => {
+  const nome = $('camera').value;
+  const pontos = (E.luzes || []).reduce((n, l) => n + (l.pontos || []).length, 0);
+  if (!nome || (pontos && !confirm('Trocar de câmera apaga a calibração das luzes (' + pontos + ' pontos). Trocar?'))) {
+    $('camera').dataset.opcoes = ''; return desenhar();
+  }
+  try { await chamar('/api/seguir/camera', {nome}); atualizar(); } catch (e) { falhar(e); }
+});
 $('pan-v').textContent = $('pan').value; $('tilt-v').textContent = $('tilt').value;
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { $('video').removeAttribute('src'); videoAberto = false; } else atualizar();

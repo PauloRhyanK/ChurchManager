@@ -227,6 +227,7 @@ function desenharMenu(d) {
       '<a href="/youtube">Transmissão no YouTube</a>' +
       '<a href="https://ponte.igrejaparaiso.com.br/miniatura" target="_blank" rel="noopener">Imagem da live (no site)</a>' +
       '<a href="/cenas">Montar uma cena de luz</a><a href="/estudio">Estúdio de luz: testar ideias</a>' +
+      '<a href="/seguir">Luz do teto seguindo alguém</a>' +
       '<a href="/baixar">Baixar o projeto para outro PC</a>';
     if ((d.ordens || []).length) {
       m += '<label>Ordem do culto de hoje<select id="troca-ordem">' + d.ordens.map(o =>
@@ -692,6 +693,26 @@ function desenharLuz(d) {
   else if (comMusica) lado = '<span class="linha"><span class="na-mao">Luz na mão</span>' +
     (podeConduzir() ? botao('Seguir a música', {tipo: 'luz_seguir'}, {classe: 'bt pequeno'}) : '') + '</span>';
   let h = '<div class="cabeca"><h2 class="rotulo">Luz</h2>' + lado + '</div>';
+  // SEGUIR UMA PESSOA: as cabeças do teto acompanhando alguém pela câmera.
+  // Um botão só, que liga e desliga. Ligado, a frase diz o que falta para a
+  // luz andar; os detalhes (câmera, calibrar, escolher a pessoa) ficam em /seguir.
+  const sp = luz.seguir_pessoa;
+  if (sp) {
+    const ligado = sp.estado !== 'desligado';
+    const link = d.local !== false ? ' <a href="/seguir">abrir</a>' : '';
+    const texto = {
+      preparando: 'Preparando o Seguir (instalando)…',
+      erro: 'Seguir com problema: ' + esc(sp.motivo || 'motivo desconhecido'),
+      falta_calibrar: 'Seguir ligado, mas falta calibrar as luzes' + link,
+      ninguem: 'Seguir ligado: escolha a pessoa' + link,
+      perdido: 'Luz do teto parada: perdi a pessoa',
+      seguindo: 'Luz do teto seguindo uma pessoa',
+    }[sp.estado] || '';
+    h += '<div class="linha" style="gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap">' +
+      (texto ? '<span class="seguindo">' + texto + '</span>' : '') +
+      botao(ligado ? 'Parar de seguir' : 'Seguir uma pessoa', {tipo: ligado ? 'parar_seguir' : 'seguir_ligar'},
+        {classe: 'bt pequeno', apertado: ligado}) + '</div>';
+  }
   h += '<div class="climas" role="group" aria-label="Clima da luz">' + (luz.climas || []).map(c =>
     botao('<span class="ponto ' + esc(c.id) + '" aria-hidden="true"></span>' + esc(c.nome), {tipo: 'clima', clima: c.id},
       {classe: 'clima', apertado: c.ativo, desligado: !c.disponivel, titulo: c.disponivel ? '' : 'Falta configurar a luz deste clima neste PC'})).join('') +
