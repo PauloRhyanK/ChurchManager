@@ -8,7 +8,7 @@ import { rematchDeliveries } from './delivery-rematch';
 import { CreateSermonDto, UpdateSermonDto } from './dto/sermon.dto';
 import { deriveSermon, normalizeSearch } from './sermon-derive';
 import { EMPTY_DOC, validateSermonDocument, type SermonDoc } from './sermon-document';
-import { buildSlides, parseStoredSlides, publicSlides, type SlideItem, type SlideMode, type SlideStyle } from './sermon-slides';
+import { parseStoredSlides, publicSlides, readSlideMode, SLIDE_LIMITS, type SlideItem, type SlideMode, type SlideStyle } from './sermon-slides';
 
 export interface SermonSummary {
   id: string;
@@ -64,12 +64,17 @@ export function toSermonSummary(sermon: SermonRow, now: Date, timeZone: string):
   };
 }
 
-/** Os slides de título (nenhum editado) já não batem com o título da palavra (aparado e dividido como na geração)? */
+/**
+ * O título da palavra já não bate com o dos slides? Confere a Capa (se não foi editada) e o título da visão geral,
+ * aparados como na geração. A Capa com versículo leva o título no alto, então conta também.
+ */
 function titleChanged(slides: SlideItem[], title: string): boolean {
-  const stored = slides.filter((s) => s.kind === 'TITLE');
-  if (stored.length === 0 || stored.some((s) => s.edited)) return false;
-  const expected = buildSlides(title, EMPTY_DOC, 'VERSES_AND_POINTS').filter((s) => s.kind === 'TITLE');
-  return stored.map((s) => s.text).join('\n') !== expected.map((s) => s.text).join('\n');
+  const expected = Array.from(title.replace(/\s+/g, ' ').trim()).slice(0, SLIDE_LIMITS.textChars).join('');
+  const cover = slides.find((s) => s.kind === 'TITLE');
+  if (cover) return !cover.edited && cover.text !== expected;
+  const overview = slides.find((s) => s.id === 'overview');
+  if (overview) return (overview.heading ?? '') !== expected;
+  return false;
 }
 
 export function toSermonFull(sermon: SermonWithDelivery, now: Date, timeZone: string): SermonFull {
@@ -78,7 +83,7 @@ export function toSermonFull(sermon: SermonWithDelivery, now: Date, timeZone: st
     ...toSermonSummary(sermon, now, timeZone),
     document: sermon.document as unknown as SermonDoc,
     revision: sermon.revision,
-    slideMode: sermon.slideMode,
+    slideMode: readSlideMode(sermon.slideMode),
     slideStyle: sermon.slideStyle,
     slides,
     slidesStale: slides.length > 0 && (sermon.slidesRevision !== sermon.revision || titleChanged(slides, sermon.title)),

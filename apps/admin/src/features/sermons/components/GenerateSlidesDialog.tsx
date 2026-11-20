@@ -1,29 +1,23 @@
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
-import { useQuery } from "@tanstack/react-query";
 import { Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { generateSlides, getSermonAi, type Sermon } from "../api/sermons-api";
+import { generateSlides, type Sermon } from "../api/sermons-api";
 import type { SermonDoc } from "../lib/document";
 import { SLIDE_THEMES } from "../lib/slide-identity";
 import { slideErrorMessage } from "../lib/slide-errors";
-import { countSlides, type SlideMode, type SlideStyle } from "../lib/slides";
+import { countSlides, readSlideMode, type SlideMode, type SlideStyle, type StoredSlideMode } from "../lib/slides";
 
-type Choice = SlideMode;
-
-const FORMATS: { mode: Choice; name: string; text: string }[] = [
-  { mode: "VERSES", name: "Só versículos", text: "Na ordem em que aparecem" },
-  { mode: "VERSES_AND_POINTS", name: "Versículos e pontos", text: "Mais o título e os pontos" },
-  { mode: "FULL", name: "Slides completos", text: "Cada parte resumida numa frase por IA" },
+const FORMATS: { mode: SlideMode; name: string; text: string }[] = [
+  { mode: "VERSES_AND_POINTS", name: "Com versículos", text: "Título, visão geral e o versículo de cada tópico" },
+  { mode: "TITLES", name: "Só títulos", text: "Título, visão geral e o título de cada tópico" },
 ];
 
 const STYLES: SlideStyle[] = ["MINIMAL", "BACKGROUND"];
 
-const AI_NOTICE = "O texto da palavra é enviado ao provedor de IA para gerar os resumos. As anotações “Só para mim” nunca são enviadas.";
 const GENERATE_ERROR = "Não foi possível gerar os slides.";
 
 const plural = (n: number) => `${n} ${n === 1 ? "slide" : "slides"}`;
@@ -35,7 +29,7 @@ interface GenerateSlidesDialogProps {
   /** Título e texto como estão na tela (as contagens saem daqui). */
   title: string;
   document: SermonDoc;
-  /** Visual já gravado na palavra. */
+  /** Variação de cor já gravada na palavra. */
   initialStyle: SlideStyle;
   /** Salva o que está na tela; resolve com `true` se não sobrou nada sem salvar. */
   ensureSaved(): Promise<boolean>;
@@ -43,8 +37,8 @@ interface GenerateSlidesDialogProps {
   unsavedMessage?: string;
   /** Chamado com a palavra devolvida pelo servidor, já com os slides. */
   onGenerated(sermon: Sermon): void;
-  /** Modo marcado ao abrir (padrão: Versículos e pontos). */
-  initialMode?: SlideMode;
+  /** Modo marcado ao abrir (padrão: Com versículos; modos antigos valem como Com versículos). */
+  initialMode?: StoredSlideMode;
   /** Aviso acima dos botões (ex.: ao gerar de novo). */
   notice?: string;
 }
@@ -62,28 +56,20 @@ export function GenerateSlidesDialog({
   initialMode = "VERSES_AND_POINTS",
   notice,
 }: GenerateSlidesDialogProps) {
-  const [mode, setMode] = useState<Choice>(initialMode);
+  const startMode = readSlideMode(initialMode) ?? "VERSES_AND_POINTS";
+  const [mode, setMode] = useState<SlideMode>(startMode);
   const [style, setStyle] = useState<SlideStyle>(initialStyle);
   const [busy, setBusy] = useState(false);
-  const [model, setModel] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  // Só pergunta com o diálogo aberto; erro na consulta = IA desligada (tudo como sem IA).
-  const ai = useQuery({ queryKey: ["sermons", "ai"], queryFn: getSermonAi, staleTime: 5 * 60_000, retry: false, enabled: open });
-  const aiOn = ai.data?.enabled === true;
-  const models = aiOn ? ai.data.models : [];
-  const chosenModel = models.find((m) => m.id === model)?.id ?? models[0]?.id;
 
   // Volta ao padrão só quando o diálogo abre; mudanças das props com ele aberto não desfazem a escolha.
   const wasOpen = useRef(false);
   useEffect(() => {
     if (open && !wasOpen.current) {
-      setMode(initialMode);
+      setMode(startMode);
       setStyle(initialStyle);
-      setError(null);
     }
     wasOpen.current = open;
-  }, [open, initialStyle, initialMode]);
+  }, [open, initialStyle, startMode]);
 
   /** Enquanto monta, o diálogo não fecha. */
   function changeOpen(next: boolean) {
@@ -91,34 +77,22 @@ export function GenerateSlidesDialog({
     onOpenChange(next);
   }
 
-  const counts = useMemo(() => (open ? countSlides(title, document) : { VERSES: 0, VERSES_AND_POINTS: 0, FULL: 0 }), [open, title, document]);
-  // Slides completos sem IA ligada não existe: a escolha cai em Versículos e pontos.
-  const effective: Choice = mode === "FULL" && !aiOn ? "VERSES_AND_POINTS" : mode;
-  const chosen = counts[effective];
-
-  // Enquanto a consulta da IA não volta, o modo mostrado pode ainda mudar: não monta.
-  const aiLoading = ai.isLoading;
+  const counts = useMemo(() => (open ? countSlides(title, document) : { VERSES_AND_POINTS: 0, TITLES: 0 }), [open, title, document]);
+  const chosen = counts[mode];
 
   async function build() {
-    if (chosen === 0 || aiLoading) return;
+    if (chosen === 0) return;
     setBusy(true);
-    setError(null);
     try {
       if (!(await ensureSaved())) {
         toast.error(unsavedMessage);
         return;
       }
-      const sermon = await generateSlides(sermonId, {
-        mode: effective,
-        style,
-        ...(effective === "FULL" && models.length > 1 && chosenModel ? { model: chosenModel } : {}),
-      });
+      const sermon = await generateSlides(sermonId, { mode, style });
       onOpenChange(false);
       onGenerated(sermon);
     } catch (err) {
-      const message = slideErrorMessage(err, GENERATE_ERROR);
-      if (effective === "FULL") setError(message);
-      else toast.error(message);
+      toast.error(slideErrorMessage(err, GENERATE_ERROR));
     } finally {
       setBusy(false);
     }
@@ -134,18 +108,14 @@ export function GenerateSlidesDialog({
 
         <RadioGroupPrimitive.Root
           aria-label="O que mostrar"
-          value={effective}
-          onValueChange={(v) => {
-            setMode(v as Choice);
-            setError(null);
-          }}
+          value={mode}
+          onValueChange={(v) => setMode(v as SlideMode)}
           className="flex flex-col gap-2"
         >
           {FORMATS.map((f) => (
             <RadioGroupPrimitive.Item
               key={f.mode}
               value={f.mode}
-              disabled={f.mode === "FULL" && !aiOn}
               className={cn(
                 "flex min-h-[60px] items-center gap-3 rounded-xl border-2 px-3.5 text-left",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
@@ -154,21 +124,21 @@ export function GenerateSlidesDialog({
             >
               <span
                 aria-hidden="true"
-                className={cn("h-[18px] w-[18px] shrink-0 rounded-full border-2", effective === f.mode ? "border-[6px] border-primary" : "border-muted-foreground/60")}
+                className={cn("h-[18px] w-[18px] shrink-0 rounded-full border-2", mode === f.mode ? "border-[6px] border-primary" : "border-muted-foreground/60")}
               />
               <span className="flex flex-1 flex-col gap-0.5">
                 <span className="text-sm font-semibold">{f.name}</span>
                 <span className="text-[13px] text-muted-foreground">{f.text}</span>
               </span>
               <span className="text-[13px] font-semibold text-muted-foreground">
-                {f.mode === "FULL" && !aiOn ? "em breve" : plural(counts[f.mode])}
+                {plural(counts[f.mode])}
               </span>
             </RadioGroupPrimitive.Item>
           ))}
         </RadioGroupPrimitive.Root>
 
         <RadioGroupPrimitive.Root
-          aria-label="Visual do slide"
+          aria-label="Cores"
           value={style}
           onValueChange={(v) => setStyle(v as SlideStyle)}
           className="grid grid-cols-2 gap-2"
@@ -185,45 +155,22 @@ export function GenerateSlidesDialog({
             >
               <span
                 aria-hidden="true"
-                className="flex aspect-video w-full items-center justify-center rounded-md text-xs"
-                style={{ backgroundColor: SLIDE_THEMES[s].background, color: SLIDE_THEMES[s].color }}
+                className="flex aspect-video w-full flex-col items-center justify-center gap-1.5 rounded-md"
+                style={{ backgroundColor: SLIDE_THEMES[s].background }}
               >
-                Aa
+                <span className="h-1 w-6 rounded-full" style={{ backgroundColor: SLIDE_THEMES[s].accent }} />
+                <span
+                  className="h-1/3 w-3/4 rounded border"
+                  style={{ backgroundColor: SLIDE_THEMES[s].panel, borderColor: SLIDE_THEMES[s].border }}
+                />
               </span>
               {SLIDE_THEMES[s].name}
             </RadioGroupPrimitive.Item>
           ))}
         </RadioGroupPrimitive.Root>
 
-        {effective === "FULL" && (
-          <div className="flex flex-col gap-2">
-            <p className="text-sm text-muted-foreground">{AI_NOTICE}</p>
-            {models.length > 1 && (
-              <select
-                aria-label="Modelo de IA"
-                value={chosenModel}
-                onChange={(e) => setModel(e.target.value)}
-                disabled={busy}
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                {models.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-        )}
-
         {chosen === 0 && (
           <p className="text-sm text-muted-foreground">Escreva um versículo ou um ponto para montar os slides.</p>
-        )}
-
-        {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
         )}
 
         {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
@@ -232,9 +179,9 @@ export function GenerateSlidesDialog({
           <Button type="button" variant="ghost" disabled={busy} onClick={() => changeOpen(false)}>
             Cancelar
           </Button>
-          <Button type="button" className="gap-2" disabled={busy || chosen === 0 || aiLoading} onClick={build}>
+          <Button type="button" className="gap-2" disabled={busy || chosen === 0} onClick={build}>
             <Sparkles aria-hidden="true" />
-            {busy && effective === "FULL" ? "Resumindo…" : "Montar"}
+            Montar
           </Button>
         </DialogFooter>
       </DialogContent>

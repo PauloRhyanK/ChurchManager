@@ -194,6 +194,8 @@ def montar_musica(louvor, marcas, slides, tabela, duracao=None):
         "id": str(louvor.get("id") or ""),
         "titulo": str(louvor.get("nome") or louvor.get("id") or ""),
         "pronta": pronta,
+        "tom": str(louvor["tom"]) if louvor.get("tom") else None,
+        "bpm": _numero(louvor.get("bpm")),
         "holyrics_id": str(louvor["holyrics_id"]) if louvor.get("holyrics_id") else None,
         "audio": str(louvor["audio"]) if louvor.get("audio") else None,
         "duracao": duracao,
@@ -332,6 +334,7 @@ def musica_do_cultos(song, tabela, achar_no_holyrics=None):
               and all(s["tempo"] is not None for s in slides) and all(p["tempo"] is not None for p in partes))
     return {
         "id": str(song.get("id") or ""), "titulo": titulo, "pronta": pronta,
+        "tom": str(song["musicalKey"]) if song.get("musicalKey") else None, "bpm": _numero(song.get("bpm")),
         "holyrics_id": str(holyrics_id) if holyrics_id else None,
         "audio": None, "audio_url": audio.get("url"),
         "duracao": _numero(audio.get("durationSeconds")),
@@ -433,3 +436,10 @@ class FonteCultos:
 
     def culto(self):
         return (self._resposta or {}).get("service")
+
+    def roteiro(self):
+        """Momentos e musicas intercalados, na ordem do culto (ponte/roteiro.py).
+        None quando o ChurchManager nao manda o campo `roteiro`: ai a Ponte
+        segue a ordem do culto dela, como sempre."""
+        from .roteiro import normalizar
+        return normalizar((self._resposta or {}).get("roteiro"))

@@ -31,18 +31,18 @@ const slide = (id: string, over: Partial<SlideItem> = {}): SlideItem => ({
   reference: "João 8:12",
   included: true,
   edited: false,
-  subtitleEdited: false,
-  layout: "M03",
-  heading: null,
-  subtitle: null,
+  layout: "VERSE",
+  heading: "1. A luz",
+  items: null,
+  start: null,
   version: null,
   ...over,
 });
 const SLIDES = [
   slide("a"),
   slide("b", { included: false }),
-  slide("c", { kind: "PRIVATE", included: true, layout: "M01" }),
-  slide("d", { kind: "POINT", reference: null, layout: "M01" }),
+  slide("c", { kind: "PRIVATE", included: true, layout: "TITLE", heading: null }),
+  slide("d", { kind: "POINT", reference: null, layout: "TITLE", heading: null }),
 ];
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -99,7 +99,7 @@ describe("ExportDialog", () => {
       screen.getByText("O texto inteiro, para imprimir ou ler no tablet"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("2 slides, no visual escolhido"),
+      screen.getByText("2 slides, nas cores escolhidas"),
     ).toBeInTheDocument();
     expect(screen.getByText("As 2 referências, na ordem")).toBeInTheDocument();
     expect(screen.getByLabelText(/Incluir as anotações/)).not.toBeChecked();
@@ -113,7 +113,7 @@ describe("ExportDialog", () => {
     });
     await waitFor(() => expect(row("PDF")).toBeEnabled());
     expect(
-      screen.getByText("1 slide, no visual escolhido"),
+      screen.getByText("1 slide, nas cores escolhidas"),
     ).toBeInTheDocument();
     expect(screen.getByText("A referência, na ordem")).toBeInTheDocument();
   });
@@ -236,17 +236,17 @@ describe("ExportDialog", () => {
     const [fileName, title, deck] = pptx.downloadPptx.mock.calls[0];
     expect(fileName).toBe("a-luz-do-mundo.pptx");
     expect(title).toBe("A luz do mundo");
-    const texts = (s: { blocks: { text: string }[] }) => s.blocks.map((b) => b.text);
+    const texts = (s: { texts: { lines: { text: string }[][] }[] }) => s.texts.map((t) => t.lines.map((l) => l.map((r) => r.text).join("")).join(" "));
     expect(deck.map(texts)).toEqual([
-      ["João 8:12", "Texto a", "João 8:12"],
+      ["1. A luz", "“", "Texto a", "João 8:12"],
       ["Texto d"],
     ]);
-    expect(deck[0]).toMatchObject({ width: 1920, height: 1080, background: "#092A1E", color: "#FFFFFF" });
+    expect(deck[0].theme).toMatchObject({ background: "#11223B", text: "#F6F2EA" });
   });
 
-  it("PPT avisa que o computador precisa das fontes da identidade", () => {
+  it("PPT avisa que o computador precisa da Montserrat", () => {
     renderDialog();
-    expect(within(row("PPT")).getByText("Para abrir com a identidade, o computador precisa ter as fontes Playfair Display e Poppins instaladas.")).toBeInTheDocument();
+    expect(within(row("PPT")).getByText("Para o .pptx ficar igual, instale a fonte Montserrat (Google Fonts) no computador que vai abrir a apresentação.")).toBeInTheDocument();
   });
 
   it("PPT mostra Gerando… enquanto gera e avisa se falhar", async () => {

@@ -112,3 +112,10 @@ describe('CreateFromTextDto', () => {
     }
   });
 });
+
+describe('SermonImportService.aiOptions', () => {
+  it('devolve só enabled e models com id e label; desligada, nenhum modelo', () => {
+    assert.deepEqual(setup().service.aiOptions(), { enabled: true, models: ON.models.map(({ id, label }) => ({ id, label })) });
+    assert.deepEqual(setup({ ai: { ...ON, enabled: false } }).service.aiOptions(), { enabled: false, models: [] });
+  });
+});

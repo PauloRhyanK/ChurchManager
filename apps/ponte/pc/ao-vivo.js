@@ -107,7 +107,8 @@ function desenhar() {
   const d = D;
   mostrar('simulacao', !!d.simulacao);
   $('nome').textContent = (d.ordem && d.ordem.nome) || 'Ponte do Culto';
-  const ag = d.agenda || {};
+  // Com o roteiro do ChurchManager, o atraso sai dos horarios dele.
+  const ag = (d.roteiro && d.roteiro.texto) ? d.roteiro : (d.agenda || {});
   $('atraso').textContent = ag.texto || '';
   $('atraso').className = 'atraso ' + (ag.estado || '');
   desenharPilulas(d);
@@ -177,6 +178,7 @@ function desenharMenu(d) {
   if (local) {
     m += '<a href="/letras">Letras do dia</a><a href="/louvor">Marcar o tempo das músicas</a>' +
       '<a href="/youtube">Transmissão no YouTube</a>' +
+      '<a href="https://ponte.igrejaparaiso.com.br/miniatura" target="_blank" rel="noopener">Imagem da live (no site)</a>' +
       '<a href="/cenas">Montar uma cena de luz</a><a href="/estudio">Estúdio de luz: testar ideias</a>' +
       '<a href="/baixar">Baixar o projeto para outro PC</a>';
     if ((d.ordens || []).length) {
@@ -203,7 +205,7 @@ function desenharMenu(d) {
       '<button type="button" data-remoto="1" aria-pressed="' + (d.remoto && d.remoto.aceita ? 'true' : 'false') + '">Aceita comandos</button>' +
       '<button type="button" data-remoto="0" aria-pressed="' + (d.remoto && d.remoto.aceita ? 'false' : 'true') + '">Só mostra</button></div></div>';
   } else {
-    m += '<a href="/instalar">Instalar a ponte num PC</a><a href="/sair">Sair</a>';
+    m += '<a href="/miniatura">Imagem da live</a><a href="/instalar">Instalar a ponte num PC</a><a href="/sair">Sair</a>';
   }
   const pcs = d.maquinas || [];
   if (pcs.length) {
@@ -222,7 +224,25 @@ function confirmarMomento(m) {
   return m.confirmar ? {titulo: 'Ir para "' + m.nome + '"?', texto: 'Esse momento pede confirmação antes de ir ao ar.', sim: 'Ir'} : null;
 }
 
+// O roteiro do ChurchManager: momentos e musicas na ordem em que acontecem.
+// Quando ele vem, e ele que aparece na coluna da ordem; sem ele, a ordem do
+// culto de sempre.
+function desenharRoteiro(d) {
+  const r = d.roteiro;
+  pintar('ordem', r.itens.map(m => {
+    const agora = r.atual === m.indice, feito = r.atual != null && m.indice < r.atual;
+    let resta = m.tipo === 'musica' ? (m.tom || '♪') : '';
+    if (agora && m.resta_s != null) resta = m.resta_s >= 0 ? emMinutos(m.resta_s) + ' min' : '+' + emMinutos(m.resta_s) + ' min';
+    return '<button type="button" class="momento' + (m.tipo === 'musica' ? ' e-musica' : '') + (agora ? ' agora' : feito ? ' feito' : '') + '"' +
+      (agora ? ' aria-current="step"' : '') + ' data-a="' + esc(JSON.stringify({tipo: 'roteiro_ir', indice: m.indice})) + '"' +
+      (ocupado || !podeAgir() ? ' disabled' : '') + '>' +
+      '<span class="hora">' + esc(m.hora || '') + '</span><span class="cresce">' + (m.tipo === 'musica' ? '♪ ' : '') + esc(m.nome) + '</span>' +
+      '<span class="resta' + (agora && m.resta_s < 0 ? ' passou' : '') + '">' + esc(resta) + '</span></button>';
+  }).join(''));
+}
+
 function desenharOrdem(d) {
+  if (d.roteiro && d.roteiro.itens.length) { desenharRoteiro(d); return; }
   const o = d.ordem || {momentos: []};
   if (!o.momentos.length) {
     pintar('ordem', '<div class="vazio">Nenhuma ordem de culto carregada. Escolha uma no menu Mais.</div>');
@@ -469,28 +489,38 @@ function htmlPalavra(d) {
 // mao, um texto, um aviso): o slide atual, o proximo, a lista, e os botoes de
 // passar. Aparece no cartao do momento, quando nem o louvor nem a palavra da
 // Ponte estao com o centro da tela.
+// O Holyrics manda a miniatura em base64, sem dizer se e JPG ou PNG.
+function srcDaImagem(b64) {
+  if (/^data:image\//.test(b64)) return b64;
+  return 'data:image/' + (b64.slice(0, 5) === 'iVBOR' ? 'png' : 'jpeg') + ';base64,' + b64;
+}
+
 function htmlTelao(d) {
   const tv = d.telao_ao_vivo, slides = (C && C.telao) || [], pode = podeConduzir();
   const i = tv.slide == null ? 0 : tv.slide;
   const atual = slides[i], seguinte = slides[i + 1];
   const total = tv.total || slides.length;
   const texto = s => (s && s.linhas && s.linhas.length) ? esc(s.linhas.join('\n')) : '';
+  // Slide de imagem (os slides da Palavra, por exemplo): a miniatura real.
+  const figura = (s, classe) => s && s.imagem ? '<img class="' + classe + '" alt="" src="' + srcDaImagem(s.imagem) + '">' : '';
   const preta = d.telao && d.telao.preta;
   let h = '<div class="cabeca"><div class="empilha"><span class="rotulo">Aberto no telão</span>' +
     '<span class="medio">' + esc(tv.nome || 'Apresentação') + '</span></div>' +
     '<span class="resumo">slide ' + (i + 1) + (total ? ' de ' + total : '') + '</span></div>';
   h += '<div class="slides-agora"><div class="no-telao"><span class="rotulo">' + (preta ? 'Tela preta' : 'No telão') + '</span>' +
-    (texto(atual) ? '<span class="letra' + (preta ? ' fraca' : '') + '">' + texto(atual) + '</span>'
-      : '<span class="letra fraca">slide ' + (i + 1) + (total ? ' de ' + total : '') + '</span>') +
+    (figura(atual, 'slide-img' + (preta ? ' fraca' : '')) ||
+      (texto(atual) ? '<span class="letra' + (preta ? ' fraca' : '') + '">' + texto(atual) + '</span>'
+        : '<span class="letra fraca">slide ' + (i + 1) + (total ? ' de ' + total : '') + '</span>')) +
     (tv.erro ? '<span class="falha">O slide não passou: ' + esc(tv.erro) + '</span>' : '') + '</div>' +
     '<div class="ao-lado"><div class="a-seguir"><span class="rotulo">A seguir</span><span class="letra">' +
-    (texto(seguinte) || (total && i + 1 >= total ? 'fim' : 'slide ' + (i + 2))) + '</span></div>';
+    (figura(seguinte, 'slide-img pequena') || texto(seguinte) || (total && i + 1 >= total ? 'fim' : 'slide ' + (i + 2))) + '</span></div>';
   const recados = (atual && atual.instrucoes) || [];
   if (recados.length) h += '<div class="instrucao">' + recados.map(r => esc(r.para) + ' · ' + esc(r.texto)).join('<br>') + '</div>';
   h += '</div></div>';
   if (slides.length) {
     h += '<div class="grade-slides" id="grade-telao">' + slides.map((s, n) => {
-      const corpo = '<span class="n">' + (n + 1) + '</span>' + (texto(s) || (s.instrucoes[0] ? '(' + esc(s.instrucoes[0].texto) + ')' : ''));
+      const corpo = '<span class="n">' + (n + 1) + '</span>' + (figura(s, 'slide-img mini') || texto(s) ||
+        (s.instrucoes[0] ? '(' + esc(s.instrucoes[0].texto) + ')' : ''));
       const classe = 'slide' + (n === i ? ' atual' : n < i ? ' passado' : '');
       return pode ? '<button type="button" class="' + classe + '" aria-pressed="' + (n === i ? 'true' : 'false') + '"' +
         ' data-a="' + esc(JSON.stringify({tipo: 'telao_slide', para: n})) + '">' + corpo + '</button>'
@@ -529,6 +559,19 @@ function htmlMomento(d) {
       h += '<div class="empilha"><span class="rotulo">Agora</span><span class="grande">' + esc(atual.nome) + '</span></div>';
     }
     if (atual.resumo) h += '<p class="resumo">' + esc(atual.resumo) + '</p>';
+    // Botoes do momento: os slides da Palavra e o Pix do ofertorio.
+    const quem = (atual.id + ' ' + atual.nome).toLowerCase();
+    const extras = [];
+    if (/palavra|prega|serm|mensagem/.test(quem)) {
+      extras.push(botao('Abrir os slides da Palavra', {tipo: 'slides_palavra'}, {classe: 'bt forte'}));
+    }
+    if (/ofert|d[ií]zimo/.test(quem)) {
+      const al = d.telao && d.telao.alerta;
+      extras.push(al && al.mostrando
+        ? botao('Tirar o Pix do telão', {tipo: 'pix', ligar: false})
+        : botao('Mostrar o Pix', {tipo: 'pix', ligar: true}, {classe: 'bt forte'}));
+    }
+    if (extras.length) h += '<div class="botoes">' + extras.join('') + '</div>';
   }
   const t = d.telao, tv = d.telao_ao_vivo;
   if (tv && tv.responde && !tv.vazio) {
@@ -540,7 +583,12 @@ function htmlMomento(d) {
   const audios = (d.transmissao && d.transmissao.audios) || [];
   const mic = audios.filter(a => a.palavra);
   if (mic.length) h += '<div class="caixa"><span class="rotulo">Microfone</span>' + mic.map(htmlAudio).join('') + '</div>';
-  if (proximo) {
+  const rot = d.roteiro, seguinte = rot && rot.itens[(rot.atual == null ? -1 : rot.atual) + 1];
+  if (rot && rot.itens.length) {
+    // Com o roteiro, "Proximo" e o proximo item dele: pode ser uma musica.
+    if (seguinte) h += '<div class="botoes">' + botao('Próximo: ' + (seguinte.tipo === 'musica' ? '♪ ' : '') + esc(seguinte.nome),
+      {tipo: 'roteiro_ir', indice: seguinte.indice}, {classe: tv && tv.responde && !tv.vazio ? 'bt' : 'bt forte'}) + '</div>';
+  } else if (proximo) {
     h += '<div class="botoes">' + botao((atual ? 'Próximo: ' : 'Começar: ') + esc(proximo.nome),
       {tipo: 'ir', momento: proximo.id, versao: o.versao},
       {classe: tv && tv.responde && !tv.vazio ? 'bt' : 'bt forte', confirmar: confirmarMomento(proximo)}) + '</div>';
@@ -562,7 +610,24 @@ function desenharMusicas(d) {
     const c = tocando ? {titulo: 'Trocar para "' + m.titulo + '"?', texto: '"' + l.musica.titulo + '" ainda está tocando.', sim: 'Trocar'} : null;
     return '<button type="button" class="musica ' + m.estado + '" data-a="' + esc(JSON.stringify({tipo: 'louvor_musica', para: m.id})) + '"' +
       (c ? ' data-c="' + esc(JSON.stringify(c)) + '"' : '') + (ocupado ? ' disabled' : '') + '>' + corpo + '</button>';
-  }).join(''));
+  }).join('') + linhaDoMusico(d));
+}
+
+// O celular do musico (ponte/musico.py) e o VS (ponte/vs.py): o link para a
+// banda, e quem esta no comando do audio.
+function linhaDoMusico(d) {
+  if (!d.musico || !podeConduzir()) return '';
+  const vs = d.vs || {};
+  let audio;
+  const contado = d.louvor && d.louvor.relogio && d.louvor.relogio.fonte === 'cronometro';
+  if (!vs.ativo) audio = 'A Ponte não comanda o áudio (VS desligado no config): os botões do músico ' +
+    (contado ? 'mexem no tempo que a Ponte conta, e a letra segue.' : 'passam só a letra do telão.');
+  else if (vs.alguem_obedece) audio = 'VS ligado: ' + esc(vs.quem || 'alguém') + ' está obedecendo.';
+  else audio = 'VS ligado, mas ninguém está buscando os pedidos.';
+  return '<div class="linha" style="flex-basis:100%;padding:6px 6px 2px;flex-wrap:wrap"><span class="miudo cresce">' +
+    (d.musico.link ? 'O celular do músico está liberado. ' : '') + audio + '</span>' +
+    '<button type="button" class="bt pequeno" id="bt-musico">Celular do músico</button>' +
+    (d.musico.link ? botao('Encerrar o acesso', {tipo: 'musico_link', acao: 'encerrar'}, {classe: 'bt pequeno fantasma'}) : '') + '</div>';
 }
 
 function desenharLuz(d) {
@@ -659,6 +724,12 @@ function desenharTransmissao(d) {
       : botao('Gravar', {tipo: 'gravar', ligar: true});
     h += '</div>';
   }
+  if (d.live && d.live.pode) {
+    h += botao('Configurar a live no YouTube', {tipo: 'live'}, {classe: 'bt forte', confirmar: {
+      titulo: 'Configurar a live',
+      texto: 'Título da live (pode editar). A imagem padrão vai junto; ela se troca no site da Ponte, em Imagem da live.',
+      campo: d.live.titulo, max: 100, chave: 'titulo', sim: 'Configurar'}});
+  }
   const y = t.youtube;
   if (y) {
     h += '<div class="empilha" style="gap:8px"><span class="miudo">' + (y.link ? '<a href="' + esc(y.link) + '" target="_blank" rel="noopener">' + esc(y.titulo || 'Abrir no YouTube') + '</a>'
@@ -754,21 +825,29 @@ setInterval(andar, 200);
 
 // A imagem ao vivo do OBS. So na rede da igreja, e so com a tela a vista:
 // uma aba esquecida em segundo plano nao pode custar nada ao notebook.
-let fotoAtual = null;
-async function buscarImagem() {
-  if (!D || D.local === false || !D.transmissao || !(D.imagem && D.imagem.ativa) || document.hidden) return;
-  try {
-    const r = await fetch('/api/painel/imagem', {cache: 'no-store'});
-    const foto = $('tx-foto');
-    if (r.status !== 200) { foto.hidden = true; return; }
-    const url = URL.createObjectURL(await r.blob());
-    foto.src = url;
-    foto.hidden = false;
-    $('tx-sem').textContent = '';
-    if (fotoAtual) URL.revokeObjectURL(fotoAtual);
-    fotoAtual = url;
-  } catch (e) { $('tx-foto').hidden = true; }
+// E um FLUXO (MJPEG, /api/painel/video): uma conexao aberta, e as fotos vao
+// chegando sozinhas — varias por segundo, sem uma pergunta por foto. Tirar o
+// src fecha a conexao. A ponte encerra o fluxo em 5 minutos; aqui ele e
+// reaberto antes disso.
+let fluxoDesde = 0;
+function buscarImagem() {
+  const foto = $('tx-foto');
+  const quer = D && D.local !== false && D.transmissao && D.imagem && D.imagem.ativa && !document.hidden;
+  if (!quer) {
+    if (fluxoDesde) { foto.removeAttribute('src'); foto.hidden = true; fluxoDesde = 0; }
+    return;
+  }
+  if (fluxoDesde && Date.now() - fluxoDesde < 280000) return;
+  fluxoDesde = Date.now();
+  foto.src = '/api/painel/video?t=' + fluxoDesde;
 }
+$('tx-foto').addEventListener('load', () => { $('tx-foto').hidden = false; $('tx-sem').textContent = ''; });
+$('tx-foto').addEventListener('error', () => {
+  // Caiu (OBS fora, imagem desligada): tenta de novo daqui a pouco.
+  $('tx-foto').hidden = true;
+  fluxoDesde = Date.now() - 280000 + 3000;
+});
+document.addEventListener('visibilitychange', buscarImagem);
 setInterval(buscarImagem, 1000);
 
 // ---------------------------------------------------------------- ensaio --
@@ -796,6 +875,26 @@ const ensaio = {
   },
 };
 setInterval(() => { if (ensaio.musica && ensaio.tocando()) ensaio.avisar(); }, 250);
+
+// O VS em ensaio (ponte/vs.py, driver "navegador"): esta tela, que toca o
+// audio, busca o ultimo pedido do musico e obedece. E o mesmo caminho que a
+// ponte do PC do som faz com o Reaper.
+let vsFeito = null;
+setInterval(async () => {
+  const vs = D && D.vs;
+  if (!vs || !vs.ativo || vs.driver !== 'navegador' || !ensaio.ligado || D.local === false) return;
+  try {
+    const p = (await (await fetch('/api/vs/pedido?quem=' + encodeURIComponent(meuNome() || 'Ensaio'), {cache: 'no-store'})).json()).pedido;
+    if (!p) return;
+    if (vsFeito === null) { vsFeito = p.n; return; }      // pedido antigo, de antes de esta tela abrir
+    if (p.n <= vsFeito) return;
+    if (p.acao === 'parar') { vsFeito = p.n; som.pause(); return; }
+    if (ensaio.musica !== p.musica) return;                // a musica ainda esta carregando: tenta na proxima volta
+    vsFeito = p.n;
+    som.currentTime = Math.max(0, p.posicao + (Date.now() / 1000 - p.em));
+    som.play().catch(() => {});
+  } catch (e) { /* tenta de novo */ }
+}, 300);
 ['pause', 'seeked', 'ended', 'play'].forEach(e => som.addEventListener(e, () => { ensaio.avisar(); redesenhar(); }));
 
 // ------------------------------------------------------------------- agir --
@@ -817,6 +916,7 @@ function perguntar(c) {
     $('dialogo-sim').textContent = c.sim || 'Confirmar';
     $('dialogo-sim').className = 'bt ' + (c.perigo ? 'perigo' : 'forte');
     campo.hidden = c.campo == null;
+    campo.maxLength = c.max || 30;
     campo.value = c.campo || '';
     const fechar = resposta => {
       dlg.close();
@@ -875,6 +975,18 @@ document.addEventListener('click', async evento => {
   if (!alvo || alvo.disabled) return;
   if (alvo.id === 'bt-recados') { recadosAbertos = !recadosAbertos; redesenhar(); return; }
   if (alvo.id === 'bt-ensaio') { ensaio.tocando() ? som.pause() : som.play().catch(e => avisar('Não consegui tocar o áudio: ' + e.message, true)); return; }
+  if (alvo.id === 'bt-musico') {
+    try {
+      if (!(D.musico && D.musico.link)) await pedir('/api/painel/acao', {tipo: 'musico_link', acao: 'gerar'});
+      const link = await (await fetch('/api/painel/musico', {cache: 'no-store'})).json();
+      if (!link.ativo) throw new Error('não consegui criar o link');
+      await perguntar({titulo: 'Celular do músico', sim: 'Pronto', campo: link.local,
+        texto: 'Com o celular no Wi-Fi da igreja, abra o endereço abaixo. Vale só neste culto.' +
+          (link.web ? ' Fora do Wi-Fi, pela internet: ' + link.web : '')});
+    } catch (e) { avisar(e.message, true); }
+    consultar();
+    return;
+  }
   if (alvo.id === 'bt-pregador') {
     // O endereco do link vem de uma rota que so existe na igreja: o codigo
     // nunca passa pelo retrato, que viaja para a web.
@@ -920,7 +1032,13 @@ document.addEventListener('click', async evento => {
   }
   if (!alvo.dataset.a) return;
   const acao = JSON.parse(alvo.dataset.a);
-  if (alvo.dataset.c && !await perguntar(JSON.parse(alvo.dataset.c))) return;
+  if (alvo.dataset.c) {
+    const pergunta = JSON.parse(alvo.dataset.c);
+    const resposta = await perguntar(pergunta);
+    if (!resposta || (typeof resposta === 'string' && !resposta.trim())) return;
+    // Pergunta com campo: o que a pessoa escreveu vai junto no pedido.
+    if (pergunta.chave && typeof resposta === 'string') acao[pergunta.chave] = resposta.trim();
+  }
   agir(acao);
 });
 

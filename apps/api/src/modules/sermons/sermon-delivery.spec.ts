@@ -500,7 +500,7 @@ test('enviar para data e hora que já passaram dá 400', async () => {
 // --- slides no envio ---------------------------------------------------------
 
 const STORED = () =>
-  buildSlides('Luz', EXAMPLE_DOC, 'VERSES_AND_POINTS').map((x) => (x.id === 'pt2:0' ? { ...x, included: false } : x));
+  buildSlides('Luz', EXAMPLE_DOC, 'VERSES_AND_POINTS').map((x) => (x.id === 'pt2:title' ? { ...x, included: false } : x));
 // Um PRIVATE marcado à força no banco também não pode sair.
 const TAMPERED = () => STORED().map((x) => (x.kind === 'PRIVATE' ? { ...x, included: true } : x));
 
@@ -511,10 +511,11 @@ test('send copia os slides públicos atuais e o estilo para o envio, sem PRIVATE
   });
   await service.send(user(), S1, { serviceId: SV_B });
   assert.equal(deliveries[0].slideStyle, 'BACKGROUND');
-  assert.deepEqual(deliveries[0].slides.map((x: Row) => x.kind), ['TITLE', 'VERSE', 'POINT', 'VERSE']);
+  assert.deepEqual(deliveries[0].slides.map((x: Row) => x.kind), ['VERSE', 'SUMMARY', 'VERSE']);
   assert.equal(JSON.stringify(deliveries[0].slides).includes('Dois minutos'), false);
-  for (const x of deliveries[0].slides) assert.deepEqual(Object.keys(x).sort(), ['kind', 'layout', 'reference', 'subtitle', 'text', 'title', 'verse']);
-  assert.equal(deliveries[0].slides[1].reference, 'João 8:12 · BLIVRE');
+  for (const x of deliveries[0].slides) assert.deepEqual(Object.keys(x).sort(), ['items', 'kind', 'layout', 'reference', 'start', 'text', 'title', 'verse']);
+  assert.equal(deliveries[0].slides[0].reference, 'João 8:12');
+  assert.equal(deliveries[0].slides[1].text, 'A luz chama\nA luz mostra');
 });
 
 test('reenviar (mover) recopia os slides atuais', async () => {
@@ -526,7 +527,7 @@ test('reenviar (mover) recopia os slides atuais', async () => {
   sermons[0].slides = STORED();
   await service.send(user(), S1, { serviceId: SV_B });
   assert.equal(deliveries.length, 1);
-  assert.equal(deliveries[0].slides.length, 4);
+  assert.equal(deliveries[0].slides.length, 3);
 });
 
 test('summaries conta os slides do envio', async () => {
@@ -537,7 +538,7 @@ test('summaries conta os slides do envio', async () => {
   assert.equal((await service.summaries(TENANT, [SV_B])).get(SV_B)!.slideCount, 2);
 });
 
-test('slidesForService lê só o envio do tenant (linha antiga completada com slideFace); mySermonId só para o autor', async () => {
+test('slidesForService lê só o envio do tenant (linha antiga refeita com slideFace); mySermonId só para o autor', async () => {
   const slides = [
     { kind: 'VERSE', text: 'Eu sou a luz', reference: 'João 8:12' },
     { kind: 'PRIVATE', text: 'segredo', reference: null },
@@ -553,8 +554,8 @@ test('slidesForService lê só o envio do tenant (linha antiga completada com sl
     preacherName: 'Paulo',
     slideStyle: 'BACKGROUND',
     slides: [
-      { kind: 'VERSE', text: 'Eu sou a luz', layout: 'M03', title: 'João 8:12', subtitle: null, verse: 'Eu sou a luz', reference: 'João 8:12' },
-      { kind: 'POINT', text: 'A luz chama', layout: 'M01', title: 'A luz chama', subtitle: null, verse: null, reference: null },
+      { kind: 'VERSE', text: 'Eu sou a luz', layout: 'VERSE', title: 'João 8:12', verse: 'Eu sou a luz', reference: 'João 8:12', items: null, start: null },
+      { kind: 'POINT', text: 'A luz chama', layout: 'TITLE', title: 'A luz chama', verse: null, reference: null, items: null, start: null },
     ],
     mySermonId: S1,
   });

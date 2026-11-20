@@ -25,38 +25,46 @@ const toMinutes = (hhmm: string) => {
   const [h, m] = hhmm.split(':').map(Number);
   return h * 60 + m;
 };
-const toClock = (minutes: number) => {
+const toClock = (seconds: number) => {
+  const minutes = Math.floor(seconds / 60);
   const day = ((minutes % 1440) + 1440) % 1440;
   return `${String(Math.floor(day / 60)).padStart(2, '0')}:${String(day % 60).padStart(2, '0')}`;
 };
 
+export interface ScheduleItem {
+  kind: MomentKind;
+  durationMinutes: number;
+  /** Só em SONG com música: a duração do áudio, em segundos (vale no lugar da duração do item). */
+  songSeconds?: number | null;
+}
+
 /**
- * Horário de cada momento. Os PRE_SERVICE do começo contam para trás a partir
- * do início do culto; o resto, para a frente. O primeiro momento WORSHIP dura
- * a soma dos áudios das músicas quando todas têm áudio; senão, a duração dele.
+ * Horário de cada item do roteiro, na ordem. Os PRE_SERVICE do começo contam
+ * para trás a partir do início do culto; o resto, para a frente. Música com
+ * áudio dura o áudio (contado em segundos, para cinco músicas de 4:10 não
+ * virarem 25 min); o resto dura o que foi escrito.
  */
-export function computeSchedule<T extends TemplateMoment>(
+export function computeSchedule<T extends ScheduleItem>(
   startTime: string,
   moments: T[],
-  songDurations: (number | null)[],
-): { moments: (T & { startsAt: string; effectiveMinutes: number })[]; endsAt: string; worshipStartsAt: string | null } {
-  const allTimed = songDurations.length > 0 && songDurations.every((d) => typeof d === 'number' && d > 0);
-  const songsMinutes = allTimed ? Math.ceil(songDurations.reduce<number>((a, d) => a + (d ?? 0), 0) / 60) : null;
-  const firstWorship = moments.findIndex((m) => m.kind === 'WORSHIP');
-  const effective = moments.map((m, i) =>
-    i === firstWorship && songsMinutes !== null ? songsMinutes : m.durationMinutes,
+): {
+  moments: (T & { startsAt: string; effectiveMinutes: number; effectiveSeconds: number })[];
+  endsAt: string;
+  worshipStartsAt: string | null;
+} {
+  const seconds = moments.map((m) =>
+    m.kind === 'SONG' && typeof m.songSeconds === 'number' && m.songSeconds > 0 ? Math.round(m.songSeconds) : m.durationMinutes * 60,
   );
-
   let leading = 0;
   while (leading < moments.length && moments[leading].kind === 'PRE_SERVICE') leading += 1;
-  let clock = toMinutes(startTime) - effective.slice(0, leading).reduce((a, b) => a + b, 0);
+  let clock = toMinutes(startTime) * 60 - seconds.slice(0, leading).reduce((a, b) => a + b, 0);
 
   let worshipStartsAt: string | null = null;
   const out = moments.map((m, i) => {
     const startsAt = toClock(clock);
-    if (i === firstWorship) worshipStartsAt = startsAt;
-    clock += effective[i];
-    return { ...m, startsAt, effectiveMinutes: effective[i] };
+    if (worshipStartsAt === null && (m.kind === 'SONG' || m.kind === 'WORSHIP')) worshipStartsAt = startsAt;
+    clock += seconds[i];
+    return { ...m, startsAt, effectiveSeconds: seconds[i], effectiveMinutes: Math.max(1, Math.round(seconds[i] / 60)) };
   });
   return { moments: out, endsAt: toClock(clock), worshipStartsAt };
 }

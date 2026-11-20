@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="noindex">
+<title>Louvor ao vivo</title>
+<!--
+  O celular do musico. Abre por um link que vale so naquele culto (o codigo e
+  o fim do endereco) e funciona igual pelo Wi-Fi da igreja e pela versao web.
+  Mostra a musica de agora com as partes em lista, e manda: Proximo, Voltar,
+  Repetir, tocar numa parte para pular para ela, e Proxima musica, que SOLTA O
+  VS e por isso precisa ser segurado por um segundo. Depois de cada toque
+  aparece "Desfazer". Sozinha num arquivo: tem que abrir inteira no celular de
+  quem nunca viu a Ponte. As regras estao em ponte/musico.py.
+-->
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: #0B0F17; }
+  body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #F3F5F9; font-size: 15px; line-height: 1.35;
+    -webkit-text-size-adjust: 100%; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+  button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  button:disabled { cursor: default; }
+  :focus-visible { outline: 3px solid #C4B8F5; outline-offset: 2px; }
+  [hidden] { display: none !important; }
+  .tela { min-height: 100vh; min-height: 100dvh; max-width: 520px; margin: 0 auto; padding: 18px 16px calc(22px + env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; gap: 14px; }
+  .topo { display: flex; align-items: center; gap: 10px; }
+  .ao-vivo { display: inline-flex; align-items: center; gap: 7px; min-height: 28px; padding: 0 10px; border-radius: 999px;
+    background: #1B2333; color: #9AA3B5; font-size: 12px; font-weight: 700; letter-spacing: .04em; }
+  .ao-vivo i { width: 7px; height: 7px; border-radius: 50%; background: #5D6577; }
+  .ao-vivo.sim { background: #2A1215; color: #FCA5A5; }
+  .ao-vivo.sim i { background: #F87171; }
+  .suave { color: #9AA3B5; }
+  .hora { margin-left: auto; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .rotulo { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #9AA3B5; }
+  .cartao { background: #141A26; border: 1px solid #232B3A; border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+  .cartao.folgado { padding: 18px 16px; gap: 8px; }
+  .cabeca { display: flex; align-items: center; gap: 12px; }
+  .nota { flex: none; width: 40px; height: 40px; border-radius: 12px; background: #8B77E8; color: #0B0F17; display: inline-flex; align-items: center; justify-content: center; }
+  .titulo { font-size: 24px; font-weight: 700; line-height: 1.15; }
+  .grande { font-size: 30px; font-weight: 700; line-height: 1.1; }
+  .tom { margin-left: auto; text-align: right; display: flex; flex-direction: column; gap: 2px; flex: none; }
+  .tom b { font-size: 20px; font-weight: 700; }
+  .tom span { font-size: 12px; color: #9AA3B5; }
+  .partes { display: flex; flex-direction: column; gap: 4px; }
+  .parte { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 44px; padding: 0 14px; border-radius: 12px;
+    background: #1B2333; color: #F3F5F9; border: 1px solid #2C3547; text-align: left; width: 100%; }
+  .parte .linha { display: flex; align-items: center; gap: 10px; width: 100%; }
+  .parte .nome { font-size: 18px; font-weight: 700; }
+  .parte .dica { margin-left: auto; font-size: 13px; color: #6B7488; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
+  .parte.ja_foi { background: transparent; color: #5D6577; border-color: #1B2333; }
+  .parte.agora { background: #8B77E8; color: #0B0F17; border-color: #8B77E8; padding: 10px 14px 12px; }
+  .parte.agora .dica { color: #2A1F66; }
+  .parte.agora .letra { font-size: 19px; font-weight: 600; line-height: 1.3; white-space: pre-line; }
+  .parte.repete { background: #10251D; color: #A7F3D0; border: 1px dashed #2E7A5C; }
+  .parte.repete .dica { color: #6EE7B7; }
+  .ja-foram { padding: 2px 14px 4px; font-size: 13px; color: #5D6577; }
+  .preparem { background: #1E1A3A; border: 1px solid #5B4AB0; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .preparem .rotulo, .preparem .tom span { color: #C4B8F5; }
+  .preparem .tom b { font-size: 26px; font-weight: 800; }
+  .depois { background: #141A26; border: 1px solid #232B3A; border-radius: 12px; padding: 12px 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .proxima-musica { position: relative; overflow: hidden; display: flex; align-items: center; gap: 12px; min-height: 58px; padding: 0 14px; border-radius: 14px;
+    border: 1px solid #7A5B12; background: #221A08; color: #FDE68A; text-align: left; width: 100%; }
+  .proxima-musica .enche { position: absolute; top: 0; bottom: 0; left: 0; width: 0; background: rgba(250, 204, 21, .28); }
+  .proxima-musica.segurando .enche { width: 100%; transition: width 1s linear; }
+  .proxima-musica > :not(.enche) { position: relative; }
+  .proxima-musica b { display: block; font-size: 16px; }
+  .proxima-musica small { font-size: 12px; color: #D6B85A; }
+  .cresce { flex: 1; }
+  .feito { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 16px; border-radius: 14px; background: #10251D; border: 1px solid #1F5A43; color: #A7F3D0; font-weight: 600; }
+  .feito button { min-height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid #2E7A5C; background: transparent; color: #D1FAE5; font-weight: 700; }
+  .aviso { padding: 10px 12px; border-radius: 10px; background: #2A2110; border: 1px solid #5C4813; color: #FCD34D; font-weight: 600; }
+  .aviso.grave { background: #3A1518; border-color: #EF4444; color: #fff; }
+  .par { display: flex; gap: 10px; }
+  .par button { flex: 1; min-height: 76px; border-radius: 16px; border: 1px solid #343E52; background: #1B2333; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+  .par button b { font-size: 17px; }
+  .par button span { font-size: 13px; color: #9AA3B5; }
+  .par #repetir { border-color: #5B4AB0; background: #1E1A3A; }
+  .par #repetir span { color: #C4B8F5; }
+  .par button:disabled { border: 1px dashed #2C3547; background: transparent; color: #5D6577; }
+  .par button:disabled span { color: #5D6577; }
+  #proximo { min-height: 104px; border-radius: 18px; border: none; background: #8B77E8; color: #0B0F17; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; }
+  #proximo b { font-size: 26px; font-weight: 800; }
+  #proximo span { font-size: 15px; font-weight: 600; }
+  #proximo:disabled { background: #2C3547; color: #6B7488; }
+</style>
+</head>
+<body>
+<div class="tela">
+  <div class="topo">
+    <span class="ao-vivo" id="ao-vivo"><i aria-hidden="true"></i><span id="ao-vivo-texto">LOUVOR</span></span>
+    <span class="suave" id="data"></span>
+    <span class="hora" id="hora"></span>
+  </div>
+  <div class="aviso" id="aviso" role="status" hidden></div>
+  <div id="meio" style="display:flex;flex-direction:column;gap:14px"></div>
+  <div class="cresce"></div>
+  <div class="feito" id="feito" role="status" hidden><span class="cresce" id="feito-texto"></span><button type="button" id="desfazer">Desfazer</button></div>
+  <div class="par">
+    <button type="button" id="voltar"><b>← Voltar</b><span id="voltar-para"></span></button>
+    <button type="button" id="repetir"><b>⟲ Repetir</b><span id="repetir-o-que"></span></button>
+  </div>
+  <button type="button" id="proximo"><b>Próximo →</b><span id="proximo-para"></span></button>
+</div>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const CODIGO = location.pathname.split('/').filter(Boolean).pop();
+const ROTA = '/api/musico/' + encodeURIComponent(CODIGO);
+const NOTA = '<span class="nota" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l10-2v13"></path><circle cx="6.5" cy="18" r="2.5"></circle><circle cx="16.5" cy="16" r="2.5"></circle></svg></span>';
+let D = null, lidoEm = 0, falhas = 0, enviando = false, morto = false, pintado = '';
+
+function relogio(segundos) {
+  const s = Math.max(0, Math.floor(segundos));
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+function tom(m) {
+  if (!m || (!m.tom && !m.bpm)) return '';
+  return '<span class="tom">' + (m.tom ? '<b>' + esc(m.tom) + '</b>' : '') + (m.bpm ? '<span>' + m.bpm + ' bpm</span>' : '') + '</span>';
+}
+
+function htmlMusica(d) {
+  const partes = d.partes || [];
+  const idxAgora = partes.findIndex(p => p.estado === 'agora');
+  // As que ja passaram viram uma linha so, para a lista caber sem rolar.
+  const passadas = partes.filter(p => p.estado === 'ja_foi');
+  const mostrar = passadas.length > 2 ? partes.slice(Math.max(0, idxAgora - 1)) : partes;
+  let h = '<div class="cartao"><div class="cabeca">' + NOTA + '<span style="min-width:0;display:flex;flex-direction:column;gap:2px">' +
+    '<span class="rotulo">Agora' + (d.musica.a_mao ? ' · letra à mão' : '') + '</span><span class="titulo">' + esc(d.musica.titulo) + '</span></span>' + tom(d.musica) + '</div>';
+  h += '<div class="partes" role="list" aria-label="Partes da música; toque numa para pular para ela">';
+  if (mostrar.length < partes.length) {
+    const nomes = passadas.slice(0, passadas.length - 1).map(p => p.nome);
+    const lista = nomes.length > 1 ? nomes.slice(0, -1).join(', ') + ' e ' + nomes[nomes.length - 1] : nomes[0];
+    h += '<span class="ja-foram">' + esc(lista) + (nomes.length > 1 ? ' já foram' : ' já foi') + '</span>';
+  }
+  mostrar.forEach(p => {
+    const letra = p.estado === 'agora' && (d.letra || []).length ? '<span class="letra">' + esc(d.letra.join('\n')) + '</span>' : '';
+    const dica = p.estado === 'agora' ? 'agora' : p.estado === 'ja_foi' ? 'já foi' : p.dica;
+    const corpo = '<span class="linha"><span class="nome">' + esc(p.nome) + '</span><span class="dica">' + esc(dica || '') + '</span></span>' + letra;
+    h += (p.estado === 'agora' || p.estado === 'repete')
+      ? '<div role="listitem" class="parte ' + p.estado + '">' + corpo + '</div>'
+      : '<button type="button" role="listitem" class="parte ' + p.estado + '" data-parte="' + p.indice + '"' +
+        ' aria-label="Pular para ' + esc(p.nome) + '">' + corpo + '</button>';
+  });
+  h += '</div></div>';
+  if (d.proxima_musica) {
+    h += '<button type="button" class="proxima-musica" id="proxima-musica" aria-label="Pular para a próxima música, ' + esc(d.proxima_musica.titulo) +
+      '. Segure para soltar o VS."><span class="enche" aria-hidden="true"></span><span aria-hidden="true" style="font-size:20px">⏭</span>' +
+      '<span><b>Próxima música · ' + esc(d.proxima_musica.titulo) + '</b><small>Segure para soltar o VS' +
+      (d.proxima_musica.tom ? ' · tom ' + esc(d.proxima_musica.tom) : '') + '</small></span></button>';
+  }
+  return h;
+}
+
+function htmlMomento(d) {
+  const m = d.momento;
+  let h = '<div class="cartao folgado"><span class="rotulo">Agora</span><span class="grande">' + esc(m.nome) + '</span>' +
+    '<span class="suave" id="tempo-do-momento"></span></div>';
+  const p = d.preparem;
+  if (p) {
+    h += '<div class="preparem"><span class="rotulo">Preparem</span><div class="cabeca">' + NOTA +
+      '<span class="titulo">' + esc(p.titulo) + '</span>' + tom(p) + '</div>' +
+      (p.instrucao ? '<span style="color:#D1D5DB;line-height:1.45">' + esc(p.instrucao) + '</span>' : '') + '</div>';
+  }
+  if ((d.depois || []).length) {
+    h += '<div class="depois"><span class="rotulo">Depois</span>' + d.depois.map((n, i) =>
+      '<span style="' + (i ? 'color:#9AA3B5' : 'font-weight:600') + '">' + esc(n) + '</span>').join('<span style="color:#6B7488">·</span>') + '</div>';
+  }
+  return h;
+}
+
+function desenhar() {
+  const d = D;
+  if (!d) return;
+  const aviso = $('aviso');
+  if (morto) { aviso.hidden = false; aviso.className = 'aviso grave'; aviso.textContent = 'Este link não vale mais. Peça outro à equipe de multimídia.'; }
+  else if (falhas > 2) { aviso.hidden = false; aviso.className = 'aviso grave';
+    aviso.textContent = d.local === false ? 'Sem contato com a igreja. No templo, conecte no Wi-Fi da igreja e peça o endereço local à equipe.' : 'Sem contato com a igreja. Confira o Wi-Fi.'; }
+  else if (d.modo === 'musica' && !d.pelo_audio && !d.musica.a_mao) { aviso.hidden = false; aviso.className = 'aviso';
+    aviso.textContent = 'Os botões estão passando só a letra do telão: a Ponte não está no comando do áudio.'; }
+  else aviso.hidden = true;
+
+  $('ao-vivo').className = 'ao-vivo' + (d.no_ar ? ' sim' : '');
+  $('ao-vivo-texto').textContent = d.no_ar ? 'AO VIVO' : 'LOUVOR';
+  $('data').textContent = d.data || '';
+  // O meio so e refeito quando muda: um botao que some debaixo do dedo
+  // cancelaria o "segure" da proxima musica.
+  const meio = d.modo === 'musica' ? htmlMusica(d) : d.modo === 'momento' ? htmlMomento(d)
+    : '<div class="cartao folgado"><span class="rotulo">Agora</span><span class="grande">O culto ainda não começou</span></div>';
+  if (meio !== pintado) { pintado = meio; $('meio').innerHTML = meio; }
+
+  $('feito').hidden = !d.feito;
+  if (d.feito) $('feito-texto').textContent = '✓ ' + d.feito.texto;
+  const parado = enviando || morto || falhas > 2;
+  $('voltar').disabled = parado || !d.voltar.pode;
+  $('voltar-para').textContent = d.voltar.rotulo || '';
+  $('repetir').disabled = parado || !d.repetir.pode;
+  $('repetir-o-que').textContent = d.repetir.rotulo || '';
+  $('proximo').disabled = parado || !d.proximo.pode;
+  $('proximo-para').textContent = d.proximo.rotulo || '';
+  $('desfazer').disabled = parado;
+  andar();
+}
+
+function andar() {
+  if (!D || !D.agora) return;
+  const passou = (performance.now() - lidoEm) / 1000;
+  const agora = new Date((D.agora + passou) * 1000);
+  $('hora').textContent = String(agora.getHours()).padStart(2, '0') + ':' + String(agora.getMinutes()).padStart(2, '0');
+  const tempo = $('tempo-do-momento');
+  if (tempo && D.momento) {
+    tempo.textContent = D.momento.passou_s == null ? '' :
+      relogio(D.momento.passou_s + passou) + (D.momento.de_min ? ' de ' + D.momento.de_min + ' min' : '');
+  }
+}
+setInterval(andar, 1000);
+
+async function consultar() {
+  if (morto) return;
+  try {
+    const r = await fetch(ROTA, {cache: 'no-store'});
+    if (r.status === 404) { morto = true; D = D || {}; desenhar(); return; }
+    if (!r.ok) throw new Error('erro ' + r.status);
+    const novo = await r.json();
+    if (novo && novo.modo) { D = novo; lidoEm = performance.now(); falhas = 0; }
+  } catch (e) { falhas++; }
+  if (D && D.modo) desenhar();
+}
+
+async function agir(acao, extra) {
+  if (enviando || !D || morto) return;
+  enviando = true; desenhar();
+  try {
+    const r = await fetch(ROTA, {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(Object.assign({acao: acao, visto: D.versao}, extra || {}))});
+    if (r.status === 404) morto = true;
+    if (navigator.vibrate) navigator.vibrate(15);
+  } catch (e) { falhas = 3; }
+  enviando = false;
+  await consultar();
+  // Pela internet o toque leva um instante para chegar a igreja e voltar.
+  if (D && D.local === false) setTimeout(consultar, 700);
+}
+$('proximo').onclick = () => agir('proximo');
+$('voltar').onclick = () => agir('voltar');
+$('repetir').onclick = () => agir('repetir');
+$('desfazer').onclick = () => agir('desfazer');
+
+// Tocar numa parte pula para ela.
+$('meio').addEventListener('click', evento => {
+  const parte = evento.target.closest('[data-parte]');
+  if (parte) agir('pular', {parte: Number(parte.dataset.parte)});
+});
+
+// "Proxima musica" SOLTA O VS: so vale segurando por um segundo. Soltar o
+// dedo antes, ou arrasta-lo para fora, cancela.
+let segurando = null;
+function soltar() {
+  if (!segurando) return;
+  clearTimeout(segurando.relogio);
+  segurando.botao.classList.remove('segurando');
+  segurando = null;
+}
+$('meio').addEventListener('pointerdown', evento => {
+  const botao = evento.target.closest('#proxima-musica');
+  if (!botao || enviando) return;
+  botao.classList.add('segurando');
+  segurando = {botao: botao, relogio: setTimeout(() => { soltar(); agir('proxima_musica'); }, 1000)};
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach(tipo => $('meio').addEventListener(tipo, soltar, true));
+document.addEventListener('contextmenu', evento => { if (evento.target.closest('#proxima-musica')) evento.preventDefault(); });
+
+(async function laco() {
+  await consultar();
+  setTimeout(laco, D && D.local === false ? 2000 : 1000);
+})();
+</script>
+</body>
+</html>

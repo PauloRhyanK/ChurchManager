@@ -138,19 +138,17 @@ export async function getSermonAi(): Promise<SermonAi> {
   return (await api.get<SermonAi>(`${SERMONS}/ai`)).data;
 }
 
-export async function generateSlides(id: string, input: { mode: SlideMode; style?: SlideStyle; model?: string }): Promise<Sermon> {
-  const body: { mode: SlideMode; style?: SlideStyle; model?: string } = { mode: input.mode };
+export async function generateSlides(id: string, input: { mode: SlideMode; style?: SlideStyle }): Promise<Sermon> {
+  const body: { mode: SlideMode; style?: SlideStyle } = { mode: input.mode };
   if (input.style !== undefined) body.style = input.style;
-  if (input.model !== undefined) body.model = input.model;
   return (await api.post<Sermon>(`${SERMONS}/${id}/slides/generate`, body)).data;
 }
 
 export interface SlideItemInput {
   id: string;
   included: boolean;
+  /** Só Capa e Ponto, até 120 caracteres. */
   text?: string;
-  /** Subtítulo do ponto (modelo 02) ou do versículo (modelo 04); "" tira. */
-  subtitle?: string;
 }
 
 export async function saveSlides(id: string, input: { style?: SlideStyle; items: SlideItemInput[] }): Promise<Sermon> {
@@ -158,7 +156,6 @@ export async function saveSlides(id: string, input: { style?: SlideStyle; items:
     items: input.items.map((i) => {
       const item: SlideItemInput = { id: i.id, included: i.included };
       if (i.text !== undefined) item.text = i.text;
-      if (i.subtitle !== undefined) item.subtitle = i.subtitle;
       return item;
     }),
   };

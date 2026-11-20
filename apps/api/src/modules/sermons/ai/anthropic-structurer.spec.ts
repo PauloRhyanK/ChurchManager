@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import Anthropic from '@anthropic-ai/sdk';
 import type { BetaMessage, MessageCreateParamsNonStreaming } from '@anthropic-ai/sdk/resources/beta/messages';
 import { AnthropicStructurer, STRUCTURE_SYSTEM_PROMPT } from './anthropic-structurer';
-import type { AnthropicMessagesClient } from './anthropic-summarizer';
+import type { AnthropicMessagesClient } from './anthropic-client';
 import { SummarizerError } from './sermon-summarizer';
 
 const message = (over: Partial<BetaMessage>) =>

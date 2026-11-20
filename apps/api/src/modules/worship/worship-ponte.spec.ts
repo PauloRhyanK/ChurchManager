@@ -29,11 +29,13 @@ function build(options: { keys?: Record<string, string>; lastUsedAt?: Date | nul
   const service = {
     id: SERVICE_B, tenantId: TENANT_B, date: new Date('2026-11-22T00:00:00.000Z'), startTime: '19:00', name: 'Domingo',
     templateId: null, updatedAt: new Date('2026-11-20T10:00:00Z'),
+    // Roteiro intercalado: a música é um item, entre os momentos.
     moments: [
-      { name: 'Louvor', kind: 'WORSHIP', durationMinutes: 17, sortOrder: 0 },
-      { name: 'Palavra', kind: 'SERMON', durationMinutes: 40, sortOrder: 1 },
+      { id: 'm1', name: 'Abertura', kind: 'GENERIC', durationMinutes: 3, sortOrder: 0, songId: null, song: null },
+      { id: 'm2', name: 'Luz da Manhã', kind: 'SONG', durationMinutes: 5, sortOrder: 1, songId: 's1', song: SONG },
+      { id: 'm3', name: 'Música', kind: 'SONG', durationMinutes: 4, sortOrder: 2, songId: null, song: null },
+      { id: 'm4', name: 'Palavra', kind: 'SERMON', durationMinutes: 40, sortOrder: 3, songId: null, song: null },
     ],
-    songs: [{ id: 'e1', song: SONG }],
   };
   const keyRow = (tenantId: string) =>
     keys.has(tenantId)
@@ -125,9 +127,34 @@ test('próximo culto: formato do contrato, com versão estável', async () => {
   const { svc } = build();
   const out = await svc.nextService(TENANT_B, new Date('2026-11-22T21:00:00Z'));
   assert.equal(out.service?.date, '2026-11-22');
+  // Campos de antes, sem mudar de nome nem de forma.
   assert.deepEqual(out.service?.moments, [
-    { name: 'Louvor', kind: 'WORSHIP', startsAt: '19:00', durationMinutes: 5 },
-    { name: 'Palavra', kind: 'SERMON', startsAt: '19:05', durationMinutes: 40 },
+    { name: 'Abertura', kind: 'GENERIC', startsAt: '19:00', durationMinutes: 3 },
+    { name: 'Luz da Manhã', kind: 'SONG', startsAt: '19:03', durationMinutes: 4 },
+    { name: 'Música', kind: 'SONG', startsAt: '19:07', durationMinutes: 4 },
+    { name: 'Palavra', kind: 'SERMON', startsAt: '19:11', durationMinutes: 40 },
+  ]);
+  assert.equal(out.service?.endsAt, '19:51');
+  assert.equal(out.songs.length, 1);
+  // O roteiro, acrescentado: a ordem do culto inteiro.
+  assert.deepEqual(out.roteiro, [
+    { ordem: 1, tipo: 'momento', id: 'm1', nome: 'Abertura', inicio: '19:00', duracaoMin: 3, momento: { kind: 'GENERIC' } },
+    {
+      ordem: 2, tipo: 'musica', id: 'm2', nome: 'Luz da Manhã', inicio: '19:03', duracaoMin: 4,
+      musica: {
+        id: 's1', titulo: 'Luz da Manhã', tom: 'Sol', bpm: 72, clima: 'CELEBRATION', holyricsId: '1741522267781',
+        audioUrl: 'https://cdn/a.mp3', duracaoSeg: 252.4,
+        partes: [
+          { indice: 0, nome: 'Verso 1', kind: 'VERSE', inicioSeg: 14.2, fimSeg: 44 },
+          { indice: 1, nome: 'Refrão', kind: 'CHORUS', inicioSeg: 44, fimSeg: 252.4 },
+        ],
+      },
+    },
+    { ordem: 3, tipo: 'musica', id: 'm3', nome: 'Música', inicio: '19:07', duracaoMin: 4, musica: null },
+    {
+      ordem: 4, tipo: 'momento', id: 'm4', nome: 'Palavra', inicio: '19:11', duracaoMin: 40,
+      momento: { kind: 'SERMON', palavra: { titulo: 'A luz', pregador: 'Pr. João' } },
+    },
   ]);
   assert.deepEqual(out.sermon, { title: 'A luz', preacherName: 'Pr. João', estimatedMinutes: 35 });
   const song = out.songs[0];
@@ -156,7 +183,7 @@ test('"hoje" é o dia em São Paulo: às 23h de domingo o culto de domingo ainda
   // 02:30 UTC de segunda = 23:30 de domingo em São Paulo.
   assert.equal((await svc.nextService(TENANT_B, new Date('2026-11-23T02:30:00Z'))).service?.id, SERVICE_B);
   const depois = await svc.nextService(TENANT_B, new Date('2026-11-23T12:00:00Z'));
-  assert.deepEqual(depois, { version: 'vazio', service: null, sermon: null, songs: [] });
+  assert.deepEqual(depois, { version: 'vazio', service: null, sermon: null, songs: [], roteiro: [] });
 });
 
 test('culto por id: de outra igreja responde 404', async () => {

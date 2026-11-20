@@ -52,7 +52,11 @@ export default function ServicePlanPage() {
 
   const [newOpen, setNewOpen] = useState(false);
   const [newDate, setNewDate] = useState<string | null>(null);
-  const [addOpen, setAddOpen] = useState(false);
+  /**
+   * Onde a música escolhida entra: no fim do roteiro ("+ Música"), num espaço
+   * reservado, ou na lista de músicas (aba "Só as músicas" e o bloco Louvor).
+   */
+  const [addTarget, setAddTarget] = useState<{ mode: "end" } | { mode: "slot"; momentId: string } | { mode: "songs" } | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [ponteOpen, setPonteOpen] = useState(false);
   // A chave dá acesso de leitura ao roteiro: gerar e revogar é de quem cuida das configurações.
@@ -243,7 +247,7 @@ export default function ServicePlanPage() {
               {(
                 [
                   { key: "culto" as const, label: "Culto inteiro" },
-                  { key: "louvor" as const, label: `Louvor · ${service.songs.length}` },
+                  { key: "louvor" as const, label: `Só as músicas · ${service.songs.length}` },
                 ]
               ).map((t) => (
                 <button
@@ -270,7 +274,9 @@ export default function ServicePlanPage() {
                 canEdit={canEdit}
                 saving={moments.isPending}
                 onSave={(list) => moments.mutate(list)}
-                onOpenWorship={() => go({ aba: "louvor" })}
+                onAddSong={() => setAddTarget({ mode: "end" })}
+                onChooseSong={(momentId) => setAddTarget({ mode: "slot", momentId })}
+                onFillWorship={() => setAddTarget({ mode: "songs" })}
               />
             ) : (
               <WorshipTab
@@ -278,7 +284,7 @@ export default function ServicePlanPage() {
                 canEdit={canEdit}
                 saving={songs.isPending}
                 onSave={(ids) => songs.mutate(ids)}
-                onAdd={() => setAddOpen(true)}
+                onAdd={() => setAddTarget({ mode: "songs" })}
               />
             )}
           </section>
@@ -297,9 +303,24 @@ export default function ServicePlanPage() {
 
       {service && (
         <AddSongDialog
-          open={addOpen}
-          onOpenChange={setAddOpen}
-          onAdd={(songId) => songs.mutateAsync([...service.songs.map((s) => s.id), songId])}
+          open={addTarget !== null}
+          onOpenChange={(open) => !open && setAddTarget(null)}
+          onAdd={(songId) => {
+            const drafts = service.moments.map((m) => ({
+              id: m.id,
+              name: m.name,
+              kind: m.kind,
+              durationMinutes: m.durationMinutes,
+              songId: m.songId,
+            }));
+            if (addTarget?.mode === "end") {
+              return moments.mutateAsync([...drafts, { name: "Música", kind: "SONG", durationMinutes: 5, songId }]);
+            }
+            if (addTarget?.mode === "slot") {
+              return moments.mutateAsync(drafts.map((d) => (d.id === addTarget.momentId ? { ...d, songId } : d)));
+            }
+            return songs.mutateAsync([...service.songs.map((s) => s.id), songId]);
+          }}
           onOpenEditor={(songId) => navigate(`/cultos/musicas/${songId}`)}
         />
       )}

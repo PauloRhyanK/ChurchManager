@@ -640,6 +640,17 @@ class ClienteYouTube:
             raise ErroYouTube("essa chave veio vazia do YouTube")
         return {"chave": chave, "servidor": ing.get("ingestionAddress")}
 
+    def definir_miniatura_bytes(self, id_video, dados):
+        """A miniatura a partir da imagem em memoria (JPG ou PNG). Mesmos
+        limites de definir_miniatura."""
+        if len(dados) > 2 * 1024 * 1024:
+            raise ErroYouTube("a imagem tem {:.1f} MB; o YouTube aceita ate 2 MB".format(
+                len(dados) / 1024 / 1024))
+        tipo = "image/png" if dados[:8] == b"\x89PNG\r\n\x1a\n" else "image/jpeg"
+        return self._pedir("POST", ENVIO + "/thumbnails/set",
+                           params={"videoId": id_video, "uploadType": "media"},
+                           headers={"Content-Type": tipo}, data=dados)
+
     def definir_miniatura(self, id_video, caminho):
         """A miniatura. Limite do YouTube: 2 MB, e a conta precisa estar
         verificada por telefone — senao vem um 403 que nao explica isso."""
