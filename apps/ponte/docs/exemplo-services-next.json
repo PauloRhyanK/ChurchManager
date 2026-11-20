@@ -76,7 +76,145 @@
       }
     ]
   },
-  "sermon": null,
+  "sermon": {
+    "title": "A agenda Profética está em Curso",
+    "preacherName": "Pr. João",
+    "estimatedMinutes": 40,
+    "slideCount": 13,
+    "version": "cdf749f867ef7114",
+    "slides": [
+      {
+        "index": 0,
+        "kind": "VERSE",
+        "title": "A agenda Profética está em Curso",
+        "text": "Que anuncio o fim desde o princípio, e desde a antiguidade as coisas que ainda não sucederam; que digo: O meu conselho será firme, e farei toda a minha vontade.",
+        "reference": "Isaías 46:10",
+        "imageUrl": "https://arquivos.exemplo.org/tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/sermons/eeeeeeee-eeee-4eee-8eee-000000000001/403dae2d30aaf87f.png",
+        "width": 1920,
+        "height": 1080
+      },
+      {
+        "index": 1,
+        "kind": "SUMMARY",
+        "title": "A agenda Profética está em Curso",
+        "text": "Uma Agenda de Poder\nUma Agenda Guiada pelo Espírito Santo\nUma Agenda de Fé\nUm Agenda para Reinar em Vida\nUma Agenda que vai abalar tudo mais uma vez\nUma Agenda de Tranferência de Riquezas\nUma Agenda de Troca de Guarda",
+        "reference": null,
+        "imageUrl": "https://arquivos.exemplo.org/tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/sermons/eeeeeeee-eeee-4eee-8eee-000000000001/2761df1f12e414ef.png",
+        "width": 1920,
+        "height": 1080
+      },
+      {
+        "index": 2,
+        "kind": "VERSE",
+        "title": "1. Uma Agenda de Poder",
+        "text": "A palavra da cruz é loucura para os que perecem; mas para nós, que somos salvos, é o poder de Deus.",
+        "reference": "1 Coríntios 1:18",
+        "imageUrl": "https://arquivos.exemplo.org/tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/sermons/eeeeeeee-eeee-4eee-8eee-000000000001/3c5722dedafc6d7b.png",
+        "width": 1920,
+        "height": 1080
+      },
+      {
+        "index": 3,
+        "kind": "VERSE",
+        "title": "2. Uma Agenda Guiada pelo Espírito Santo",
+        "text": "As quais também falamos, não com palavras que a sabedoria humana ensina, mas com as que o Espírito Santo ensina, comparando as coisas espirituais com as espirituais.",
+        "reference": "1 Coríntios 2:13",
+        "imageUrl": "https://arquivos.exemplo.org/tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/sermons/eeeeeeee-eeee-4eee-8eee-000000000001/f745b9551425f063.png",
+        "width": 1920,
+        "height": 1080
+      },
+      {
+        "index": 4,
+        "kind": "VERSE",
+        "title": "3. Uma Agenda de Fé",
+        "text": "“Qual de vocês, se seu filho pedir pão, lhe dará uma pedra?",
+        "reference": "Mateus 7:9",
+        "imageUrl": "https://arquivos.exemplo.org/tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/sermons/eeeeeeee-eeee-4eee-8eee-000000000001/c15a93893f67463e.png",
+        "width": 1920,
+        "height": 1080
+      },
+      {
+        "index": 5,
+        "kind": "VERSE",
+        "title": "3. Uma Agenda de Fé",
+        "text": "Se vocês, apesar de serem maus, sabem dar boas coisas aos seus filhos, quanto mais o Pai de vocês, que está nos céus, dará coisas boas aos que lhe pedirem!",
+        "reference": "Mateus 7:11",
+        "imageUrl": "https://arquivos.exemplo.org/tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/sermons/eeeeeeee-eeee-4eee-8eee-000000000001/1c61b5cd0c18bef2.png",
+        "width": 1920,
+        "height": 1080
+      },
+      {
+        "index": 6,
+        "kind": "VERSE",
+        "title": "4. Um Agenda para Reinar em Vida",
+        "text": "Porque, se pela ofensa de um só, a morte reinou por esse, muito mais os que recebem a abundância da graça, e do dom da justiça, reinarão em vida por um só, Jesus Cristo.",
+        "reference": "Romanos 5:17",
+        "imageUrl": "https://arquivos.exemplo.org/tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/sermons/eeeeeeee-eeee-4eee-8eee-000000000001/cbae07b954286c71.png",
+        "width": 1920,
+        "height": 1080
+      },
+      {
+        "index": 7,
+        "kind": "VERSE",
+        "title": "5. Uma Agenda que vai abalar tudo mais uma vez",
+        "text": "Porque assim diz o Senhor dos Exércitos: Ainda uma vez, daqui a pouco, farei tremer os céus e a terra, o mar e a terra seca;",
+        "reference": "Ageu 2:6",
+        "imageUrl": "https://arquivos.exemplo.org/tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/sermons/eeeeeeee-eeee-4eee-8eee-000000000001/58fba8b935708be8.png",
+        "width": 1920,
+        "height": 1080
+      },
+      {
+        "index": 8,
+        "kind": "VERSE",
+        "title": "5. Uma Agenda que vai abalar tudo mais uma vez",
+        "text": "Por isso farei estremecer os céus; e a terra se moverá do seu lugar, por causa do furor do Senhor dos Exércitos, e por causa do dia da sua ardente ira.",
+        "reference": "Isaías 13:13",
+        "imageUrl": "https://arquivos.exemplo.org/tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/sermons/eeeeeeee-eeee-4eee-8eee-000000000001/80309774e6c9a9ad.png",
+        "width": 1920,
+        "height": 1080
+      },
+      {
+        "index": 9,
+        "kind": "VERSE",
+        "title": "6. Uma Agenda de Tranferência de Riquezas",
+        "text": "Não digam, pois, em seu coração: “A minha capacidade e a força das minhas mãos ajuntaram para mim toda esta riqueza”.",
+        "reference": "Deuteronômio 8:17",
+        "imageUrl": "https://arquivos.exemplo.org/tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/sermons/eeeeeeee-eeee-4eee-8eee-000000000001/511c6456c71949a9.png",
+        "width": 1920,
+        "height": 1080
+      },
+      {
+        "index": 10,
+        "kind": "VERSE",
+        "title": "6. Uma Agenda de Tranferência de Riquezas",
+        "text": "Mas, lembrem-se do Senhor, do seu Deus, pois é ele que lhes dá a capacidade de produzir riqueza, confirmando a aliança que jurou aos seus antepassados, conforme hoje se vê.",
+        "reference": "Deuteronômio 8:18",
+        "imageUrl": "https://arquivos.exemplo.org/tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/sermons/eeeeeeee-eeee-4eee-8eee-000000000001/4ca942aaaaf5d3f4.png",
+        "width": 1920,
+        "height": 1080
+      },
+      {
+        "index": 11,
+        "kind": "SUMMARY",
+        "title": "7. Uma Agenda de Troca de Guarda",
+        "text": "Deus visitou José em sonhos: ele sustentaria Israel no Egito (Gênesis 37:5)\nDeus visitou Moises em visão na sarça ardente: (Êxodo 3:2)\nDeus visitou Salomão em sonho: pede-me... (1 Reis 3:5)",
+        "reference": null,
+        "imageUrl": "https://arquivos.exemplo.org/tenants/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/sermons/eeeeeeee-eeee-4eee-8eee-000000000001/84288c4227558fad.png",
+        "width": 1920,
+        "height": 1080
+      },
+      {
+        "index": 12,
+        "kind": "VERSE",
+        "title": "7. Uma Agenda de Troca de Guarda",
+        "text": "Meus olhos aprovam os fiéis da terra, e eles habitarão comigo. Somente quem tem vida íntegra me servirá.",
+        "reference": "Salmos 101:6",
+        "imageUrl": null,
+        "width": null,
+        "height": null
+      }
+    ]
+  },
   "songs": [
     {
       "id": "edaa043f-c32c-464c-8058-691204afed88",
@@ -1073,7 +1211,10 @@
       "duracaoMin": 40,
       "momento": {
         "kind": "SERMON",
-        "palavra": null
+        "palavra": {
+          "titulo": "A agenda Profética está em Curso",
+          "pregador": "Pr. João"
+        }
       }
     },
     {
