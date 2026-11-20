@@ -227,6 +227,32 @@ conferir("o Sunshine novo escreve o id do monitor: tambem vale", telas.sunshine_
 conferir("sem nada escrito, sempre existe", telas.sunshine_tem_a_tela("", BOA[:1]) is True)
 conferir("sem dar para ler o arquivo: nao sabe", telas.sunshine_tem_a_tela(None, BOA) is None)
 
+# O Sunshine novo escreve um ID entre chaves no output_name (visto em
+# 19/11/2026: "{9acddf6d-43cc-576e-9aff-0c5fc80b4cc8}" com a TV funcionando).
+# Quem diz a que tela ele corresponde e o registro do proprio Sunshine.
+ID_TV = "{9acddf6d-43cc-576e-9aff-0c5fc80b4cc8}"
+LOG_SUNSHINE = os.path.join(PASTA, "sunshine.log")
+with open(LOG_SUNSHINE, "w", encoding="utf-8") as _arq:
+    _arq.write('[2026-11-19 18:00:00.000]: Info: Currently available display devices:\n[\n'
+               '  {\n    "device_id": "{11111111-2222-3333-4444-555555555555}",\n'
+               '    "display_name": "\\\\\\\\.\\\\DISPLAY1",\n    "friendly_name": "Monitor"\n  },\n'
+               '  {\n    "device_id": "' + ID_TV + '",\n'
+               '    "display_name": "\\\\\\\\.\\\\DISPLAY2",\n    "friendly_name": "Tela virtual"\n  }\n]\n')
+conferir("id do Sunshine com a tela ligada: existe",
+         telas.sunshine_tem_a_tela(ID_TV, BOA, LOG_SUNSHINE) is True)
+conferir("id do Sunshine cuja tela sumiu do Windows: nao existe",
+         telas.sunshine_tem_a_tela(ID_TV, BOA[:1], LOG_SUNSHINE) is False)
+conferir("id que o registro nao conhece: nao sabe (sem alarme)",
+         telas.sunshine_tem_a_tela("{00000000-0000-0000-0000-000000000000}", BOA, LOG_SUNSHINE) is None)
+conferir("sem registro do Sunshine: nao sabe (sem alarme)",
+         telas.sunshine_tem_a_tela(ID_TV, BOA, os.path.join(PASTA, "nao-existe.log")) is None)
+with open(LOG_SUNSHINE, "a", encoding="utf-8") as _arq:
+    _arq.write('[2026-11-19 19:00:00.000]: Info: Currently available display devices:\n[\n'
+               '  {\n    "device_id": "' + ID_TV + '",\n    "display_name": "",\n'
+               '    "friendly_name": "Tela virtual"\n  }\n]\n')
+conferir("o Sunshine diz que a tela do id esta desligada: nao existe",
+         telas.sunshine_tem_a_tela(ID_TV, BOA, LOG_SUNSHINE) is False)
+
 print("\nO vigia das telas")
 falsas = simulados.TelasSimuladas()
 notas = []
