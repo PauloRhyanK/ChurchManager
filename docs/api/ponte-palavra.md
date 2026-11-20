@@ -135,3 +135,13 @@ A Ponte só lê. Quem desenha e envia é o painel, com o pregador logado (permis
 
 - `GET /api/admin/tenants/me/sermons/:id/delivery/images` devolve `{ style, version, slides: [{ index, hash, slide, imageUrl }] }` e tira do registro as imagens de slides que não existem mais.
 - `PUT /api/admin/tenants/me/sermons/:id/delivery/images/:hash` recebe o PNG (multipart, campo `file`, até 1,5 MB, 1920×1080) e responde `{ hash, imageUrl }`. Hash que não é de um slide atual dá 400 ("A lista de slides mudou. Atualize a página.").
+
+## Exemplos reais
+
+Imagens geradas pelo painel para a palavra de exemplo "A agenda Profética está em Curso" (Verde, 1920×1080):
+
+- Capa com o versículo de abertura: [`exemplos/ponte-palavra-slide-capa.png`](exemplos/ponte-palavra-slide-capa.png)
+- Tópico com lista e referências: [`exemplos/ponte-palavra-slide-lista.png`](exemplos/ponte-palavra-slide-lista.png)
+- O aviso na página de slides do painel: [`exemplos/ponte-palavra-status-painel.png`](exemplos/ponte-palavra-status-painel.png)
+
+Nos 13 slides desse exemplo, o PNG teve em média 160 KB (o maior, 186 KB). Pelo `r2.dev` de hoje (17 MB em 83 s, uns 200 KB/s), cada imagem leva perto de 1 s e a palavra inteira uns 10 s. As imagens têm o hash no nome e não mudam, então a Ponte só baixa de novo as que mudaram.
