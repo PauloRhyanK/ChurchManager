@@ -54,6 +54,7 @@ class ObsSimulado:
         self.preview = CENAS[0]
         self.transmitindo_desde = None
         self.gravando_desde = None
+        self.chave = "chave-de-mentira-de-hoje"
         self.pedidos = []
 
     # A mesma interface do ClienteOBS -------------------------------------
@@ -117,6 +118,12 @@ class ObsSimulado:
                 if self.gravando_desde is None:
                     return {"outputActive": False}
                 return {"outputActive": True, "outputDuration": int((agora - self.gravando_desde) * 1000)}
+            if tipo == "GetStreamServiceSettings":
+                return {"streamServiceType": "rtmp_common",
+                        "streamServiceSettings": {"server": "rtmp://a.rtmp.youtube.com/live2", "key": self.chave}}
+            if tipo == "SetStreamServiceSettings":
+                self.chave = (dados.get("streamServiceSettings") or {}).get("key") or self.chave
+                return {}
             if tipo == "GetStats":
                 return {"cpuUsage": 12.5, "availableDiskSpace": 217088.0, "activeFps": 30.0,
                         "renderSkippedFrames": 0, "renderTotalFrames": 1000,
@@ -238,3 +245,168 @@ class HolyricsSimulado:
                 self.pasta = None
                 return {"status": "ok"}
             return {"status": "ok"}
+
+
+class TvSimulada:
+    """Uma TV do altar de mentira: liga, desliga, tem um aplicativo na tela, e
+    "conecta" escrevendo no registro do Sunshine, como a de verdade faria."""
+
+    def __init__(self):
+        import os
+        import tempfile
+        self.log = os.path.join(tempfile.mkdtemp(), "sunshine.log")
+        open(self.log, "w").close()
+        self.ligada = False
+        self.app = "com.webos.app.home"
+        self.pedidos_de_ligar = 0
+        self.liga_pela_rede = False     # a TV de mentira so acorda pela rede se isto for verdade
+        self.conecta = True
+
+    def _escrever(self, linha):
+        with open(self.log, "ab") as arquivo:
+            arquivo.write(("[2026-11-22 18:42:01.000]: Info: " + linha + "\n").encode())
+
+    def ip(self):
+        return "192.168.1.53" if self.ligada else None
+
+    def na_tela(self, ip):
+        return self.app if self.ligada else None
+
+    def ligar(self):
+        self.ligada = True
+        self.app = "com.webos.app.home"
+
+    def desligar(self):
+        if self.ligada and self.app == "com.limelight.webos":
+            self._escrever("CLIENT DISCONNECTED")
+        self.ligada = False
+
+    def ligar_pela_rede(self):
+        self.pedidos_de_ligar += 1
+        if self.liga_pela_rede:
+            self.ligar()
+
+    def abrir_retorno(self):
+        if not self.ligada:
+            return False, "a TV nao respondeu na rede"
+        if not self.conecta:
+            return True, "comando enviado, mas a TV nao entrou"
+        self.app = "com.limelight.webos"
+        self._escrever("CLIENT CONNECTED")
+        return True, "comando enviado"
+
+
+class TelasSimuladas:
+    """As telas de um PC de mentira: o monitor do operador e a saida para a TV."""
+
+    BOA = [
+        {"nome": r"\\.\DISPLAY1", "id": r"MONITOR\GSM5B09\{1}", "monitor": "Monitor do operador", "x": 0, "y": 0,
+         "largura": 1920, "altura": 1080, "hz": 60, "giro": 0, "principal": True},
+        {"nome": r"\\.\DISPLAY2", "id": r"MONITOR\VRT0001\{2}", "monitor": "Tela do retorno", "x": 1920, "y": 0,
+         "largura": 1920, "altura": 1080, "hz": 60, "giro": 0, "principal": False},
+    ]
+
+    def __init__(self):
+        import os
+        import tempfile
+        self.telas = [dict(t) for t in self.BOA]
+        self.restauradas = 0
+        self.conf = os.path.join(tempfile.mkdtemp(), "sunshine.conf")
+        with open(self.conf, "w", encoding="utf-8") as arquivo:
+            arquivo.write("sunshine_name = PC do Holyrics\noutput_name = \\\\.\\DISPLAY2\n")
+
+    def ler(self):
+        return [dict(t) for t in self.telas]
+
+    def restaurar(self, boa):
+        self.restauradas += 1
+        # Como no Windows: o que e posicao e resolucao volta; uma tela que nao
+        # esta mais ligada ao PC nao reaparece.
+        ligadas = {t["nome"] for t in self.telas}
+        self.telas = [dict(t) for t in boa if t["nome"] in ligadas]
+        return []
+
+    def mudar(self, caso):
+        self.telas = [dict(t) for t in self.BOA]
+        if caso == "sumiu":             # o cabo da tela do retorno soltou
+            self.telas = self.telas[:1]
+        elif caso == "resolucao":       # o Windows trocou a resolucao da tela do retorno
+            self.telas[1].update({"largura": 1280, "altura": 720})
+        elif caso == "principal":       # o Windows trocou qual e a principal
+            self.telas[0]["principal"], self.telas[1]["principal"] = False, True
+
+
+class YouTubeSimulado:
+    """Um canal de mentira, para ver o painel conferir o YouTube.
+
+    `cenario` escolhe o que ele responde: "ok", "nao_recebe", "outra_chave",
+    "nao_iniciada" ou "sem_transmissao". As acoes de verdade (iniciar a
+    transmissao, trocar a chave do OBS) consertam o cenario, como consertariam
+    a transmissao.
+    """
+
+    CHAVES = {"stream-hoje": "chave-de-mentira-de-hoje", "stream-velho": "chave-de-mentira-antiga"}
+
+    def __init__(self, obs):
+        self._obs = obs
+        self.cenario = "ok"
+        self.pedidos = []
+
+    def autorizado(self):
+        return True
+
+    def canal(self):
+        return {"nome": "Canal de mentira", "id": "canal-simulado"}
+
+    def _no_ar(self):
+        return self._obs.transmitindo_desde is not None
+
+    def transmissao(self, estado="active"):
+        self.pedidos.append(("transmissao", estado))
+        if self.cenario == "sem_transmissao":
+            return None
+        ao_vivo = self._no_ar() and self.cenario != "nao_iniciada"
+        if (estado == "active") != ao_vivo:
+            return None
+        return {"id": "video-simulado", "snippet": {"title": "Culto de domingo (simulado)", "description": ""},
+                "status": {"privacyStatus": "unlisted", "lifeCycleStatus": "live" if ao_vivo else "ready"},
+                "contentDetails": {"boundStreamId": "stream-hoje", "enableAutoStart": False}}
+
+    def ultima_concluida(self):
+        return None
+
+    def espectadores(self, id_video):
+        return 12
+
+    def saude_do_envio(self, id_stream):
+        return self.estado_dos_streams([id_stream]).get(id_stream, {}).get("saude")
+
+    def chaves(self):
+        self.pedidos.append(("chaves",))
+        return [{"id": i, "nome": i, "servidor": "rtmp://a.rtmp.youtube.com/live2", "tem_chave": True, "estado": "ready"}
+                for i in self.CHAVES]
+
+    def chave_de(self, id_stream):
+        self.pedidos.append(("chave_de", id_stream))
+        return {"chave": self.CHAVES[id_stream], "servidor": "rtmp://a.rtmp.youtube.com/live2"}
+
+    def estado_dos_streams(self, ids):
+        self.pedidos.append(("estado_dos_streams", tuple(ids)))
+        do_obs = next((i for i, chave in self.CHAVES.items() if chave == self._obs.chave), None)
+        saida = {}
+        for i in ids:
+            chegando = self._no_ar() and i == do_obs and self.cenario != "nao_recebe"
+            saida[i] = {"estado": "active" if chegando else "inactive", "saude": "good" if chegando else "noData"}
+        return saida
+
+    def iniciar(self, id_transmissao):
+        self.pedidos.append(("iniciar", id_transmissao))
+        self.cenario = "ok"
+        return {}
+
+    def atualizar(self, transmissao, titulo=None, descricao=None, privacidade=None):
+        return transmissao
+
+    @staticmethod
+    def link(transmissao):
+        return "https://www.youtube.com/watch?v=" + transmissao["id"] if transmissao else None
