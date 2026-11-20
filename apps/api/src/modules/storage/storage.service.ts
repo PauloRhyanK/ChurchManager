@@ -35,6 +35,19 @@ export function detectImageType(buf: Buffer): DetectedImageType | null {
   return null;
 }
 
+export const MAX_SLIDE_PNG_BYTES = 1.5 * 1024 * 1024;
+export const SLIDE_PNG_TOO_LARGE_MESSAGE = 'A imagem do slide excede o limite de 1,5 MB.';
+export const SLIDE_PNG_FORMAT_MESSAGE = 'A imagem do slide precisa ser um PNG.';
+
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+/** Largura e altura do PNG, lidas do IHDR (o primeiro bloco, logo depois da assinatura). `null` se não for PNG. */
+export function pngDimensions(buf: Buffer): { width: number; height: number } | null {
+  if (buf.length < 24 || !buf.subarray(0, 8).equals(PNG_SIGNATURE)) return null;
+  if (buf.subarray(12, 16).toString('latin1') !== 'IHDR') return null;
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+}
+
 export const MAX_AUDIO_BYTES = 90 * 1024 * 1024;
 export const AUDIO_TOO_LARGE_MESSAGE = 'O áudio excede o limite de 90 MB.';
 export const AUDIO_FORMAT_MESSAGE = 'Formato não aceito. Envie um áudio MP3, WAV, M4A, OGG ou FLAC.';
@@ -139,8 +152,39 @@ export class StorageService {
     return { url, sizeBytes: fileBuffer.length };
   }
 
+  /**
+   * Grava um PNG na chave exata (sem nome aleatório) e devolve o URL público. A chave vem do
+   * conteúdo, então o arquivo pode ficar em cache para sempre. Valida a assinatura e o tamanho.
+   */
+  async uploadPng(fileBuffer: Buffer | undefined, key: string): Promise<string> {
+    if (!fileBuffer || fileBuffer.length === 0) {
+      throw new BadRequestException('Arquivo não enviado.');
+    }
+    if (fileBuffer.length > MAX_SLIDE_PNG_BYTES) {
+      throw new PayloadTooLargeException(SLIDE_PNG_TOO_LARGE_MESSAGE);
+    }
+    if (!pngDimensions(fileBuffer)) {
+      throw new BadRequestException(SLIDE_PNG_FORMAT_MESSAGE);
+    }
+    const url = await this.putObject(
+      key,
+      fileBuffer,
+      'image/png',
+      'Não foi possível enviar a imagem. Tente novamente em instantes.',
+      'public, max-age=31536000, immutable',
+    );
+    this.logger.log(`PNG enviado: ${key}`);
+    return url;
+  }
+
   /** Grava no R2 e devolve o URL público. Detalhes internos só vão para o log. */
-  private async putObject(key: string, body: Buffer, contentType: string, failMessage: string): Promise<string> {
+  private async putObject(
+    key: string,
+    body: Buffer,
+    contentType: string,
+    failMessage: string,
+    cacheControl?: string,
+  ): Promise<string> {
     const config = this.readConfig();
     try {
       await this.s3Client.send(
@@ -149,6 +193,7 @@ export class StorageService {
           Key: key,
           Body: body,
           ContentType: contentType,
+          ...(cacheControl ? { CacheControl: cacheControl } : {}),
         }),
       );
     } catch (error) {
