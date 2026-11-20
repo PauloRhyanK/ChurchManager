@@ -856,6 +856,8 @@ def louvor_slide(indice):
 EXTENSOES_DE_AUDIO = {".wav", ".mp3", ".ogg", ".m4a", ".flac"}
 CAMINHO_MARCAS = os.path.join(RAIZ, "_marcas_louvor.json")
 CAMINHO_SEGUIR = os.path.join(RAIZ, "_seguir_calibracao.json")
+# Se o Seguir esta ligado neste PC (o botao do painel). Vale depois de religar.
+CAMINHO_SEGUIR_LIGADO = os.path.join(RAIZ, "_seguir.json")
 
 
 @app.get("/api/louvor/audio/<nome>")
@@ -1133,6 +1135,7 @@ def luz_modo(nome):
         escolhido = motor.escolher(None if nome == "parado" else nome)
     except mod_movimento.ErroMovimento as erro:
         return jsonify({"erro": str(erro)}), 404
+    _seguir_cede()
 
     # Com o modo desligado, o proximo envio ja leva a cena pura — mas ele so
     # sai no proximo batimento, que pode demorar 1 segundo. Um envio imediato
@@ -1277,6 +1280,7 @@ def luz_estudio_animar():
         motor.definir_estudio(corpo)
     except mod_movimento.ErroMovimento as erro:
         return jsonify({"erro": str(erro)}), 400
+    _seguir_cede()
 
     # Mesmo motivo do /api/luz/modo: parar tem que valer na hora.
     try:
@@ -2575,6 +2579,11 @@ def _retrato_do_painel():
             "modos": [{"id": m["id"], "nome": m["nome"], "descricao": m["descricao"]}
                       for m in (motor.catalogo() if motor else []) if not m["perigoso"]],
         }
+        # A luz do teto seguindo ALGUEM pela camera (/seguir). Nao confundir
+        # com "seguindo", que e a luz seguindo a MUSICA.
+        seguir = _estado_do_seguir()
+        if seguir is not None:
+            luz["seguir_pessoa"] = seguir
     controles = {nome: all(c in _cues_por_id for c in par) for nome, par in PARES.items()}
     controles["cortar"] = _contexto.get("obs") is not None
     recados = [{"id": c["id"], "nome": c.get("nome", c["id"])} for c in _cues_por_id.values()
@@ -2741,6 +2750,7 @@ def _acao_do_painel(dados, origem):
                 escolhido = motor.escolher(None if nome == "parado" else nome)
             except mod_movimento.ErroMovimento:
                 return {"erro": "esse movimento não existe"}, 404
+            _seguir_cede()
             cliente = _contexto.get("luzes")
             if cliente is not None:
                 try:
@@ -2751,6 +2761,17 @@ def _acao_do_painel(dados, origem):
                 _ao_vivo["valor"].luz_mexida()
             titulo = "Movimento da luz: " + (escolhido or "parado")
             resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
+        elif tipo in ("seguir_ligar", "parar_seguir"):
+            # O botao "Seguir uma pessoa" / "Parar de seguir" do cartao da Luz.
+            # Ligar prepara o que faltar; a luz so anda com tudo pronto.
+            ligar = tipo == "seguir_ligar"
+            try:
+                _seguir_definir(ligar)
+            except mod_rastreio.ErroRastreio as erro:
+                return {"erro": str(erro)}, 400
+            titulo = "Seguir ligado" if ligar else "Luz parou de seguir"
+            resultado = {"ok": True, "titulo": titulo,
+                         "detalhe": "a luz anda quando estiver pronto" if ligar else "as luzes voltaram para a cena"}
         elif tipo == "cortar":
             cliente = _contexto.get("obs")
             if cliente is None:
@@ -3115,8 +3136,11 @@ def seguir_estado():
     rastreador = _pecas.get("seguir")
     _, cabecas = _cabecas_do_seguir()
     if rastreador is None:
+        estado = _estado_do_seguir() or {}
         return jsonify({"disponivel": False,
                         "motivo": _pecas.get("seguir_motivo") or "o seguir nao roda neste PC",
+                        "pode_ligar": not _seguir_bloqueado() and estado.get("estado") in ("desligado", "erro"),
+                        "preparando": estado.get("estado") == "preparando",
                         "luzes": cabecas})
     rastreador.olhar()
     mapas = rastreador.mapas()
@@ -3127,7 +3151,7 @@ def seguir_estado():
                        "conta": mapa.tipo if mapa else None,
                        "erro": round(mapa.erro, 1) if mapa else None})
     corpo = rastreador.retrato()
-    corpo.update({"disponivel": True, "luzes": cabecas})
+    corpo.update({"disponivel": True, "luzes": cabecas, "cameras": rastreador.cameras()})
     # Com driver agente, quem leva a luz e o PC do som. Ponte antiga la ignora
     # o alvo, e a luz nao segue: a tela precisa dizer isso.
     cliente = _contexto.get("luzes")
@@ -3168,6 +3192,22 @@ def seguir_escolher():
     return jsonify({"ok": True})
 
 
+@app.post("/api/seguir/camera")
+def seguir_camera():
+    """Qual camera do OBS olha o palco. Trocar APAGA a calibracao."""
+    rastreador, falha = _seguir_ou_erro()
+    if falha:
+        return falha
+    nome = str((request.get_json(silent=True) or {}).get("nome") or "")
+    try:
+        rastreador.escolher_camera(nome)
+    except mod_rastreio.ErroRastreio as erro:
+        return jsonify({"erro": str(erro)}), 400
+    _reenviar_luz()
+    _anotar("Seguir: câmera " + nome, True, "", "local")
+    return jsonify({"fonte": rastreador.fonte})
+
+
 @app.post("/api/seguir/soltar")
 def seguir_soltar():
     rastreador, falha = _seguir_ou_erro()
@@ -3179,18 +3219,16 @@ def seguir_soltar():
 
 @app.post("/api/seguir/ligar")
 def seguir_ligar():
-    """Liga ou desliga a luz seguindo. Desligar devolve as cabecas a cena."""
-    rastreador, falha = _seguir_ou_erro()
-    if falha:
-        return falha
+    """O mesmo botao do painel, pela tela /seguir. Funciona antes de o
+    rastreador existir: ligar e justamente o que prepara tudo."""
     ligar = bool((request.get_json(silent=True) or {}).get("ligar"))
     try:
-        rastreador.ligar(ligar)
+        _seguir_definir(ligar)
     except mod_rastreio.ErroRastreio as erro:
         return jsonify({"erro": str(erro)}), 400
-    _reenviar_luz()
     _anotar("Seguir " + ("ligado" if ligar else "desligado"), True, "", "local")
-    return jsonify({"seguindo": rastreador.seguindo})
+    rastreador = _pecas.get("seguir")
+    return jsonify({"seguindo": bool(rastreador and rastreador.seguindo), "estado": _estado_do_seguir()})
 
 
 def _reenviar_luz():
@@ -3222,7 +3260,9 @@ def seguir_mirar():
     if base not in [c["endereco"] for c in cabecas] or grupo.get("pan") is None or grupo.get("tilt") is None:
         return jsonify({"erro": "essa luz nao e do grupo do seguir"}), 400
     if rastreador.seguindo:
-        rastreador.ligar(False)
+        # Mirar na mao e seguir brigariam pela mesma cabeca: calibrar DESLIGA
+        # o Seguir. Liga-se de novo depois, pelo painel ou por esta tela.
+        _seguir_definir(False)
     try:
         cliente.aplicar({base + int(grupo["pan"]): pan, base + int(grupo["tilt"]): tilt})
     except Exception as erro:
@@ -3703,30 +3743,156 @@ def _montar_ao_vivo():
     return ao_vivo
 
 
+_instalando_opencv = {"tentou": False, "rodando": False}
+
+
+def _seguir_bloqueado():
+    return (_config.get("seguir") or {}).get("ativo") is False
+
+
+def _seguir_quer():
+    """O botao do painel: o Seguir esta ligado neste PC?"""
+    try:
+        with open(CAMINHO_SEGUIR_LIGADO, encoding="utf-8") as arquivo:
+            return bool(json.load(arquivo).get("ligado"))
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def _seguir_definir(ligar, cliente=None):
+    """Liga ou desliga o Seguir (botao do painel, da tela /seguir ou da web).
+
+    Ligar a primeira vez PREPARA: monta o rastreador e, sem OpenCV, instala em
+    segundo plano. A luz so anda quando estiver tudo pronto: OpenCV, camera
+    escolhida, luz calibrada e uma pessoa na mira. Desligar volta as cabecas
+    para a cena na hora."""
+    if ligar and _seguir_bloqueado():
+        raise mod_rastreio.ErroRastreio("o Seguir está desligado no config deste PC (seguir.ativo: false)")
+    temporario = CAMINHO_SEGUIR_LIGADO + ".tmp"
+    with open(temporario, "w", encoding="utf-8") as arquivo:
+        json.dump({"ligado": bool(ligar)}, arquivo)
+    os.replace(temporario, CAMINHO_SEGUIR_LIGADO)
+    rastreador = _pecas.get("seguir")
+    if not ligar:
+        if rastreador is not None:
+            rastreador.ligar(False)
+        _reenviar_luz()
+        return
+    if rastreador is None:
+        if not _instalando_opencv["rodando"]:
+            _instalando_opencv["tentou"] = False     # clicar de novo tenta de novo
+            _montar_seguir(cliente)
+        rastreador = _pecas.get("seguir")
+    if rastreador is not None:
+        rastreador.ligar(True)
+
+
+def _seguir_cede():
+    """Alguem escolheu um modo, o Parado ou uma animacao do estudio: o Seguir
+    DESLIGA de verdade. So limpar o motor nao basta — o rastreador mandaria um
+    alvo novo na foto seguinte e a luz voltaria a seguir sozinha."""
+    rastreador = _pecas.get("seguir")
+    if rastreador is not None and rastreador.seguindo:
+        _seguir_definir(False)
+
+
+def _estado_do_seguir():
+    """O que o cartao da Luz mostra. None = este PC nao tem Seguir."""
+    if _seguir_bloqueado() or _maquina.get("principal") is not None:
+        return None
+    rastreador = _pecas.get("seguir")
+    if not _seguir_quer():
+        return {"estado": "desligado"}
+    if _instalando_opencv["rodando"]:
+        return {"estado": "preparando"}
+    if rastreador is None:
+        return {"estado": "erro", "motivo": _pecas.get("seguir_motivo") or "o Seguir não conseguiu começar"}
+    estado = rastreador.situacao()
+    corpo = {"estado": estado}
+    if estado == "erro":
+        corpo["motivo"] = rastreador.retrato()["erro"]
+    return corpo
+
+
 def _montar_seguir(cliente=None):
-    """O SEGUIR (ponte/rastreio.py). So nasce com seguir.ativo no config, e
-    so nesta maquina, que fala com o OBS. Sem OpenCV, fica o motivo para a
-    tela /seguir mostrar — a ponte segue igual."""
+    """O SEGUIR (ponte/rastreio.py). So nesta maquina, que fala com o OBS.
+
+    VEM DESLIGADO. Liga-se pelo botao "Seguir uma pessoa" no painel (ou na
+    tela /seguir), e a escolha fica gravada em _seguir.json. `seguir.ativo:
+    false` no config bloqueia de vez. Desligado, nao instala nada e nao
+    captura nada.
+
+    Sem OpenCV, INSTALA SOZINHO, em segundo plano, uma vez por partida (ver
+    _instalar_opencv). Enquanto isso, ou se falhar, o cartao da Luz diz o
+    motivo e o resto da ponte segue igual."""
     conf = _config.get("seguir") or {}
     _pecas["seguir"] = None
     _pecas["seguir_motivo"] = None
-    if not conf.get("ativo"):
-        _pecas["seguir_motivo"] = "desligado no config (seguir.ativo)"
+    if _seguir_bloqueado():
+        _pecas["seguir_motivo"] = "desligado no config deste PC (seguir.ativo: false)"
+        return
+    if not _seguir_quer():
+        _pecas["seguir_motivo"] = "desligado: ligue em \u201cSeguir uma pessoa\u201d, no cartão da Luz do painel"
         return
     try:
         detector = _pecas.get("seguir_detector") or mod_rastreio.montar_detector(conf, RAIZ)
+    except mod_rastreio.FaltaOpenCV as erro:
+        if SIMULAR or _instalando_opencv["tentou"]:
+            _pecas["seguir_motivo"] = _pecas.get("seguir_motivo_instalacao") or str(erro)
+            return
+        _instalando_opencv["tentou"] = True
+        _instalando_opencv["rodando"] = True
+        _pecas["seguir_motivo"] = "preparando o Seguir (instalando, só na primeira vez)…"
+        threading.Thread(target=_instalar_opencv, args=(cliente,), daemon=True).start()
+        return
     except mod_rastreio.ErroRastreio as erro:
         _pecas["seguir_motivo"] = str(erro)
         print("[aviso] seguir desligado: {}".format(erro))
         return
     grupo = ((_config.get("grupos_de_luz") or {}).get(str(conf.get("grupo") or "teto")) or {})
     rastreador = mod_rastreio.Rastreador(
-        cliente or ClienteOBS(*_args_obs(), timeout=2.0, tentativas=1),
+        cliente or (_contexto.get("obs") if SIMULAR else None)
+        or ClienteOBS(*_args_obs(), timeout=2.0, tentativas=1),
         conf.get("fonte"), detector, _contexto.get("movimento"),
         mod_rastreio.Calibracao(CAMINHO_SEGUIR), grupo.get("bases") or [],
-        fps=conf.get("fps", 8), largura=conf.get("largura", 416))
+        fps=conf.get("fps", 6), largura=conf.get("largura", 416))
     rastreador.comecar()
     _pecas["seguir"] = rastreador
+    if getattr(rastreador.detector, "nome", "") == "hog":
+        print("[aviso] seguir sem o modelo em modelos/: usando o detector simples")
+    rastreador.ligar(True)
+
+
+def _instalar_opencv(cliente=None):
+    """pip install -r requirements-seguir.txt, em segundo plano.
+
+    POR QUE NAO VAI NO requirements.txt: o atualizador DESFAZ a atualizacao
+    inteira se o pip falhar. Com o OpenCV la, uma internet ruim ou uma versao
+    de Python sem pacote travaria a atualizacao de TODOS os PCs — inclusive a
+    do PC do som, que leva a luz. Aqui, falhar so deixa o seguir desligado,
+    com o motivo na tela, e a proxima partida da ponte tenta de novo."""
+    print("[seguir] instalando o OpenCV (so na primeira vez)...")
+    try:
+        saida = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "-q",
+             "-r", os.path.join(RAIZ, "requirements-seguir.txt")],
+            capture_output=True, text=True, timeout=900)
+        ok = saida.returncode == 0
+        detalhe = (saida.stderr or saida.stdout or "").strip().splitlines()[-1:] if not ok else []
+    except Exception as erro:
+        ok, detalhe = False, [str(erro)]
+    _instalando_opencv["rodando"] = False
+    if not ok:
+        motivo = "não consegui instalar o reconhecimento de pessoas ({}). Tento de novo quando a ponte reiniciar.".format(
+            (detalhe[0] if detalhe else "erro desconhecido")[:160])
+        _pecas["seguir_motivo_instalacao"] = motivo
+        _pecas["seguir_motivo"] = motivo
+        print("[seguir] " + motivo)
+        return
+    import importlib
+    importlib.invalidate_caches()
+    print("[seguir] OpenCV instalado")
+    _montar_seguir(cliente)
 
 
 # -- atualizacao ---------------------------------------------------------------

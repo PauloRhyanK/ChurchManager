@@ -114,42 +114,39 @@ de abrir junto com o Windows, e liga a ponte.
 É ele que leva a luz até os refletores. Em 12/11/2026 ele saiu da rede duas vezes no
 meio do culto, e a suspensão já estava desligada — a causa está sendo investigada.
 
-## Seguir com a luz (opcional)
+## Seguir com a luz
 
-As cabeças móveis do teto acompanham uma pessoa pela câmera aberta do OBS. A
-tela é `/seguir`, no PC principal. Sem os passos abaixo, a ponte funciona igual
-e a tela só diz o que falta.
+As cabeças móveis do teto acompanham uma pessoa pela câmera do palco.
 
-1. **No PC principal**, instale o OpenCV (uma vez):
+**Vem desligado.** Para ligar, no painel do culto, cartão da **Luz**, toque em
+**Seguir uma pessoa**. O botão vira **Parar de seguir**, e a frase ao lado diz o
+que falta para a luz andar. A escolha fica gravada no PC principal e vale depois
+de religar. Para bloquear de vez num PC: `seguir: { ativo: false }` no config.
 
-   ```
-   pip install -r requirements-seguir.txt
-   ```
+**Na primeira vez que liga, a ponte prepara tudo sozinha:**
+- instala o reconhecimento de pessoas (OpenCV, uns 40 MB, alguns minutos). O
+  cartão mostra "Preparando o Seguir (instalando)…". Se falhar, mostra o motivo;
+  tocar de novo tenta de novo. Nada mais da ponte para por isso;
+- o modelo que acha as pessoas (YOLOX-Nano, licença Apache-2.0) já vem com a
+  ponte, em `modelos/`. Origem e licença em `modelos/LEIA-ME.md`;
+- a câmera, a ponte acha sozinha no OBS. Se houver mais de uma, escolha na tela
+  `/seguir` (menu Mais do painel).
 
-2. **O modelo YOLO** (recomendado; sem ele, a ponte usa um detector simples
-   que erra mais). Em qualquer computador com Python, uma vez:
+**A única coisa manual é calibrar**, uma vez, cada luz que vai seguir. Na tela
+`/seguir`: uma pessoa em pé numa marca do palco, a luz no peito dela (pelos
+controles de pan e tilt), "Gravar ponto" e clicar nela na imagem. De 4 a 6
+marcas espalhadas. Mexer na mira desliga o Seguir; ligue de novo ao terminar.
+Trocou a câmera de lugar ou de zoom? Calibre de novo.
 
-   ```
-   pip install ultralytics
-   yolo export model=yolo11n.pt format=onnx imgsz=320 opset=12
-   ```
+**A luz só anda** com o Seguir ligado, a luz calibrada e uma pessoa na mira. Com
+uma pessoa só no palco, ela vira a mira sozinha; com mais de uma, escolha na tela
+`/seguir`. Perdeu a pessoa, a luz fica parada onde está. **Parar de seguir**,
+**Parado**, qualquer botão de movimento e o Estúdio desligam o Seguir. Trocar de
+clima não desliga: a cor muda, e a direção continua seguindo. Cabeça apagada não
+se mexe.
 
-   Copie o `yolo11n.onnx` gerado para `modelos/` na pasta da ponte. O YOLO da
-   Ultralytics tem licença AGPL-3.0: uso interno na igreja não tem problema,
-   mas não redistribua o arquivo junto com a ponte.
-
-3. **No `config.yaml` do PC principal**, a seção `seguir:` (exemplo no fim de
-   `config.exemplo.yaml`). O mais importante é `fonte`: o nome da fonte da
-   câmera aberta no OBS. **No PC do som**, ponha `seguir: { cerca: ..., velocidade: ... }`
-   se quiser limitar até onde e quão rápido a luz anda.
-
-4. **Calibre** cada luz pela tela `/seguir`: uma pessoa em pé numa marca do
-   palco, a luz no peito dela, clique em "Gravar ponto" e na pessoa. De 4 a 6
-   marcas espalhadas. Se a câmera mudar de lugar ou de zoom, calibre de novo.
-
-Segurança: a luz só anda com "Seguir" ligado. Perdeu a pessoa, a luz fica
-parada onde está. "Parado", qualquer modo do culto ou o Estúdio desligam o
-seguir. Cabeça apagada não se mexe.
+O **PC do som** também precisa estar atualizado: é ele que move a luz. Se estiver
+na versão antiga, a tela `/seguir` avisa.
 
 ### Vídeo ainda mais rápido (opcional, fase 2)
 
