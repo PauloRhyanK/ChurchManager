@@ -1186,6 +1186,8 @@ model SermonDelivery {
   estimatedSeconds Int              @default(0) @map("estimated_seconds")
   slideStyle       SermonSlideStyle @default(MINIMAL) @map("slide_style")
   slides           Json             @default("[]")
+  /// Mapa `hash do slide → url pública` das imagens PNG que o painel desenhou (Ponte do Culto).
+  slideImages      Json             @default("{}") @map("slide_images")
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
 

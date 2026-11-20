@@ -1,4 +1,17 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Post, Put, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Put,
+  Query,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import { PermissionLevel, PermissionModule } from '@prisma/client';
@@ -6,11 +19,13 @@ import { PermissionsGuard } from '../access/permissions.guard';
 import { RequirePermission } from '../access/require-permission.decorator';
 import type { AuthUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { PngUploadInterceptor } from '../storage/png-upload.interceptor';
 import type { SermonStatus } from './delivery-match';
 import { DeliveryPreviewQuery, SendSermonDto } from './dto/delivery.dto';
 import { CreateFromTextDto } from './dto/from-text.dto';
 import { CreateSermonDto, UpdateSermonDto } from './dto/sermon.dto';
 import { GenerateSlidesDto, SaveSlidesDto } from './dto/slides.dto';
+import { SermonDeliveryImagesService } from './delivery-images.service';
 import { SermonDeliveryService } from './sermon-delivery.service';
 import { SermonImportService } from './sermon-import.service';
 import { SermonSlidesService } from './sermon-slides.service';
@@ -29,6 +44,7 @@ export class SermonsController {
     private readonly deliveries: SermonDeliveryService,
     private readonly slides: SermonSlidesService,
     private readonly imports: SermonImportService,
+    private readonly images: SermonDeliveryImagesService,
   ) {}
 
   @Get()
@@ -104,6 +120,28 @@ export class SermonsController {
   @RequirePermission(PermissionModule.SERMONS, PermissionLevel.EDIT)
   cancel(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.deliveries.cancel(user, id);
+  }
+
+  /** As imagens dos slides do envio para a Ponte: a lista, o que falta e o slide a desenhar. Roda a cada salvar. */
+  @Get(':id/delivery/images')
+  @Throttle({ public: { limit: 120, ttl: 60_000 } })
+  @RequirePermission(PermissionModule.SERMONS, PermissionLevel.EDIT)
+  listImages(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.images.list(user, id);
+  }
+
+  /** Uma palavra tem até umas 40 imagens, enviadas uma de cada vez: o mesmo limite do autosave. */
+  @Put(':id/delivery/images/:hash')
+  @Throttle({ public: { limit: 120, ttl: 60_000 } })
+  @RequirePermission(PermissionModule.SERMONS, PermissionLevel.EDIT)
+  @UseInterceptors(PngUploadInterceptor)
+  uploadImage(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('hash') hash: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.images.upload(user, id, hash, file);
   }
 
   /** Gerar refaz a sequência inteira: limite próprio, mais apertado que o do salvar. */
