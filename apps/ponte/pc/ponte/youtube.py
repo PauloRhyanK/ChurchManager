@@ -596,6 +596,27 @@ class ClienteYouTube:
             return None
         return ((itens[0].get("status") or {}).get("healthStatus") or {}).get("status")
 
+    def estado_dos_streams(self, ids):
+        """{id: {"estado", "saude"}} de um ou mais streams, numa chamada so.
+        `estado` e active / inactive / ready...; `saude` e good / ok / bad /
+        noData. E o que o YOUTUBE diz que esta recebendo."""
+        ids = [str(i) for i in ids if i]
+        if not ids:
+            return {}
+        corpo = self._pedir("GET", API + "/liveStreams", params={"part": "id,status", "id": ",".join(ids)})
+        saida = {}
+        for item in corpo.get("items") or []:
+            status = item.get("status") or {}
+            saida[item.get("id")] = {"estado": status.get("streamStatus"),
+                                     "saude": (status.get("healthStatus") or {}).get("status")}
+        return saida
+
+    def iniciar(self, id_transmissao):
+        """Poe a transmissao no ar (transition para live). O YouTube so aceita
+        com o stream dela ativo, isto e, com o envio chegando."""
+        return self._pedir("POST", API + "/liveBroadcasts/transition",
+                           params={"broadcastStatus": "live", "id": str(id_transmissao), "part": "id,status"})
+
     @staticmethod
     def link(transmissao):
         if not transmissao or not transmissao.get("id"):
@@ -639,6 +660,17 @@ class ClienteYouTube:
         if not chave:
             raise ErroYouTube("essa chave veio vazia do YouTube")
         return {"chave": chave, "servidor": ing.get("ingestionAddress")}
+
+    def definir_miniatura_bytes(self, id_video, dados):
+        """A miniatura a partir da imagem em memoria (JPG ou PNG). Mesmos
+        limites de definir_miniatura."""
+        if len(dados) > 2 * 1024 * 1024:
+            raise ErroYouTube("a imagem tem {:.1f} MB; o YouTube aceita ate 2 MB".format(
+                len(dados) / 1024 / 1024))
+        tipo = "image/png" if dados[:8] == b"\x89PNG\r\n\x1a\n" else "image/jpeg"
+        return self._pedir("POST", ENVIO + "/thumbnails/set",
+                           params={"videoId": id_video, "uploadType": "media"},
+                           headers={"Content-Type": tipo}, data=dados)
 
     def definir_miniatura(self, id_video, caminho):
         """A miniatura. Limite do YouTube: 2 MB, e a conta precisa estar

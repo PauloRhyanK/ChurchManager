@@ -113,3 +113,49 @@ de abrir junto com o Windows, e liga a ponte.
 
 É ele que leva a luz até os refletores. Em 12/11/2026 ele saiu da rede duas vezes no
 meio do culto, e a suspensão já estava desligada — a causa está sendo investigada.
+
+## Seguir com a luz (opcional)
+
+As cabeças móveis do teto acompanham uma pessoa pela câmera aberta do OBS. A
+tela é `/seguir`, no PC principal. Sem os passos abaixo, a ponte funciona igual
+e a tela só diz o que falta.
+
+1. **No PC principal**, instale o OpenCV (uma vez):
+
+   ```
+   pip install -r requirements-seguir.txt
+   ```
+
+2. **O modelo YOLO** (recomendado; sem ele, a ponte usa um detector simples
+   que erra mais). Em qualquer computador com Python, uma vez:
+
+   ```
+   pip install ultralytics
+   yolo export model=yolo11n.pt format=onnx imgsz=320 opset=12
+   ```
+
+   Copie o `yolo11n.onnx` gerado para `modelos/` na pasta da ponte. O YOLO da
+   Ultralytics tem licença AGPL-3.0: uso interno na igreja não tem problema,
+   mas não redistribua o arquivo junto com a ponte.
+
+3. **No `config.yaml` do PC principal**, a seção `seguir:` (exemplo no fim de
+   `config.exemplo.yaml`). O mais importante é `fonte`: o nome da fonte da
+   câmera aberta no OBS. **No PC do som**, ponha `seguir: { cerca: ..., velocidade: ... }`
+   se quiser limitar até onde e quão rápido a luz anda.
+
+4. **Calibre** cada luz pela tela `/seguir`: uma pessoa em pé numa marca do
+   palco, a luz no peito dela, clique em "Gravar ponto" e na pessoa. De 4 a 6
+   marcas espalhadas. Se a câmera mudar de lugar ou de zoom, calibre de novo.
+
+Segurança: a luz só anda com "Seguir" ligado. Perdeu a pessoa, a luz fica
+parada onde está. "Parado", qualquer modo do culto ou o Estúdio desligam o
+seguir. Cabeça apagada não se mexe.
+
+### Vídeo ainda mais rápido (opcional, fase 2)
+
+A imagem do painel agora chega em fluxo, com 4 a 5 quadros por segundo, a
+partir de fotos do OBS. Para ter vídeo de verdade (30 quadros por segundo, com
+menos de meio segundo de atraso), o caminho é um **MediaMTX** na rede da
+igreja recebendo uma segunda saída do OBS, pequena (480p) e com codificador
+de hardware. O navegador assiste por WebRTC. Isso pede instalar o MediaMTX e
+um plugin de saída extra no OBS, e não está feito.
