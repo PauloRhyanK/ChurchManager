@@ -159,6 +159,7 @@ h1, h2, h3, p { margin: 0; }
 .no-telao { flex: 1.8 1 300px; aspect-ratio: 16 / 9; background: #000; border: 1px solid var(--borda); border-radius: 12px;
   position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28px 20px 20px; text-align: center; }
 .no-telao .rotulo { position: absolute; top: 12px; left: 14px; }
+.no-telao .rotulo.das-imagens { top: auto; bottom: 10px; }
 .no-telao .letra { font-weight: 700; font-size: clamp(16px, 2vw, 24px); line-height: 1.3; white-space: pre-line; }
 .no-telao .letra.fraca { font-weight: 500; color: var(--suave); font-size: 15px; }
 .no-telao .falha { position: absolute; left: 0; right: 0; bottom: 0; padding: 6px 10px; background: var(--vermelho); color: #fff;
