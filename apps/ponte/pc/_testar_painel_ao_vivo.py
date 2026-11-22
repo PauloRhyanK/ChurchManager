@@ -27,6 +27,7 @@ os.environ["PONTE_HTTP"] = "1"
 
 import app as ponte          # noqa: E402
 from ponte import obs_imagem, painel_ao_vivo, simulados   # noqa: E402
+from ponte import roteiro as roteiro_mod   # noqa: E402
 
 FALHAS = []
 
@@ -168,6 +169,19 @@ conferir("e a letra continua sozinha", r["louvor"]["letra"] == "sozinho")
 conferir("'Seguir a musica' devolve a luz", acao({"tipo": "luz_seguir"})[1] == 200
          and cliente.get("/api/painel").get_json()["luz"]["seguindo"] is True)
 conferir("a musica ficou guardada para o caso de a ponte reiniciar", ponte._louvor_lembrado() == "avante")
+
+print("\nTirar a letra do telao e voltar")
+slide_antes = HOLYRICS.slide
+corpo, codigo = acao({"tipo": "louvor_tirar", "quem": "PC"})
+conferir("'Tirar do telão' fecha a letra no Holyrics", codigo == 200 and corpo["ok"] and HOLYRICS.musica is None, corpo)
+conferir("e o retrato do louvor diz que ela esta fora", cliente.get("/api/painel").get_json()["louvor"]["fora"] is True)
+corpo, codigo = acao({"tipo": "louvor_voltar", "quem": "PC"})
+conferir("'Voltar ao telão' reabre a musica no mesmo slide",
+         codigo == 200 and HOLYRICS.musica == "1741522267781" and HOLYRICS.slide == slide_antes, (corpo, HOLYRICS.slide))
+corpo, codigo = acao({"tipo": "louvor_seguir_de", "para": 2, "quem": "PC"})
+conferir("com o tempo vindo do audio, 'seguir daqui' explica e nao mexe",
+         codigo == 409 and "áudio" in corpo["erro"] and HOLYRICS.slide == slide_antes, corpo)
+conferir("pela web, tirar a letra e recusado", acao({"tipo": "louvor_tirar"}, "web")[1] == 403)
 
 print("\nHorarios")
 r = cliente.get("/api/painel").get_json()
@@ -358,6 +372,37 @@ conferir("e quando a web diz que nao tem", "conteudo" not in enviados[3] and "co
 antigo = mod_espelho.Espelho("http://web", "chave", lambda: chegada, lambda c: None)
 antigo._uma_volta()
 conferir("sem conteudo configurado, o espelho funciona como antes", set(enviados[-1]) == {"maquina", "chegada"})
+
+print("\nO momento da palavra pelo roteiro")
+e = roteiro_mod.e_da_palavra
+conferir("item 'sermon' do ChurchManager e a palavra", e({"tipo": "momento", "momento": "SERMON", "nome": "Ministração"}))
+conferir("sem tipo, o nome basta", e({"tipo": "momento", "momento": None, "nome": "Pregação da Palavra"}))
+conferir("outros momentos nao", not e({"tipo": "momento", "momento": "prayer", "nome": "Oração"}))
+conferir("musica nunca e a palavra", not e({"tipo": "musica", "momento": None, "nome": "Palavra de Deus"}))
+conferir("sem item, nao", not e(None))
+
+
+class RoteiroFalso:
+    origem = "cultos"
+
+    def __init__(self, item):
+        self._item = item
+
+    def item(self):
+        return self._item
+
+
+def na_palavra(item, atual_id="louvor", origem="cultos"):
+    rot = RoteiroFalso(item)
+    rot.origem = origem
+    return painel_ao_vivo.PainelAoVivo({"roteiro": rot, "config": {}})._na_palavra({"atual_id": atual_id})
+
+
+pregacao = {"tipo": "momento", "momento": "sermon", "nome": "Palavra"}
+conferir("a ordem parada no louvor, mas o roteiro na pregacao: e a palavra", na_palavra(pregacao))
+conferir("pela ordem continua valendo", na_palavra(None, atual_id="pregacao"))
+conferir("roteiro local nao decide (a ordem ja decide)", not na_palavra(pregacao, origem="local"))
+conferir("roteiro em outro item: nao", not na_palavra({"tipo": "momento", "momento": "worship", "nome": "Louvor"}))
 
 print("\n" + "-" * 58)
 print("FALHAS: {}".format(len(FALHAS)))

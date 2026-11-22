@@ -150,6 +150,23 @@ class Telao:
 
     # -- passar --------------------------------------------------------------
 
+    def tirar(self):
+        """Fecha o que esta aberto no Holyrics: o telao fica vazio."""
+        cliente = self._cliente()
+        if cliente is None:
+            return {"erro": "o telão está desligado neste PC"}, 400
+        with self._tranca:
+            atual = self._atual
+        if atual is None:
+            return {"erro": "não há nada no telão para tirar"}, 409
+        try:
+            cliente.pedir("CloseCurrentPresentation")
+        except Exception as erro:
+            return {"ok": False, "titulo": "Tirar do telão", "detalhe": str(erro)[:160]}, 200
+        self.ler()
+        return {"ok": True, "titulo": (atual.get("nome") or "Apresentação") + " fora do telão",
+                "detalhe": "tudo certo"}, 200
+
     def ir(self, para, visto=None):
         """(corpo, codigo). `visto` e o slide que a tela mostrava: se o telao
         ja saiu dele (outra pessoa tocou), o toque nao vale."""
