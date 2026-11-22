@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseVttLyrics, sanitizeYoutubeTitle } from './worship-youtube.service';
+import { parseVttLyrics, parseYoutubeVideoId, sanitizeYoutubeTitle } from './worship-youtube.service';
 
 test('sanitizeYoutubeTitle: remove marcadores comuns como (Clipe Oficial) e [Ao Vivo]', () => {
   assert.equal(
@@ -43,4 +43,39 @@ Minha vida transformou
     lyrics,
     'Eu Te agradeço Deus\nPor tudo que tens feito\nMinha vida transformou',
   );
+});
+
+test('parseYoutubeVideoId: aceita ID solto e os formatos de link de vídeo do YouTube', () => {
+  const id = 'dQw4w9WgXcQ';
+  for (const raw of [
+    id,
+    `  ${id}  `,
+    `https://www.youtube.com/watch?v=${id}`,
+    `https://youtube.com/watch?feature=share&v=${id}&t=42`,
+    `https://m.youtube.com/watch?v=${id}`,
+    `https://music.youtube.com/watch?v=${id}&list=RD`,
+    `https://youtu.be/${id}?si=abc`,
+    `https://www.youtube.com/shorts/${id}`,
+    `https://www.youtube.com/embed/${id}`,
+    `https://www.youtube.com/live/${id}`,
+    `https://www.youtube-nocookie.com/embed/${id}`,
+    `youtube.com/watch?v=${id}`,
+  ]) {
+    assert.equal(parseYoutubeVideoId(raw), id, raw);
+  }
+});
+
+test('parseYoutubeVideoId: recusa o que não é vídeo do YouTube', () => {
+  for (const raw of [
+    '',
+    'abc',
+    'dQw4w9WgXcQx',
+    'https://vimeo.com/dQw4w9WgXcQ',
+    'https://youtube.com.evil.com/watch?v=dQw4w9WgXcQ',
+    'https://www.youtube.com/channel/UCxyz',
+    'https://www.youtube.com/watch?v=curto',
+    'javascript:alert(1)',
+  ]) {
+    assert.equal(parseYoutubeVideoId(raw), null, raw);
+  }
 });

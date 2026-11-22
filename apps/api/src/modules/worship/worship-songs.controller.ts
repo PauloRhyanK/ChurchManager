@@ -102,6 +102,22 @@ export class WorshipSongsController {
     return this.songs.setYoutubeAudio(user.tenantId, id, dto.urlOrId);
   }
 
+  @Put(':id/reference')
+  @RequirePermission(PermissionModule.WORSHIP, PermissionLevel.EDIT)
+  setReferenceYoutube(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ImportYoutubeDto,
+  ) {
+    return this.songs.setReferenceYoutube(user.tenantId, id, dto.urlOrId);
+  }
+
+  @Delete(':id/reference')
+  @RequirePermission(PermissionModule.WORSHIP, PermissionLevel.EDIT)
+  removeReferenceYoutube(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.songs.removeReferenceYoutube(user.tenantId, id);
+  }
+
   @Delete(':id/audio')
   @RequirePermission(PermissionModule.WORSHIP, PermissionLevel.EDIT)
   removeAudio(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {

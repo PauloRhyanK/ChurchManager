@@ -31,6 +31,7 @@ function build(overrides: Partial<WorshipSong> = {}, inServices = 0, lyricSettin
     audioFileName: 'a.mp3',
     audioDurationSeconds: 60,
     audioSizeBytes: 10,
+    referenceYoutubeId: null,
     readyAt: null,
     createdAt: new Date('2026-11-20T10:00:00Z'),
     updatedAt: new Date('2026-11-20T10:00:00Z'),
@@ -90,6 +91,8 @@ test('id de outro tenant → 404 e nada é escrito, em toda rota de escrita', as
     () => svc.setAudio(TENANT_A, SONG, { buffer: Buffer.from('x') }, {}),
     () => svc.setYoutubeAudio(TENANT_A, SONG, 'yt-id'),
     () => svc.removeAudio(TENANT_A, SONG),
+    () => svc.setReferenceYoutube(TENANT_A, SONG, 'dQw4w9WgXcQ'),
+    () => svc.removeReferenceYoutube(TENANT_A, SONG),
     () => svc.markReady(TENANT_A, SONG),
     () => svc.unmarkReady(TENANT_A, SONG),
     () => svc.remove(TENANT_A, SONG),
@@ -141,6 +144,33 @@ test('setYoutubeAudio baixa o áudio do YouTube e atualiza a música', async () 
   assert.equal(out.audio?.fileName, 'musica-yt.mp3');
   assert.deepEqual(deleted, ['https://cdn/a.mp3']);
   assert.equal(writes[0].data?.status, 'NEEDS_TIMING');
+});
+
+test('referência do YouTube: salva só o ID do vídeo e não mexe no áudio-guia nem na situação', async () => {
+  const readyAt = new Date('2026-11-21T10:00:00Z');
+  const { svc, writes, deleted } = build({ status: 'READY', readyAt });
+  const out = await svc.setReferenceYoutube(TENANT_B, SONG, 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=30s');
+  assert.equal(out.referenceYoutubeId, 'dQw4w9WgXcQ');
+  assert.equal(out.audio?.url, 'https://cdn/a.mp3');
+  assert.equal(out.status, 'READY');
+  assert.deepEqual(writes, [{ op: 'update', data: { referenceYoutubeId: 'dQw4w9WgXcQ' } }]);
+  assert.deepEqual(deleted, []);
+});
+
+test('referência do YouTube: link que não é de vídeo do YouTube → 400 e nada é escrito', async () => {
+  const { svc, writes } = build();
+  for (const bad of ['https://vimeo.com/123', 'abc', 'https://www.youtube.com/channel/UCxyz']) {
+    await assert.rejects(svc.setReferenceYoutube(TENANT_B, SONG, bad), BadRequestException);
+  }
+  assert.deepEqual(writes, []);
+});
+
+test('tirar a referência do YouTube limpa só o campo dela', async () => {
+  const { svc, writes } = build({ referenceYoutubeId: 'dQw4w9WgXcQ' });
+  const out = await svc.removeReferenceYoutube(TENANT_B, SONG);
+  assert.equal(out.referenceYoutubeId, null);
+  assert.equal(out.audio?.url, 'https://cdn/a.mp3');
+  assert.deepEqual(writes, [{ op: 'update', data: { referenceYoutubeId: null } }]);
 });
 
 test('marcar como pronta: completa passa; incompleta responde 400 dizendo o que falta', async () => {

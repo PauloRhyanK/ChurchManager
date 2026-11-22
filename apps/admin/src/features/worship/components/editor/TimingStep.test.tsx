@@ -45,6 +45,7 @@ const mockSong: Song = {
   updatedAt: "2026-01-01T00:00:00Z",
   rawLyrics: "Primeira frase\n\nSegunda frase\n\nTerceira frase",
   rows: sampleRows,
+  referenceYoutubeId: null,
 };
 
 beforeAll(() => {

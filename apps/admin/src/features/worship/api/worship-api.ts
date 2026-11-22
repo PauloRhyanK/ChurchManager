@@ -43,6 +43,8 @@ export interface SongSummary {
 export interface Song extends SongSummary {
   rawLyrics: string;
   rows: WorshipRow[];
+  /** Vídeo do YouTube só de referência para marcar os tempos (não é o áudio-guia). */
+  referenceYoutubeId: string | null;
   createdAt: string;
 }
 
@@ -167,6 +169,15 @@ export async function uploadSongAudio(id: string, file: File, durationSeconds: n
   return (
     await api.post<Song>(`${SONGS}/${id}/audio`, form, { headers: { "Content-Type": "multipart/form-data" } })
   ).data;
+}
+
+/** Define o vídeo do YouTube de referência. Não baixa nada nem troca o áudio-guia. */
+export async function setSongReferenceYoutube(id: string, urlOrId: string): Promise<Song> {
+  return (await api.put<Song>(`${SONGS}/${id}/reference`, { urlOrId })).data;
+}
+
+export async function removeSongReferenceYoutube(id: string): Promise<Song> {
+  return (await api.delete<Song>(`${SONGS}/${id}/reference`)).data;
 }
 
 export async function removeSongAudio(id: string): Promise<Song> {
