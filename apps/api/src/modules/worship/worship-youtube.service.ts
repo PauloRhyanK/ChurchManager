@@ -36,6 +36,41 @@ export function sanitizeYoutubeTitle(raw: string): string {
   return title.trim().slice(0, 255);
 }
 
+const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
+const YOUTUBE_HOSTS = new Set([
+  'youtube.com',
+  'www.youtube.com',
+  'm.youtube.com',
+  'music.youtube.com',
+  'youtube-nocookie.com',
+  'www.youtube-nocookie.com',
+]);
+
+/**
+ * Tira o ID do vídeo (11 caracteres) de um ID solto ou de um link de vídeo do
+ * YouTube (watch, youtu.be, shorts, embed, live). Devolve null para o resto.
+ */
+export function parseYoutubeVideoId(raw: string): string | null {
+  const text = raw.trim();
+  if (YOUTUBE_ID.test(text)) return text;
+  let url: URL;
+  try {
+    url = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+  const host = url.hostname.toLowerCase();
+  const parts = url.pathname.split('/').filter(Boolean);
+  let id: string | null = null;
+  if (host === 'youtu.be') id = parts[0] ?? null;
+  else if (YOUTUBE_HOSTS.has(host)) {
+    if (parts[0] === 'watch') id = url.searchParams.get('v');
+    else if (['shorts', 'embed', 'live'].includes(parts[0] ?? '')) id = parts[1] ?? null;
+  }
+  return id && YOUTUBE_ID.test(id) ? id : null;
+}
+
 /** Converte arquivo VTT de legendas em linhas de letra limpas. */
 export function parseVttLyrics(vttContent: string): string {
   const lines = vttContent.split(/\r?\n/);

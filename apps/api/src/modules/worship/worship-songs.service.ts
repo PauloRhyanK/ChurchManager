@@ -5,7 +5,7 @@ import { StorageService } from '../storage/storage.service';
 import { CreateSongDto, ListSongsQueryDto, OrganizeSongDto, UpdateSongDto, UploadAudioDto } from './dto/song.dto';
 import { organizeLyrics } from './lyrics-organizer';
 import { Pending, WorshipRow, normalizeRows, songStatus } from './worship-document';
-import { WorshipYoutubeService } from './worship-youtube.service';
+import { WorshipYoutubeService, parseYoutubeVideoId } from './worship-youtube.service';
 
 const PENDING_LABEL: Record<Pending, string> = {
   AUDIO: 'enviar o áudio',
@@ -57,7 +57,13 @@ export function toSongSummary(song: SongSummarySource) {
 }
 
 export function toSongResponse(song: WorshipSong) {
-  return { ...toSongSummary(song), rawLyrics: song.rawLyrics, rows: rowsOf(song), createdAt: song.createdAt };
+  return {
+    ...toSongSummary(song),
+    rawLyrics: song.rawLyrics,
+    rows: rowsOf(song),
+    referenceYoutubeId: song.referenceYoutubeId,
+    createdAt: song.createdAt,
+  };
 }
 
 @Injectable()
@@ -208,6 +214,29 @@ export class WorshipSongsService {
       data: { ...audio, ...this.computed({ ...song, ...audio }, rowsOf(song)) },
     });
     await this.storage.deleteFileByPublicUrl(song.audioUrl);
+    return toSongResponse(updated);
+  }
+
+  /**
+   * O vídeo do YouTube que serve só de referência ao marcar os tempos. Guarda
+   * apenas o ID: nada é baixado, e o áudio-guia e a situação ficam como estão.
+   */
+  async setReferenceYoutube(tenantId: string, id: string, urlOrId: string) {
+    const song = await this.find(tenantId, id);
+    const referenceYoutubeId = parseYoutubeVideoId(urlOrId);
+    if (!referenceYoutubeId) {
+      throw new BadRequestException('Link do YouTube inválido. Cole o link de um vídeo.');
+    }
+    const updated = await this.prisma.worshipSong.update({ where: { id: song.id }, data: { referenceYoutubeId } });
+    return toSongResponse(updated);
+  }
+
+  async removeReferenceYoutube(tenantId: string, id: string) {
+    const song = await this.find(tenantId, id);
+    const updated = await this.prisma.worshipSong.update({
+      where: { id: song.id },
+      data: { referenceYoutubeId: null },
+    });
     return toSongResponse(updated);
   }
 
