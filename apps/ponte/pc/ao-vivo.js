@@ -122,8 +122,29 @@ function desenhar() {
   desenharTransmissao(d);
   desenharTelao(d);
   desenharHistorico(d);
+  manterAVista();
   andar();
 }
+
+// A lista de slides rola DENTRO do quadro dela (a tela inteira nao rola).
+// Quando o slide atual muda, ele e trazido para a vista; enquanto nao muda,
+// quem rolou a lista para espiar adiante nao e puxado de volta.
+let atualAVista = '';
+function manterAVista() {
+  const el = document.querySelector('#centro .slide.atual, #centro .item-palavra.atual');
+  const chave = el ? el.parentNode.id + ':' + Array.prototype.indexOf.call(el.parentNode.children, el) : '';
+  if (chave === atualAVista) return;
+  atualAVista = chave;
+  if (!el) return;
+  const caixa = el.parentNode;
+  if (caixa.scrollHeight <= caixa.clientHeight) return;
+  const topo = el.getBoundingClientRect().top - caixa.getBoundingClientRect().top + caixa.scrollTop;
+  if (topo < caixa.scrollTop || topo + el.offsetHeight > caixa.scrollTop + caixa.clientHeight) {
+    caixa.scrollTop = Math.max(0, topo - (caixa.clientHeight - el.offsetHeight) / 2);
+  }
+}
+// Mudou o tamanho da janela: a grade muda de colunas e o slide atual sai do lugar.
+window.addEventListener('resize', () => { atualAVista = ''; manterAVista(); });
 
 // O OBS diz que envia; o YouTube concorda?
 //   'ok'          os dois concordam (ou este PC nao confere o YouTube)
@@ -447,21 +468,23 @@ function htmlManual(d) {
   const l = d.louvor, m = musicaAtual();
   const slides = m ? m.slides : [], partes = m ? m.partes : [];
   const eu = meuNome(), pode = podeConduzir();
-  let h = '<div class="comando">';
-  if (l.motivo === 'a_mao') {
-    h += '<span class="quem">Esta música é à mão</span><span class="porque">Ela não tem tempo marcado: a letra só passa quando alguém toca.' +
-      (l.quem ? ' Quem tocou por último: ' + esc(l.quem) + '.' : '') + '</span>';
-  } else {
+  // Musica sem tempo marcado: uma etiqueta ao lado do titulo basta. A faixa
+  // inteira fica para quando ha alguem no comando, com Assumir e Devolver.
+  const aMao = l.motivo === 'a_mao';
+  let h = '';
+  if (!aMao) {
     const meu = eu && l.quem === eu;
-    h += '<span class="quem">' + (meu ? 'Você está no comando' : l.quem ? esc(l.quem) + ' está no comando' : 'A letra está na mão') + '</span>';
+    h += '<div class="comando"><span class="quem">' + (meu ? 'Você está no comando' : l.quem ? esc(l.quem) + ' está no comando' : 'A letra está na mão') + '</span>';
     if (pode) {
       if (!meu) h += botao('Assumir', {tipo: 'louvor_assumir'}, {classe: 'bt'});
       h += botao('Devolver', {tipo: 'louvor_devolver'}, {classe: 'bt claro', desligado: !l.pode_devolver, titulo: l.motivo_devolver || ''});
       if (!l.pode_devolver && l.motivo_devolver) h += '<span class="porque">Não dá para devolver agora: ' + esc(l.motivo_devolver) + '.</span>';
     }
+    h += '</div>';
   }
-  h += '</div>';
-  h += '<div class="cabeca"><span class="grande">' + esc(l.musica.titulo) + '</span>' +
+  h += '<div class="cabeca"><span class="linha titulo-musica"><span class="grande">' + esc(l.musica.titulo) + '</span>' +
+    (aMao ? '<span class="selo ambar pequeno" title="Ela não tem tempo marcado: a letra só passa quando alguém toca.">À mão' +
+      (l.quem ? ' · ' + esc(l.quem) : '') + '</span>' : '') + '</span>' +
     '<span class="resumo">slide ' + ((l.slide || 0) + 1) + ' de ' + l.total_slides +
     (l.erro_letra ? ' · <b style="color:var(--vermelho-texto)">a letra não chegou ao telão</b>' : '') + '</span></div>';
   if (partes.length > 1) {
@@ -670,14 +693,17 @@ function desenharMusicas(d) {
   if (!tem) return;
   const rotulos = {tocou: 'Tocou', tocando: 'Tocando', a_seguir: 'A seguir', depois: 'Depois'};
   const tocando = l.musica && l.relogio && l.relogio.tocando && !l.acabou;
-  pintar('musicas', l.lista.map(m => {
-    const corpo = '<span class="rotulo' + (m.pronta ? '' : ' a-mao') + '">' + rotulos[m.estado] + (m.pronta ? '' : ' · à mão') + '</span>' +
-      '<span class="titulo">' + esc(m.titulo) + '</span>';
+  pintar('musicas', '<div class="musicas-linha">' + l.lista.map(m => {
+    // "mão": a letra so passa quando alguem toca. "auto": ela segue o tempo.
+    const corpo = '<span class="linha estado-e-modo"><span class="rotulo cresce">' + rotulos[m.estado] + '</span>' +
+      '<span class="modo ' + (m.pronta ? 'auto' : 'mao') + '" title="' + (m.pronta ? 'Automática: a letra segue o tempo da música' : 'À mão: a letra só passa quando alguém toca') + '">' +
+      (m.pronta ? 'auto' : 'mão') + '</span></span>' +
+      '<span class="titulo" title="' + esc(m.titulo) + '">' + esc(m.titulo) + '</span>';
     if (!podeConduzir() || m.estado === 'tocando') return '<button type="button" class="musica ' + m.estado + '" disabled>' + corpo + '</button>';
     const c = tocando ? {titulo: 'Trocar para "' + m.titulo + '"?', texto: '"' + l.musica.titulo + '" ainda está tocando.', sim: 'Trocar'} : null;
     return '<button type="button" class="musica ' + m.estado + '" data-a="' + esc(JSON.stringify({tipo: 'louvor_musica', para: m.id})) + '"' +
       (c ? ' data-c="' + esc(JSON.stringify(c)) + '"' : '') + (ocupado ? ' disabled' : '') + '>' + corpo + '</button>';
-  }).join('') + linhaDoMusico(d));
+  }).join('') + linhaDoMusico(d) + '</div>');
 }
 
 // O celular do musico (ponte/musico.py) e o VS (ponte/vs.py): o link para a
@@ -691,10 +717,20 @@ function linhaDoMusico(d) {
     (contado ? 'mexem no tempo que a Ponte conta, e a letra segue.' : 'passam só a letra do telão.');
   else if (vs.alguem_obedece) audio = 'VS ligado: ' + esc(vs.quem || 'alguém') + ' está obedecendo.';
   else audio = 'VS ligado, mas ninguém está buscando os pedidos.';
-  return '<div class="linha" style="flex-basis:100%;padding:6px 6px 2px;flex-wrap:wrap"><span class="miudo cresce">' +
-    (d.musico.link ? 'O celular do músico está liberado. ' : '') + audio + '</span>' +
-    '<button type="button" class="bt pequeno" id="bt-musico">Celular do músico</button>' +
-    (d.musico.link ? botao('Encerrar o acesso', {tipo: 'musico_link', acao: 'encerrar'}, {classe: 'bt pequeno fantasma'}) : '') + '</div>';
+  // O botao vai no fim da fila; a frase do audio vira a dica dele.
+  const frase = (d.musico.link ? 'O celular do músico está liberado. ' : '') + audio;
+  return '<span class="linha linha-musico"><button type="button" class="bt pequeno' + (d.musico.link ? ' ativo' : '') + '" id="bt-musico" title="' + esc(frase) + '">Celular do músico</button>' +
+    (d.musico.link ? botao('Encerrar', {tipo: 'musico_link', acao: 'encerrar'}, {classe: 'bt pequeno fantasma', titulo: 'Encerrar o acesso do celular do músico'}) : '') + '</span>';
+}
+
+// A amostra de uma luz: uma faixa de cor por grupo de refletores aceso.
+// `modo` (so na luz que esta acesa agora) faz a amostra mexer como o movimento.
+function amostraDeLuz(cores, reserva, modo) {
+  const faixas = (cores || []).map(c => /^#[0-9a-f]{6}$/i.test(c.cor)
+    ? '<i style="background:' + c.cor + '" title="' + esc(c.grupo) + '"></i>' : '').join('');
+  if (!faixas && !reserva) return '';
+  return '<span class="amostra' + (modo ? ' mov-' + esc(modo) : '') + '" aria-hidden="true">' +
+    (faixas || '<i class="' + esc(reserva) + '"></i>') + '</span>';
 }
 
 function desenharLuz(d) {
@@ -706,11 +742,11 @@ function desenharLuz(d) {
   if (comMusica && luz.seguindo) lado = '<span class="seguindo">Seguindo a música</span>';
   else if (comMusica) lado = '<span class="linha"><span class="na-mao">Luz na mão</span>' +
     (podeConduzir() ? botao('Seguir a música', {tipo: 'luz_seguir'}, {classe: 'bt pequeno'}) : '') + '</span>';
-  let h = '<div class="cabeca"><h2 class="rotulo">Luz</h2>' + lado + '</div>';
   // SEGUIR UMA PESSOA: as cabeças do teto acompanhando alguém pela câmera.
   // Um botão só, que liga e desliga. Ligado, a frase diz o que falta para a
   // luz andar; os detalhes (câmera, calibrar, escolher a pessoa) ficam em /seguir.
   const sp = luz.seguir_pessoa;
+  let pessoa = '';
   if (sp) {
     const ligado = sp.estado !== 'desligado';
     const link = d.local !== false ? ' <a href="/seguir">abrir</a>' : '';
@@ -722,18 +758,24 @@ function desenharLuz(d) {
       perdido: 'Luz do teto parada: perdi a pessoa',
       seguindo: 'Luz do teto seguindo uma pessoa',
     }[sp.estado] || '';
-    h += '<div class="linha" style="gap:8px;align-items:center;margin:6px 0;flex-wrap:wrap">' +
-      (texto ? '<span class="seguindo">' + texto + '</span>' : '') +
+    pessoa = (texto ? '<span class="seguindo">' + texto + '</span>' : '') +
       botao(ligado ? 'Parar de seguir' : 'Seguir uma pessoa', {tipo: ligado ? 'parar_seguir' : 'seguir_ligar'},
-        {classe: 'bt pequeno', apertado: ligado}) + '</div>';
+        {classe: 'bt pequeno', apertado: ligado});
   }
+  let h = '<div class="cabeca"><h2 class="rotulo">Luz</h2><span class="linha luz-lado">' + lado + pessoa + '</span></div>';
+  // Cada clima MOSTRA a luz que acende: as cores da cena (uma faixa por grupo
+  // de refletores) e o nome do movimento. Sem as cores (cena fora do patch
+  // deste PC), fica a cor fixa do clima.
   h += '<div class="climas" role="group" aria-label="Clima da luz">' + (luz.climas || []).map(c =>
-    botao('<span class="ponto ' + esc(c.id) + '" aria-hidden="true"></span>' + esc(c.nome), {tipo: 'clima', clima: c.id},
+    botao(amostraDeLuz(c.cores, 'clima-' + c.id, c.ativo ? c.modo : '') +
+      '<span class="clima-texto"><span>' + esc(c.nome) + '</span>' + (c.movimento ? '<small>' + esc(c.movimento) + '</small>' : '') + '</span>',
+      {tipo: 'clima', clima: c.id},
       {classe: 'clima', apertado: c.ativo, desligado: !c.disponivel, titulo: c.disponivel ? '' : 'Falta configurar a luz deste clima neste PC'})).join('') +
-    botao('Apagar', {tipo: 'apagar_luz'}, {classe: 'clima apagar', apertado: luz.cena === 'apagar'}) + '</div>';
+    botao('<span class="amostra" aria-hidden="true"><i class="apagada"></i></span><span class="clima-texto"><span>Apagar</span><small>tudo escuro</small></span>',
+      {tipo: 'apagar_luz'}, {classe: 'clima apagar', apertado: luz.cena === 'apagar'}) + '</div>';
   const modos = luz.modos || [];
   h += '<details class="dobra" id="dobra-luz"' + (luzAberta ? ' open' : '') + '><summary>Cenas e movimento, um a um</summary><div class="dentro">' +
-    '<div class="chips">' + (luz.cenas || []).map(c => botao(esc(c.nome), {tipo: 'cena_luz', cena: c.id},
+    '<div class="chips">' + (luz.cenas || []).map(c => botao(amostraDeLuz(c.cores, '', '') + esc(c.nome), {tipo: 'cena_luz', cena: c.id},
       {classe: 'bt' + (luz.cena === c.id ? ' ativo' : ''), apertado: luz.cena === c.id})).join('') + '</div>';
   if (modos.length) {
     h += '<div class="chips">' + botao('Parado', {tipo: 'modo_luz', modo: 'parado'}, {classe: 'bt' + (luz.modo === 'parado' ? ' ativo' : ''), apertado: luz.modo === 'parado'}) +
@@ -795,15 +837,18 @@ function desenharTransmissao(d) {
     noData: 'O YouTube não está recebendo nada'}[q.youtube];
   let detalheQ = q.kbps != null ? q.kbps + ' kbps' : '';
   if (yt) detalheQ += (detalheQ ? ' · ' : '') + yt + (q.youtube_lido_em ? ' (' + q.youtube_lido_em + ')' : '');
-  const numero = (nome, valor, cor, detalhe) => '<div class="numero"><span class="rotulo">' + nome + '</span>' +
-    '<span class="valor ' + (cor || '') + '">' + valor + '</span>' + (detalhe ? '<span class="detalhe">' + esc(detalhe) + '</span>' : '') + '</div>';
-  h += '<div class="grade2">' +
-    numero('Assistindo', n.assistindo != null ? n.assistindo : '—', '', n.assistindo != null && n.assistindo_lido_em ? 'às ' + n.assistindo_lido_em : '') +
-    numero('Qualidade', esc(q.palavra || '—'), corQ, detalheQ) +
-    numero('Gravação', t.gravando ? duracao(n.gravacao_ms) : 'parada', '', '') +
-    numero('Espaço no disco', n.disco_gb != null ? n.disco_gb + ' GB' : '—', n.disco_cor === 'normal' ? '' : n.disco_cor, '') + '</div>';
+  // Os numeros numa linha so, e so os que se sabe: caixa vazia com um traco
+  // e informacao a mais numa tela que ja tem muita.
+  const dado = (texto, cor, detalhe) => '<span class="dado ' + (cor || '') + '"' + (detalhe ? ' title="' + esc(detalhe) + '"' : '') + '>' + texto + '</span>';
+  const dados = [];
+  if (n.assistindo != null) dados.push(dado('<b>' + esc(n.assistindo) + '</b> assistindo', '', n.assistindo_lido_em ? 'às ' + n.assistindo_lido_em : ''));
+  if (q.palavra) dados.push(dado('Qualidade <b>' + esc(String(q.palavra).toLowerCase()) + '</b>', corQ, detalheQ));
+  else if (yt) dados.push(dado(esc(yt), '', detalheQ));
+  if (t.gravando) dados.push(dado('Gravando <b>' + duracao(n.gravacao_ms) + '</b>', 'verde'));
+  if (n.disco_gb != null) dados.push(dado('Disco <b>' + esc(n.disco_gb) + ' GB</b>', n.disco_cor === 'normal' ? '' : n.disco_cor));
+  if (dados.length) h += '<div class="dados">' + dados.join('') + '</div>';
   if (c.transmitir || c.gravar) {
-    h += '<div class="grade2">';
+    h += '<div class="grade2 grupo medios">';
     if (c.transmitir) h += t.no_ar
       ? botao('Parar a transmissão', {tipo: 'transmitir', ligar: false}, {confirmar: {titulo: 'Parar a transmissão?',
           texto: 'Quem está assistindo pela internet deixa de ver o culto.', sim: 'Parar', perigo: true}})
@@ -814,20 +859,22 @@ function desenharTransmissao(d) {
       : botao('Gravar', {tipo: 'gravar', ligar: true});
     h += '</div>';
   }
-  if (d.live && d.live.pode) {
-    h += botao('Configurar a live no YouTube', {tipo: 'live'}, {classe: 'bt forte', confirmar: {
-      titulo: 'Configurar a live',
-      texto: 'Título da live (pode editar). A imagem padrão vai junto; ela se troca no site da Ponte, em Imagem da live.',
-      campo: d.live.titulo, max: 100, chave: 'titulo', sim: 'Configurar'}});
-  }
+  // O YouTube num bloco so: o link da live, quem pode ver, e (discreto) o
+  // botao de configurar. O unico botao forte da coluna e o "Por no ar".
   const y = t.youtube;
+  const configurar = d.live && d.live.pode ? botao(y ? 'Configurar' : 'Configurar a live no YouTube', {tipo: 'live'}, {classe: y ? 'bt texto' : 'bt medio', confirmar: {
+    titulo: 'Configurar a live',
+    texto: 'Título da live (pode editar). A imagem padrão vai junto; ela se troca no site da Ponte, em Imagem da live.',
+    campo: d.live.titulo, max: 100, chave: 'titulo', sim: 'Configurar'}}) : '';
   if (y) {
-    h += '<div class="empilha" style="gap:8px"><span class="miudo">' + (y.link ? '<a href="' + esc(y.link) + '" target="_blank" rel="noopener">' + esc(y.titulo || 'Abrir no YouTube') + '</a>'
-      : esc(y.titulo || '')) + '</span><div class="par">' +
-      '<button type="button" data-a="' + esc(JSON.stringify({tipo: 'visibilidade', valor: 'public'})) + '" aria-pressed="' + (y.publica ? 'true' : 'false') + '"' +
-      (ocupado || !podeAgir() ? ' disabled' : '') + '>Aberta ao público</button>' +
-      '<button type="button" data-a="' + esc(JSON.stringify({tipo: 'visibilidade', valor: 'unlisted'})) + '" aria-pressed="' + (y.publica ? 'false' : 'true') + '"' +
-      (ocupado || !podeAgir() ? ' disabled' : '') + '>Só com o link</button></div></div>';
+    const quemVe = (valor, rotulo, dica, ligado) => '<button type="button" title="' + dica + '" data-a="' + esc(JSON.stringify({tipo: 'visibilidade', valor: valor})) +
+      '" aria-pressed="' + (ligado ? 'true' : 'false') + '"' + (ocupado || !podeAgir() ? ' disabled' : '') + '>' + rotulo + '</button>';
+    h += '<div class="linha youtube"><span class="miudo cresce um-so">' +
+      (y.link ? '<a href="' + esc(y.link) + '" target="_blank" rel="noopener">' + esc(y.titulo || 'Abrir no YouTube') + '</a>' : esc(y.titulo || '')) +
+      '</span><div class="par mini" role="group" aria-label="Quem pode ver a live">' +
+      quemVe('public', 'Pública', 'Aberta ao público', y.publica) + quemVe('unlisted', 'Só link', 'Só com o link', !y.publica) + '</div>' + configurar + '</div>';
+  } else if (configurar) {
+    h += configurar;
   }
   pintar('tx-resto', '<div class="empilha" style="gap:14px">' + h + '</div>');
 }
@@ -852,17 +899,17 @@ function desenharTelao(d) {
   }
   if (rt) {
     const ruim = ['caiu', 'reconectando', 'desistiu', 'fora_da_janela', 'esperando_tv', 'abrindo', 'outro_app'].indexOf(rt.estado) >= 0;
-    h += '<div class="empilha" style="gap:6px"><span class="miudo">TV do altar: <b style="color:' + (ruim ? 'var(--ambar-texto)' : 'var(--texto)') + '">' + esc(rt.texto) + '</b>' +
-      (rt.motivo ? ' <span>(' + esc(rt.motivo) + ')</span>' : '') + '</span>' +
-      '<div class="grade2">' +
+    h += '<div class="empilha" style="gap:0"><div class="equip"><span class="ponto ' + (ruim ? 'ambar' : 'verde') + '" aria-hidden="true"></span>' +
+      '<span class="cresce">TV do altar</span><span class="estado ' + (ruim ? 'ambar' : '') + '"' + (rt.motivo ? ' title="' + esc(rt.motivo) + '"' : '') + '>' + esc(rt.texto) + '</span></div>' +
+      '<div class="linha acoes">' +
       // Com o retorno no ar, "Reabrir" (derruba e abre). Sem ele, "Tentar de
       // novo": o ciclo inteiro do vigia (ligar a TV pela rede, abrir, conferir).
       (rt.estado === 'no_ar'
-        ? botao('Reabrir o retorno', {tipo: 'retorno', acao: 'reabrir'}, {classe: 'bt pequeno',
+        ? botao('Reabrir o retorno', {tipo: 'retorno', acao: 'reabrir'}, {classe: 'bt texto',
             confirmar: {titulo: 'Reabrir o retorno na TV?', texto: 'A TV já está recebendo a letra. Reabrir faz a imagem sumir por uns 20 segundos.', sim: 'Reabrir'}})
-        : botao('Tentar de novo', {tipo: 'retorno', acao: 'tentar'}, {classe: 'bt pequeno forte'})) +
-      (rt.pausado ? botao('Voltar a vigiar', {tipo: 'retorno', acao: 'retomar'}, {classe: 'bt pequeno forte'})
-        : botao('Pausar o vigia', {tipo: 'retorno', acao: 'pausar'}, {classe: 'bt pequeno',
+        : botao('Tentar de novo', {tipo: 'retorno', acao: 'tentar'}, {classe: 'bt texto'})) +
+      (rt.pausado ? botao('Voltar a vigiar', {tipo: 'retorno', acao: 'retomar'}, {classe: 'bt texto'})
+        : botao('Pausar o vigia', {tipo: 'retorno', acao: 'pausar'}, {classe: 'bt texto',
             confirmar: {titulo: 'Pausar o vigia do retorno?', texto: 'Até o fim do dia, a ponte não reabre o retorno sozinha se a TV soltar.', sim: 'Pausar'}})) +
       '</div></div>';
   }

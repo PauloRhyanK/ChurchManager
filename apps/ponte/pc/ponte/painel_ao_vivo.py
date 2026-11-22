@@ -255,6 +255,11 @@ class PainelAoVivo:
         }
         return transmissao
 
+    def _cores(self, cena):
+        looks = self._dep("looks") or {}
+        grupos = (self._dep("config") or {}).get("grupos_de_luz") or {}
+        return mod_repertorio.cores_da_cena(looks.get(cena) or looks.get(str(cena)), grupos)
+
     def _climas(self, luz):
         motor = self._dep("motor")
         modo = "parado"
@@ -263,9 +268,20 @@ class PainelAoVivo:
                 modo = motor.atual() or "parado"
             except Exception:
                 modo = "parado"
+        # Para a tela MOSTRAR a luz: as cores que a cena acende e o nome do
+        # movimento, em vez de so o nome do clima.
+        movimentos = {"parado": "Parado"}
+        if motor is not None:
+            try:
+                movimentos.update({m["id"]: m["nome"] for m in motor.catalogo()})
+            except Exception:
+                pass
         climas = []
         for item in self.tabela():
             climas.append({"id": item["id"], "nome": item["nome"], "disponivel": item["disponivel"],
+                           "cores": self._cores(item["cena"]),
+                           "movimento": movimentos.get(item["modo"]) or item["modo"],
+                           "modo": item["modo"],
                            "ativo": bool(item["disponivel"] and luz.get("cena") == item["cena"]
                                          and modo == item["modo"])})
         return climas
@@ -287,6 +303,8 @@ class PainelAoVivo:
         louvor = condutor.retrato() if condutor is not None else None
         if base.get("luz") is not None:
             base["luz"]["climas"] = self._climas(base["luz"])
+            for cena in base["luz"].get("cenas") or []:
+                cena["cores"] = self._cores(cena["id"])
             base["luz"]["seguindo"] = bool(louvor and louvor["musica"] and louvor["luz"] == "seguindo")
         if louvor is not None:
             louvor["no_momento"] = ordem.get("atual_id") in self.momentos_do_louvor()
