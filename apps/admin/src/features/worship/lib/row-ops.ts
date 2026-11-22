@@ -99,7 +99,7 @@ function tidyBreaks(rows: WorshipRow[]): WorshipRow[] {
  * uma instrução inserida ali. Instrução que é sozinha uma parte (Intro,
  * Instrumental, Final) leva a parte junto.
  */
-export function moveCue(rows: WorshipRow[], id: string, beforeIndex: number): WorshipRow[] {
+export function moveCue(rows: WorshipRow[], id: string, beforeIndex: number, destination?: "part-end"): WorshipRow[] {
   const from = rows.findIndex((r) => r.id === id && r.type === "cue");
   if (from < 0 || beforeIndex === from || beforeIndex === from + 1) return rows;
   const cue = rows[from];
@@ -115,6 +115,11 @@ export function moveCue(rows: WorshipRow[], id: string, beforeIndex: number): Wo
     const following = out[at];
     // O que vem depois continua na parte em que estava.
     if (following && !isBreak(following) && !following.part) following.part = partAt(out, at);
+    out.splice(at, 0, moved);
+    return tidyBreaks(out);
+  }
+  if (destination === "part-end") {
+    const out = removeRow(rows, id);
     out.splice(at, 0, moved);
     return tidyBreaks(out);
   }
@@ -206,6 +211,111 @@ export function splitSlideAt(rows: WorshipRow[], index: number): WorshipRow[] {
   const out = rows.map((r) => ({ ...r }));
   out.splice(index, 0, { id: newRowId(), type: "break" });
   return out;
+}
+
+/** Divide uma parte no início da linha/seleção e herda o clima da parte original. */
+export function splitPartAt(rows: WorshipRow[], index: number, kind: PartKind, name: string | null = null): WorshipRow[] {
+  if (index <= 0 || index >= rows.length || isBreak(rows[index])) return rows;
+  index = withLeadingCues(rows, index);
+  if (rows[index]?.part) return rows;
+  const current = partAt(rows, index);
+  const part: RowPart = { kind, mood: current.mood };
+  const cleanName = (name ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_PART_NAME);
+  if (cleanName) part.name = cleanName;
+  const out = rows.map((r) => ({ ...r }));
+  out[index].part = part;
+  return out;
+}
+
+function partMarkers(rows: WorshipRow[], index: number): number[] {
+  const markers = [index];
+  for (let i = index - 1; i >= 0 && isBreak(rows[i]); i--) if (rows[i].part) markers.push(i);
+  return markers;
+}
+
+/** Une a parte selecionada ao vizinho; a parte de destino conserva seu clima. */
+export function mergePart(rows: WorshipRow[], partRowId: string, direction: "previous" | "next"): WorshipRow[] {
+  const parts = deriveSong(rows).parts;
+  const index = parts.findIndex((part) => part.rowId === partRowId);
+  if (index < 0) return rows;
+  const removeIndex = direction === "previous" ? index : index + 1;
+  if (removeIndex <= 0 || removeIndex >= parts.length) return rows;
+  const boundary = rows.findIndex((row) => row.id === parts[removeIndex].rowId);
+  if (boundary < 0) return rows;
+  const out = rows.map((row) => ({ ...row }));
+  for (const marker of partMarkers(rows, boundary)) delete out[marker].part;
+  return out;
+}
+
+/** Move uma parte inteira mantendo cada linha e seus dados ligados ao mesmo ID. */
+export function movePart(rows: WorshipRow[], partRowId: string, direction: -1 | 1): WorshipRow[] {
+  const parts = deriveSong(rows).parts;
+  const index = parts.findIndex((part) => part.rowId === partRowId);
+  const neighbor = index + direction;
+  if (index < 0 || neighbor < 0 || neighbor >= parts.length) return rows;
+  const starts = parts.map((part) => rows.findIndex((row) => row.id === part.rowId));
+  starts.forEach((start, partIndex) => {
+    for (let i = start - 1; i >= 0 && isBreak(rows[i]); i--) {
+      if (rows[i].part) starts[partIndex] = i;
+    }
+  });
+  const ranges = starts.map((start, partIndex) => [start, starts[partIndex + 1] ?? rows.length] as const);
+  const blocks = ranges.map(([start, end]) => rows.slice(start, end));
+  [blocks[index], blocks[neighbor]] = [blocks[neighbor], blocks[index]];
+  return blocks.flat().map((row) => ({ ...row }));
+}
+
+function wrapText(text: string, maxChars: number): string[] {
+  const chunks: string[] = [];
+  let line = "";
+  for (const word of text.trim().split(/\s+/).filter(Boolean)) {
+    if (word.length > maxChars) {
+      if (line) chunks.push(line);
+      line = "";
+      for (let at = 0; at < word.length; at += maxChars) chunks.push(word.slice(at, at + maxChars));
+    } else if (line && line.length + word.length + 1 > maxChars) {
+      chunks.push(line);
+      line = word;
+    } else line = line ? `${line} ${word}` : word;
+  }
+  if (line) chunks.push(line);
+  return chunks;
+}
+
+/** Reorganiza apenas as quebras de um slide; preserva texto, anotação e metadados originais. */
+export function reflowSlide(rows: WorshipRow[], slideRowId: string, maxChars: number, maxLines: number): WorshipRow[] {
+  if (maxChars < 1 || maxLines < 1) return rows;
+  const start = rows.findIndex((row) => row.id === slideRowId);
+  if (start < 0) return rows;
+  let end = start + 1;
+  while (end < rows.length && !isBreak(rows[end]) && !rows[end].part) end += 1;
+
+  const original = rows.slice(start, end);
+  const outputSlides: WorshipRow[][] = [[]];
+  let pendingCues: WorshipRow[] = [];
+  let lineCount = 0;
+  for (const row of original) {
+    if (row.type === "cue") {
+      pendingCues.push({ ...row });
+      continue;
+    }
+    const lines = wrapText(row.text ?? "", maxChars);
+    for (const [lineIndex, text] of lines.entries()) {
+      if (lineCount >= maxLines) {
+        outputSlides.push([{ id: newRowId(), type: "break" }]);
+        lineCount = 0;
+      }
+      if (pendingCues.length) {
+        outputSlides[outputSlides.length - 1].push(...pendingCues);
+        pendingCues = [];
+      }
+      const copy: WorshipRow = lineIndex === 0 ? { ...row, text } : { id: newRowId(), type: "lyric", text };
+      outputSlides[outputSlides.length - 1].push(copy);
+      lineCount += 1;
+    }
+  }
+  if (pendingCues.length) outputSlides[outputSlides.length - 1].push(...pendingCues);
+  return [...rows.slice(0, start), ...outputSlides.flat(), ...rows.slice(end)];
 }
 
 /**

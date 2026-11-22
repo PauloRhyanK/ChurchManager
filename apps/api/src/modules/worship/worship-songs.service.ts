@@ -95,9 +95,14 @@ export class WorshipSongsService {
     return toSongResponse(await this.find(tenantId, id));
   }
 
+  private async lyricFormatOptions(tenantId: string) {
+    const settings = await this.prisma.worshipSettings.findUnique({ where: { tenantId } });
+    return { maxC: settings?.lyricMaxChars ?? 28, maxLines: settings?.lyricMaxLines ?? 3 };
+  }
+
   async create(tenantId: string, dto: CreateSongDto) {
     const rawLyrics = dto.rawLyrics ?? '';
-    const rows = dto.organize ? normalizeRows(organizeLyrics(rawLyrics)) : [];
+    const rows = dto.organize ? normalizeRows(organizeLyrics(rawLyrics, await this.lyricFormatOptions(tenantId))) : [];
     const audio = dto.audio
       ? {
           audioUrl: dto.audio.url,
@@ -152,7 +157,7 @@ export class WorshipSongsService {
   async organize(tenantId: string, id: string, dto: OrganizeSongDto) {
     const song = await this.find(tenantId, id);
     const rawLyrics = dto.rawLyrics ?? song.rawLyrics;
-    const rows = normalizeRows(organizeLyrics(rawLyrics));
+    const rows = normalizeRows(organizeLyrics(rawLyrics, await this.lyricFormatOptions(tenantId)));
     const updated = await this.prisma.worshipSong.update({
       where: { id: song.id },
       data: { rawLyrics, rows: asJson(rows), ...this.computed({ ...song, readyAt: null }, rows) },

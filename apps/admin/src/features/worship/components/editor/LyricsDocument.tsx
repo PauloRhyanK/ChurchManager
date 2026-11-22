@@ -1,10 +1,12 @@
-import { Pencil } from "lucide-react";
+import { MoreHorizontal, Pencil } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { CUE_TARGET_LABEL, deriveSong, type DerivedPart, type PartKind, type WorshipRow } from "../../lib/document";
 import { PART_TONE } from "../../lib/part-colors";
 import type { PartChoice } from "../../lib/part-names";
 import { pasteLines, rowsFromEditorNodes, type EditorNode } from "../../lib/row-ops";
 import { PartNamePicker } from "./PartNamePicker";
+import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export interface DocSelection {
   /** Primeira e última linha tocadas pela seleção (índices no documento). */
@@ -26,9 +28,10 @@ interface LyricsDocumentProps {
   onSelection: (selection: DocSelection | null) => void;
   onCueClick: (rowId: string) => void;
   /** Leva a instrução para antes da linha `beforeIndex` (arrastando ou com Alt+setas). */
-  onMoveCue: (rowId: string, beforeIndex: number) => void;
+  onMoveCue: (rowId: string, beforeIndex: number, destination?: "part-end") => void;
   /** Renomeia a parte que começa na linha `rowId`. */
   onRenamePart: (rowId: string, choice: PartChoice) => void;
+  onPartAction: (rowId: string, action: "up" | "down" | "split" | "mergePrevious" | "mergeNext" | "cueStart" | "cueEnd", choice?: PartChoice) => void;
   /** A barrinha flutuante, desenhada sobre o trecho selecionado. */
   renderToolbar: (selection: DocSelection) => ReactNode;
 }
@@ -44,6 +47,8 @@ interface PartBox {
   part: DerivedPart;
   top: number;
   bottom: number;
+  endIndex: number;
+  outsideIndex: number;
 }
 interface SlideBox {
   index: number;
@@ -171,6 +176,7 @@ export function LyricsDocument({
   onCueClick,
   onMoveCue,
   onRenamePart,
+  onPartAction,
   renderToolbar,
 }: LyricsDocumentProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -184,7 +190,8 @@ export function LyricsDocument({
   const [layout, setLayout] = useState<Layout>(EMPTY_LAYOUT);
   const [selection, setSelection] = useState<DocSelection | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
-  const [drag, setDrag] = useState<{ id: string; from: number; gap: number } | null>(null);
+  const [drag, setDrag] = useState<{ id: string; from: number; gap: number; partEnd?: { inside: boolean } } | null>(null);
+  const [splitting, setSplitting] = useState<string | null>(null);
   const suppressClick = useRef(false);
 
   /**
@@ -217,9 +224,10 @@ export function LyricsDocument({
     parts.forEach((part, k) => {
       const start = indexOf.get(part.rowId);
       if (start === undefined || !boxes[start]) return;
-      const end = k + 1 < parts.length ? (indexOf.get(parts[k + 1].rowId) ?? els.length) : els.length;
+      const outsideIndex = k + 1 < parts.length ? (indexOf.get(parts[k + 1].rowId) ?? els.length) : els.length;
+      const end = outsideIndex;
       const last = lastFilled(start, end);
-      partBoxes.push({ part, top: boxes[start].top, bottom: boxes[last].bottom });
+      partBoxes.push({ part, top: boxes[start].top, bottom: boxes[last].bottom, endIndex: last + 1, outsideIndex });
     });
     const slideBoxes: SlideBox[] = [];
     slides.forEach((slide, k) => {
@@ -389,22 +397,33 @@ export function LyricsDocument({
     const startY = event.clientY;
     let dragging = false;
     let gap = from;
+    let destination: "part-end" | undefined;
 
     const nearestGap = (clientY: number) => {
       const y = clientY - wrapper.getBoundingClientRect().top;
       const { gaps } = layoutRef.current;
+      const partEnd = layoutRef.current.parts.find((part) => y >= part.bottom - 7 && y <= part.bottom + 34);
+      if (partEnd) {
+        const inside = y <= partEnd.bottom + 12;
+        return {
+          gap: inside ? partEnd.endIndex : partEnd.outsideIndex,
+          partEnd: { inside },
+        };
+      }
       let best = from;
       gaps.forEach((g, k) => {
         if (Math.abs(g - y) < Math.abs((gaps[best] ?? Infinity) - y)) best = k;
       });
-      return best;
+      return { gap: best, partEnd: undefined };
     };
     const onMove = (e: PointerEvent) => {
       if (!dragging && Math.abs(e.clientY - startY) < DRAG_THRESHOLD) return;
       dragging = true;
       row.dataset.dragging = "1";
-      gap = nearestGap(e.clientY);
-      setDrag({ id, from, gap });
+      const target = nearestGap(e.clientY);
+      gap = target.gap;
+      destination = target.partEnd?.inside ? "part-end" : undefined;
+      setDrag({ id, from, gap, partEnd: target.partEnd });
       // Perto da borda da janela, a página rola junto.
       if (e.clientY < 64) window.scrollBy(0, -12);
       else if (e.clientY > window.innerHeight - 64) window.scrollBy(0, 12);
@@ -424,7 +443,7 @@ export function LyricsDocument({
       }, 0);
       if (commit && gap !== from && gap !== from + 1) {
         pendingFocus.current = id;
-        onMoveCue(id, gap);
+        onMoveCue(id, gap, destination);
       }
     };
     const onUp = () => finish(true);
@@ -496,7 +515,7 @@ export function LyricsDocument({
           </span>
         </div>
       ))}
-      {layout.parts.map(({ part, top }) =>
+      {layout.parts.map(({ part, top }, partIndex) =>
         readOnly ? (
           <span
             key={part.rowId}
@@ -507,37 +526,73 @@ export function LyricsDocument({
             {part.name}
           </span>
         ) : (
-          <PartNamePicker
-            key={part.rowId}
-            open={renaming === part.rowId}
-            onOpenChange={(open) => setRenaming(open ? part.rowId : null)}
-            name={part.name}
-            kind={part.kind}
-            parts={layout.parts.map((p) => p.part)}
-            onPick={(choice) => onRenamePart(part.rowId, choice)}
-          >
-            <button
-              type="button"
-              aria-label={`Renomear a parte ${part.name}`}
-              title="Clique para renomear"
-              className={`group absolute left-4 flex max-w-[6.75rem] items-start gap-1 rounded px-2 py-0.5 text-left text-[11px] font-bold uppercase leading-4 tracking-wider hover:bg-background/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:left-8 ${PART_TONE[part.kind].label}`}
-              style={{ top: top + 8 }}
+          <div key={part.rowId}>
+            <PartNamePicker
+              open={renaming === part.rowId}
+              onOpenChange={(open) => setRenaming(open ? part.rowId : null)}
+              name={part.name}
+              kind={part.kind}
+              parts={layout.parts.map((p) => p.part)}
+              onPick={(choice) => onRenamePart(part.rowId, choice)}
             >
-              <span className="min-w-0 break-words">{part.name}</span>
-              <Pencil className="mt-0.5 h-3 w-3 flex-none opacity-0 group-hover:opacity-70 group-focus-visible:opacity-70" aria-hidden="true" />
-            </button>
-          </PartNamePicker>
+              <button
+                type="button"
+                aria-label={`Renomear a parte ${part.name}`}
+                title="Clique para renomear"
+                className={`group absolute left-4 flex max-w-[6.75rem] items-start gap-1 rounded px-2 py-0.5 text-left text-[11px] font-bold uppercase leading-4 tracking-wider hover:bg-background/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:left-8 ${PART_TONE[part.kind].label}`}
+                style={{ top: top + 8 }}
+              >
+                <span className="min-w-0 break-words">{part.name}</span>
+                <Pencil className="mt-0.5 h-3 w-3 flex-none opacity-0 group-hover:opacity-70 group-focus-visible:opacity-70" aria-hidden="true" />
+              </button>
+            </PartNamePicker>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Ações da parte ${part.name}`}
+                  title={`Ações da parte ${part.name}`}
+                  className="absolute h-8 w-8"
+                  style={{ top: top + 3, left: layout.left + layout.width - 34 }}
+                ><MoreHorizontal className="h-4 w-4" /></Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem disabled={partIndex === 0} onSelect={() => onPartAction(part.rowId, "up")}>Mover parte para cima</DropdownMenuItem>
+                <DropdownMenuItem disabled={partIndex === layout.parts.length - 1} onSelect={() => onPartAction(part.rowId, "down")}>Mover parte para baixo</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <PartNamePicker
+                  open={splitting === part.rowId}
+                  onOpenChange={(open) => setSplitting(open ? part.rowId : null)}
+                  name={part.name}
+                  kind={part.kind}
+                  parts={layout.parts.map((p) => p.part)}
+                  forcePick
+                  onPick={(choice) => onPartAction(part.rowId, "split", choice)}
+                >
+                  <DropdownMenuItem onSelect={(event) => { event.preventDefault(); setSplitting(part.rowId); }}>Dividir parte neste ponto</DropdownMenuItem>
+                </PartNamePicker>
+                <DropdownMenuItem disabled={partIndex === 0} onSelect={() => onPartAction(part.rowId, "mergePrevious")}>Unir com a parte anterior</DropdownMenuItem>
+                <DropdownMenuItem disabled={partIndex === layout.parts.length - 1} onSelect={() => onPartAction(part.rowId, "mergeNext")}>Unir com a próxima parte</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => onPartAction(part.rowId, "cueStart")}>Adicionar anotação no início</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onPartAction(part.rowId, "cueEnd")}>Adicionar anotação no fim</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         ),
       )}
       {drag && layout.gaps[drag.gap] !== undefined && (
         <div
           aria-hidden="true"
           data-drop-indicator
+          data-drop-target={drag.partEnd ? (drag.partEnd.inside ? "part-end-inside" : "part-end-outside") : "line"}
           className="pointer-events-none absolute z-30 flex items-center"
           style={{ top: layout.gaps[drag.gap] - 5, left: layout.left - 18, width: layout.width + 18 }}
         >
           <span className="h-2.5 w-2.5 flex-none rounded-full border-2 border-primary bg-background" />
           <span className="h-0.5 flex-1 rounded-full bg-primary" />
+          {drag.partEnd && <span className="ml-2 rounded bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground">{drag.partEnd.inside ? "Fim da parte" : "Depois da parte"}</span>}
         </div>
       )}
       {showToolbar && (

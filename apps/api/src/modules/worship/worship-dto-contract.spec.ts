@@ -6,6 +6,7 @@ import { VALIDATION_PIPE_OPTIONS } from '../../validation-options';
 import { CreateServiceDto, SetMomentsDto, SetSongsDto } from './dto/service.dto';
 import { CreateSongDto, UpdateSongDto, UploadAudioDto } from './dto/song.dto';
 import { ImportYoutubeDto, SearchYoutubeQueryDto } from './dto/youtube.dto';
+import { LyricsSettingsDto } from './dto/timing.dto';
 
 const pipe = new ValidationPipe(VALIDATION_PIPE_OPTIONS);
 
@@ -93,6 +94,21 @@ test('UploadAudioDto converte a duração que chega como texto no multipart', as
   assert.equal(dto.durationSeconds, 252.4);
   await rejects(UploadAudioDto, { durationSeconds: 'abc' });
   await rejects(UploadAudioDto, { audioUrl: 'https://x' });
+});
+
+test('LyricsSettingsDto limita caracteres e linhas por slide', async () => {
+  const valid = await parse(LyricsSettingsDto, { lyricMaxChars: 28, lyricMaxLines: 3 });
+  assert.equal(valid.lyricMaxChars, 28);
+  assert.equal(valid.lyricMaxLines, 3);
+  for (const body of [
+    { lyricMaxChars: 9, lyricMaxLines: 3 },
+    { lyricMaxChars: 61, lyricMaxLines: 3 },
+    { lyricMaxChars: 28, lyricMaxLines: 0 },
+    { lyricMaxChars: 28, lyricMaxLines: 6 },
+    { lyricMaxChars: 28.5, lyricMaxLines: 3 },
+    { lyricMaxChars: '28', lyricMaxLines: 3 },
+    { lyricMaxChars: 28, lyricMaxLines: 3, tenantId: 'other' },
+  ]) await rejects(LyricsSettingsDto, body);
 });
 
 test('YouTube DTOs: validações de busca e importação', async () => {

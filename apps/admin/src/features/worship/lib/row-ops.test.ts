@@ -4,7 +4,9 @@ import {
   applySuggestedMoods,
   insertCue,
   insertEmptyPart,
+  mergePart,
   moveCue,
+  movePart,
   pasteLines,
   removeRow,
   renamePart,
@@ -12,6 +14,8 @@ import {
   rowsFromEditorNodes,
   setPartKind,
   setPartMood,
+  reflowSlide,
+  splitPartAt,
   splitSlideAt,
 } from "./row-ops";
 
@@ -61,6 +65,20 @@ describe("insertCue / removeRow", () => {
     const out = insertCue(verse(), 1, "DRUMS", "entra");
     expect(out[0].time).toBe(10);
     expect(deriveSong(out).slides).toHaveLength(3);
+  });
+
+  it("mantém a instrução dentro da parte quando solta no fim dela", () => {
+    const rows: WorshipRow[] = [
+      { id: "verse", type: "lyric", text: "Verso", part: { kind: "VERSE", mood: "WORSHIP" } },
+      { id: "chorus", type: "lyric", text: "Refrão", part: { kind: "CHORUS", mood: "CELEBRATION" } },
+      { id: "cue", type: "cue", target: "ALL", text: "Sobe" },
+    ];
+
+    const out = moveCue(rows, "cue", 1, "part-end");
+
+    expect(out.map((row) => row.id)).toEqual(["verse", "cue", "chorus"]);
+    expect(out[1]).not.toHaveProperty("part");
+    expect(out[2].part).toEqual({ kind: "CHORUS", mood: "CELEBRATION" });
   });
 
   it("remover a instrução devolve a parte e o tempo para a linha seguinte", () => {
@@ -140,6 +158,56 @@ describe("climas", () => {
     expect(applySuggestedMoods(changed)[0].part).toEqual({ kind: "VERSE", mood: "WORSHIP" });
     const rows = verse();
     expect(setPartMood(rows, "nao-existe", "BUILD")).toBe(rows);
+  });
+});
+
+describe("operações de parte", () => {
+  it("divide a partir da linha escolhida e herda o clima, mantendo os tempos e as notas nas linhas", () => {
+    const rows = insertCue(verse(), 3, "KEYS", "pad");
+    const out = splitPartAt(rows, 4, "CHORUS", "Refrão final");
+    expect(names(out)).toEqual(["Verso 1", "Refrão final"]);
+    expect(deriveSong(out).parts[1].mood).toBe("WORSHIP");
+    expect(out.find((r) => r.id === rows[3].id)).toMatchObject({ time: 20 });
+    expect(deriveSong(out).slides[1].cues).toEqual([{ target: "KEYS", text: "pad" }]);
+  });
+
+  it("une ao bloco de destino, preservando linhas, notas, tempos e clima do destino", () => {
+    const rows = setPartKind(verse(), 3, 4, "CHORUS");
+    const out = mergePart(rows, "d", "previous");
+    expect(names(out)).toEqual(["Verso 1", "Verso 2"]);
+    expect(deriveSong(out).parts[0].mood).toBe("WORSHIP");
+    expect(out.find((r) => r.id === rows[3].id)?.time).toBe(20);
+  });
+
+  it("move a parte inteira e preserva a ordem interna, IDs, tempos, notas e climas", () => {
+    const rows = insertCue(setPartKind(verse(), 3, 4, "CHORUS"), 3, "KEYS", "pad");
+    const out = movePart(rows, rows[3].id, -1);
+    expect(names(out)).toEqual(["Refrão", "Verso 1", "Verso 2"]);
+    expect(out.map((r) => r.id)).toContain("d");
+    expect(out.find((r) => r.id === rows[3].id)?.time).toBe(20);
+    expect(deriveSong(out).slides[0].cues).toEqual([{ target: "KEYS", text: "pad" }]);
+    expect(movePart(out, rows[3].id, -1)).toBe(out);
+  });
+});
+
+describe("reflowSlide", () => {
+  it("divide por limites sem perder texto, nota, tempo ou clima", () => {
+    const rows = [
+      { id: "note", type: "cue" as const, target: "ALL" as const, text: "todos", part: { kind: "VERSE" as const, mood: "BUILD" as const }, time: 4 },
+      { id: "a", type: "lyric" as const, text: "Um dois três quatro cinco" },
+      { id: "later-note", type: "cue" as const, target: "DRUMS" as const, text: "entra" },
+      { id: "b", type: "lyric" as const, text: "Seis sete" },
+      { id: "next", type: "lyric" as const, text: "Próximo", part: { kind: "CHORUS" as const, mood: "CELEBRATION" as const }, time: 12 },
+    ];
+    const out = reflowSlide(rows, "note", 12, 2);
+    const { parts, slides } = deriveSong(out);
+    expect(slides.map((slide) => slide.lines)).toEqual([["UM DOIS TRÊS", "QUATRO CINCO"], ["SEIS SETE"], ["PRÓXIMO"]]);
+    expect(slides.map((slide) => slide.time)).toEqual([4, null, 12]);
+    expect(slides[0].cues).toEqual([{ target: "ALL", text: "todos" }]);
+    expect(slides[1].cues).toEqual([{ target: "DRUMS", text: "entra" }]);
+    expect(parts.map((part) => part.mood)).toEqual(["BUILD", "CELEBRATION"]);
+    expect(out.filter((row) => row.type === "lyric").map((row) => row.text))
+      .toEqual(["Um dois três", "quatro cinco", "Seis sete", "Próximo"]);
   });
 });
 
