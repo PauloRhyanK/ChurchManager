@@ -35,6 +35,21 @@ conferir("movimento que nao esta na lista (perigoso) deixa indisponivel", t3[0][
 conferir("cena + movimento -> clima", repertorio.clima_de("celebracao", "batida", TABELA) == "explosao")
 conferir("par que nao e clima nenhum", repertorio.clima_de("louvor", "pendulo", TABELA) is None)
 
+print("\nAs cores de uma cena, para a tela mostrar a luz")
+GRUPOS = {"cortina": {"bases": [49, 65], "brilho": 0, "paleta": [4, 5, 6, 7, 8]},
+          "teto": {"bases": [113], "pan": 0, "tilt": 1, "paleta": [3, 4, 5, 6]},
+          "barra": {"bases": [17, 33], "cores": [0, 1, 2, 3]}}
+cores = repertorio.cores_da_cena({17: 128, 18: 0, 19: 0, 20: 0, 33: 128, 49: 255, 55: 255, 116: 0}, GRUPOS)
+conferir("a barra vermelha a meia luz sai vermelha cheia",
+         {"grupo": "barra", "cor": "#ff0000"} in cores, cores)
+conferir("a cortina com brilho e azul sai azul", {"grupo": "cortina", "cor": "#0000ff"} in cores, cores)
+conferir("grupo apagado fica de fora", [c["grupo"] for c in cores] == ["cortina", "barra"], cores)
+conferir("cortina com cor e brilho zerado conta como apagada",
+         repertorio.cores_da_cena({53: 255, 49: 0}, GRUPOS) == [])
+conferir("branco soma nas tres cores", repertorio.cores_da_cena({"20": 200}, GRUPOS) == [{"grupo": "barra", "cor": "#ffffff"}])
+conferir("cena de exemplo, fora do patch, nao da cor nenhuma", repertorio.cores_da_cena({1: 255, 2: 210}, GRUPOS) == [])
+conferir("sem cena e sem grupos nao quebra", repertorio.cores_da_cena(None, None) == [])
+
 print("\nTipo da parte, pelo nome que a banda usa")
 for nome, tipo in (("Intro", "intro"), ("Verso 1 (solo)", "verso"), ("Pré-refrão", "pre_refrao"),
                    ("Refrão final", "refrao"), ("Ponte: cai", "ponte"), ("Instrumental", "instrumental"),
