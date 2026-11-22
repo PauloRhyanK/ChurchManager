@@ -133,13 +133,15 @@ export class WorshipYoutubeService {
         '-x',
         '--audio-format',
         'mp3',
+        '--write-sub',
         '--write-auto-sub',
         '--sub-lang',
-        'pt,en',
+        'pt.*,pt,en.*,en',
         '--sub-format',
         'vtt',
         '--no-warnings',
-        '--dump-json',
+        '--print',
+        '%(title)s\t%(duration)s',
         '-o',
         path.join(tmpDir, 'audio.%(ext)s'),
       ]);
@@ -147,17 +149,26 @@ export class WorshipYoutubeService {
       let videoTitle = 'Áudio do YouTube';
       let durationSeconds: number | null = null;
       try {
-        const metadata = JSON.parse(stdout) as { title?: string; duration?: number };
-        if (metadata.title) videoTitle = sanitizeYoutubeTitle(metadata.title);
-        if (typeof metadata.duration === 'number') durationSeconds = Math.round(metadata.duration);
+        const line = stdout.trim().split('\n').find((l) => l.includes('\t')) ?? stdout.trim().split('\n')[0] ?? '';
+        const [rawTitle, rawDuration] = line.split('\t');
+        if (rawTitle?.trim()) {
+          videoTitle = sanitizeYoutubeTitle(rawTitle.trim());
+        }
+        if (rawDuration?.trim()) {
+          const parsed = parseFloat(rawDuration.trim());
+          if (!Number.isNaN(parsed) && parsed > 0) {
+            durationSeconds = Math.round(parsed);
+          }
+        }
       } catch {
-        // Ignora erro de JSON se o dump tiver logs extras
+        // Ignora erro ao extrair metadados do print
       }
 
       // Procura o arquivo .mp3 gerado
       const files = fs.readdirSync(tmpDir);
       const audioFile = files.find((f) => f.endsWith('.mp3'));
       if (!audioFile) {
+        this.logger.error(`Nenhum arquivo .mp3 encontrado em ${tmpDir}. Arquivos gerados: ${files.join(', ') || '(nenhum)'}`);
         throw new BadRequestException('Não foi possível extrair o áudio do vídeo selecionado.');
       }
 
