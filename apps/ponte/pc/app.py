@@ -3607,6 +3607,13 @@ def _musica_no_telao(musica):
     cliente.pedir("ShowLyrics", {"id": musica["holyrics_id"]})
 
 
+def _letra_fora_do_telao():
+    cliente = _contexto.get("holyrics")
+    if cliente is None:
+        raise RuntimeError("o telão está desligado neste PC")
+    cliente.pedir("CloseCurrentPresentation")
+
+
 def _slide_no_telao(musica, slide):
     cliente = _contexto.get("holyrics")
     if cliente is None:
@@ -3729,7 +3736,7 @@ def _montar_ao_vivo():
     _pecas["condutor"] = mod_condutor.Condutor(
         _pecas["relogio"], _pecas["repertorio"].musicas, _musica_no_telao, _slide_no_telao,
         ao_vivo.luz_da_parte, lambda titulo, ok, detalhe: _anotar(titulo, ok, detalhe, "local"),
-        lembrado=_lembrar_se_ainda_e_louvor(ao_vivo), guardar=_guardar_louvor)
+        lembrado=_lembrar_se_ainda_e_louvor(ao_vivo), guardar=_guardar_louvor, tirar=_letra_fora_do_telao)
     _pecas["condutor"].comecar()
     # O roteiro (momentos e musicas intercalados), o VS e o celular do musico.
     _pecas["roteiro"] = mod_roteiro.Roteiro()

@@ -422,8 +422,8 @@ function htmlSozinho(d) {
     (podeConduzir() ? botao('Assumir', {tipo: 'louvor_assumir'}, {classe: 'bt claro'}) : '') + '</div></div>';
 
   const texto = letraDe(atual);
-  h += '<div class="slides-agora"><div class="no-telao"><span class="rotulo">No telão</span>' +
-    (texto ? '<span class="letra">' + texto + '</span>' : semLetra(l, l.slide || 0)) +
+  h += '<div class="slides-agora"><div class="no-telao"><span class="rotulo">' + (l.fora ? 'Fora do telão' : 'No telão') + '</span>' +
+    (texto ? '<span class="letra' + (l.fora ? ' fraca' : '') + '">' + texto + '</span>' : semLetra(l, l.slide || 0)) +
     (l.erro_letra ? '<span class="falha">A letra não chegou ao telão</span>' : '') + '</div>' +
     '<div class="ao-lado"><div class="a-seguir"><span class="rotulo">A seguir<span id="contagem"></span></span>' +
     '<span class="letra">' + (seguinte ? (letraDe(seguinte) || 'slide ' + (l.slide + 2)) : 'fim da música') + '</span></div>';
@@ -442,13 +442,43 @@ function htmlSozinho(d) {
       '</span><span>' + relogio(fim) + '</span></div></div>';
   }
   h += linhaDoRelogio(d);
+  if (podeConduzir() && slides.length) {
+    // Tocar num slide: com o tempo contado aqui, a musica passa a estar no
+    // inicio dele e a letra segue sozinha dali (a musica comecou sem o
+    // "Comecou", ou a letra estava atrasada). Com o tempo vindo do audio,
+    // o toque assume a letra, como sempre.
+    const daqui = l.relogio.fonte === 'cronometro';
+    h += '<span class="miudo">' + (daqui ? 'Toque no slide em que a música está: a letra segue sozinha dali.'
+      : 'Toque num slide para passar à mão.') + '</span>';
+    h += gradeLouvor(l, slides, i => daqui ? {tipo: 'louvor_seguir_de', para: i} : {tipo: 'louvor_slide', para: i});
+  }
   if (podeConduzir()) {
     h += '<div class="botoes">' +
       botao(l.segurando ? 'Soltar a letra' : 'Segurar a letra', {tipo: 'louvor_segurar', segurar: !l.segurando}, {classe: 'bt' + (l.segurando ? ' ativo' : '')}) +
       botao('Repetir o refrão', {tipo: 'louvor_repetir_refrao'}, {desligado: !l.tem_refrao, titulo: l.tem_refrao ? '' : 'Esta música não tem refrão marcado'}) +
-      botaoProxima(l) + '</div>';
+      botaoTirarLetra(l) + botaoProxima(l) + '</div>';
   }
   return h;
+}
+
+// A grade de slides da musica. `acaoDe(i)` diz o que o toque no slide i pede.
+function gradeLouvor(l, slides, acaoDe) {
+  const pode = podeConduzir();
+  return '<div class="grade-slides" id="grade-slides">' + slides.map((s, i) => {
+    const corpo = '<span class="n">' + (i + 1) + '</span>' + (letraDe(s) || (s.instrucoes[0] ? '(' + esc(s.instrucoes[0].texto) + ')' : ''));
+    const classe = 'slide' + (i === l.slide ? ' atual' : i < l.slide ? ' passado' : '');
+    return pode
+      ? '<button type="button" class="' + classe + '" aria-pressed="' + (i === l.slide ? 'true' : 'false') + '"' +
+        ' data-a="' + esc(JSON.stringify(acaoDe(i))) + '"' + (ocupado ? ' disabled' : '') + '>' + corpo + '</button>'
+      : '<div class="' + classe + '">' + corpo + '</div>';
+  }).join('') + '</div>';
+}
+
+// Tirar a letra do telao (o louvor continua contando) e trazer de volta.
+function botaoTirarLetra(l) {
+  return l.fora
+    ? botao('Voltar ao telão', {tipo: 'louvor_voltar'}, {classe: 'bt forte'})
+    : botao('Tirar do telão', {tipo: 'louvor_tirar'});
 }
 
 function botaoProxima(l) {
@@ -485,27 +515,27 @@ function htmlManual(d) {
   h += '<div class="cabeca"><span class="linha titulo-musica"><span class="grande">' + esc(l.musica.titulo) + '</span>' +
     (aMao ? '<span class="selo ambar pequeno" title="Ela não tem tempo marcado: a letra só passa quando alguém toca.">À mão' +
       (l.quem ? ' · ' + esc(l.quem) : '') + '</span>' : '') + '</span>' +
-    '<span class="resumo">slide ' + ((l.slide || 0) + 1) + ' de ' + l.total_slides +
+    '<span class="resumo">' + (l.fora ? 'fora do telão · ' : '') + 'slide ' + ((l.slide || 0) + 1) + ' de ' + l.total_slides +
     (l.erro_letra ? ' · <b style="color:var(--vermelho-texto)">a letra não chegou ao telão</b>' : '') + '</span></div>';
   if (partes.length > 1) {
     h += '<div class="atalhos">' + partes.map((p, i) => pode
       ? botao(esc(p.nome), {tipo: 'louvor_parte', parte: i}, {classe: 'bt' + (i === l.parte ? ' ativo' : ''), apertado: i === l.parte})
       : '<span class="bt' + (i === l.parte ? ' ativo' : '') + '">' + esc(p.nome) + '</span>').join('') + '</div>';
   }
-  h += '<div class="grade-slides" id="grade-slides">' + slides.map((s, i) => {
-    const corpo = '<span class="n">' + (i + 1) + '</span>' + (letraDe(s) || (s.instrucoes[0] ? '(' + esc(s.instrucoes[0].texto) + ')' : ''));
-    const classe = 'slide' + (i === l.slide ? ' atual' : i < l.slide ? ' passado' : '');
-    return pode
-      ? '<button type="button" class="' + classe + '" aria-pressed="' + (i === l.slide ? 'true' : 'false') + '"' +
-        ' data-a="' + esc(JSON.stringify({tipo: 'louvor_slide', para: i})) + '">' + corpo + '</button>'
-      : '<div class="' + classe + '">' + corpo + '</div>';
-  }).join('') + '</div>';
+  h += gradeLouvor(l, slides, i => ({tipo: 'louvor_slide', para: i}));
   h += linhaDoRelogio(d);
   if (pode) {
     h += '<div class="passar">' +
       botao('← Anterior', {tipo: 'louvor_slide', para: 'anterior', visto: l.slide}, {desligado: !l.slide}) +
+      botaoTirarLetra(l) +
       botao('Próximo slide <span class="tecla">Espaço</span>', {tipo: 'louvor_slide', para: 'proximo', visto: l.slide},
         {classe: 'bt forte', desligado: l.slide + 1 >= l.total_slides}) + '</div>';
+    // Musica com tempo e o tempo contado aqui: soltar a letra a partir do
+    // slide em que esta, mesmo sem o tempo andando (comecou sem o "Comecou").
+    if (l.musica.pronta && l.relogio.fonte === 'cronometro') {
+      h += '<div class="linha"><span class="miudo cresce">A música está no slide ' + ((l.slide || 0) + 1) + '? A letra pode seguir sozinha dali.</span>' +
+        botao('Seguir sozinho daqui', {tipo: 'louvor_seguir_de', para: l.slide || 0}, {classe: 'bt claro'}) + '</div>';
+    }
   }
   return h;
 }
@@ -620,6 +650,8 @@ function htmlTelao(d) {
   if (pode) {
     h += '<div class="passar" id="passar-telao">' +
       botao('← Anterior', {tipo: 'telao_slide', para: 'anterior', visto: tv.slide}, {desligado: tv.slide === 0}) +
+      botao('Tirar do telão', {tipo: 'telao_tirar'}, {confirmar: {titulo: 'Tirar do telão?',
+        texto: '"' + (tv.nome || 'Apresentação') + '" fecha no Holyrics. Para voltar, abra de novo.', sim: 'Tirar'}}) +
       botao('Próximo slide <span class="tecla">Espaço</span>', {tipo: 'telao_slide', para: 'proximo', visto: tv.slide},
         {classe: 'bt forte', desligado: !!total && i + 1 >= total}) + '</div>';
   }
@@ -650,7 +682,7 @@ function htmlMomento(d) {
     // Botoes do momento: os slides da Palavra e o Pix do ofertorio.
     const quem = (atual.id + ' ' + atual.nome).toLowerCase();
     const extras = [];
-    if (/palavra|prega|serm|mensagem/.test(quem)) {
+    if (/palavra|prega|serm|mensagem/.test(quem) || (d.palavra && d.palavra.no_momento)) {
       extras.push(botao('Abrir os slides da Palavra', {tipo: 'slides_palavra'}, {classe: 'bt forte'}));
       const dasImagens = linhaDasImagens(d.palavra);
       if (dasImagens) extras.push(dasImagens);

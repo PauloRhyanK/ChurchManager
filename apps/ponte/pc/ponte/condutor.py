@@ -13,6 +13,7 @@ O condutor nao conhece Flask, Holyrics nem luz. Recebe:
   por_slide       poe um slide no telao (levanta excecao se falhar)
   por_luz         aplica a luz de uma parte
   anotar          escreve no "Aconteceu agora"
+  tirar           tira a letra do telao (opcional; sem ele, "Tirar" e recusado)
 
 REGRAS QUE NAO SE DISCUTEM:
   - So manda quando MUDA. Dez voltas por segundo nao podem virar dez pedidos.
@@ -32,7 +33,7 @@ ACERTO_MAXIMO = 5.0
 
 class Condutor:
     def __init__(self, relogio, musicas, mostrar_musica, por_slide, por_luz, anotar,
-                 agora=time.monotonic, lembrado=None, guardar=None):
+                 agora=time.monotonic, lembrado=None, guardar=None, tirar=None):
         self._relogio = relogio
         self._musicas = musicas
         self._mostrar_musica = mostrar_musica
@@ -41,6 +42,7 @@ class Condutor:
         self._anotar = anotar
         self._agora = agora
         self._guardar = guardar
+        self._tirar = tirar
         self._tranca = threading.RLock()
 
         self._id = None            # id da musica atual
@@ -56,6 +58,9 @@ class Condutor:
         self._erro_letra = None
         self._retentar_em = None
         self._ja_retentou = False
+        # A letra foi tirada do telao: o tempo continua contando e o slide
+        # continua sendo acompanhado, mas nada vai ao telao ate alguem voltar.
+        self._fora = False
 
         if lembrado:
             # A ponte reiniciou no meio do louvor: volta na mesma musica, na
@@ -112,6 +117,9 @@ class Condutor:
         """Poe o slide no telao. Devolve o erro, ou None se deu certo."""
         if indice is None or not 0 <= indice < len(musica["slides"]):
             return None
+        with self._tranca:
+            if self._fora:
+                return None
         try:
             self._por_slide(musica, musica["slides"][indice])
         except Exception as erro:
@@ -127,6 +135,21 @@ class Condutor:
                 self._erro_letra = None
                 self._retentar_em = None
         return None
+
+    def _mandar_na_mao(self, musica, indice):
+        """Um toque do operador poe o slide no telao. Se a letra tinha sido
+        tirada, reabre a musica antes: passar o slide e voltar ao telao."""
+        with self._tranca:
+            reabrir, self._fora = self._fora, False
+        if reabrir:
+            try:
+                self._mostrar_musica(musica)
+            except Exception as falha:
+                texto = str(falha)[:160] or "a letra não chegou ao telão"
+                with self._tranca:
+                    self._erro_letra = texto
+                return texto
+        return self._mandar_slide(musica, indice)
 
     def _mandar_luz(self, musica, indice):
         if indice is None or not 0 <= indice < len(musica["partes"]):
@@ -227,7 +250,7 @@ class Condutor:
                 "letra": self._letra, "segurando": self._segurando, "luz": self._luz,
                 "quem": self._quem, "motivo": None, "pode_devolver": False,
                 "motivo_devolver": None, "tem_refrao": False, "proximo_em": None,
-                "erro_letra": None, "acabou": False,
+                "erro_letra": None, "acabou": False, "fora": self._fora,
                 "relogio": {"fonte": leitura["fonte"], "posicao": None, "tocando": False,
                             "sinal": False, "duracao": None},
             }
@@ -359,7 +382,7 @@ class Condutor:
             self._letra, self._segurando = "na_mao", False
             self._quem = self._nome(quem)
             self._trocar_slide(alvo)
-        erro = self._mandar_slide(musica, alvo)
+        erro = self._mandar_na_mao(musica, alvo)
         return self._feito("Letra: slide {} de {}".format(alvo + 1, total), erro)
 
     def _ir_parte(self, musica, indice, quem):
@@ -392,7 +415,7 @@ class Condutor:
             nome = musica["partes"][indice]["nome"]
         if aplica:
             self._mandar_luz(musica, indice)
-        return self._feito("Letra: " + nome, self._mandar_slide(musica, slide))
+        return self._feito("Letra: " + nome, self._mandar_na_mao(musica, slide))
 
     def repetir_refrao(self, quem):
         with self._tranca:
@@ -416,7 +439,74 @@ class Condutor:
             slide, aplica = self._ir_parte(musica, indice, quem)
         if aplica:
             self._mandar_luz(musica, indice)
-        return self._feito(self._nome(quem) + " voltou ao refrão", self._mandar_slide(musica, slide))
+        return self._feito(self._nome(quem) + " voltou ao refrão", self._mandar_na_mao(musica, slide))
+
+    def seguir_de(self, para, quem):
+        """A musica esta no slide `para`: o tempo vai para o inicio dele e a
+        letra segue sozinha dali. E o caso da musica que comecou sem ninguem
+        tocar "Comecou", ou do operador que passou a mao e quer soltar.
+
+        So com o tempo contado aqui (cronometro): com o Reaper ou o audio do
+        navegador, quem diz onde a musica esta e o audio."""
+        with self._tranca:
+            _, musica = self._atual()
+            if musica is None:
+                return self._sem_musica()
+            if not musica["pronta"]:
+                return {"erro": "esta música não tem tempo marcado"}, 409
+            try:
+                alvo = int(para)
+            except (TypeError, ValueError):
+                return {"erro": "slide desconhecido"}, 400
+            if not 0 <= alvo < len(musica["slides"]):
+                return {"erro": "esse slide não existe"}, 400
+            tempo = musica["slides"][alvo]["tempo"]
+            if tempo is None:
+                return {"erro": "esse slide não tem tempo marcado"}, 409
+            if not self._relogio.posicionar(musica["id"], tempo):
+                return {"erro": "aqui o tempo vem do áudio da música: a letra acompanha ele sozinha"}, 409
+            self._letra, self._segurando = "sozinho", False
+            self._quem = self._nome(quem)
+            self._andou = True
+            self._avisou_sem_sinal = False
+            self._trocar_slide(alvo)
+        erro = self._mandar_na_mao(musica, alvo)
+        return self._feito("{}: letra sozinha a partir do slide {}".format(self._nome(quem), alvo + 1), erro)
+
+    def tirar(self, quem):
+        """Tira a letra do telao. O louvor continua: o tempo conta, o slide
+        e acompanhado, e "Voltar ao telao" (ou passar um slide) traz de volta."""
+        if self._tirar is None:
+            return {"erro": "o telão está desligado neste PC"}, 400
+        with self._tranca:
+            _, musica = self._atual()
+            if musica is None:
+                return self._sem_musica()
+            if self._fora:
+                return {"erro": "a letra já está fora do telão"}, 409
+            self._fora = True
+            self._quem = self._nome(quem)
+            self._retentar_em = None
+        try:
+            self._tirar()
+        except Exception as falha:
+            return {"ok": False, "titulo": "Tirar a letra do telão", "detalhe": str(falha)[:160]}, 200
+        return self._feito(self._nome(quem) + " tirou a letra do telão")
+
+    def voltar(self, quem):
+        """Poe a letra de volta no slide em que a musica esta."""
+        with self._tranca:
+            _, musica = self._atual()
+            if musica is None:
+                return self._sem_musica()
+            if not self._fora:
+                return {"erro": "a letra já está no telão"}, 409
+            posicao, _ = self._posicao(musica)
+            if self._letra == "sozinho" and not self._segurando and posicao is not None:
+                self._trocar_slide(self._slide_em(musica, posicao))
+            alvo = self._slide if self._slide is not None else 0
+            self._quem = self._nome(quem)
+        return self._feito(self._nome(quem) + " voltou a letra ao telão", self._mandar_na_mao(musica, alvo))
 
     def ir_musica(self, para):
         with self._tranca:
@@ -444,6 +534,7 @@ class Condutor:
             self._parte_da_luz = None
             self._luz_presa = None
             self._erro_letra = None
+            self._fora = False
             self._trocar_slide(0 if musica["slides"] else None)
         self._relogio.parar()
         if self._guardar:
@@ -468,6 +559,7 @@ class Condutor:
             self._id = None
             self._slide = None
             self._letra, self._luz, self._segurando = "na_mao", "na_mao", False
+            self._fora = False
         self._relogio.parar()
         if self._guardar:
             try:

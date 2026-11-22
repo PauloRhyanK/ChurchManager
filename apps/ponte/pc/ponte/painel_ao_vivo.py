@@ -25,9 +25,10 @@ ACOES = (
     "cena_transmissao", "clima", "luz_seguir",
     "louvor_assumir", "louvor_devolver", "louvor_segurar", "louvor_slide", "louvor_parte",
     "louvor_repetir_refrao", "louvor_musica", "louvor_comecou", "louvor_acertar",
+    "louvor_seguir_de", "louvor_tirar", "louvor_voltar",
     "imagem",
     "palavra_slide", "palavra_assumir", "palavra_tirar", "pregador_link",
-    "telao_slide",
+    "telao_slide", "telao_tirar",
     "roteiro_ir", "musico_link",
 )
 ACOES_DA_WEB = ("cena_transmissao", "clima", "roteiro_ir")
@@ -462,8 +463,7 @@ class PainelAoVivo:
         if palavra is not None and para in ("proximo", "anterior"):
             dela = palavra.retrato()
             ordem = self._dep("ordem_agora") or {}
-            if dela.get("ativa") and dela.get("total") and (
-                    dela.get("visivel") or ordem.get("atual_id") in self._momentos_da_palavra()):
+            if dela.get("ativa") and dela.get("total") and (dela.get("visivel") or self._na_palavra(ordem)):
                 return palavra.ir(para, None, quem)
         telao = self._dep("telao")
         if telao is None:
@@ -477,12 +477,24 @@ class PainelAoVivo:
             momentos = [momentos]
         return [str(m) for m in momentos]
 
+    def _na_palavra(self, ordem):
+        """O culto esta no momento da palavra? Pela ordem (`momento_da_palavra`
+        do config) ou, com o roteiro do ChurchManager, pelo item em que ele
+        esta: a pregacao do roteiro nem sempre tem uma cue `pregacao` que
+        mude a ordem, e sem isto a lista dos slides nao aparecia."""
+        if ordem.get("atual_id") in self._momentos_da_palavra():
+            return True
+        roteiro = self._dep("roteiro")
+        if roteiro is None or roteiro.origem != "cultos":
+            return False
+        return mod_roteiro.e_da_palavra(roteiro.item())
+
     def _palavra(self, ordem, agenda):
         palavra = self._dep("palavra")
         if palavra is None:
             return None
         retrato = palavra.retrato()
-        retrato["no_momento"] = ordem.get("atual_id") in self._momentos_da_palavra()
+        retrato["no_momento"] = self._na_palavra(ordem)
         # Quanto tempo da palavra ja passou, para o operador e para o celular
         # do pregador: sai do momento atual da ordem, quando ele e o da palavra.
         retrato["passou_s"] = retrato["de_minutos"] = None
@@ -643,6 +655,12 @@ class PainelAoVivo:
             corpo["silencioso"] = bool(corpo.get("ok"))
             return corpo, codigo
 
+        if tipo == "telao_tirar":
+            telao = self._dep("telao")
+            if telao is None:
+                return {"erro": "o telão não está disponível neste PC"}, 400
+            return telao.tirar()
+
         if tipo in ("palavra_slide", "palavra_assumir", "palavra_tirar", "pregador_link"):
             palavra = self._dep("palavra")
             if palavra is None:
@@ -678,6 +696,12 @@ class PainelAoVivo:
             corpo, codigo = condutor.ir_slide(dados.get("para"), dados.get("visto"), quem)
             corpo["silencioso"] = bool(corpo.get("ok"))
             return corpo, codigo
+        if tipo == "louvor_seguir_de":
+            return condutor.seguir_de(dados.get("para"), quem)
+        if tipo == "louvor_tirar":
+            return condutor.tirar(quem)
+        if tipo == "louvor_voltar":
+            return condutor.voltar(quem)
         if tipo == "louvor_parte":
             corpo, codigo = condutor.ir_parte(dados.get("parte"), quem)
             corpo["silencioso"] = bool(corpo.get("ok"))
