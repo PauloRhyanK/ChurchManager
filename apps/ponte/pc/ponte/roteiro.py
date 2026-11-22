@@ -125,6 +125,17 @@ def do_local(momentos, musicas, momentos_do_louvor, minutos_de=None):
     return itens
 
 
+def e_da_palavra(item):
+    """Um item do roteiro que e a pregacao: pelo tipo que o ChurchManager
+    manda (`sermon`) ou, sem ele, pelo nome."""
+    if not item or item.get("tipo") != "momento":
+        return False
+    if _limpo(item.get("momento")) in ("sermon", "palavra", "pregacao"):
+        return True
+    nome = _limpo(item.get("nome"))
+    return any(p in nome for p in ("palavra", "prega", "sermao", "mensagem"))
+
+
 def achar_cue(item, cues, mapa=None, da_palavra=None, do_louvor=None):
     """Que momento do config.yaml (cue) corresponde a este item do roteiro?
 
