@@ -63,6 +63,54 @@ def tabela_de_climas(config, cenas, modos):
     return tabela
 
 
+def cores_da_cena(look, grupos):
+    """As cores que uma cena de luz acende, para o painel MOSTRAR a cena.
+
+    `look` e {canal: valor}; `grupos` e o `grupos_de_luz` do config. Devolve
+    uma cor por grupo aceso, na ordem do config: [{"grupo", "cor": "#rrggbb"}].
+    Os canais de cor de cada grupo (`cores` ou `paleta`) vem na ordem
+    R G B Branco Ambar, como o config explica. A cor sai com o brilho cheio:
+    na tela escura o que interessa e QUAL cor, nao quanto. Grupo apagado, ou
+    sem canal de cor, fica de fora.
+    """
+    valores = {}
+    for canal, valor in (look or {}).items():
+        try:
+            valores[int(canal)] = max(0, min(255, int(valor)))
+        except (TypeError, ValueError):
+            continue
+    cores = []
+    for nome, grupo in (grupos or {}).items():
+        if not isinstance(grupo, dict):
+            continue
+        canais = list(grupo.get("cores") or grupo.get("paleta") or [])
+        if len(canais) < 3:
+            continue
+        soma, acesos = [0.0, 0.0, 0.0], 0
+        for base in grupo.get("bases") or []:
+            try:
+                v = [valores.get(int(base) + int(d), 0) for d in canais]
+            except (TypeError, ValueError):
+                continue
+            branco = v[3] if len(v) > 3 else 0
+            ambar = v[4] if len(v) > 4 else 0
+            rgb = [v[0] + branco + ambar, v[1] + branco + ambar * 0.75, v[2] + branco]
+            brilho = grupo.get("brilho")
+            if brilho is not None:
+                fator = valores.get(int(base) + int(brilho), 0) / 255.0
+                rgb = [c * fator for c in rgb]
+            if max(rgb) < 12:
+                continue
+            acesos += 1
+            soma = [a + b for a, b in zip(soma, rgb)]
+        if not acesos:
+            continue
+        maior = max(soma)
+        cores.append({"grupo": str(nome),
+                      "cor": "#%02x%02x%02x" % tuple(int(round(255 * c / maior)) for c in soma)})
+    return cores
+
+
 def clima_de(cena, modo, tabela):
     """Que clima tem esta cena e este movimento? None se nenhum."""
     for item in tabela or []:

@@ -230,7 +230,6 @@ button.item-palavra:hover:not(.atual) { background: var(--botao); }
 .musica.tocou { color: var(--suave); }
 .musica.tocando { background: var(--roxo-fundo); border-color: var(--roxo); }
 .musica.tocando .rotulo { color: var(--roxo-claro); }
-.musica .rotulo.a-mao { color: var(--ambar-texto); }
 .musica:disabled { opacity: 1; cursor: default; }
 
 /* luz */
@@ -327,3 +326,178 @@ dialog input { width: 100%; min-height: 46px; border-radius: 10px; border: 1px s
 .slide-img.pequena { max-height: 120px; aspect-ratio: 16 / 9; }
 .slide-img.mini { width: 100%; aspect-ratio: 16 / 9; height: auto; margin-top: 4px; }
 
+
+/* A amostra de uma luz: uma faixa de cor por grupo de refletores que a cena
+   acende. E o que deixa ver QUE luz e aquela antes de tocar no botao. */
+.amostra { display: flex; gap: 2px; height: 10px; border-radius: 5px; overflow: hidden; flex: none; }
+.amostra i { flex: 1; display: block; min-width: 8px; }
+.amostra i.apagada { background: #000; border: 1px dashed var(--borda-forte); border-radius: 5px; }
+.clima { flex-direction: column; align-items: stretch; justify-content: center; gap: 5px; padding: 6px 10px; text-align: left; }
+.clima.apagar { justify-content: center; }
+.clima-texto { display: flex; flex-direction: column; gap: 1px; min-width: 0; line-height: 1.2; }
+.clima-texto > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clima-texto small { font-size: 11px; font-weight: 500; color: var(--suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chips .bt .amostra { width: 30px; }
+/* A luz acesa agora mexe como o movimento dela. */
+@keyframes luz-pulso { 50% { opacity: .3; } }
+.amostra.mov-respiro, .amostra.mov-lento { animation: luz-pulso 3.4s ease-in-out infinite; }
+.amostra.mov-animado, .amostra.mov-batida, .amostra.mov-celebracao { animation: luz-pulso .8s ease-in-out infinite; }
+.amostra.mov-onda i, .amostra.mov-pendulo i { animation: luz-pulso 1.8s ease-in-out infinite; }
+.amostra.mov-onda i:nth-child(2), .amostra.mov-pendulo i:nth-child(2) { animation-delay: .45s; }
+.amostra.mov-onda i:nth-child(3), .amostra.mov-pendulo i:nth-child(3) { animation-delay: .9s; }
+@media (prefers-reduced-motion: reduce) { .amostra, .amostra i { animation: none !important; } }
+
+.selo.pequeno { min-height: 26px; padding: 0 10px; font-size: 12px; border-radius: 8px; }
+.titulo-musica { flex-wrap: wrap; min-width: 0; }
+.musicas-linha { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 100%; min-width: 0; align-items: stretch; }
+.linha-musico { gap: 6px; margin-left: auto; }
+/* a fila de musicas: o estado em cima, e uma etiqueta curta de como a letra passa */
+.estado-e-modo { gap: 8px; min-width: 0; }
+.musica .titulo { min-width: 0; }
+.musica .modo { flex: none; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  padding: 1px 6px; border-radius: 999px; border: 1px solid var(--borda-forte); color: var(--suave); }
+.musica .modo.mao { border-color: var(--ambar-borda); color: var(--ambar-texto); }
+.musica .modo.auto { border-color: transparent; background: var(--verde-fundo); color: var(--verde-texto); }
+.musica.tocou .modo { opacity: .5; }
+
+/* os numeros da transmissao: uma linha de texto, sem caixas */
+.dados { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 12px; color: var(--suave); font-variant-numeric: tabular-nums; }
+.dados b { color: var(--texto); font-weight: 600; }
+.dado.ambar, .dado.ambar b { color: var(--ambar-texto); }
+.dado.vermelho, .dado.vermelho b { color: var(--vermelho-texto); }
+.dado.verde b { color: var(--verde-texto); }
+.um-so { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* um fio separa o que vai AO AR (imagem, camera) do que e ligar e configurar */
+.grupo { border-top: 1px solid var(--borda); padding-top: 10px; margin-top: 2px; }
+
+/* NIVEIS DE BOTAO. Uma coluna com tudo do mesmo tamanho nao diz o que importa.
+   forte = a acao do momento (um por quadro); bt = normal; medio = liga e
+   desliga de vez em quando; texto = raro, vira um link. */
+.bt.medio, .medios > .bt { min-height: 36px; font-size: 13px; background: transparent; }
+.bt.texto { min-height: 26px; padding: 0 4px; border: none; background: transparent; color: var(--roxo-claro);
+  font-size: 12px; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.bt.texto:hover:not(:disabled) { color: #fff; }
+.acoes { gap: 12px; justify-content: flex-end; }
+.youtube { gap: 8px; }
+.par.mini { flex: none; gap: 0; border: 1px solid var(--borda-forte); border-radius: 8px; overflow: hidden; }
+.par.mini button { flex: none; min-height: 26px; padding: 0 8px; border: none; border-radius: 0; background: transparent;
+  font-size: 12px; color: var(--suave); }
+.par.mini button[aria-pressed="true"] { background: var(--roxo-fundo); color: var(--texto); }
+
+/* TELA UNICA. No PC, o painel inteiro cabe na janela e a pagina nao rola: so
+   a lista de slides rola, dentro do quadro dela. Em tela pequena (celular,
+   janela estreita ou baixa) continua a pagina corrida de sempre.
+   As colunas da esquerda e da direita tem rolagem propria como valvula: ela
+   so aparece se a janela for baixa demais para o que ha nelas. */
+@media (min-width: 1100px) and (min-height: 620px) {
+  html, body { height: 100%; overflow: hidden; }
+  * { scrollbar-width: thin; scrollbar-color: var(--borda-forte) transparent; }
+  .tela { height: 100vh; min-height: 0; padding: 10px 14px 12px; display: grid; gap: 8px 12px; align-items: center;
+    grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto minmax(0, 1fr); }
+  .simulacao { grid-row: 1; grid-column: 1 / -1; padding: 2px 12px; font-size: 12px; }
+  .topo { display: contents; }
+  .topo-titulo { grid-row: 2; grid-column: 1; flex-wrap: nowrap; white-space: nowrap; }
+  .topo-direita { grid-row: 2; grid-column: 3; flex-wrap: nowrap; }
+  .pilulas { flex-wrap: nowrap; gap: 6px; }
+  .pilula { min-height: 28px; padding: 0 10px; white-space: nowrap; }
+  .menu summary { min-height: 28px; }
+  .faixas { grid-row: 2; grid-column: 2; flex-direction: row; gap: 6px; min-width: 0; }
+  .faixa { flex: 1 1 0; min-width: 0; flex-wrap: nowrap; padding: 4px 10px; font-size: 13px; border-radius: 10px; }
+  .faixa > span:first-child { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .faixa .bt.pequeno { min-height: 28px; white-space: nowrap; }
+
+  .colunas { grid-row: 3; grid-column: 1 / -1; align-self: stretch; min-height: 0; display: grid; gap: 12px; align-items: stretch;
+    grid-template-columns: minmax(170px, 220px) minmax(0, 1.55fr) minmax(330px, 1fr); }
+  .coluna { gap: 8px; min-height: 0; max-width: none; }
+  .esquerda, .direita { overflow-y: auto; }
+  .cartao { flex: none; padding: 10px; gap: 8px; border-radius: 12px; }
+  .cartao.largo { padding: 12px; gap: 8px; }
+  .cartao.justo { padding: 6px; gap: 2px; }
+  .grande { font-size: 18px; }
+  .bt { min-height: 38px; border-radius: 10px; }
+  .bt.pequeno { min-height: 32px; }
+  .bt.claro { min-height: 34px; }
+  .selo { min-height: 34px; }
+  .selo.pequeno { min-height: 24px; }
+
+  #ordem { flex: 0 1 auto; min-height: 120px; overflow-y: auto; }
+  .momento { min-height: 36px; }
+  .momento.e-musica { min-height: 30px; }
+  .equip { gap: 8px; font-size: 13px; }
+
+  /* centro: o que nao e lista tem a altura dela; a lista fica com o resto */
+  #centro { flex: 1 1 0; min-height: 0; overflow-y: auto; }
+  #centro > * { flex: none; }
+  #centro > .grade-slides, #centro > .lista-palavra { flex: 1 1 0; min-height: 96px; max-height: none; }
+  /* max-content: com a altura do quadro fixa, a linha automatica nao enxerga
+     a proporcao 16:9 do slide e achata tudo. */
+  .grade-slides { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); grid-auto-rows: max-content; align-content: start; gap: 8px; }
+  .slides-agora { gap: 10px; }
+  .slides-agora .no-telao { aspect-ratio: auto; height: clamp(120px, 24vh, 250px); padding: 22px 14px 12px; }
+  .comando { padding: 6px 10px 6px 14px; border-radius: 12px; }
+  .passar .bt { min-height: 50px; font-size: 15px; border-radius: 12px; }
+  .passar .bt.forte { font-size: 16px; }
+
+  #musicas { flex-direction: column; flex-wrap: nowrap; gap: 4px; }
+  .musicas-linha { flex: none; flex-wrap: nowrap; overflow-x: auto; align-items: center; }
+  .musica { flex: 1 1 0; min-width: 120px; min-height: 40px; padding: 3px 10px; }
+  .musica .titulo { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .linha-musico { flex: none; }
+  .musica .rotulo { font-size: 10px; }
+
+  #luz { position: relative; gap: 6px; }
+  .luz-lado { flex-wrap: wrap; justify-content: flex-end; }
+  .climas { flex-wrap: nowrap; }
+  .clima { flex: 1 1 0; min-width: 0; min-height: 46px; padding: 6px 8px; }
+  details.dobra summary { padding: 0; }
+  /* as cenas uma a uma abrem POR CIMA, sem empurrar a letra */
+  details.dobra[open] .dentro { position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); z-index: 15; padding: 12px;
+    max-height: 46vh; overflow: auto; background: var(--cartao); border: 1px solid var(--borda-forte); border-radius: 12px;
+    box-shadow: 0 -12px 30px rgba(0,0,0,.5); }
+
+  /* direita: a imagem encolhe antes de qualquer botao sair da tela */
+  /* A altura da imagem sai da altura da janela: o que sobra depois dos
+     botoes (uns 650px com tudo ligado), ate o limite de 16:9 da coluna. */
+  #transmissao { container-type: inline-size; }
+  .imagem-obs { flex: none; aspect-ratio: auto; height: clamp(110px, calc(100vh - 650px), calc((100cqw - 22px) * 0.5625)); }
+  .imagem-obs img { object-fit: contain; background: #000; }
+  #tx-resto > .empilha { gap: 8px !important; }
+  /* as cameras sao UMA escolha: um seletor so, nao cinco botoes soltos */
+  .cenas { display: flex; gap: 0; border: 1px solid var(--borda-forte); border-radius: 10px; overflow: hidden; background: var(--fundo); }
+  .cena { flex: 1 1 0; min-width: 0; min-height: 32px; padding: 0 4px; border: none; border-radius: 0; background: transparent;
+    border-left: 1px solid var(--borda); color: var(--suave); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cena:first-child { border-left: none; }
+  .cena[aria-pressed="true"] { background: var(--vermelho-fundo); color: #fff; box-shadow: inset 0 -3px 0 var(--vermelho); }
+  #tx-resto .bt.forte { min-height: 46px; font-size: 15px; }
+  #telao .bt { min-height: 36px; font-size: 13px; }
+  #telao .bt.texto { min-height: 24px; font-size: 12px; }
+  #bt-recados { flex: 0 0 auto; background: transparent; }
+  /* as partes da musica: fichas pequenas, para a letra ser o que aparece */
+  .atalhos { gap: 5px; }
+  .atalhos .bt { min-height: 28px; padding: 0 10px; border-width: 1px; border-radius: 999px; font-size: 12px; color: var(--suave); background: transparent; }
+  .atalhos .bt.ativo { color: var(--texto); }
+  .medidor { height: 8px; }
+  .grupo { padding-top: 8px; }
+  /* so o "Por no ar" e do tamanho cheio: o resto da coluna e mais baixo */
+  .par button { min-height: 34px; }
+  #historico { flex: 1 1 0; min-height: 58px; overflow: hidden; gap: 6px; }
+}
+
+/* Janela baixa (notebook de 768 de altura): tudo um pouco mais junto, e o
+   historico sai para os botoes caberem. */
+@media (min-width: 1100px) and (min-height: 620px) and (max-height: 820px) {
+  .tela { padding: 8px 12px 10px; gap: 6px 10px; }
+  .colunas { gap: 10px; }
+  .coluna { gap: 6px; }
+  .cartao { padding: 8px; gap: 6px; }
+  .cartao.largo { padding: 10px; gap: 6px; }
+  .bt { min-height: 32px; font-size: 13px; }
+  .bt.pequeno { min-height: 28px; }
+  .cena { min-height: 28px; }
+  #tx-resto .bt.forte { min-height: 40px; }
+  .momento { min-height: 32px; }
+  .passar .bt { min-height: 44px; }
+  .clima { min-height: 42px; }
+  #tx-resto > .empilha { gap: 6px !important; }
+  #historico { display: none; }
+}
