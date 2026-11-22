@@ -133,6 +133,7 @@ export class WorshipYoutubeService {
         '-x',
         '--audio-format',
         'mp3',
+        '--no-simulate',
         '--write-sub',
         '--write-auto-sub',
         '--sub-lang',
