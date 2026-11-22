@@ -15,12 +15,14 @@ interface PartNamePickerProps {
   /** Todas as partes da música, para sugerir os nomes que já existem. */
   parts: DerivedPart[];
   onPick: (choice: PartChoice) => void;
+  /** Usa também quando o rótulo escolhido coincide com o atual (por exemplo, ao criar uma parte). */
+  forcePick?: boolean;
   /** O rótulo clicável. */
   children: ReactNode;
 }
 
 /** Campo com sugestões para renomear uma parte: escolhe um nome existente, um tipo ou cria um novo. */
-export function PartNamePicker({ open, onOpenChange, name, kind, parts, onPick, children }: PartNamePickerProps) {
+export function PartNamePicker({ open, onOpenChange, name, kind, parts, onPick, forcePick = false, children }: PartNamePickerProps) {
   const [query, setQuery] = useState("");
   useEffect(() => {
     if (open) setQuery("");
@@ -31,7 +33,7 @@ export function PartNamePicker({ open, onOpenChange, name, kind, parts, onPick, 
   const known = [...existing, ...types].some((o) => plain(o.label) === plain(typed));
   const pick = (choice: PartChoice | null, label: string) => {
     onOpenChange(false);
-    if (choice && plain(label) !== plain(name)) onPick(choice);
+    if (choice && (forcePick || plain(label) !== plain(name))) onPick(choice);
   };
 
   return (

@@ -15,7 +15,7 @@ import { GenerationLimiter } from '../sermons/ai/generation-limiter';
 import type { SermonAiConfig } from '../sermons/ai/sermon-ai.config';
 import { SummarizerError } from '../sermons/ai/sermon-summarizer';
 import { TIMING_ALIGNER, TimingAligner, WORSHIP_AI_CONFIG } from './ai/timing-aligner';
-import type { TimingCorrectionDto, TimingSettingsDto, TimingSuggestDto } from './dto/timing.dto';
+import type { LyricsSettingsDto, TimingCorrectionDto, TimingSettingsDto, TimingSuggestDto } from './dto/timing.dto';
 import {
   LEAD_LIMITS,
   SuggestionRejected,
@@ -69,17 +69,34 @@ export class WorshipTimingService {
 
   async settings(tenantId: string) {
     const saved = await this.prisma.worshipSettings.findUnique({ where: { tenantId } });
-    return { slideLeadSeconds: saved?.slideLeadSeconds ?? LEAD_LIMITS.default, aiEnabled: !!this.aligner && this.ai.enabled };
+    return {
+      slideLeadSeconds: saved?.slideLeadSeconds ?? LEAD_LIMITS.default,
+      aiEnabled: !!this.aligner && this.ai.enabled,
+    };
   }
 
   async setSettings(tenantId: string, dto: TimingSettingsDto) {
-    const slideLeadSeconds = Math.round(dto.slideLeadSeconds * 100) / 100;
+    const data = { slideLeadSeconds: Math.round(dto.slideLeadSeconds * 100) / 100 };
     await this.prisma.worshipSettings.upsert({
       where: { tenantId },
-      create: { tenantId, slideLeadSeconds },
-      update: { slideLeadSeconds },
+      create: { tenantId, ...data },
+      update: data,
     });
     return this.settings(tenantId);
+  }
+
+  async lyricsSettings(tenantId: string) {
+    const saved = await this.prisma.worshipSettings.findUnique({ where: { tenantId } });
+    return { lyricMaxChars: saved?.lyricMaxChars ?? 28, lyricMaxLines: saved?.lyricMaxLines ?? 3 };
+  }
+
+  async setLyricsSettings(tenantId: string, dto: LyricsSettingsDto) {
+    await this.prisma.worshipSettings.upsert({
+      where: { tenantId },
+      create: { tenantId, lyricMaxChars: dto.lyricMaxChars, lyricMaxLines: dto.lyricMaxLines },
+      update: { lyricMaxChars: dto.lyricMaxChars, lyricMaxLines: dto.lyricMaxLines },
+    });
+    return this.lyricsSettings(tenantId);
   }
 
   async learned(tenantId: string): Promise<LearnedTiming> {
