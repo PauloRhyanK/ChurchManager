@@ -1,10 +1,11 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, WorshipSong } from '@prisma/client';
+import { ConflictException, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Prisma, type WorshipSong } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { CreateSongDto, ListSongsQueryDto, OrganizeSongDto, UpdateSongDto, UploadAudioDto } from './dto/song.dto';
 import { organizeLyrics } from './lyrics-organizer';
 import { Pending, WorshipRow, normalizeRows, songStatus } from './worship-document';
+import { WorshipYoutubeService } from './worship-youtube.service';
 
 const PENDING_LABEL: Record<Pending, string> = {
   AUDIO: 'enviar o áudio',
@@ -64,14 +65,15 @@ export class WorshipSongsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly youtube: WorshipYoutubeService,
   ) {}
 
   async list(tenantId: string, query: ListSongsQueryDto) {
-    const songs = await this.prisma.worshipSong.findMany({
+    const songs = (await this.prisma.worshipSong.findMany({
       where: { tenantId },
       orderBy: { title: 'asc' },
       omit: { rawLyrics: true },
-    });
+    })) as SongSummarySource[];
     const all = songs.map(toSongSummary);
     const ready = all.filter((s) => s.status === 'READY').length;
     const q = plain(query.q ?? '');
@@ -96,9 +98,29 @@ export class WorshipSongsService {
   async create(tenantId: string, dto: CreateSongDto) {
     const rawLyrics = dto.rawLyrics ?? '';
     const rows = dto.organize ? normalizeRows(organizeLyrics(rawLyrics)) : [];
-    const { status } = songStatus(rows, { url: null, durationSeconds: null }, null);
+    const audio = dto.audio
+      ? {
+          audioUrl: dto.audio.url,
+          audioFileName: (dto.audio.fileName ?? 'audio.mp3').slice(0, 255),
+          audioDurationSeconds: dto.audio.durationSeconds ?? null,
+          audioSizeBytes: dto.audio.sizeBytes ?? null,
+        }
+      : {
+          audioUrl: null,
+          audioFileName: null,
+          audioDurationSeconds: null,
+          audioSizeBytes: null,
+        };
+    const { status } = songStatus(rows, { url: audio.audioUrl, durationSeconds: audio.audioDurationSeconds }, null);
     const song = await this.prisma.worshipSong.create({
-      data: { tenantId, title: dto.title, rawLyrics, rows: asJson(rows), status },
+      data: {
+        tenantId,
+        title: dto.title.trim(),
+        rawLyrics,
+        rows: asJson(rows),
+        status,
+        ...audio,
+      },
     });
     return toSongResponse(song);
   }
@@ -150,6 +172,23 @@ export class WorshipSongsService {
     const updated = await this.prisma.worshipSong.update({
       where: { id: song.id },
       // Os tempos foram marcados contra o arquivo anterior: a música volta a "Falta conferir".
+      data: { ...audio, ...this.computed({ ...song, ...audio, readyAt: null }, rowsOf(song)) },
+    });
+    await this.storage.deleteFileByPublicUrl(song.audioUrl);
+    return toSongResponse(updated);
+  }
+
+  async setYoutubeAudio(tenantId: string, id: string, urlOrId: string) {
+    const song = await this.find(tenantId, id);
+    const imported = await this.youtube.import(tenantId, urlOrId);
+    const audio = {
+      audioUrl: imported.audio.url,
+      audioFileName: imported.audio.fileName.slice(0, 255),
+      audioDurationSeconds: imported.audio.durationSeconds,
+      audioSizeBytes: imported.audio.sizeBytes,
+    };
+    const updated = await this.prisma.worshipSong.update({
+      where: { id: song.id },
       data: { ...audio, ...this.computed({ ...song, ...audio, readyAt: null }, rowsOf(song)) },
     });
     await this.storage.deleteFileByPublicUrl(song.audioUrl);

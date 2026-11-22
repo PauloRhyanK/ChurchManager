@@ -15,6 +15,7 @@ import { WorshipSongsService } from './worship-songs.service';
 import { TIMING_ALIGNER, TimingAligner, WORSHIP_AI_CONFIG } from './ai/timing-aligner';
 import { WorshipTimingController } from './worship-timing.controller';
 import { WorshipTimingService } from './worship-timing.service';
+import { WorshipYoutubeService } from './worship-youtube.service';
 
 /** Cultos: músicas (letra, tempo, clima, áudio-guia) e roteiro. */
 @Module({
@@ -32,6 +33,7 @@ import { WorshipTimingService } from './worship-timing.service';
     WorshipServicesService,
     WorshipPonteService,
     WorshipTimingService,
+    WorshipYoutubeService,
     // A mesma chave e os mesmos modelos da IA das Palavras (SERMON_AI_MODELS; vale o primeiro).
     {
       provide: WORSHIP_AI_CONFIG,

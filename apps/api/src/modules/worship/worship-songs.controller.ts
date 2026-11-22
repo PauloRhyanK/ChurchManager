@@ -22,7 +22,9 @@ import type { AuthUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { AudioUploadInterceptor } from '../storage/audio-upload.interceptor';
 import { CreateSongDto, ListSongsQueryDto, OrganizeSongDto, UpdateSongDto, UploadAudioDto } from './dto/song.dto';
+import { ImportYoutubeDto, SearchYoutubeQueryDto } from './dto/youtube.dto';
 import { WorshipSongsService } from './worship-songs.service';
+import { WorshipYoutubeService } from './worship-youtube.service';
 
 /** Cultos › Músicas: o repertório e a montagem de cada música. */
 @Controller('admin/tenants/me/worship/songs')
@@ -30,11 +32,26 @@ import { WorshipSongsService } from './worship-songs.service';
 @UseGuards(AuthGuard('jwt'), PermissionsGuard)
 @RequirePermission(PermissionModule.WORSHIP, PermissionLevel.VIEW)
 export class WorshipSongsController {
-  constructor(private readonly songs: WorshipSongsService) {}
+  constructor(
+    private readonly songs: WorshipSongsService,
+    private readonly youtube: WorshipYoutubeService,
+  ) {}
 
   @Get()
   list(@CurrentUser() user: AuthUser, @Query() query: ListSongsQueryDto) {
     return this.songs.list(user.tenantId, query);
+  }
+
+  @Get('youtube/search')
+  searchYoutube(@Query() query: SearchYoutubeQueryDto) {
+    return this.youtube.search(query.q);
+  }
+
+  @Post('youtube/import')
+  @HttpCode(200)
+  @RequirePermission(PermissionModule.WORSHIP, PermissionLevel.EDIT)
+  importYoutube(@CurrentUser() user: AuthUser, @Body() dto: ImportYoutubeDto) {
+    return this.youtube.import(user.tenantId, dto.urlOrId);
   }
 
   @Get(':id')
@@ -72,6 +89,17 @@ export class WorshipSongsController {
     @Body() dto: UploadAudioDto,
   ) {
     return this.songs.setAudio(user.tenantId, id, file, dto);
+  }
+
+  @Post(':id/youtube')
+  @HttpCode(200)
+  @RequirePermission(PermissionModule.WORSHIP, PermissionLevel.EDIT)
+  setYoutubeAudio(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ImportYoutubeDto,
+  ) {
+    return this.songs.setYoutubeAudio(user.tenantId, id, dto.urlOrId);
   }
 
   @Delete(':id/audio')

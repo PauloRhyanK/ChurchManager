@@ -3,9 +3,15 @@ import { ArrowLeft, Music, Plus, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { getApiErrorMessage } from "@/lib/api";
+import { Input } from "@/components/ui/input";
 import { createSong, fetchSongs, uploadSongAudio } from "../../api/worship-api";
 import { createOrganizedSong, organizeSteps } from "../../lib/create-song";
 import { plain, readAudioDuration, songFicha } from "../../lib/format";
@@ -59,7 +65,11 @@ export function AddSongDialog({ open, onOpenChange, onAdd, onOpenEditor }: AddSo
   async function addAsDraft(current: NewSongDraft) {
     setBusy(true);
     try {
-      const song = await createSong({ title: current.title.trim(), rawLyrics: current.rawLyrics });
+      const song = await createSong({
+        title: current.title.trim(),
+        rawLyrics: current.rawLyrics,
+        audio: current.audio ?? undefined,
+      });
       if (current.file) {
         await uploadSongAudio(song.id, current.file, await readAudioDuration(current.file)).catch((err) =>
           toast.error(`A música foi criada, mas o áudio não foi enviado. ${getApiErrorMessage(err)}`),
@@ -80,7 +90,7 @@ export function AddSongDialog({ open, onOpenChange, onAdd, onOpenEditor }: AddSo
     setStep(0);
     try {
       const { song, audioError } = await createOrganizedSong(
-        { title: current.title.trim(), rawLyrics: current.rawLyrics, file: current.file },
+        { title: current.title.trim(), rawLyrics: current.rawLyrics, file: current.file, audio: current.audio },
         setStep,
       );
       if (audioError) {
@@ -105,7 +115,7 @@ export function AddSongDialog({ open, onOpenChange, onAdd, onOpenEditor }: AddSo
               <DialogTitle>Organizando a música</DialogTitle>
               <DialogDescription>Aguarde.</DialogDescription>
             </DialogHeader>
-            <OrganizingScreen steps={organizeSteps(!!draft.file)} current={step} />
+            <OrganizingScreen steps={organizeSteps(!!draft.file || !!draft.audio)} current={step} />
           </>
         ) : draft ? (
           <>
@@ -195,7 +205,7 @@ export function AddSongDialog({ open, onOpenChange, onAdd, onOpenEditor }: AddSo
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => setDraft({ title: typed, rawLyrics: "", file: null })}
+                onClick={() => setDraft({ title: typed, rawLyrics: "", file: null, audio: null })}
                 className="flex w-full items-center gap-3.5 rounded-lg border border-dashed px-3 py-3 text-left font-semibold text-primary hover:bg-primary/5"
               >
                 <span className="flex h-10 w-10 flex-none items-center justify-center rounded-lg bg-primary/10">

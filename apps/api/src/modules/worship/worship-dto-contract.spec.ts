@@ -5,6 +5,7 @@ import type { Type } from '@nestjs/common';
 import { VALIDATION_PIPE_OPTIONS } from '../../validation-options';
 import { CreateServiceDto, SetMomentsDto, SetSongsDto } from './dto/service.dto';
 import { CreateSongDto, UpdateSongDto, UploadAudioDto } from './dto/song.dto';
+import { ImportYoutubeDto, SearchYoutubeQueryDto } from './dto/youtube.dto';
 
 const pipe = new ValidationPipe(VALIDATION_PIPE_OPTIONS);
 
@@ -71,12 +72,20 @@ test('UpdateSongDto valida cada linha', async () => {
   await rejects(UpdateSongDto, { title: '   ' });
 });
 
-test('CreateSongDto: título obrigatório; organize só booleano', async () => {
-  const dto = await parse(CreateSongDto, { title: 'Nova', rawLyrics: 'a\nb', organize: true });
+test('CreateSongDto: título obrigatório; organize só booleano; aceita audio opcional', async () => {
+  const dto = await parse(CreateSongDto, {
+    title: 'Nova',
+    rawLyrics: 'a\nb',
+    organize: true,
+    audio: { url: 'https://cdn/x.mp3', fileName: 'x.mp3', durationSeconds: 60, sizeBytes: 100 },
+  });
   assert.equal(dto.organize, true);
+  assert.equal(dto.audio?.url, 'https://cdn/x.mp3');
+  assert.equal(dto.audio?.durationSeconds, 60);
   await rejects(CreateSongDto, { rawLyrics: 'a' });
   await rejects(CreateSongDto, { title: 'x', rows: [] });
   await rejects(CreateSongDto, { title: 'x', rawLyrics: 'a'.repeat(20_001) });
+  await rejects(CreateSongDto, { title: 'x', audio: { url: 'not-a-url' } });
 });
 
 test('UploadAudioDto converte a duração que chega como texto no multipart', async () => {
@@ -84,6 +93,16 @@ test('UploadAudioDto converte a duração que chega como texto no multipart', as
   assert.equal(dto.durationSeconds, 252.4);
   await rejects(UploadAudioDto, { durationSeconds: 'abc' });
   await rejects(UploadAudioDto, { audioUrl: 'https://x' });
+});
+
+test('YouTube DTOs: validações de busca e importação', async () => {
+  const search = await parse(SearchYoutubeQueryDto, { q: '  Gratidão  ' });
+  assert.equal(search.q, 'Gratidão');
+  await rejects(SearchYoutubeQueryDto, { q: '   ' });
+
+  const imp = await parse(ImportYoutubeDto, { urlOrId: '  https://youtu.be/abc  ' });
+  assert.equal(imp.urlOrId, 'https://youtu.be/abc');
+  await rejects(ImportYoutubeDto, { urlOrId: '   ' });
 });
 
 test('roteiro: data, hora, momentos e músicas', async () => {
