@@ -1,4 +1,4 @@
-import { createSong, uploadSongAudio, type Song } from "../api/worship-api";
+import { createSong, uploadSongAudio, type Song, type SongAudio } from "../api/worship-api";
 import { readAudioDuration } from "./format";
 
 /** Os passos que de fato rodam ao organizar uma música (nada de alinhamento de áudio ainda). */
@@ -15,14 +15,19 @@ const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * Se o áudio falhar, a música já existe: o erro volta em `audioError`.
  */
 export async function createOrganizedSong(
-  input: { title: string; rawLyrics: string; file: File | null },
+  input: { title: string; rawLyrics: string; file: File | null; audio?: SongAudio | null },
   onStep: (index: number) => void,
   stepMs = 350,
 ): Promise<{ song: Song; audioError: unknown }> {
   onStep(0);
   // A organização é uma chamada só; os passos seguintes mostram o que ela fez.
   const [created] = await Promise.all([
-    createSong({ title: input.title, rawLyrics: input.rawLyrics, organize: true }),
+    createSong({
+      title: input.title,
+      rawLyrics: input.rawLyrics,
+      organize: true,
+      audio: input.audio ?? undefined,
+    }),
     pause(stepMs),
   ]);
   for (let i = 1; i < 4; i++) {

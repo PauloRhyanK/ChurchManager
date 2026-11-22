@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUrl,
   Max,
   MaxLength,
   Min,
@@ -24,6 +25,29 @@ const emptyToNull = ({ value }: { value: unknown }) => {
   return s === '' ? null : s;
 };
 
+export class CreateSongAudioDto {
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true, require_tld: false })
+  url!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  fileName?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @Min(0)
+  @Max(4 * 3600)
+  durationSeconds?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  sizeBytes?: number;
+}
+
 export class CreateSongDto {
   @RequiredText()
   @MaxLength(255)
@@ -38,6 +62,11 @@ export class CreateSongDto {
   @IsOptional()
   @StrictBoolean()
   organize?: boolean;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CreateSongAudioDto)
+  audio?: CreateSongAudioDto;
 }
 
 export class UpdateSongDto {

@@ -293,7 +293,6 @@ export function LyricsDocument({
     els.forEach((el, i) => {
       el.dataset.rowId = next[i].id;
     });
-    rowsRef.current = next;
     decorate(next);
     return next;
   }, [decorate]);
@@ -468,7 +467,7 @@ export function LyricsDocument({
     onMoveCue(id, to);
   }
 
-  const showToolbar = !readOnly && selection && !selection.collapsed && !drag;
+  const showToolbar = !readOnly && selection && !drag;
 
   return (
     <div ref={wrapperRef} className="relative px-6 pb-12 pt-9 sm:px-10">
