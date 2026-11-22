@@ -12,14 +12,14 @@ import { createOrganizedSong, organizeSteps } from "../lib/create-song";
 export default function NewSongPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [draft, setDraft] = useState<NewSongDraft>({ title: "", rawLyrics: "", file: null });
+  const [draft, setDraft] = useState<NewSongDraft>({ title: "", rawLyrics: "", file: null, audio: null });
   const [step, setStep] = useState<number | null>(null);
 
   async function organize() {
     setStep(0);
     try {
       const { song, audioError } = await createOrganizedSong(
-        { title: draft.title.trim(), rawLyrics: draft.rawLyrics, file: draft.file },
+        { title: draft.title.trim(), rawLyrics: draft.rawLyrics, file: draft.file, audio: draft.audio },
         setStep,
       );
       void queryClient.invalidateQueries({ queryKey: ["worship", "songs"] });
@@ -36,7 +36,7 @@ export default function NewSongPage() {
   return (
     <DashboardLayout>
       {step !== null ? (
-        <OrganizingScreen steps={organizeSteps(!!draft.file)} current={step} />
+        <OrganizingScreen steps={organizeSteps(!!draft.file || !!draft.audio)} current={step} />
       ) : (
         <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
           <h1 className="text-2xl font-bold tracking-tight">Nova música</h1>

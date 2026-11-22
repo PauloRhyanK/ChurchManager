@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Check, Loader2, Pencil } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2, Pencil, Redo2, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -61,6 +61,8 @@ export default function SongEditorPage() {
   const dirty = useRef(false);
   const saving = useRef<Promise<void> | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoStack = useRef<WorshipRow[][]>([]);
+  const redoStack = useRef<WorshipRow[][]>([]);
 
   useEffect(() => {
     if (!songQuery.data || song) return;
@@ -115,6 +117,11 @@ export default function SongEditorPage() {
   const change = useCallback(
     (next: WorshipRow[], external = false) => {
       if (!canEdit) return;
+      if (next !== rowsRef.current) {
+        undoStack.current.push(rowsRef.current);
+        if (undoStack.current.length > 100) undoStack.current.shift();
+        redoStack.current = [];
+      }
       rowsRef.current = next;
       setRows(next);
       if (external) setVersion((v) => v + 1);
@@ -125,6 +132,32 @@ export default function SongEditorPage() {
     },
     [canEdit],
   );
+
+  const restoreHistory = useCallback((direction: "undo" | "redo") => {
+    const source = direction === "undo" ? undoStack.current : redoStack.current;
+    const destination = direction === "undo" ? redoStack.current : undoStack.current;
+    const previous = source.pop();
+    if (!previous || !canEdit) return;
+    destination.push(rowsRef.current);
+    rowsRef.current = previous;
+    setRows(previous);
+    setVersion((v) => v + 1);
+    dirty.current = true;
+    setSaveState("saving");
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => void flushRef.current(), SAVE_DELAY_MS);
+  }, [canEdit]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z" || event.altKey) return;
+      if (event.target instanceof HTMLElement && event.target.closest("input, textarea")) return;
+      event.preventDefault();
+      restoreHistory(event.shiftKey ? "redo" : "undo");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [restoreHistory]);
 
   // Ao sair do editor, salva o que estiver pendente; ao fechar a aba, avisa.
   useEffect(() => {
@@ -143,6 +176,8 @@ export default function SongEditorPage() {
     (saved: Song, replaceRows: boolean) => {
       setSong(saved);
       if (replaceRows) {
+        undoStack.current = [];
+        redoStack.current = [];
         rowsRef.current = saved.rows;
         setRows(saved.rows);
         setDraft(saved.rows.length === 0);
@@ -267,6 +302,12 @@ export default function SongEditorPage() {
             <SituationBadge status={live.status} pending={live.pending} />
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            {canEdit && step < 4 && (
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="icon" aria-label="Desfazer (Ctrl+Z)" title="Desfazer (Ctrl+Z)" disabled={!undoStack.current.length} onClick={() => restoreHistory("undo")}><Undo2 className="h-4 w-4" /></Button>
+                <Button variant="ghost" size="icon" aria-label="Refazer (Ctrl+Shift+Z)" title="Refazer (Ctrl+Shift+Z)" disabled={!redoStack.current.length} onClick={() => restoreHistory("redo")}><Redo2 className="h-4 w-4" /></Button>
+              </div>
+            )}
             {canEdit && (
               <span role="status" className="text-[13px] text-muted-foreground">
                 {saveState === "saving" && "Salvando…"}
