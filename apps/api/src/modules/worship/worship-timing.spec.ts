@@ -16,13 +16,26 @@ const ROWS: WorshipRow[] = [
 
 function build(output: AlignOutput | null, opts: { enabled?: boolean } = {}) {
   const created: unknown[] = [];
+  const settingsUpserts: unknown[] = [];
+  const settingsReads: unknown[] = [];
+  let settingsRow: { slideLeadSeconds: number; lyricMaxChars: number; lyricMaxLines: number } | null = null;
   let sent: AlignInput | null = null;
   const prisma = {
     worshipSong: {
       findFirst: async ({ where }: { where: { id: string; tenantId: string } }) =>
         where.tenantId === TENANT && where.id === 's1' ? { id: 's1', tenantId: TENANT, rows: ROWS, audioDurationSeconds: 60 } : null,
     },
-    worshipSettings: { findUnique: async () => null, upsert: async () => ({}) },
+    worshipSettings: {
+      findUnique: async ({ where }: { where: unknown }) => {
+        settingsReads.push(where);
+        return settingsRow;
+      },
+      upsert: async ({ where, create, update }: { where: unknown; create: typeof settingsRow; update: Partial<NonNullable<typeof settingsRow>> }) => {
+        settingsUpserts.push({ where, create, update });
+        settingsRow = { slideLeadSeconds: 0.3, lyricMaxChars: 28, lyricMaxLines: 3, ...settingsRow, ...update };
+        return settingsRow;
+      },
+    },
     worshipTimingCorrection: {
       findMany: async () => [{ source: 'DRAG', instruction: null, changedSlides: 1, meanDeltaSeconds: -0.5, slideShift: null }],
       create: async ({ data }: { data: unknown }) => created.push(data),
@@ -33,8 +46,23 @@ function build(output: AlignOutput | null, opts: { enabled?: boolean } = {}) {
     : null;
   const ai = { enabled: opts.enabled ?? true, models: [{ id: 'anthropic:m', provider: 'anthropic' as const, model: 'm', label: 'm' }], effort: 'low' as const };
   const svc = new WorshipTimingService(prisma as never, ai, aligner, new GenerationLimiter(2));
-  return { svc, created, sent: () => sent };
+  return { svc, created, settingsUpserts, settingsReads, settingsRow: () => settingsRow, sent: () => sent };
 }
+
+test('configurações: padrão de letras 28/3 e atualização parcial por igreja', async () => {
+  const { svc, settingsUpserts, settingsReads, settingsRow } = build(null);
+  assert.deepEqual(await svc.lyricsSettings(TENANT), { lyricMaxChars: 28, lyricMaxLines: 3 });
+  assert.deepEqual(settingsReads[0], { tenantId: TENANT });
+  await svc.setLyricsSettings(TENANT, { lyricMaxChars: 24, lyricMaxLines: 2 });
+  assert.deepEqual(settingsUpserts[0], {
+    where: { tenantId: TENANT },
+    create: { tenantId: TENANT, lyricMaxChars: 24, lyricMaxLines: 2 },
+    update: { lyricMaxChars: 24, lyricMaxLines: 2 },
+  });
+  assert.equal(settingsRow()?.lyricMaxChars, 24);
+  assert.equal(settingsRow()?.lyricMaxLines, 2);
+  assert.deepEqual(settingsReads[1], { tenantId: TENANT });
+});
 
 test('sugestão: manda slides, antecipação padrão e o aprendido; devolve antes e depois', async () => {
   const { svc, sent } = build({ times: [5, 10, 20], summary: 'Voltei um slide.' });

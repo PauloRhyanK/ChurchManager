@@ -26,6 +26,14 @@ test('formatLyrics: o porte devolve o mesmo texto do formatador da Ponte', () =>
   assert.equal(formatLyrics(EXEMPLO).text, SAIDA_DA_PONTE);
 });
 
+test('organizeLyrics respeita limites configurados e mantém os padrões antigos por omissão', () => {
+  const lyrics = 'Linha um\nLinha dois\nLinha três';
+  assert.equal(deriveSong(organizeLyrics(lyrics)).slides.length, 1);
+  assert.equal(deriveSong(organizeLyrics(lyrics, { maxC: 60, maxLines: 2 })).slides.length, 2);
+  const long = 'Palavra comprida atravessa limite configurado';
+  assert.ok(deriveSong(organizeLyrics(long, { maxC: 16, maxLines: 3 })).slides.every((slide) => slide.lines.every((line) => line.length <= 16)));
+});
+
 test('organizeLyrics: os slides do exemplo têm as mesmas linhas de letra da Ponte', () => {
   const esperado = SAIDA_DA_PONTE.split('\n\n').map((b) => b.split('\n').filter((l) => !l.startsWith('//')));
   const { slides } = deriveSong(organizeLyrics(EXEMPLO));

@@ -1,4 +1,4 @@
-import { formatLyrics } from './lyrics-format';
+import { formatLyrics, type FormatOptions } from './lyrics-format';
 import {
   CueTarget,
   MAX_ROW_TEXT,
@@ -115,7 +115,7 @@ const stanzaKey = (s: Stanza) =>
       .join(' '),
   );
 
-export function organizeLyrics(raw: string): WorshipRow[] {
+export function organizeLyrics(raw: string, format: Pick<FormatOptions, 'maxC' | 'maxLines'> = { maxC: 28, maxLines: 3 }): WorshipRow[] {
   const stanzas = readStanzas(raw);
 
   // Estrofe só de recados não é parte: os recados passam para a estrofe seguinte.
@@ -163,7 +163,7 @@ export function organizeLyrics(raw: string): WorshipRow[] {
     };
     const flushRun = () => {
       if (!run.length) return;
-      for (const slide of formatLyrics(run.join('\n'), { upper: false }).slides) {
+      for (const slide of formatLyrics(run.join('\n'), { ...format, upper: false }).slides) {
         if (slide.lines.length) pushSlide(slide.lines);
       }
       run = [];

@@ -383,6 +383,22 @@ export async function saveTimingSettings(slideLeadSeconds: number): Promise<Timi
   return (await api.put<TimingSettings>(`${TIMING}/settings`, body)).data;
 }
 
+export interface LyricsSettings {
+  lyricMaxChars: number;
+  lyricMaxLines: number;
+}
+
+const LYRICS_SETTINGS = `${TIMING}/lyrics-settings`;
+
+export async function fetchLyricsSettings(): Promise<LyricsSettings> {
+  return (await api.get<LyricsSettings>(LYRICS_SETTINGS)).data;
+}
+
+export async function saveLyricsSettings(lyricMaxChars: number, lyricMaxLines: number): Promise<LyricsSettings> {
+  const body: LyricsSettings = { lyricMaxChars, lyricMaxLines };
+  return (await api.put<LyricsSettings>(LYRICS_SETTINGS, body)).data;
+}
+
 export interface LearnedTiming {
   corrections: number;
   meanFineDeltaSeconds: number | null;

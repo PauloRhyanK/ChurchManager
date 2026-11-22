@@ -1,4 +1,5 @@
-import { ListPlus, RotateCcw, Sparkles } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ListPlus, RotateCcw, Settings2, Sparkles } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import {
   AlertDialog,
@@ -18,7 +19,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
-import type { Song } from "../../api/worship-api";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { toast } from "sonner";
+import { getApiErrorMessage } from "@/lib/api";
+import { fetchLyricsSettings, saveLyricsSettings, type Song } from "../../api/worship-api";
 import { PART_KIND_LABEL, deriveSong, type PartKind, type WorshipRow } from "../../lib/document";
 import {
   insertCue,
@@ -29,7 +34,11 @@ import {
   renamePart,
   repeatRange,
   setPartKind,
+  splitPartAt,
   splitSlideAt,
+  mergePart,
+  movePart,
+  reflowSlide,
   updateCue,
 } from "../../lib/row-ops";
 import { AudioCard } from "./AudioCard";
@@ -45,6 +54,7 @@ interface LyricsStepProps {
   draft: boolean;
   version: number;
   canEdit: boolean;
+  canManageSettings: boolean;
   onChange: (rows: WorshipRow[], external?: boolean) => void;
   /** Refaz a organização no servidor (apaga ajustes e tempos). */
   onOrganize: (rawLyrics?: string) => void;
@@ -54,12 +64,26 @@ interface LyricsStepProps {
 
 const EMPTY_PARTS: PartKind[] = ["INTRO", "INSTRUMENTAL", "ENDING"];
 
-export function LyricsStep({ song, rows, draft, version, canEdit, onChange, onOrganize, organizing, onAudioUploaded }: LyricsStepProps) {
+export function LyricsStep({ song, rows, draft, version, canEdit, canManageSettings, onChange, onOrganize, organizing, onAudioUploaded }: LyricsStepProps) {
+  const queryClient = useQueryClient();
   const [selection, setSelection] = useState<DocSelection | null>(null);
   const [cursorRow, setCursorRow] = useState(-1);
   const [cue, setCue] = useState<{ mode: "insert"; before: number } | { mode: "edit"; id: string } | null>(null);
   const [confirmOrganize, setConfirmOrganize] = useState(false);
   const [rawDraft, setRawDraft] = useState(song.rawLyrics);
+
+  const lyricsSettings = useQuery({ queryKey: ["worship", "lyrics-settings"], queryFn: fetchLyricsSettings });
+  const saveSettings = useMutation({
+    mutationFn: ({ chars, lines }: { chars: number; lines: number }) => saveLyricsSettings(chars, lines),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(["worship", "lyrics-settings"], saved);
+      toast.success("Padrão de slides salvo para toda a igreja.");
+    },
+    onError: (err) => toast.error(getApiErrorMessage(err)),
+  });
+
+  const maxChars = lyricsSettings.data?.lyricMaxChars ?? 28;
+  const maxLines = lyricsSettings.data?.lyricMaxLines ?? 3;
 
   const derived = useMemo(() => deriveSong(rows), [rows]);
 
@@ -111,6 +135,7 @@ export function LyricsStep({ song, rows, draft, version, canEdit, onChange, onOr
               </Button>
             </div>
           )}
+          {canManageSettings && <LyricsSettingsControl chars={maxChars} lines={maxLines} saving={saveSettings.isPending} onSave={(chars, lines) => saveSettings.mutateAsync({ chars, lines }).then(() => undefined)} />}
         </section>
         <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-6">
           <AudioCard song={song} canEdit={canEdit} onUploaded={onAudioUploaded} />
@@ -160,6 +185,10 @@ export function LyricsStep({ song, rows, draft, version, canEdit, onChange, onOr
               </Button>
             </>
           )}
+          <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+            <span>Padrão da igreja: até {maxChars} caracteres · {maxLines} {maxLines === 1 ? "linha" : "linhas"}/slide</span>
+            {canManageSettings && <LyricsSettingsControl chars={maxChars} lines={maxLines} saving={saveSettings.isPending} onSave={(chars, lines) => saveSettings.mutateAsync({ chars, lines }).then(() => undefined)} />}
+          </div>
         </div>
 
         <LyricsDocument
@@ -169,8 +198,31 @@ export function LyricsStep({ song, rows, draft, version, canEdit, onChange, onOr
           onChange={onChange}
           onSelection={handleSelection}
           onCueClick={(id) => canEdit && setCue({ mode: "edit", id })}
-          onMoveCue={(id, beforeIndex) => onChange(moveCue(rows, id, beforeIndex), true)}
+          onMoveCue={(id, beforeIndex, destination) => onChange(moveCue(rows, id, beforeIndex, destination), true)}
           onRenamePart={(rowId, choice) => onChange(renamePart(rows, rowId, choice.kind, choice.name), true)}
+          onPartAction={(rowId, action, choice) => {
+            const partIndex = derived.parts.findIndex((item) => item.rowId === rowId);
+            const part = derived.parts[partIndex];
+            if (!part) return;
+            const start = rows.findIndex((row) => row.id === rowId);
+            const nextPart = derived.parts[partIndex + 1];
+            const end = nextPart ? rows.findIndex((row) => row.id === nextPart.rowId) : rows.length;
+            if (action === "up") onChange(movePart(rows, rowId, -1), true);
+            else if (action === "down") onChange(movePart(rows, rowId, 1), true);
+            else if (action === "mergePrevious") onChange(mergePart(rows, rowId, "previous"), true);
+            else if (action === "mergeNext") onChange(mergePart(rows, rowId, "next"), true);
+            else if (action === "cueStart") setCue({ mode: "insert", before: start });
+            else if (action === "cueEnd") {
+              let at = end;
+              while (at > start && rows[at - 1].type === "break") at -= 1;
+              setCue({ mode: "insert", before: at });
+            } else if (action === "split" && choice) {
+              const selected = selection?.from ?? cursorRow;
+              const at = selected >= start && selected < end ? selected : start + 1;
+              const next = splitPartAt(rows, at, choice.kind, choice.name);
+              if (next !== rows) onChange(next, true);
+            }
+          }}
           renderToolbar={(sel) => (
             <SelectionToolbar
               activeKind={partAt(rows, sel.from).kind}
@@ -193,7 +245,14 @@ export function LyricsStep({ song, rows, draft, version, canEdit, onChange, onOr
 
       <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-6">
         <AudioCard song={song} canEdit={canEdit} onUploaded={onAudioUploaded} />
-        <SlidesPreview slides={derived.slides} selected={selectedSlide} />
+        <SlidesPreview
+          slides={derived.slides}
+          selected={selectedSlide}
+          maxChars={maxChars}
+          maxLines={maxLines}
+          canEdit={canEdit}
+          onReflow={(rowId) => onChange(reflowSlide(rows, rowId, maxChars, maxLines), true)}
+        />
       </div>
 
       <CueDialog
@@ -231,5 +290,62 @@ export function LyricsStep({ song, rows, draft, version, canEdit, onChange, onOr
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+function LyricsSettingsControl({
+  chars,
+  lines,
+  saving,
+  onSave,
+}: {
+  chars: number;
+  lines: number;
+  saving: boolean;
+  onSave: (chars: number, lines: number) => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [nextChars, setNextChars] = useState(String(chars));
+  const [nextLines, setNextLines] = useState(String(lines));
+  const parsedChars = Number(nextChars);
+  const parsedLines = Number(nextLines);
+  const valid = nextChars !== "" && nextLines !== "" && Number.isInteger(parsedChars) && Number.isInteger(parsedLines) && parsedChars >= 10 && parsedChars <= 60 && parsedLines >= 1 && parsedLines <= 5;
+  const save = async () => {
+    if (!valid) return;
+    try {
+      await onSave(parsedChars, parsedLines);
+      setOpen(false);
+    } catch {
+      // O erro já é informado pela mutação; manter o diálogo aberto permite corrigir ou tentar novamente.
+    }
+  };
+  return (
+    <Dialog open={open} onOpenChange={(value) => {
+      setOpen(value);
+      if (value) {
+        setNextChars(String(chars));
+        setNextLines(String(lines));
+      }
+    }}>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2"><Settings2 className="h-4 w-4" />Configurar</Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Padrão dos slides</DialogTitle>
+          <DialogDescription>Este padrão vale para todas as pessoas da igreja. Letras já editadas só mudam quando você ajustar cada slide.</DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-4">
+          <label className="space-y-1.5 text-sm font-medium">Caracteres por linha
+            <Input type="number" min={10} max={60} step={1} value={nextChars} aria-invalid={nextChars !== "" && (parsedChars < 10 || parsedChars > 60 || !Number.isInteger(parsedChars))} onChange={(event) => setNextChars(event.target.value)} />
+          </label>
+          <label className="space-y-1.5 text-sm font-medium">Linhas por slide
+            <Input type="number" min={1} max={5} step={1} value={nextLines} aria-invalid={nextLines !== "" && (parsedLines < 1 || parsedLines > 5 || !Number.isInteger(parsedLines))} onChange={(event) => setNextLines(event.target.value)} />
+          </label>
+        </div>
+        <p className="text-xs text-muted-foreground">De 10 a 60 caracteres e de 1 a 5 linhas. O padrão inicial é 28 caracteres e 3 linhas.</p>
+        <DialogFooter><Button onClick={() => void save()} disabled={saving || !valid}>Salvar padrão da igreja</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

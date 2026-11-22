@@ -14,7 +14,7 @@ const COMPLETE: WorshipRow[] = [
   { id: 'b', type: 'lyric', text: 'És a luz da manhã', part: { kind: 'CHORUS', mood: 'CELEBRATION' }, time: 9 },
 ];
 
-function build(overrides: Partial<WorshipSong> = {}, inServices = 0) {
+function build(overrides: Partial<WorshipSong> = {}, inServices = 0, lyricSettings: { lyricMaxChars: number; lyricMaxLines: number } | null = null) {
   const row: WorshipSong = {
     id: SONG,
     tenantId: TENANT_B,
@@ -38,6 +38,7 @@ function build(overrides: Partial<WorshipSong> = {}, inServices = 0) {
   };
   const writes: Array<{ op: string; data?: Record<string, unknown> }> = [];
   const deleted: Array<string | null> = [];
+  const settingsReads: unknown[] = [];
   const prisma = {
     worshipSong: {
       findFirst: async ({ where }: { where: { id: string; tenantId: string } }) =>
@@ -56,6 +57,12 @@ function build(overrides: Partial<WorshipSong> = {}, inServices = 0) {
       },
     },
     worshipServiceSong: { count: async () => inServices },
+    worshipSettings: {
+      findUnique: async ({ where }: { where: unknown }) => {
+        settingsReads.push(where);
+        return lyricSettings;
+      },
+    },
   };
   const storage = {
     uploadAudio: async () => ({ url: 'https://cdn/novo.mp3', sizeBytes: 123 }),
@@ -71,7 +78,7 @@ function build(overrides: Partial<WorshipSong> = {}, inServices = 0) {
       audio: { url: 'https://cdn/yt.mp3', fileName: 'musica-yt.mp3', durationSeconds: 180, sizeBytes: 500 },
     }),
   };
-  return { svc: new WorshipSongsService(prisma as never, storage as never, youtube as never), writes, deleted };
+  return { svc: new WorshipSongsService(prisma as never, storage as never, youtube as never), writes, deleted, settingsReads };
 }
 
 test('id de outro tenant → 404 e nada é escrito, em toda rota de escrita', async () => {
@@ -100,6 +107,19 @@ test('criar com organize já devolve as partes; sem letra fica Rascunho', async 
   const draft = await svc.create(TENANT_B, { title: 'Só o nome' });
   assert.equal(draft.status, 'DRAFT');
   assert.deepEqual(draft.rows, []);
+});
+
+test('criar e reorganizar usam os limites configurados no tenant autenticado', async () => {
+  const lyrics = 'Linha um\nLinha dois\nLinha três';
+  const configured = build({}, 0, { lyricMaxChars: 50, lyricMaxLines: 2 });
+  const created = await configured.svc.create(TENANT_B, { title: 'Nova', rawLyrics: lyrics, organize: true });
+  assert.equal(created.slideCount, 2);
+  assert.deepEqual(configured.settingsReads, [{ tenantId: TENANT_B }]);
+
+  const reorganized = build({ rawLyrics: lyrics }, 0, { lyricMaxChars: 50, lyricMaxLines: 2 });
+  const song = await reorganized.svc.organize(TENANT_B, SONG, {});
+  assert.equal(song.slideCount, 2);
+  assert.deepEqual(reorganized.settingsReads, [{ tenantId: TENANT_B }]);
 });
 
 test('criar com audio recebido já vincula o arquivo', async () => {

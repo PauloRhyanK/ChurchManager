@@ -1006,6 +1006,10 @@ model WorshipSettings {
   tenantId         String   @id @map("tenant_id") @db.Uuid
   /// Quanto antes do tempo marcado (início da frase) o slide entra na projeção, em segundos.
   slideLeadSeconds Float    @default(0.3) @map("slide_lead_seconds")
+  /// Limite da organização automática de letras: caracteres por linha.
+  lyricMaxChars    Int      @default(28) @map("lyric_max_chars")
+  /// Limite da organização automática de letras: linhas por slide.
+  lyricMaxLines    Int      @default(3) @map("lyric_max_lines")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
