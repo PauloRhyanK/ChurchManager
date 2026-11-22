@@ -174,6 +174,7 @@ export function LyricsStep({ song, rows, draft, version, canEdit, onChange, onOr
           renderToolbar={(sel) => (
             <SelectionToolbar
               activeKind={partAt(rows, sel.from).kind}
+              collapsed={sel.collapsed}
               onKind={(kind) => onChange(setPartKind(rows, sel.from, sel.to, kind), true)}
               onCue={() => setCue({ mode: "insert", before: sel.from })}
               onRepeat={() => onChange(repeatRange(rows, sel.from, sel.to), true)}
