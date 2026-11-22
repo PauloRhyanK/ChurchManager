@@ -13,7 +13,7 @@ import { LyricsStep } from "./LyricsStep";
 const song = {
   id: "song-1", title: "Gratidão", artist: null, musicalKey: null, bpm: null, timeSignature: null,
   holyricsId: null, status: "NEEDS_TIMING" as const, pending: [], slideCount: 1, audio: null,
-  readyAt: null, updatedAt: "", createdAt: "", rawLyrics: "", rows: [],
+  readyAt: null, updatedAt: "", createdAt: "", rawLyrics: "", rows: [], referenceYoutubeId: null,
 };
 const rows = [{ id: "line", type: "lyric" as const, text: "Gratidão", part: { kind: "VERSE" as const, mood: null } }];
 

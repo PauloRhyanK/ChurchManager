@@ -987,6 +987,9 @@ model WorshipSong {
   audioFileName        String?           @map("audio_file_name") @db.VarChar(255)
   audioDurationSeconds Float?            @map("audio_duration_seconds")
   audioSizeBytes       Int?              @map("audio_size_bytes")
+  /// Vídeo do YouTube só de referência para marcar os tempos (ID de 11 caracteres).
+  /// Não é o áudio-guia: não toca no culto nem muda a situação da música.
+  referenceYoutubeId   String?           @map("reference_youtube_id") @db.VarChar(11)
   readyAt              DateTime?         @map("ready_at")
   createdAt            DateTime          @default(now()) @map("created_at")
   updatedAt            DateTime          @updatedAt @map("updated_at")

@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { getApiErrorMessage } from "@/lib/api";
-import { setSongYoutubeAudio, uploadSongAudio, type Song } from "../../api/worship-api";
+import { setSongReferenceYoutube, setSongYoutubeAudio, uploadSongAudio, type Song } from "../../api/worship-api";
 import { AUDIO_ACCEPT, validateAudioFile } from "../../lib/audio";
 import { formatClock, readAudioDuration } from "../../lib/format";
 import { YoutubeSearchDialog } from "../YoutubeSearchDialog";
@@ -15,7 +15,11 @@ interface AudioCardProps {
   onUploaded: (song: Song) => void;
 }
 
-/** O áudio-guia da música: mostra o arquivo atual e envia ou troca. */
+/**
+ * O áudio-guia da música (o VS com click): mostra o arquivo atual e envia ou troca.
+ * Sem áudio, o YouTube pode virar o áudio-guia; com áudio, o YouTube só entra
+ * como vídeo de referência e nunca troca o VS.
+ */
 export function AudioCard({ song, canEdit, onUploaded }: AudioCardProps) {
   const [youtubeOpen, setYoutubeOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -38,6 +42,12 @@ export function AudioCard({ song, canEdit, onUploaded }: AudioCardProps) {
     } catch (err) {
       toast.error(getApiErrorMessage(err));
     }
+  }
+
+  async function handleReference(urlOrId: string) {
+    const saved = await setSongReferenceYoutube(song.id, urlOrId);
+    onUploaded(saved);
+    toast.success("Vídeo de referência salvo. Ele aparece na marcação dos tempos.");
   }
 
   const pick = () => inputRef.current?.click();
@@ -132,8 +142,8 @@ export function AudioCard({ song, canEdit, onUploaded }: AudioCardProps) {
             type="button"
             variant="ghost"
             size="icon"
-            aria-label="Buscar outro no YouTube"
-            title="Trocar áudio pelo YouTube"
+            aria-label="Escolher vídeo de referência do YouTube"
+            title="Vídeo de referência do YouTube (não troca o áudio-guia)"
             disabled={upload.isPending}
             onClick={() => setYoutubeOpen(true)}
             className="text-muted-foreground hover:text-red-600"
@@ -159,7 +169,8 @@ export function AudioCard({ song, canEdit, onUploaded }: AudioCardProps) {
         open={youtubeOpen}
         onOpenChange={setYoutubeOpen}
         initialQuery={song.title}
-        onImport={handleImportYoutube}
+        purpose="reference"
+        onImport={handleReference}
       />
     </div>
   );
