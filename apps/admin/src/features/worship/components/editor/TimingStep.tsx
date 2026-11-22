@@ -45,6 +45,7 @@ import { SlidesTimeline } from "./SlidesTimeline";
 import { TimingAiPanel } from "./TimingAiPanel";
 import { TimingBulkPanel } from "./TimingBulkPanel";
 import { usePlayer } from "./usePlayer";
+import { YoutubeReferencePanel } from "./YoutubeReferencePanel";
 
 interface TimingStepProps {
   song: Song;
@@ -343,6 +344,8 @@ export function TimingStep({ song, rows, canEdit, onChange, onAudioUploaded, sav
           />
         )}
       </section>
+
+      <YoutubeReferencePanel song={song} canEdit={canEdit} onChanged={onAudioUploaded} />
 
       {/* MODO PASSADOR DE SLIDES (CORTE EM TEMPO REAL) */}
       {mode === "presenter" && (

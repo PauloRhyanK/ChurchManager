@@ -19,14 +19,37 @@ interface YoutubeSearchDialogProps {
   onOpenChange: (open: boolean) => void;
   initialQuery?: string;
   onImport: (urlOrId: string) => Promise<void>;
+  /** "reference": só escolhe o vídeo de referência (nada é baixado). */
+  purpose?: "audio" | "reference";
 }
+
+const COPY = {
+  audio: {
+    title: "Buscar música no YouTube",
+    description:
+      "Digite o nome da música ou cole o link do YouTube. Vamos extrair o áudio de referência e a letra para sincronização.",
+    busyTitle: "Baixando e processando do YouTube…",
+    busyDetail: "Convertendo áudio de referência e extraindo legendas. Aguarde alguns segundos.",
+    action: "Usar no louvor",
+  },
+  reference: {
+    title: "Vídeo de referência do YouTube",
+    description:
+      "Digite o nome da música ou cole o link. O vídeo toca à parte, só para você ouvir a versão gravada; o VS com click continua sendo o áudio-guia.",
+    busyTitle: "Salvando a referência…",
+    busyDetail: "Nada é baixado: o vídeo toca direto do YouTube.",
+    action: "Usar como referência",
+  },
+};
 
 export function YoutubeSearchDialog({
   open,
   onOpenChange,
   initialQuery = "",
   onImport,
+  purpose = "audio",
 }: YoutubeSearchDialogProps) {
+  const copy = COPY[purpose];
   const [query, setQuery] = useState(initialQuery);
   const [results, setResults] = useState<YoutubeSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -76,11 +99,9 @@ export function YoutubeSearchDialog({
         <DialogHeader className="shrink-0 text-left">
           <DialogTitle className="flex items-center gap-2">
             <Youtube className="h-5 w-5 text-red-600 shrink-0" />
-            Buscar música no YouTube
+            {copy.title}
           </DialogTitle>
-          <DialogDescription>
-            Digite o nome da música ou cole o link do YouTube. Vamos extrair o áudio de referência e a letra para sincronização.
-          </DialogDescription>
+          <DialogDescription>{copy.description}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSearch} className="flex gap-2 shrink-0">
@@ -104,10 +125,8 @@ export function YoutubeSearchDialog({
           <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-primary/20 bg-primary/5 py-8 text-center shrink-0">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
             <div className="flex flex-col gap-1">
-              <b className="text-sm">Baixando e processando do YouTube…</b>
-              <span className="text-xs text-muted-foreground">
-                Convertendo áudio de referência e extraindo legendas. Aguarde alguns segundos.
-              </span>
+              <b className="text-sm">{copy.busyTitle}</b>
+              <span className="text-xs text-muted-foreground">{copy.busyDetail}</span>
             </div>
           </div>
         )}
@@ -148,7 +167,7 @@ export function YoutubeSearchDialog({
                     disabled={!!importingId}
                     onClick={() => handleImport(video.id)}
                   >
-                    Usar no louvor
+                    {copy.action}
                   </Button>
                 </div>
               ))}

@@ -28,6 +28,7 @@ const song = (over: Partial<Song> = {}): Song => ({
   createdAt: "",
   rawLyrics: "",
   rows,
+  referenceYoutubeId: null,
   ...over,
 });
 
