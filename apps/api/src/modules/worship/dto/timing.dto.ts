@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { MAX_ROWS } from '../worship-document';
 import { LEAD_LIMITS, MAX_INSTRUCTION, TIMING_SOURCES, type TimingSource } from '../timing-learning';
 
@@ -10,6 +10,20 @@ export class TimingSettingsDto {
   @Min(LEAD_LIMITS.min)
   @Max(LEAD_LIMITS.max)
   slideLeadSeconds!: number;
+}
+
+export class LyricsSettingsDto {
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @IsInt()
+  @Min(10)
+  @Max(60)
+  lyricMaxChars!: number;
+
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  lyricMaxLines!: number;
 }
 
 export class TimingSuggestDto {

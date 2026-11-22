@@ -369,6 +369,7 @@ export default function SongEditorPage() {
             draft={draft}
             version={version}
             canEdit={canEdit && !organize.isPending}
+            canManageSettings={can("SETTINGS", "EDIT")}
             onChange={change}
             onOrganize={(rawLyrics) => organize.mutate(rawLyrics)}
             organizing={organize.isPending}

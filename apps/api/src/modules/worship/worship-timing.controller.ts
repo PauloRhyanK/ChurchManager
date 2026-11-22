@@ -6,7 +6,7 @@ import { PermissionsGuard } from '../access/permissions.guard';
 import { RequirePermission } from '../access/require-permission.decorator';
 import type { AuthUser } from '../auth/auth-user';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { TimingCorrectionDto, TimingSettingsDto, TimingSuggestDto } from './dto/timing.dto';
+import { LyricsSettingsDto, TimingCorrectionDto, TimingSettingsDto, TimingSuggestDto } from './dto/timing.dto';
 import { WorshipTimingService } from './worship-timing.service';
 
 /** Cultos › tempos dos slides: antecipação, ajuste por instrução e o histórico de correções. */
@@ -26,6 +26,17 @@ export class WorshipTimingController {
   @RequirePermission(PermissionModule.WORSHIP, PermissionLevel.EDIT)
   setSettings(@CurrentUser() user: AuthUser, @Body() dto: TimingSettingsDto) {
     return this.timing.setSettings(user.tenantId, dto);
+  }
+
+  @Get('lyrics-settings')
+  lyricsSettings(@CurrentUser() user: AuthUser) {
+    return this.timing.lyricsSettings(user.tenantId);
+  }
+
+  @Put('lyrics-settings')
+  @RequirePermission(PermissionModule.SETTINGS, PermissionLevel.EDIT)
+  setLyricsSettings(@CurrentUser() user: AuthUser, @Body() dto: LyricsSettingsDto) {
+    return this.timing.setLyricsSettings(user.tenantId, dto);
   }
 
   @Get('learned')
