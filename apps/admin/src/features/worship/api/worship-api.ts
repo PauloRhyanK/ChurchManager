@@ -9,6 +9,20 @@ export interface SongAudio {
   sizeBytes: number | null;
 }
 
+export interface YoutubeSearchResult {
+  id: string;
+  title: string;
+  channel: string | null;
+  durationSeconds: number | null;
+  thumbnail: string | null;
+}
+
+export interface YoutubeImportResponse {
+  title: string;
+  lyrics: string;
+  audio: SongAudio;
+}
+
 export interface SongSummary {
   id: string;
   title: string;
@@ -49,11 +63,41 @@ export async function fetchSong(id: string): Promise<Song> {
   return (await api.get<Song>(`${SONGS}/${id}`)).data;
 }
 
-export async function createSong(input: { title: string; rawLyrics?: string; organize?: boolean }): Promise<Song> {
-  const body: { title: string; rawLyrics?: string; organize?: boolean } = { title: input.title };
+export async function createSong(input: {
+  title: string;
+  rawLyrics?: string;
+  organize?: boolean;
+  audio?: { url: string; fileName?: string | null; durationSeconds?: number | null; sizeBytes?: number | null };
+}): Promise<Song> {
+  const body: {
+    title: string;
+    rawLyrics?: string;
+    organize?: boolean;
+    audio?: { url: string; fileName?: string; durationSeconds?: number; sizeBytes?: number };
+  } = { title: input.title };
   if (input.rawLyrics !== undefined) body.rawLyrics = input.rawLyrics;
   if (input.organize !== undefined) body.organize = input.organize;
+  if (input.audio) {
+    body.audio = {
+      url: input.audio.url,
+      ...(input.audio.fileName ? { fileName: input.audio.fileName } : {}),
+      ...(typeof input.audio.durationSeconds === "number" ? { durationSeconds: input.audio.durationSeconds } : {}),
+      ...(typeof input.audio.sizeBytes === "number" ? { sizeBytes: input.audio.sizeBytes } : {}),
+    };
+  }
   return (await api.post<Song>(SONGS, body)).data;
+}
+
+export async function searchYoutube(q: string): Promise<YoutubeSearchResult[]> {
+  return (await api.get<YoutubeSearchResult[]>(`${SONGS}/youtube/search`, { params: { q } })).data;
+}
+
+export async function importYoutube(urlOrId: string): Promise<YoutubeImportResponse> {
+  return (await api.post<YoutubeImportResponse>(`${SONGS}/youtube/import`, { urlOrId })).data;
+}
+
+export async function setSongYoutubeAudio(id: string, urlOrId: string): Promise<Song> {
+  return (await api.post<Song>(`${SONGS}/${id}/youtube`, { urlOrId })).data;
 }
 
 export interface SongInfoBody {

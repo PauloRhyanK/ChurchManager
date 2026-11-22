@@ -5,6 +5,7 @@ import { PART_KIND_LABEL, type PartKind } from "../../lib/document";
 interface SelectionToolbarProps {
   /** Tipo da parte onde a seleção começa, para destacar o botão. */
   activeKind: PartKind | null;
+  collapsed?: boolean;
   onKind: (kind: PartKind) => void;
   onCue: () => void;
   onRepeat: () => void;
@@ -17,12 +18,12 @@ const OTHER: PartKind[] = ["INTRO", "PRE_CHORUS", "INSTRUMENTAL", "ENDING"];
 const ICON_BUTTON = "flex h-11 w-11 items-center justify-center rounded-lg text-white hover:bg-white/15";
 
 /** A barrinha que aparece ao selecionar um trecho da letra. */
-export function SelectionToolbar({ activeKind, onKind, onCue, onRepeat, onSplit }: SelectionToolbarProps) {
+export function SelectionToolbar({ activeKind, collapsed = false, onKind, onCue, onRepeat, onSplit }: SelectionToolbarProps) {
   const [otherOpen, setOtherOpen] = useState(false);
   return (
     <div
       role="toolbar"
-      aria-label="O que fazer com o trecho selecionado"
+      aria-label={collapsed ? "Inserir ou classificar neste ponto" : "O que fazer com o trecho selecionado"}
       className="relative flex flex-wrap items-center gap-0.5 rounded-xl bg-gray-900 p-1 text-sm leading-tight shadow-xl"
     >
       {MAIN.map((kind) => (
@@ -72,12 +73,12 @@ export function SelectionToolbar({ activeKind, onKind, onCue, onRepeat, onSplit 
       <button type="button" aria-label="Instrução para a banda" title="Instrução para a banda" onClick={onCue} className={`${ICON_BUTTON} text-amber-300`}>
         <MessageSquare className="h-[18px] w-[18px]" />
       </button>
-      <button type="button" aria-label="Repete" title="Repete: duplica o trecho logo abaixo" onClick={onRepeat} className={ICON_BUTTON}>
+      {!collapsed && <button type="button" aria-label="Repete" title="Repete: duplica o trecho logo abaixo" onClick={onRepeat} className={ICON_BUTTON}>
         <Repeat className="h-[18px] w-[18px]" />
-      </button>
-      <button type="button" aria-label="Dividir slide" title="Dividir slide: o slide passa a começar nesta linha" onClick={onSplit} className={ICON_BUTTON}>
+      </button>}
+      {!collapsed && <button type="button" aria-label="Dividir slide" title="Dividir slide: o slide passa a começar nesta linha" onClick={onSplit} className={ICON_BUTTON}>
         <SplitSquareVertical className="h-[18px] w-[18px]" />
-      </button>
+      </button>}
     </div>
   );
 }

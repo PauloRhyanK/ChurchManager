@@ -1,22 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import type { WorshipSong } from '@prisma/client';
 import { WorshipSongsService } from './worship-songs.service';
 import type { WorshipRow } from './worship-document';
 
-const TENANT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-const TENANT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
-const SONG = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const TENANT_A = '11111111-1111-4111-8111-111111111111';
+const TENANT_B = '22222222-2222-4222-8222-222222222222';
+const SONG = '33333333-3333-4333-8333-333333333333';
 
 const COMPLETE: WorshipRow[] = [
   { id: 'a', type: 'lyric', text: 'Antes do sol nascer', part: { kind: 'VERSE', mood: 'WORSHIP' }, time: 1 },
   { id: 'b', type: 'lyric', text: 'És a luz da manhã', part: { kind: 'CHORUS', mood: 'CELEBRATION' }, time: 9 },
 ];
 
-function build(overrides: Record<string, unknown> = {}, inServices = 0) {
-  const writes: { op: string; data?: Record<string, unknown> }[] = [];
-  const deleted: (string | null)[] = [];
-  const row: Record<string, unknown> = {
+function build(overrides: Partial<WorshipSong> = {}, inServices = 0) {
+  const row: WorshipSong = {
     id: SONG,
     tenantId: TENANT_B,
     title: 'Luz da Manhã',
@@ -24,18 +23,21 @@ function build(overrides: Record<string, unknown> = {}, inServices = 0) {
     musicalKey: null,
     bpm: null,
     timeSignature: null,
+    holyricsId: null,
     rawLyrics: 'Antes do sol nascer\n\nÉs a luz da manhã',
-    rows: COMPLETE,
+    rows: COMPLETE as never,
     status: 'NEEDS_TIMING',
     audioUrl: 'https://cdn/a.mp3',
     audioFileName: 'a.mp3',
     audioDurationSeconds: 60,
     audioSizeBytes: 10,
     readyAt: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: new Date('2026-11-20T10:00:00Z'),
+    updatedAt: new Date('2026-11-20T10:00:00Z'),
     ...overrides,
   };
+  const writes: Array<{ op: string; data?: Record<string, unknown> }> = [];
+  const deleted: Array<string | null> = [];
   const prisma = {
     worshipSong: {
       findFirst: async ({ where }: { where: { id: string; tenantId: string } }) =>
@@ -61,7 +63,15 @@ function build(overrides: Record<string, unknown> = {}, inServices = 0) {
       deleted.push(url);
     },
   };
-  return { svc: new WorshipSongsService(prisma as never, storage as never), writes, deleted };
+  const youtube = {
+    search: async () => [],
+    import: async () => ({
+      title: 'Música YT',
+      lyrics: 'Letra YT',
+      audio: { url: 'https://cdn/yt.mp3', fileName: 'musica-yt.mp3', durationSeconds: 180, sizeBytes: 500 },
+    }),
+  };
+  return { svc: new WorshipSongsService(prisma as never, storage as never, youtube as never), writes, deleted };
 }
 
 test('id de outro tenant → 404 e nada é escrito, em toda rota de escrita', async () => {
@@ -71,6 +81,7 @@ test('id de outro tenant → 404 e nada é escrito, em toda rota de escrita', as
     () => svc.update(TENANT_A, SONG, { title: 'x' }),
     () => svc.organize(TENANT_A, SONG, {}),
     () => svc.setAudio(TENANT_A, SONG, { buffer: Buffer.from('x') }, {}),
+    () => svc.setYoutubeAudio(TENANT_A, SONG, 'yt-id'),
     () => svc.removeAudio(TENANT_A, SONG),
     () => svc.markReady(TENANT_A, SONG),
     () => svc.unmarkReady(TENANT_A, SONG),
@@ -91,6 +102,27 @@ test('criar com organize já devolve as partes; sem letra fica Rascunho', async 
   assert.deepEqual(draft.rows, []);
 });
 
+test('criar com audio recebido já vincula o arquivo', async () => {
+  const { svc } = build();
+  const created = await svc.create(TENANT_B, {
+    title: 'Com áudio',
+    rawLyrics: 'Linha um',
+    organize: true,
+    audio: { url: 'https://cdn/link.mp3', fileName: 'link.mp3', durationSeconds: 120, sizeBytes: 5000 },
+  });
+  assert.equal(created.audio?.url, 'https://cdn/link.mp3');
+  assert.equal(created.audio?.durationSeconds, 120);
+});
+
+test('setYoutubeAudio baixa o áudio do YouTube e atualiza a música', async () => {
+  const { svc, writes, deleted } = build({ status: 'READY', readyAt: new Date() });
+  const out = await svc.setYoutubeAudio(TENANT_B, SONG, 'abc123');
+  assert.equal(out.audio?.url, 'https://cdn/yt.mp3');
+  assert.equal(out.audio?.fileName, 'musica-yt.mp3');
+  assert.deepEqual(deleted, ['https://cdn/a.mp3']);
+  assert.equal(writes[0].data?.status, 'NEEDS_TIMING');
+});
+
 test('marcar como pronta: completa passa; incompleta responde 400 dizendo o que falta', async () => {
   const ok = build();
   const ready = await ok.svc.markReady(TENANT_B, SONG);
@@ -105,8 +137,8 @@ test('marcar como pronta: completa passa; incompleta responde 400 dizendo o que 
   });
   assert.deepEqual(semAudio.writes, []);
 
-  const foraDeOrdem = build({ rows: [COMPLETE[0], { ...COMPLETE[1], time: 0.5 }] });
-  await assert.rejects(foraDeOrdem.svc.markReady(TENANT_B, SONG), /tempo de todos os slides/);
+  const foraDeOrdem = build({ rows: [COMPLETE[0], { ...COMPLETE[1], time: 0.5 }] as never });
+  await assert.rejects(foraDeOrdem.svc.markReady(TENANT_B, SONG), /marcar o tempo de todos os slides/);
 
   const rascunho = build({ rows: [] });
   await assert.rejects(rascunho.svc.markReady(TENANT_B, SONG), /letra organizada/);
