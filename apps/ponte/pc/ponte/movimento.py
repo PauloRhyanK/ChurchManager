@@ -35,6 +35,7 @@ cue do culto pode escolher um modo. Ver `perigoso` nos modos.
 
 import math
 import threading
+import time
 
 
 class ErroMovimento(Exception):
@@ -87,6 +88,13 @@ class Movimento:
         self._seguir = None
         self.configurar_seguir()
         self._lock = threading.Lock()
+        # TRANSICAO SUAVE (a caixinha do painel). Desligada, trocar de
+        # movimento e instantaneo, como sempre foi. Ligada, a troca vira um
+        # esmaecimento do que estava no ar ate o movimento novo.
+        self._suave = False
+        self._transicao = None      # {"de": bytes ou None, "t0": float, "criada": float}
+        self._ultima_saida = None   # o ultimo quadro que aplicar() devolveu
+        self._canais_suaves = self._canais_que_se_misturam(self._grupos)
 
     # -- configuracao --------------------------------------------------------
 
@@ -145,25 +153,118 @@ class Movimento:
         ]
         return sorted(itens, key=lambda i: (i["energia"], i["nome"]))
 
+    # -- transicao suave -----------------------------------------------------
+
+    # Quanto dura o esmaecimento entre um movimento e outro, em segundos.
+    DURACAO_SUAVE = 2.5
+
+    @staticmethod
+    def _canais_que_se_misturam(grupos):
+        """Os canais (indice 0-511) que a transicao suave pode misturar: brilho,
+        cor, pan e tilt dos grupos. O OBTURADOR FICA DE FORA DE PROPOSITO:
+        misturar dois valores de obturador passa pelo meio da faixa, e no meio
+        da faixa mora o estrobo. Canal fora da lista vai direto para o valor
+        novo, como sem a transicao."""
+        canais = set()
+        for g in grupos.values():
+            deslocamentos = list(g["cores"]) + list(g["paleta"])
+            deslocamentos += [g[k] for k in ("brilho", "pan", "tilt") if g.get(k) is not None]
+            for base in g["bases"]:
+                for d in deslocamentos:
+                    try:
+                        canal = base + int(d)
+                    except (TypeError, ValueError):
+                        continue
+                    if 1 <= canal <= 512:
+                        canais.add(canal - 1)
+        for g in grupos.values():
+            if g.get("obturador") is None:
+                continue
+            for base in g["bases"]:
+                canais.discard(base + int(g["obturador"]) - 1)
+        return sorted(canais)
+
+    def definir_suave(self, ligar):
+        with self._lock:
+            self._suave = bool(ligar)
+            if not self._suave:
+                self._transicao = None
+
+    def suave(self):
+        with self._lock:
+            return self._suave
+
+    def _assinatura(self):
+        """O que conta como TROCA de movimento. Mexer na velocidade do estudio
+        ou o alvo do seguir mudando nao e troca: so o tipo do que esta rodando."""
+        return (self._atual,
+                self._estudio["espec"]["tipo"] if self._estudio else None,
+                self._seguir is not None)
+
+    def _depois_da_troca(self, antes):
+        """Chamado COM O LOCK, depois de mudar o estado. Comeca o esmaecimento
+        se a caixinha esta ligada e o movimento de fato mudou."""
+        depois = self._assinatura()
+        if not self._suave or depois == antes:
+            return
+        # Estrobo nunca esmaece: e liga-desliga de proposito, e meio estrobo
+        # nao existe.
+        if any(m in self._modos and self._modos[m]["perigoso"] for m in (antes[0], depois[0])):
+            self._transicao = None
+            return
+        estava_ativo = antes != (None, None, False) or self._transicao is not None
+        # Se nada andava, o que estava no ar era a cena pura, e quem sabe a
+        # cena e o quadro que chega no proximo aplicar() — "de" None quer
+        # dizer isso. A ultima saida, nesse caso, poderia ser de horas atras.
+        self._transicao = {
+            "de": self._ultima_saida if estava_ativo else None,
+            "t0": None,
+            "criada": time.monotonic(),
+        }
+
+    def _misturar(self, quadro, base, t):
+        with self._lock:
+            trans = self._transicao
+        if trans is None:
+            return quadro
+        if trans["t0"] is None or t < trans["t0"]:
+            trans["t0"] = t
+        fracao = (t - trans["t0"]) / self.DURACAO_SUAVE
+        if fracao >= 1.0:
+            with self._lock:
+                if self._transicao is trans:
+                    self._transicao = None
+            return quadro
+        de = trans["de"] if trans["de"] is not None else base
+        # Curva em S: comeca e termina devagar, sem tranco nas pontas.
+        peso = fracao * fracao * (3.0 - 2.0 * fracao)
+        for i in self._canais_suaves:
+            quadro[i] = int(round(de[i] + (quadro[i] - de[i]) * peso))
+        return quadro
+
     # -- escolha -------------------------------------------------------------
 
     def escolher(self, nome):
         """None, "" ou "parado" desligam o movimento."""
         if nome in (None, "", "parado"):
             with self._lock:
+                antes = self._assinatura()
                 self._atual = None
                 # "Parado" para TUDO, inclusive o que o estudio deixou
                 # rodando: e o botao de abortar, e nao pode sobrar movimento.
                 self._estudio = None
                 self._seguir = None
+                self._depois_da_troca(antes)
             return None
         chave = str(nome)
         if chave not in self._modos:
             raise ErroMovimento("nao existe o modo {!r}".format(chave))
         with self._lock:
+            antes = self._assinatura()
             self._atual = chave
             self._estudio = None    # modo do culto e estudio nao se somam
             self._seguir = None
+            self._depois_da_troca(antes)
         return chave
 
     def atual(self):
@@ -172,8 +273,15 @@ class Movimento:
 
     def ativo(self):
         with self._lock:
+            # Uma transicao em curso conta como movimento: e ela que faz o
+            # cliente de luz mandar 30 quadros por segundo ate o fim do
+            # esmaecimento, inclusive na volta para o Parado. O prazo existe
+            # para quem nunca chama aplicar() (o modo agente) nao ficar
+            # "ativo" para sempre.
+            transitando = (self._transicao is not None and
+                           time.monotonic() - self._transicao["criada"] < self.DURACAO_SUAVE + 1.0)
             return (self._atual is not None or self._estudio is not None
-                    or self._seguir is not None)
+                    or self._seguir is not None or transitando)
 
     def e_perigoso(self, nome):
         """Se ESTE lado considera o modo perigoso.
@@ -193,6 +301,12 @@ class Movimento:
         Recebe uma COPIA do quadro base e devolve ela modificada. Nunca mexe
         no original: e isso que faz "parado" voltar exatamente para a cena.
         """
+        base = bytes(quadro)
+        quadro = self._misturar(self._modular(quadro, t), base, t)
+        self._ultima_saida = bytes(quadro)
+        return quadro
+
+    def _modular(self, quadro, t):
         chave = self.atual()
         if chave is None:
             with self._lock:
@@ -603,8 +717,10 @@ class Movimento:
         """
         limpo = self.normalizar_estudio(bruto)
         with self._lock:
+            antes = self._assinatura()
             if limpo is None:
                 self._estudio = None
+                self._depois_da_troca(antes)
                 return None
             anterior = self._estudio
             estado = {
@@ -629,6 +745,7 @@ class Movimento:
             self._estudio = estado
             self._atual = None
             self._seguir = None
+            self._depois_da_troca(antes)
         return dict(limpo)
 
     def estudio(self):
@@ -891,19 +1008,24 @@ class Movimento:
         """
         limpos = self.normalizar_seguir(bruto)
         with self._lock:
+            antes = self._assinatura()
             if limpos is None:
                 self._seguir = None
+                self._depois_da_troca(antes)
                 return None
             anterior = self._seguir or {"t": None, "posicao": {}}
             self._seguir = {"alvos": limpos, "t": anterior["t"],
                             "posicao": dict(anterior["posicao"])}
             self._atual = None
             self._estudio = None
+            self._depois_da_troca(antes)
         return {str(b): [round(p, 1), round(t, 1)] for b, (p, t) in limpos.items()}
 
     def parar_seguir(self):
         with self._lock:
+            antes = self._assinatura()
             self._seguir = None
+            self._depois_da_troca(antes)
 
     def seguir(self):
         """O que esta valendo, no formato do fio, ou None."""
