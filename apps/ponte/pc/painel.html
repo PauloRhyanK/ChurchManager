@@ -154,6 +154,8 @@ h1,h2,h3,p{margin:0}
 .dobra > summary b{color:var(--texto)}
 .dobra > summary em{font-style:normal;font-weight:600;color:var(--marca-texto);font-size:13px}
 .dobra[open] > summary{margin-bottom:6px}
+.luz-suave{display:flex;align-items:center;gap:8px;min-height:var(--alt);margin-top:6px;font-size:14px;color:var(--suave);cursor:pointer}
+.luz-suave input{width:20px;height:20px;margin:0;cursor:pointer}
 .menu > summary::-webkit-details-marker{display:none}
 .menu .folha{position:absolute;right:0;top:calc(100% + 8px);z-index:20;width:min(340px,calc(100vw - 28px));
   background:var(--caixa);border:1px solid var(--borda);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:6px;
@@ -463,7 +465,9 @@ function desenharLuz(d) {
       '<div class="grade g3">' +
       botao('Parado', {tipo: 'modo_luz', modo: 'parado'}, {classe: 'escolha', apertado: l.modo === 'parado'}) +
       l.modos.map(m => '<span title="' + esc(m.descricao || '') + '" style="display:contents">' +
-        botao(esc(m.nome), {tipo: 'modo_luz', modo: m.id}, {classe: 'escolha', apertado: m.id === l.modo}) + '</span>').join('') + '</div></details>';
+        botao(esc(m.nome), {tipo: 'modo_luz', modo: m.id}, {classe: 'escolha', apertado: m.id === l.modo}) + '</span>').join('') + '</div>' +
+      '<label class="luz-suave"><input type="checkbox" id="luz-suave"' + (l.suave ? ' checked' : '') + (podeAgir() ? '' : ' disabled') +
+      '> Transição suave entre movimentos</label></details>';
   }
   pintar('cartao-luz', h);
 }
@@ -596,6 +600,9 @@ document.addEventListener('toggle', evento => {
   movimentoAberto = evento.target.open;
   redesenhar();
 }, true);
+document.addEventListener('change', evento => {
+  if (evento.target.id === 'luz-suave') agir({tipo: 'luz_suave', ligar: evento.target.checked});
+});
 document.addEventListener('change', async evento => {
   if (evento.target.id !== 'troca-ordem') return;
   const sel = evento.target, nome = sel.options[sel.selectedIndex].text;
