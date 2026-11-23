@@ -169,6 +169,10 @@ h2{font-size:17px;font-weight:700}
 .ideia .tiras i{width:14px;height:6px;border-radius:3px;border:1px solid rgba(255,255,255,.12)}
 .ideia.nova{border-style:dashed;border-color:#5b6b7e;background:var(--fundo);color:var(--suave);align-items:center}
 .ideias .salvar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.ideias .abrir{display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex:1 1 100%}
+.ideias select{height:52px;min-width:220px;max-width:100%;border-radius:12px;border:1px solid var(--borda);
+  background:var(--fundo);color:inherit;font:inherit;padding:0 12px}
+.ideias .abrir .bt{min-height:52px}
 .ideias input[type=text]{width:200px;max-width:100%;height:52px;border-radius:12px;border:1px solid var(--borda);
   background:var(--fundo);padding:0 14px;font-size:16px}
 .ideias .salvar .bt{min-height:52px}
@@ -330,6 +334,11 @@ dialog .bt{min-height:48px;padding:0 20px;font-size:15px}
       <span class="dica">toque para comparar uma com a outra</span>
     </div>
     <div class="lista" id="ideias"></div>
+    <div class="abrir">
+      <label for="cenaBase" class="dica">Começar de uma cena que já existe</label>
+      <select id="cenaBase"><option value="">Carregando as cenas…</option></select>
+      <button type="button" class="bt" id="btAbrirCena" disabled>Abrir para editar</button>
+    </div>
     <div class="salvar">
       <label for="nomeIdeia" class="dica">Nome</label>
       <input id="nomeIdeia" type="text" maxlength="40" autocomplete="off">
@@ -748,6 +757,7 @@ function aplicarCor(){
 const CHAVE_CORES = 'ponte.estudio.cores.v1';
 const DE_FABRICA = ORDEM_CORES.slice();
 let MINHAS = [];                  // [{id, nome, def:{matiz, branco, temp, brilho}}]
+const DA_CENA = [];               // cores criadas ao abrir uma cena (ver abrirCena)
 let criando = null;               // {antes: estado em JSON, id: cor em edicao ou null}
 PALETA.__previa = Object.assign({}, PALETA.branco, {nome:'Cor nova'});
 
@@ -789,7 +799,7 @@ function guardarMinhas(){
 }
 function remontarCores(){
   ORDEM_CORES.length = 0;
-  ORDEM_CORES.push(...DE_FABRICA, ...MINHAS.map(c => c.id));
+  ORDEM_CORES.push(...DE_FABRICA, ...MINHAS.map(c => c.id), ...DA_CENA);
   $('cores').textContent = ''; $('cores2').textContent = '';
   montarCores();
 }
@@ -1218,6 +1228,119 @@ async function tirarIdeia(){
   recado('Ideia “' + nome + '” tirada da lista.', 'bom');
 }
 
+// ---------------------------------------------------------------------------
+// abrir uma cena que ja existe, para editar em cima dela. A cena guarda so os
+// numeros dos canais: aqui eles voltam a ser cor, forca e direcao de cada
+// luz (o contrario de quadroDe). Cor que nao e da paleta entra como uma cor
+// "da cena", que vale ate fechar a pagina, e assim salvar de novo sem mexer
+// devolve exatamente os mesmos numeros.
+// ---------------------------------------------------------------------------
+let CENAS = {};                   // nome -> {canais, de:'salva'|'config'}
+// Canais da cena aberta que esta tela nao controla (de outro refletor, por
+// exemplo). Salvar com o mesmo nome os devolve como estavam: abrir e salvar
+// nao pode apagar o que ninguem viu aqui.
+let cenaAberta = {nome:null, extras:{}};
+
+async function lerCenas(){
+  const sel = $('cenaBase');
+  try{
+    const m = await pedir('/api/luz/mesa');
+    CENAS = {};
+    for (const [n, c] of Object.entries(m.looks_config || {})) CENAS[n] = {canais:c, de:'config'};
+    for (const [n, c] of Object.entries(m.looks_salvas || {})) CENAS[n] = {canais:c, de:'salva'};
+  } catch(erro){ CENAS = {}; }
+  const nomes = Object.keys(CENAS).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  sel.textContent = '';
+  const vazio = document.createElement('option');
+  vazio.value = ''; vazio.textContent = nomes.length ? 'Escolha uma cena' : 'Nenhuma cena salva';
+  sel.appendChild(vazio);
+  for (const n of nomes){
+    const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o);
+  }
+  $('btAbrirCena').disabled = true;
+}
+
+const canalDe = (canais, n) => { const v = +canais[String(n)]; return Number.isFinite(v) ? limitar(Math.round(v), 0, 255) : 0; };
+
+// A cor de uma luz rgbw/cabeca: a da paleta (e a forca) que, passadas por
+// esc(), dao os mesmos numeros. Sem uma assim, None.
+function acharCor(v){
+  if (v.every(x => x === 0)) return null;
+  for (const id of ORDEM_CORES.concat(DA_CENA)){
+    const p = PALETA[id];
+    if (!p || id === 'apagado') continue;
+    for (let f = 100; f >= 1; f--) if (p.rgbw.every((c, i) => esc(c, f) === v[i])) return {cor:id, forca:f};
+  }
+  return null;
+}
+function acharCorP9(v){
+  for (const id of ORDEM_CORES.concat(DA_CENA)){
+    const p = PALETA[id];
+    if (p && id !== 'apagado' && p.p9.every((c, i) => c === v[i])) return id;
+  }
+  return null;
+}
+// Uma cor nova so com os numeros que a cena tem.
+function corDaCena(nomeCena, rgbw, p9){
+  const chave = JSON.stringify([rgbw, p9]);
+  const ja = DA_CENA.find(id => PALETA[id].chave === chave);
+  if (ja) return ja;
+  const id = 'cena_' + (DA_CENA.length + 1);
+  const [r, g, b, w] = rgbw;
+  const tela = [r, g, b].map(c => limitar(Math.round(c + w * .9), 0, 255));
+  PALETA[id] = {nome:'Cor de “' + nomeCena + '”' + (DA_CENA.length ? ' ' + (DA_CENA.length + 1) : ''),
+                css:'#' + tela.map(c => c.toString(16).padStart(2, '0')).join(''), rgbw:rgbw, p9:p9, chave};
+  DA_CENA.push(id);
+  return id;
+}
+
+function estadoDaCena(nomeCena, canais){
+  const st = estadoInicial();
+  st.sel = estado.sel.slice();
+  for (const l of LUZES){
+    const b = l.base, s = st.luz[b];
+    if (l.tipo === 'par9'){
+      const dim = canalDe(canais, b), p9 = [4, 5, 6, 7, 8].map(i => canalDe(canais, b + i));
+      if (!dim){ s.cor = 'apagado'; continue; }
+      s.forca = limitar(Math.round(dim * 100 / 255), 0, 100);
+      s.cor = acharCorP9(p9) || corDaCena(nomeCena, [p9[0], p9[1], p9[2], p9[3]], p9);
+      continue;
+    }
+    const primeiro = l.tipo === 'cabeca' ? b + 3 : b;
+    const v = [0, 1, 2, 3].map(i => canalDe(canais, primeiro + i));
+    if (l.tipo === 'cabeca'){ s.giro = canalDe(canais, b); s.lado = canalDe(canais, b + 1); }
+    const achada = acharCor(v);
+    if (achada){ s.cor = achada.cor; s.forca = achada.forca; }
+    else if (v.every(x => x === 0)) s.cor = 'apagado';
+    else { s.cor = corDaCena(nomeCena, v, [v[0], v[1], v[2], v[3], 0]); s.forca = 100; }
+  }
+  return st;
+}
+
+async function abrirCena(){
+  const nome = $('cenaBase').value, cena = CENAS[nome];
+  if (!cena) return;
+  if (criando){ fecharCriador(); }
+  marcar();
+  const eraPisca = piscando;
+  piscando = false;
+  estado = estadoDaCena(nome, cena.canais);
+  const conhecidos = quadroDe(estadoInicial());
+  cenaAberta = {nome, extras:Object.fromEntries(Object.entries(cena.canais).filter(([k]) => !(k in conhecidos)))};
+  if (DA_CENA.length){
+    ORDEM_CORES.length = 0;
+    ORDEM_CORES.push(...DE_FABRICA, ...MINHAS.map(c => c.id), ...DA_CENA);
+    $('cores').textContent = ''; $('cores2').textContent = '';
+    montarCores();
+  }
+  ideiaAtiva = null; $('nomeIdeia').value = nome;
+  if (eraPisca) jaFoi.anim = null;
+  desenhar(); mandar();
+  recado('Cena “' + nome + '” aberta. Mexa à vontade: ela só muda quando você tocar em “Salvar como cena”' +
+    (cena.de === 'config' ? ' (vem do config.yaml; salvar cria uma cena com o mesmo nome por cima dela).' : '.') +
+    ' O movimento não vem junto: a cena não guarda movimento.', 'bom');
+}
+
 const CENAS_DO_CULTO = ['abertura','louvor','pregacao','apagar'];
 async function salvarComoCena(){
   const nome = $('nomeIdeia').value.trim();
@@ -1231,8 +1354,10 @@ async function salvarComoCena(){
   if (doCulto) texto += '\n\nAtenção: os botões do culto usam a cena “' + nome + '”. Salvar aqui muda o que eles acendem no próximo culto.';
   if (!(await perguntar({titulo:'Salvar a cena “' + nome + '”?', texto, sim:'Salvar cena', perigo:doCulto}))) return;
   try{
-    await pedir('/api/luz/look', {nome, canais:quadroDe(estado)});
+    const extras = nome === cenaAberta.nome ? cenaAberta.extras : {};
+    await pedir('/api/luz/look', {nome, canais:Object.assign({}, extras, quadroDe(estado))});
     recado('Cena “' + nome + '” salva. Ela já aparece nas cenas de luz; o movimento você escolhe no painel.', 'bom');
+    lerCenas();
   } catch(erro){ recado('Não consegui salvar: ' + erro.message, 'erro'); }
 }
 
@@ -1374,6 +1499,8 @@ addEventListener('pagehide', () => {
 
 $('btTirar').onclick = tirarIdeia;
 $('btCena').onclick = salvarComoCena;
+$('btAbrirCena').onclick = abrirCena;
+$('cenaBase').onchange = () => { $('btAbrirCena').disabled = !$('cenaBase').value; };
 $('nomeIdeia').oninput = () => { if (ideiaAtiva !== null && $('nomeIdeia').value.trim() !== IDEIAS[ideiaAtiva].nome){ ideiaAtiva = null; desenharIdeias(); } };
 
 // ---------------------------------------------------------------------------
@@ -1382,6 +1509,7 @@ montarPalco(); montarCores(); montarPontos(); montarCartoes();
 lerIdeias();
 desenhar();
 lerPonte().then(desenhar);
+lerCenas();
 setInterval(() => { if (aoVivo() && !document.hidden) lerPonte(); }, 5000);
 requestAnimationFrame(previa);
 </script>
