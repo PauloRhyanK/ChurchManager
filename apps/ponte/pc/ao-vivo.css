@@ -238,6 +238,8 @@ button.item-palavra:hover:not(.atual) { background: var(--botao); }
   border: 2px solid var(--borda); background: var(--fundo); font-size: 13px; font-weight: 600; }
 .clima[aria-pressed="true"] { border-color: var(--ambar); background: var(--ambar-fundo); }
 .clima.apagar { flex: 1 1 80px; border-width: 1px; border-color: var(--borda-forte); background: transparent; color: var(--suave); justify-content: center; }
+.luz-suave { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; font-size: 13px; font-weight: 600; color: var(--suave); cursor: pointer; align-self: flex-start; }
+.luz-suave input { width: 20px; height: 20px; margin: 0; accent-color: var(--ambar); cursor: pointer; }
 .seguindo { font-size: 13px; color: var(--verde-texto); font-weight: 600; }
 .na-mao { font-size: 13px; color: var(--ambar-texto); font-weight: 600; }
 details.dobra summary { cursor: pointer; color: var(--suave); font-size: 13px; font-weight: 600; padding: 4px 0; }

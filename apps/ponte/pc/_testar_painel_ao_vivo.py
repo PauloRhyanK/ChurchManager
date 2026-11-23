@@ -44,6 +44,7 @@ def conferir(nome, condicao, detalhe=""):
 ponte.CAMINHO_PONTEIRO = os.path.join(PASTA, "_ordem_atual.json")
 ponte.CAMINHO_LOUVOR = os.path.join(PASTA, "_louvor_atual.json")
 ponte.CAMINHO_MARCAS = os.path.join(PASTA, "_marcas_louvor.json")
+ponte.CAMINHO_LUZ_SUAVE = os.path.join(PASTA, "_luz_suave.json")
 MARCAS = [{"nome": "Verso 1", "segundo": 0, "cena": "louvor", "modo": "lento", "slide": 0},
           {"nome": "Refrão", "segundo": 10, "cena": "celebracao", "modo": "animado", "slide": 3},
           {"nome": "Verso 2", "segundo": 20, "cena": "louvor", "modo": "lento", "slide": 6}]
@@ -123,6 +124,15 @@ ponte._config["climas"] = {"explosao": {"cena": "celebracao", "modo": "estrobo"}
 corpo, codigo = acao({"tipo": "clima", "clima": "explosao"})
 conferir("clima apontando para movimento perigoso fica indisponivel", codigo == 409 and "falta configurar" in corpo["erro"], corpo)
 del ponte._config["climas"]
+
+print("\nTransicao suave")
+conferir("o retrato diz se a caixinha esta marcada", cliente.get("/api/painel").get_json()["luz"].get("suave") is False)
+corpo, codigo = acao({"tipo": "luz_suave", "ligar": True})
+conferir("marcar liga no motor", codigo == 200 and motor.suave() is True, corpo)
+conferir("e o retrato mostra marcada", cliente.get("/api/painel").get_json()["luz"]["suave"] is True)
+conferir("fica gravada para depois de religar", ponte._luz_suave_gravada() is True)
+corpo, codigo = acao({"tipo": "luz_suave", "ligar": False}, "web")
+conferir("a web pode desmarcar", codigo == 200 and motor.suave() is False, corpo)
 
 print("\nLista fechada de acoes")
 conferir("acao desconhecida e recusada", acao({"tipo": "rodar_qualquer_coisa"})[1] == 400)

@@ -416,6 +416,8 @@ ACOES_DO_PAINEL = ("ir", "gravar", "transmitir", "tela_preta", "recado", "cena_l
                    # ligar e parar a luz do teto que segue alguem (o botao do
                    # cartao da Luz). A igreja so mexe a luz com tudo pronto.
                    "seguir_ligar", "parar_seguir",
+                   # a caixinha "Transição suave" do cartao da Luz
+                   "luz_suave",
                    # do painel ao vivo. Passar slide do louvor NAO entra: entre
                    # o toque e o telao haveria ate 4 segundos.
                    "cena_transmissao", "clima",

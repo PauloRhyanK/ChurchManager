@@ -186,6 +186,11 @@ class Seguidor:
         # entra na assinatura (senao a cena inteira seria reaplicada a cada
         # busca): entra so SE ha seguir. O alvo em si vai direto ao motor.
         seguir = corpo.get("seguir")
+        # A caixinha "Transição suave" do painel. Vai a cada busca e fora da
+        # assinatura: mudar so ela nao pode reaplicar a cena. E tem que entrar
+        # ANTES do modo, para a troca que vem junto ja sair suave.
+        if self._movimento is not None and "suave" in corpo:
+            self._movimento.definir_suave(corpo.get("suave") is True)
         assinatura = (corpo.get("versao"), corpo.get("modo"),
                       json.dumps(estudio, sort_keys=True) if estudio is not None else None,
                       seguir is not None)
