@@ -153,6 +153,8 @@ def montar_contexto(config):
         conf_seguir = config.get("seguir") or {}
         contexto["movimento"].configurar_seguir(conf_seguir.get("cerca"),
                                                 conf_seguir.get("velocidade"))
+        # A caixinha "Transição suave", como ficou da ultima vez.
+        contexto["movimento"].definir_suave(_luz_suave_gravada())
     except Exception as erro:
         print("[aviso] movimento desligado: {}".format(erro))
         contexto["movimento"] = None
@@ -859,6 +861,27 @@ CAMINHO_MARCAS = os.path.join(RAIZ, "_marcas_louvor.json")
 CAMINHO_SEGUIR = os.path.join(RAIZ, "_seguir_calibracao.json")
 # Se o Seguir esta ligado neste PC (o botao do painel). Vale depois de religar.
 CAMINHO_SEGUIR_LIGADO = os.path.join(RAIZ, "_seguir.json")
+# A caixinha "Transição suave" do cartao da Luz. Vale depois de religar.
+CAMINHO_LUZ_SUAVE = os.path.join(RAIZ, "_luz_suave.json")
+
+
+def _luz_suave_gravada():
+    try:
+        with open(CAMINHO_LUZ_SUAVE, encoding="utf-8") as arquivo:
+            return bool(json.load(arquivo).get("ligada"))
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
+def _luz_suave_definir(ligar):
+    motor = _contexto.get("movimento")
+    if motor is None:
+        raise RuntimeError("o movimento de luz não está disponível neste PC")
+    temporario = CAMINHO_LUZ_SUAVE + ".tmp"
+    with open(temporario, "w", encoding="utf-8") as arquivo:
+        json.dump({"ligada": bool(ligar)}, arquivo)
+    os.replace(temporario, CAMINHO_LUZ_SUAVE)
+    motor.definir_suave(ligar)
 
 
 @app.get("/api/louvor/audio/<nome>")
@@ -1114,6 +1137,9 @@ def luz_quadro():
     motor = _contexto.get("movimento")
     corpo = cliente.retrato()
     corpo["modo"] = (motor.atual() if motor else None) or "parado"
+    # A transicao suave e calculada LA, junto com o movimento. Um seguidor
+    # antigo ignora a chave e continua trocando seco, como antes.
+    corpo["suave"] = bool(motor.suave()) if motor else False
     _estudio_no_quadro(corpo, motor)    # so acrescenta algo com o estudio em uso
     seguir = motor.seguir() if motor else None
     if seguir is not None:
@@ -2576,6 +2602,7 @@ def _retrato_do_painel():
             "cena": _cena_de_luz_atual(),
             "cenas": [{"id": n, "nome": _nome_de_luz(n)} for n in sorted(nomes)],
             "modo": (motor.atual() if motor else None) or "parado",
+            "suave": bool(motor.suave()) if motor else False,
             # Os perigosos (estrobo) nao entram no painel do culto.
             "modos": [{"id": m["id"], "nome": m["nome"], "descricao": m["descricao"]}
                       for m in (motor.catalogo() if motor else []) if not m["perigoso"]],
@@ -2762,6 +2789,17 @@ def _acao_do_painel(dados, origem):
                 _ao_vivo["valor"].luz_mexida()
             titulo = "Movimento da luz: " + (escolhido or "parado")
             resultado = {"ok": True, "titulo": titulo, "detalhe": "tudo certo"}
+        elif tipo == "luz_suave":
+            # A caixinha "Transição suave": trocar de movimento esmaece em vez
+            # de saltar. Nao muda a luz no ar, so a proxima troca.
+            ligar = bool(dados.get("ligar"))
+            try:
+                _luz_suave_definir(ligar)
+            except (RuntimeError, OSError) as erro:
+                return {"erro": str(erro)}, 400
+            titulo = "Transição suave " + ("ligada" if ligar else "desligada")
+            resultado = {"ok": True, "titulo": titulo,
+                         "detalhe": "a troca de movimento agora " + ("esmaece devagar" if ligar else "é na hora")}
         elif tipo in ("seguir_ligar", "parar_seguir"):
             # O botao "Seguir uma pessoa" / "Parar de seguir" do cartao da Luz.
             # Ligar prepara o que faltar; a luz so anda com tudo pronto.

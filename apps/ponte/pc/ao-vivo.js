@@ -806,6 +806,11 @@ function desenharLuz(d) {
     botao('<span class="amostra" aria-hidden="true"><i class="apagada"></i></span><span class="clima-texto"><span>Apagar</span><small>tudo escuro</small></span>',
       {tipo: 'apagar_luz'}, {classe: 'clima apagar', apertado: luz.cena === 'apagar'}) + '</div>';
   const modos = luz.modos || [];
+  // TRANSICAO SUAVE: marcada, trocar de movimento esmaece em vez de saltar.
+  if (modos.length) {
+    h += '<label class="luz-suave"><input type="checkbox" id="luz-suave"' + (luz.suave ? ' checked' : '') +
+      (ocupado || !podeAgir() ? ' disabled' : '') + '> Transição suave entre movimentos</label>';
+  }
   h += '<details class="dobra" id="dobra-luz"' + (luzAberta ? ' open' : '') + '><summary>Cenas e movimento, um a um</summary><div class="dentro">' +
     '<div class="chips">' + (luz.cenas || []).map(c => botao(amostraDeLuz(c.cores, '', '') + esc(c.nome), {tipo: 'cena_luz', cena: c.id},
       {classe: 'bt' + (luz.cena === c.id ? ' ativo' : ''), apertado: luz.cena === c.id})).join('') + '</div>';
@@ -1219,6 +1224,10 @@ document.addEventListener('click', async evento => {
 document.addEventListener('toggle', evento => {
   if (evento.target.id === 'dobra-luz') luzAberta = evento.target.open;
 }, true);
+
+document.addEventListener('change', evento => {
+  if (evento.target.id === 'luz-suave') agir({tipo: 'luz_suave', ligar: evento.target.checked});
+});
 
 document.addEventListener('change', async evento => {
   if (evento.target.id !== 'troca-ordem') return;
