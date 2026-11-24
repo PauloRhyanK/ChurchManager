@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { EventTicketType, Prisma } from '@prisma/client';
+import { EventTicketType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateEventRegistrationDto } from './dto/create-event-registration.dto';
 import {
@@ -111,53 +111,45 @@ export class EventRegistrationsService {
       );
     }
 
-    try {
-      const row = await this.prisma.$transaction(async (tx) => {
-        // Mesma reserva atômica do checkout: a inscrição e a vaga entram (ou
-        // não) juntas, e quem perde a corrida pela última vaga recebe 409.
-        if (ticketTypeId) {
-          const reserved = await this.ticketTypes.reserveStock(
-            tx,
-            tenantId,
-            ticketTypeId,
-            1,
-          );
-          if (!reserved) {
-            throw new ConflictException('Ingressos esgotados');
-          }
+    // O mesmo e-mail pode ter várias inscrições no evento (ex.: mãe que
+    // inscreve os filhos com o próprio e-mail); cada uma consome uma vaga.
+    const row = await this.prisma.$transaction(async (tx) => {
+      // Mesma reserva atômica do checkout: a inscrição e a vaga entram (ou
+      // não) juntas, e quem perde a corrida pela última vaga recebe 409.
+      if (ticketTypeId) {
+        const reserved = await this.ticketTypes.reserveStock(
+          tx,
+          tenantId,
+          ticketTypeId,
+          1,
+        );
+        if (!reserved) {
+          throw new ConflictException('Ingressos esgotados');
         }
-        return tx.eventRegistration.create({
-          data: {
-            tenantId,
-            eventId,
-            name: dto.name.trim(),
-            email,
-            phone: dto.phone ?? null,
-            message: dto.message ?? null,
-            userId: dto.userId ?? null,
-            ...(fieldValuesToPersist.length > 0
-              ? {
-                  fieldValues: {
-                    create: fieldValuesToPersist.map((fv) => ({
-                      fieldId: fv.fieldId,
-                      value: fv.value,
-                    })),
-                  },
-                }
-              : {}),
-          },
-        });
-      });
-      return { ...toRegistrationDto(row), communityLink };
-    } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2002'
-      ) {
-        throw new ConflictException('Você já está inscrito neste evento');
       }
-      throw err;
-    }
+      return tx.eventRegistration.create({
+        data: {
+          tenantId,
+          eventId,
+          name: dto.name.trim(),
+          email,
+          phone: dto.phone ?? null,
+          message: dto.message ?? null,
+          userId: dto.userId ?? null,
+          ...(fieldValuesToPersist.length > 0
+            ? {
+                fieldValues: {
+                  create: fieldValuesToPersist.map((fv) => ({
+                    fieldId: fv.fieldId,
+                    value: fv.value,
+                  })),
+                },
+              }
+            : {}),
+        },
+      });
+    });
+    return { ...toRegistrationDto(row), communityLink };
   }
 
   async findExistingRegistration(
