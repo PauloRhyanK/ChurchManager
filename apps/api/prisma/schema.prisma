@@ -212,7 +212,8 @@ model EventRegistration {
   event       Event                         @relation(fields: [eventId], references: [id], onDelete: Cascade)
   fieldValues EventRegistrationFieldValue[]
 
-  @@unique([eventId, email], map: "event_registrations_event_email_unique")
+  /// Sem unicidade: a mesma pessoa pode inscrever familiares com o próprio e-mail.
+  @@index([eventId, email], map: "event_registrations_event_email_idx")
   @@index([tenantId])
   @@index([eventId])
   @@index([email])
