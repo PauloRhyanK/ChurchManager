@@ -5,7 +5,6 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
 import { EventRegistrationsService } from './event-registrations.service';
 import { EventTicketTypesService } from './event-ticket-types.service';
 
@@ -48,7 +47,7 @@ type Options = {
   ticket?: Record<string, unknown> | null;
   /** Linhas afetadas pelo UPDATE condicional de estoque (0 = corrida perdida). */
   reserveAffected?: number;
-  /** Erro lançado pelo INSERT da inscrição (ex.: P2002 de e-mail duplicado). */
+  /** Erro lançado pelo INSERT da inscrição. */
   createError?: Error;
 };
 
@@ -301,18 +300,23 @@ test('createForEvent: evento com timezone inválido usa America/Sao_Paulo', asyn
   assert.equal(created.length, 1);
 });
 
-test('createForEvent: e-mail duplicado com ingresso responde 409', async () => {
-  const duplicate = new Prisma.PrismaClientKnownRequestError(
-    'Unique constraint failed on the fields: (`event_id`,`email`)',
-    { code: 'P2002', clientVersion: 'test' },
+test('createForEvent: o mesmo e-mail pode inscrever várias pessoas', async () => {
+  const { service, created, stockUpdates } = build();
+  await service.createForEvent(TENANT, EVENT, bodyWithTicket);
+  await service.createForEvent(TENANT, EVENT, {
+    ...bodyWithTicket,
+    name: 'Pedro',
+    email: 'maria@exemplo.com',
+  });
+  assert.deepEqual(
+    created.map((c) => [c.name, c.email]),
+    [
+      ['Maria', 'maria@exemplo.com'],
+      ['Pedro', 'maria@exemplo.com'],
+    ],
   );
-  const { service, log } = build({ createError: duplicate });
-  await assert.rejects(
-    () => service.createForEvent(TENANT, EVENT, bodyWithTicket),
-    rejectsWith(ConflictException, 'Você já está inscrito neste evento'),
-  );
-  // O INSERT falha dentro da transação da reserva: a vaga volta no rollback.
-  assert.deepEqual(log, ['inicio-transacao', 'reserva-estoque', 'cria-inscricao']);
+  // Cada inscrição consome a sua própria vaga.
+  assert.equal(stockUpdates.length, 2);
 });
 
 /** Rascunho e com data passada: o site recusaria, o painel aceita. */
@@ -455,15 +459,11 @@ test('createForEvent (admin): ingresso inexistente ou inativo continua 404', asy
   }
 });
 
-test('createForEvent (admin): e-mail duplicado continua 409', async () => {
-  const duplicate = new Prisma.PrismaClientKnownRequestError('Unique', {
-    code: 'P2002',
-    clientVersion: 'test',
+test('createForEvent (admin): aceita outra inscrição com o mesmo e-mail', async () => {
+  const { service, created } = build({ event: closedEvent });
+  await service.createForEvent(TENANT, EVENT, body, { enforcePublicRules: false });
+  await service.createForEvent(TENANT, EVENT, { ...body, name: 'Pedro' }, {
+    enforcePublicRules: false,
   });
-  const { service } = build({ event: closedEvent, createError: duplicate });
-  await assert.rejects(
-    () =>
-      service.createForEvent(TENANT, EVENT, body, { enforcePublicRules: false }),
-    rejectsWith(ConflictException, 'Você já está inscrito neste evento'),
-  );
+  assert.equal(created.length, 2);
 });
