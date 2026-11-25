@@ -22,7 +22,7 @@ docker compose up
 ```
 
 - API: `http://localhost:3000/api`
-- Health: `GET http://localhost:3000/api/health` — usado pelo healthcheck do contentor
+- Health: `GET http://localhost:3000/api/health` — usado pelo healthcheck do contentor (200 com `pass`/`warn`, 503 com `fail`). Com `Authorization: Bearer $HEALTH_TOKEN` traz os checks detalhados (formato `application/health+json`).
 
 Após alterar código da API, `docker compose build api && docker compose up -d api` para o contentor servir as rotas novas (evita 404 no admin).
 

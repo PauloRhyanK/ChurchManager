@@ -1,62 +1,102 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { HttpStatus, ServiceUnavailableException } from '@nestjs/common';
-import { HealthController, checkDatabase } from './health.controller';
-import type { PrismaService } from '../prisma/prisma.service';
+import type { Response } from 'express';
+import { HealthController } from './health.controller';
+import type { HealthProbe } from './health.probe';
 
-function fakePrisma(queryRaw: () => Promise<unknown>): PrismaService {
-  return { $queryRaw: queryRaw } as unknown as PrismaService;
+const TOKEN = 'token-de-teste-com-mais-de-32-caracteres';
+
+function probe(pingOk = true): HealthProbe {
+  return {
+    ping: async () => {
+      if (!pingOk) throw new Error('db:5432 recusou');
+    },
+    connections: async () => ({ active: 1, idle: 1, total: 2, max: 100 }),
+    databaseSize: async () => 1000,
+    businessCounts: async () => ({
+      tenants: 1,
+      activeAdminUsers: 1,
+      eventRegistrationsLast24h: 0,
+      financialTransactionsLast24h: 0,
+    }),
+  };
 }
 
-test('health responde ok quando o banco responde', async () => {
-  let calls = 0;
-  const controller = new HealthController(
-    fakePrisma(async () => {
-      calls += 1;
-      return [{ '?column?': 1 }];
-    }),
-  );
+function fakeRes() {
+  const sent = { status: 0, headers: {} as Record<string, string>, body: '' };
+  const res = {
+    status(code: number) {
+      sent.status = code;
+      return res;
+    },
+    setHeader(name: string, value: string) {
+      sent.headers[name.toLowerCase()] = value;
+      return res;
+    },
+    send(body: string) {
+      sent.body = body;
+      return res;
+    },
+  };
+  return { res: res as unknown as Response, sent };
+}
 
-  const body = await controller.getHealth();
+async function call(authorization: string | undefined, env: string | undefined, pingOk = true) {
+  const previous = process.env.HEALTH_TOKEN;
+  if (env === undefined) delete process.env.HEALTH_TOKEN;
+  else process.env.HEALTH_TOKEN = env;
+  try {
+    const { res, sent } = fakeRes();
+    await new HealthController(probe(pingOk)).getHealth(authorization, res);
+    return { ...sent, json: JSON.parse(sent.body) as Record<string, unknown> };
+  } finally {
+    if (previous === undefined) delete process.env.HEALTH_TOKEN;
+    else process.env.HEALTH_TOKEN = previous;
+  }
+}
 
-  assert.equal(calls, 1);
-  assert.deepEqual(body, {
-    ok: true,
-    service: 'church-manager-api',
-    database: 'up',
-  });
+test('responde application/health+json sem cache', async () => {
+  const r = await call(undefined, TOKEN);
+  assert.equal(r.status, 200);
+  assert.equal(r.headers['content-type'], 'application/health+json; charset=utf-8');
+  assert.equal(r.headers['cache-control'], 'no-store');
 });
 
-test('health responde 503 sem vazar o erro quando o banco falha', async () => {
-  const secret =
-    "Can't reach database server at `db:5432` postgresql://user:senha@db/churchmanager";
-  const controller = new HealthController(
-    fakePrisma(async () => {
-      throw new Error(secret);
-    }),
-  );
-
-  await assert.rejects(controller.getHealth(), (err: unknown) => {
-    assert.ok(err instanceof ServiceUnavailableException);
-    assert.equal(err.getStatus(), HttpStatus.SERVICE_UNAVAILABLE);
-    assert.deepEqual(err.getResponse(), {
-      ok: false,
-      service: 'church-manager-api',
-      database: 'down',
-    });
-    assert.doesNotMatch(JSON.stringify(err.getResponse()), /5432|senha|reach/);
-    return true;
-  });
+test('sem token: só status e time', async () => {
+  const r = await call(undefined, TOKEN);
+  assert.deepEqual(Object.keys(r.json).sort(), ['status', 'time']);
+  assert.equal(r.json.status, 'pass');
 });
 
-test('checkDatabase falha quando a consulta passa do tempo limite', async () => {
-  const hanging = fakePrisma(() => new Promise(() => undefined));
-  const started = Date.now();
-
-  assert.equal(await checkDatabase(hanging, 50), false);
-  assert.ok(Date.now() - started < 1000);
+test('token certo no Bearer: resposta com checks', async () => {
+  const r = await call(`Bearer ${TOKEN}`, TOKEN);
+  assert.equal(r.json.serviceId, 'church-manager-api');
+  assert.ok(r.json.checks);
 });
 
-test('checkDatabase devolve true quando a consulta responde', async () => {
-  assert.equal(await checkDatabase(fakePrisma(async () => [1]), 50), true);
+test('token errado ou sem Bearer: só status e time', async () => {
+  for (const auth of ['Bearer errado', TOKEN, `Basic ${TOKEN}`, 'Bearer ']) {
+    const r = await call(auth, TOKEN);
+    assert.deepEqual(Object.keys(r.json).sort(), ['status', 'time'], auth);
+  }
+});
+
+test('HEALTH_TOKEN vazio ou ausente nunca libera os detalhes', async () => {
+  for (const env of [undefined, '', '   ']) {
+    const r = await call('Bearer ', env);
+    assert.deepEqual(Object.keys(r.json).sort(), ['status', 'time']);
+    const r2 = await call(`Bearer ${env ?? ''}`, env);
+    assert.deepEqual(Object.keys(r2.json).sort(), ['status', 'time']);
+  }
+});
+
+test('banco fora: 503 com status fail, sem detalhes do erro', async () => {
+  const r = await call(`Bearer ${TOKEN}`, TOKEN, false);
+  assert.equal(r.status, 503);
+  assert.equal(r.json.status, 'fail');
+  assert.doesNotMatch(r.body, /5432|recusou/);
+
+  const pub = await call(undefined, TOKEN, false);
+  assert.equal(pub.status, 503);
+  assert.deepEqual(pub.json, { status: 'fail', time: pub.json.time });
 });

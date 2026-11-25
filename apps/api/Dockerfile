@@ -44,4 +44,8 @@ USER node
 
 EXPOSE 3000
 
+# Commit da imagem, exposto como `releaseId` em GET /api/health (com token).
+ARG RELEASE_ID=
+ENV RELEASE_ID=$RELEASE_ID
+
 ENTRYPOINT ["./docker-entrypoint.sh"]
