@@ -1,3 +1,4 @@
+import './instrument';
 import dns from 'node:dns';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
