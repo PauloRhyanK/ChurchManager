@@ -3591,7 +3591,7 @@ def _slides_do_holyrics(identificador):
     return (dados or {}).get("slides") or None
 
 
-_musicas_do_holyrics = {"em": 0.0, "por_titulo": {}}
+_musicas_do_holyrics = {"em": 0.0, "acervo": []}
 
 
 def _achar_no_holyrics(titulo):
@@ -3609,10 +3609,8 @@ def _achar_no_holyrics(titulo):
         _musicas_do_holyrics["em"] = time.time()
         corpo = cliente.pedir("GetSongs")
         lista = corpo.get("data") if isinstance(corpo, dict) else corpo
-        _musicas_do_holyrics["por_titulo"] = {
-            _sem_acento(str(m.get("title") or "")).strip().lower(): m.get("id")
-            for m in (lista or []) if isinstance(m, dict) and m.get("id")}
-    return _musicas_do_holyrics["por_titulo"].get(_sem_acento(titulo).strip().lower())
+        _musicas_do_holyrics["acervo"] = lista or []
+    return mod_repertorio.achar_no_acervo(_musicas_do_holyrics["acervo"], titulo)
 
 
 def _imagem_do_slide(fonte, slide):
