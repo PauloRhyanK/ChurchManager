@@ -47,6 +47,7 @@ from ponte import luzes as mod_luzes
 from ponte import mesa as mod_mesa
 from ponte import movimento as mod_movimento
 from ponte import seguidor as mod_seguidor
+from ponte import erros as mod_erros
 from ponte import versao as mod_versao
 from ponte import vigia_tv as mod_vigia_tv
 from ponte import youtube as mod_youtube
@@ -4122,6 +4123,12 @@ def main():
     global _config, _contexto, _cues_por_id, _ordens_por_id, _chegada
 
     _config = carregar_config()
+    # Erros ao GlitchTip: SENTRY_DSN do Windows ou `erros: dsn:` do config.yaml.
+    # Sem nenhum dos dois, nada e enviado.
+    if mod_erros.ligar(mod_erros.qual_dsn(os.environ, _config),
+                       "simulacao" if SIMULAR else "pc",
+                       mod_versao.calcular(RAIZ)):
+        print("  Erros vao para o GlitchTip.")
     _contexto = montar_contexto(_config)
     if SIMULAR:
         from ponte import simulados

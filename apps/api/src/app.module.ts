@@ -2,7 +2,8 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { SentryGlobalFilter, SentryModule } from '@sentry/nestjs/setup';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { DynamicCorsMiddleware } from './common/dynamic-cors.middleware';
 import { PrismaModule } from './prisma/prisma.module';
@@ -23,6 +24,8 @@ import { SermonsModule } from './modules/sermons/sermons.module';
 
 @Module({
   imports: [
+    // Sem SENTRY_DSN o SDK não é iniciado e o módulo/filtro não enviam nada.
+    SentryModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: [
@@ -78,6 +81,12 @@ import { SermonsModule } from './modules/sermons/sermons.module';
     SermonsModule,
   ],
   providers: [
+    // Reporta só o que não é HttpException (erros inesperados); a resposta
+    // ao cliente continua a mesma do filtro padrão do Nest.
+    {
+      provide: APP_FILTER,
+      useClass: SentryGlobalFilter,
+    },
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,

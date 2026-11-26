@@ -98,6 +98,15 @@ VERSAO = _mod_versao.calcular(PASTA_PC)
 ARQUIVOS = _mod_versao.impressoes(PASTA_PC)
 SUBIU_EM = time.time()
 
+# Erros ao GlitchTip (projeto ponte): SENTRY_DSN em /etc/ponte-web.env. Sem
+# ele, nada e enviado. A limpeza de dados mora em pc/ponte/erros.py, a mesma
+# dos PCs.
+_espec_erros = importlib.util.spec_from_file_location(
+    "ponte_erros", os.path.join(PASTA_PC, "ponte", "erros.py"))
+_mod_erros = importlib.util.module_from_spec(_espec_erros)
+_espec_erros.loader.exec_module(_mod_erros)
+_mod_erros.ligar(_mod_erros.qual_dsn(os.environ, None), "web", VERSAO)
+
 _tranca = threading.Lock()
 _igreja = {"chegada": None, "painel": None, "em": 0.0, "maquina": "",
            # a letra das musicas do dia: grande e muda pouco, entao a igreja

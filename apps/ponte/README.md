@@ -59,6 +59,18 @@ manual**; não existe ainda eleição automática.
 credenciais do YouTube, logs, áudio e o acervo de letras. O `.gitignore` cuida disso;
 os arquivos `.exemplo` mostram o formato.
 
+## Erros no GlitchTip
+
+As duas pontes mandam os erros não tratados para https://erros.kustertech.com
+(projeto `ponte`), com `sentry-sdk` (`pc/ponte/erros.py`, o mesmo código nos dois
+lados). Sem DSN nada é enviado. Antes de sair, o evento perde corpo, cookies,
+cabeçalhos, query string, IP e variáveis locais, e e-mail, telefone, CPF e tokens
+Bearer viram `[email]`, `[telefone]` etc. Testes: `python pc/_testar_erros.py`.
+
+- Web (VPS): `SENTRY_DSN=...` em `/etc/ponte-web.env`, ambiente `web`.
+- PC da igreja: `erros: dsn: "..."` no `config.yaml` (ou `SENTRY_DSN` no Windows),
+  ambiente `pc`. O release é a versão do projeto (a impressão de `versao.py`).
+
 ## Instalar num PC novo
 
 O jeito de um arquivo só: abrir `https://ponte.igrejaparaiso.com.br/instalar` no PC

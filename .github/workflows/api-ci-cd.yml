@@ -102,6 +102,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            RELEASE_ID=${{ github.sha }}
 
   # Secrets: SSH_HOST, SSH_USER, SSH_PRIVATE_KEY (chave privada PEM com acesso SSH à VPS).
   # Na VPS: git pull precisa de acesso ao repo; docker pull do GHCR precisa de login ghcr.io (read:packages).
