@@ -7,6 +7,7 @@
 #   PONTE_SENHA=...      a senha que a equipe digita        (8+ caracteres)
 #   PONTE_CHAVE=...      o segredo que a igreja apresenta   (24+ caracteres)
 #   PONTE_SEGREDO=...    assina o cookie de sessao          (aleatorio, 64 hex)
+#   SENTRY_DSN=...       erros ao GlitchTip, projeto ponte  (opcional; vazio = nao envia)
 #
 # Subir / atualizar:  docker compose up -d --build
 services:

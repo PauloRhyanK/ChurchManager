@@ -2,3 +2,5 @@ flask==3.0.3
 websocket-client==1.8.0
 requests==2.32.3
 PyYAML==6.0.2
+# Erros no GlitchTip. Python puro (urllib3 e certifi ja vem com o requests).
+sentry-sdk==2.77.0

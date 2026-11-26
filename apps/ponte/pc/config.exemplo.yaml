@@ -1244,3 +1244,12 @@ web:
 #
 #   cerca: { pan_min: 0, pan_max: 255, tilt_min: 0, tilt_max: 255 }
 #   velocidade: 60
+
+
+# --- Erros no GlitchTip (opcional) -----------------------------------------
+# Quando a ponte quebra, o erro vai para https://erros.kustertech.com (projeto
+# ponte), já sem e-mail, telefone, CPF, senhas nem cabeçalhos. Vazio = nada é
+# enviado. O DSN fica só no config.yaml de cada PC (ou na variável SENTRY_DSN
+# do Windows, que ganha deste campo), nunca no repositório.
+erros:
+  dsn: ""
