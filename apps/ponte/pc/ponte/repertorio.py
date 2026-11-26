@@ -332,6 +332,40 @@ PARA_QUEM = {"ALL": "Todos", "VOCAL": "Voz", "KEYS": "Teclado", "ACOUSTIC_GUITAR
              "ELECTRIC_GUITAR": "Guitarra", "BASS": "Baixo", "DRUMS": "Bateria"}
 
 
+def _chave_de_titulo(texto):
+    return " ".join(_sem_acento(texto or "").lower().split())
+
+
+def achar_no_acervo(acervo, titulo):
+    """O id, no acervo do Holyrics (GetSongs: [{id, title, artist}]), da musica
+    com este titulo. None se nao achar.
+
+    No ChurchManager o titulo costuma vir como "Titulo - Artista" (o nome do
+    arquivo do YouTube), e no Holyrics so "Titulo". Vale, nesta ordem: o
+    titulo inteiro; "titulo - artista" do Holyrics; o pedaco antes do primeiro
+    " - ", preferindo a que tem o mesmo artista.
+    """
+    alvo = _chave_de_titulo(titulo)
+    if not alvo:
+        return None
+    musicas = [m for m in acervo or [] if isinstance(m, dict) and m.get("id")]
+    for m in musicas:
+        if _chave_de_titulo(m.get("title")) == alvo:
+            return str(m["id"])
+    for m in musicas:
+        if m.get("artist") and _chave_de_titulo("{} - {}".format(m.get("title"), m.get("artist"))) == alvo:
+            return str(m["id"])
+    if " - " not in alvo:
+        return None
+    base, resto = alvo.split(" - ", 1)
+    mesmas = [m for m in musicas if _chave_de_titulo(m.get("title")) == base]
+    for m in mesmas:
+        artista = _chave_de_titulo(m.get("artist"))
+        if artista and artista in resto:
+            return str(m["id"])
+    return str(mesmas[0]["id"]) if mesmas else None
+
+
 def musica_do_cultos(song, tabela, achar_no_holyrics=None):
     """Uma musica do contrato do Cultos -> o formato da ponte."""
     song = song if isinstance(song, dict) else {}
