@@ -238,6 +238,24 @@ nova = repertorio.FonteCultos("https://api.exemplo", "igreja", "segredo-da-igrej
 nova.atualizar()
 conferir("ponte reiniciada sem internet: vale o que ficou no disco", [x["id"] for x in nova.musicas()] == ["c1", "c2"])
 
+print("\nAchar a musica no acervo do Holyrics pelo titulo")
+ACERVO = [
+    {"id": "10", "title": "Jeová Jireh", "artist": "Aline Barros"},
+    {"id": "11", "title": "Jeová Jireh", "artist": "Outro Ministério"},
+    {"id": "20", "title": "Ele Vem", "artist": ""},
+    {"id": "30", "title": "O Encontro - Ao Vivo", "artist": "Valesca"},
+    {"title": "Sem id"},
+]
+achar = repertorio.achar_no_acervo
+conferir("titulo igual, sem acento e sem caixa", achar(ACERVO, "jeova jireh") == "10")
+conferir("o ' - artista' do ChurchManager acha pelo artista", achar(ACERVO, "Jeová Jireh - Aline Barros") == "10")
+conferir("o artista desempata entre titulos iguais", achar(ACERVO, "Jeová Jireh - Outro Ministério") == "11")
+conferir("so com o titulo base, sem artista no Holyrics", achar(ACERVO, "Ele Vem - Gabriel Guedes feat. Gabriela Rocha") == "20")
+conferir("titulo com ' - ' no proprio Holyrics", achar(ACERVO, "O Encontro - Ao Vivo") == "30")
+conferir("espacos a mais nao atrapalham", achar(ACERVO, "  Ele   Vem ") == "20")
+conferir("nao achou: None", achar(ACERVO, "Outra Musica - Alguém") is None)
+conferir("lixo nao estoura", achar(None, "x") is None and achar([None, 3], "") is None)
+
 print("\n" + "-" * 58)
 print("FALHAS: {}".format(len(FALHAS)))
 sys.exit(1 if FALHAS else 0)
